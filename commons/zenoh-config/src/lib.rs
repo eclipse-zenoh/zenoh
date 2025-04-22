@@ -460,7 +460,7 @@ validated_struct::validator! {
                 /// Optional weights of the outgoing links.
                 /// For non-specified destination nodes the corresponding link weight will be set to 100,
                 /// unless the weight on the same link is provided in the config of destination node, in which case
-                /// it will be used as a link weight.
+                /// it will be used as a link weight. If both link endpoints set a link weight, an average of both will be used.
                 link_weights: Option<NEVec<LinkWeight>>,
             },
             /// The routing strategy to use in peers and it's configuration.
@@ -468,6 +468,11 @@ validated_struct::validator! {
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
                 mode: Option<String>,
+                /// Optional weights of the outgoing links in linkstate mode.
+                /// For non-specified destination nodes the corresponding link weight will be set to 100,
+                /// unless the weight on the same link is provided in the config of destination node, in which case
+                /// it will be used as a link weight. If both link endpoints set a link weight, an average of both will be used.
+                link_weights: Option<NEVec<LinkWeight>>,
             },
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).

@@ -25,9 +25,8 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use nonempty_collections::NEVec;
 use token::{token_linkstate_change, token_remove_node, undeclare_simple_token};
-use zenoh_config::{unwrap_or_default, LinkWeight, ModeDependent, WhatAmI};
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
     core::ZenohIdProto,
@@ -44,7 +43,6 @@ use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
-    network::{shared_nodes, Network},
     pubsub::{pubsub_linkstate_change, pubsub_remove_node, undeclare_simple_subscription},
     queries::{queries_linkstate_change, queries_remove_node, undeclare_simple_queryable},
 };
@@ -57,7 +55,11 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::linkstate::{LinkEdge, LinkEdgeWeight, LinkStateList},
+    protocol::{
+        linkstate::{link_weights_from_config, LinkEdge, LinkStateList},
+        network::{shared_nodes, Network},
+        PEERS_NET_NAME, ROUTERS_NET_NAME,
+    },
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
@@ -66,12 +68,9 @@ use crate::net::{
 };
 
 mod interests;
-mod network;
 mod pubsub;
 mod queries;
 mod token;
-
-const ROUTERS_NET_NAME: &str = "[Routers Network]";
 
 macro_rules! hat {
     ($t:expr) => {
@@ -312,28 +311,6 @@ impl HatTables {
 
 pub(crate) struct HatCode {}
 
-fn link_weights_to_hm(
-    link_weights: Option<NEVec<LinkWeight>>,
-    network_name: &str,
-) -> ZResult<HashMap<ZenohIdProto, LinkEdgeWeight>> {
-    let mut link_weights_by_zid = HashMap::new();
-    if let Some(link_weights) = link_weights {
-        for lw in link_weights {
-            if link_weights_by_zid
-                .insert(lw.destination.into(), LinkEdgeWeight::new(lw.weight))
-                .is_some()
-            {
-                bail!(
-                    "{} config contains a duplicate zid value for link weight: {}",
-                    network_name,
-                    lw.destination
-                );
-            }
-        }
-    }
-    Ok(link_weights_by_zid)
-}
-
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
@@ -357,7 +334,7 @@ impl HatBaseTrait for HatCode {
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         let router_link_weights = config.routing().router().link_weights().clone();
-        let peer_link_weights = None;
+        let peer_link_weights = config.routing().peer().link_weights().clone();
         drop(config_guard);
 
         if router_full_linkstate | gossip {
@@ -371,12 +348,12 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
-                link_weights_to_hm(router_link_weights, ROUTERS_NET_NAME)?,
+                link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
             ));
         }
         if peer_full_linkstate | gossip {
             hat_mut!(tables).linkstatepeers_net = Some(Network::new(
-                "[Peers network]".to_string(),
+                PEERS_NET_NAME.to_string(),
                 tables.zid,
                 runtime,
                 peer_full_linkstate,
@@ -385,7 +362,7 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
-                link_weights_to_hm(peer_link_weights, "[Peers Network]")?,
+                link_weights_from_config(peer_link_weights, PEERS_NET_NAME)?,
             ));
         }
         if router_full_linkstate && peer_full_linkstate {
@@ -859,20 +836,24 @@ impl HatBaseTrait for HatCode {
         tables_ref: &Arc<TablesLock>,
         runtime: &Runtime,
     ) -> ZResult<()> {
-        let router_link_weights = link_weights_to_hm(
-            runtime
-                .config()
-                .lock()
-                .0
-                .routing()
-                .router()
-                .link_weights()
-                .clone(),
+        let config = runtime.config().lock();
+        let router_link_weights = link_weights_from_config(
+            config.routing().router().link_weights().clone(),
             ROUTERS_NET_NAME,
         )?;
+        let peer_link_weights = link_weights_from_config(
+            config.routing().peer().link_weights().clone(),
+            PEERS_NET_NAME,
+        )?;
+        drop(config);
         if let Some(rn) = hat_mut!(tables).routers_net.as_mut() {
             if rn.update_link_weights(router_link_weights) {
                 hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
+            }
+        }
+        if let Some(pn) = hat_mut!(tables).linkstatepeers_net.as_mut() {
+            if pn.update_link_weights(peer_link_weights) {
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
             }
         }
         Ok(())

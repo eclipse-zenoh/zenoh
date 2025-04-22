@@ -151,10 +151,11 @@ async fn test_interceptors_cache_update_ingress() {
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
-        .unwrap()
-        .insert(router_id, Box::new(f));
+        .unwrap();
+    lk.clear();
+    lk.insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27701).await;
@@ -241,10 +242,12 @@ async fn test_interceptors_cache_update_egress() {
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
-        .unwrap()
-        .insert(router_id, Box::new(f));
+        .unwrap();
+    lk.clear();
+    lk.insert(router_id, Box::new(f));
+    drop(lk);
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27702).await;
@@ -331,10 +334,12 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let mut lk = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
-        .unwrap()
-        .insert(router_id, Box::new(f));
+        .unwrap();
+    lk.clear();
+    lk.insert(router_id, Box::new(f));
+    drop(lk);
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27703).await;

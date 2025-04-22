@@ -42,7 +42,6 @@ use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
-    network::Network,
     pubsub::{pubsub_remove_node, undeclare_simple_subscription},
     queries::{queries_remove_node, undeclare_simple_queryable},
 };
@@ -55,7 +54,11 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::linkstate::LinkStateList,
+    protocol::{
+        linkstate::{link_weights_from_config, LinkStateList},
+        network::Network,
+        PEERS_NET_NAME,
+    },
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
@@ -64,7 +67,6 @@ use crate::net::{
 };
 
 mod interests;
-mod network;
 mod pubsub;
 mod queries;
 mod token;
@@ -202,10 +204,12 @@ impl HatBaseTrait for HatCode {
             unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
+
+        let peer_link_weights = config.routing().peer().link_weights().clone();
         drop(config_guard);
 
         hat_mut!(tables).linkstatepeers_net = Some(Network::new(
-            "[Peers network]".to_string(),
+            PEERS_NET_NAME.to_string(),
             tables.zid,
             runtime,
             peer_full_linkstate,
@@ -214,6 +218,7 @@ impl HatBaseTrait for HatCode {
             gossip_multihop,
             gossip_target,
             autoconnect,
+            link_weights_from_config(peer_link_weights, PEERS_NET_NAME)?,
         ));
         Ok(())
     }
@@ -461,6 +466,26 @@ impl HatBaseTrait for HatCode {
                 .unwrap_or_else(|| "graph {}".to_string()),
             _ => "graph {}".to_string(),
         }
+    }
+
+    fn update_from_config(
+        &self,
+        tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
+        runtime: &Runtime,
+    ) -> ZResult<()> {
+        let config = runtime.config().lock();
+        let peer_link_weights = link_weights_from_config(
+            config.routing().peer().link_weights().clone(),
+            PEERS_NET_NAME,
+        )?;
+        drop(config);
+        if let Some(pn) = hat_mut!(tables).linkstatepeers_net.as_mut() {
+            if pn.update_link_weights(peer_link_weights) {
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
+            }
+        }
+        Ok(())
     }
 }
 

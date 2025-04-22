@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::num::NonZeroU16;
+use std::{collections::HashMap, num::NonZeroU16};
 
+use nonempty_collections::NEVec;
+use zenoh_config::LinkWeight;
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohIdProto};
+use zenoh_result::ZResult;
 
 pub const PID: u64 = 1; // 0x01
 pub const WAI: u64 = 1 << 1; // 0x02
@@ -168,4 +171,26 @@ impl LinkStateList {
 
         Self { link_states }
     }
+}
+
+pub(crate) fn link_weights_from_config(
+    link_weights: Option<NEVec<LinkWeight>>,
+    network_name: &str,
+) -> ZResult<HashMap<ZenohIdProto, LinkEdgeWeight>> {
+    let mut link_weights_by_zid = HashMap::new();
+    if let Some(link_weights) = link_weights {
+        for lw in link_weights {
+            if link_weights_by_zid
+                .insert(lw.destination.into(), LinkEdgeWeight::new(lw.weight))
+                .is_some()
+            {
+                bail!(
+                    "{} config contains a duplicate zid value for link weight: {}",
+                    network_name,
+                    lw.destination
+                );
+            }
+        }
+    }
+    Ok(link_weights_by_zid)
 }
