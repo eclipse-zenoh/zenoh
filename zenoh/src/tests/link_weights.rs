@@ -129,9 +129,13 @@ use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
-async fn get_basic_router_config(listen_ports: &[u16], connect_ports: &[u16]) -> Config {
+async fn get_basic_router_config(
+    listen_ports: &[u16],
+    connect_ports: &[u16],
+    wai: WhatAmI,
+) -> Config {
     let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Router)).unwrap();
+    config.set_mode(Some(wai)).unwrap();
     config
         .listen
         .endpoints
@@ -153,6 +157,7 @@ async fn get_basic_router_config(listen_ports: &[u16], connect_ports: &[u16]) ->
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config.scouting.gossip.set_enabled(Some(false)).unwrap();
     config
 }
 
@@ -172,6 +177,7 @@ struct Net {
     routers: Vec<Session>,
     source: Session,
     dest: Session,
+    wai: WhatAmI,
 }
 
 impl Net {
@@ -188,18 +194,50 @@ impl Net {
                     })
                     .collect::<Vec<_>>();
 
-            self.routers[i]
-                .0
-                .runtime
-                .config()
-                .lock()
-                .routing
-                .router
-                .set_link_weights(weights.try_into().ok())
-                .unwrap();
+            match self.wai {
+                WhatAmI::Router => self.routers[i]
+                    .0
+                    .runtime
+                    .config()
+                    .lock()
+                    .routing
+                    .router
+                    .set_link_weights(weights.try_into().ok())
+                    .unwrap(),
+                WhatAmI::Peer => self.routers[i]
+                    .0
+                    .runtime
+                    .config()
+                    .lock()
+                    .routing
+                    .peer
+                    .set_link_weights(weights.try_into().ok())
+                    .unwrap(),
+                WhatAmI::Client => unreachable!(),
+            };
             self.routers[i].0.runtime.update_network().unwrap();
         }
     }
+}
+
+#[allow(clippy::type_complexity)]
+async fn create_routers_net(
+    net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
+    source: u16,
+    dest: u16,
+    port_offset: u16,
+) -> Net {
+    create_net(net, source, dest, port_offset, WhatAmI::Router).await
+}
+
+#[allow(clippy::type_complexity)]
+async fn create_peers_net(
+    net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
+    source: u16,
+    dest: u16,
+    port_offset: u16,
+) -> Net {
+    create_net(net, source, dest, port_offset, WhatAmI::Peer).await
 }
 
 #[allow(clippy::type_complexity)]
@@ -208,6 +246,7 @@ async fn create_net(
     source: u16,
     dest: u16,
     port_offset: u16,
+    wai: WhatAmI,
 ) -> Net {
     let start_id = ZenohId::from_str("a").unwrap();
     let end_id = ZenohId::from_str("b").unwrap();
@@ -236,7 +275,7 @@ async fn create_net(
             v.1.iter()
                 .map(|(id, _)| id + port_offset)
                 .collect::<Vec<_>>();
-        let mut config = get_basic_router_config(&[port_offset + v.0], &connect).await;
+        let mut config = get_basic_router_config(&[port_offset + v.0], &connect, wai).await;
         config.set_id(zid).unwrap();
         let weights =
             v.1.iter()
@@ -247,12 +286,27 @@ async fn create_net(
                     })
                 })
                 .collect::<Vec<_>>();
-        if !weights.is_empty() {
-            config
-                .routing
-                .router
-                .set_link_weights(Some(weights.try_into().unwrap()))
-                .unwrap();
+        match wai {
+            WhatAmI::Router => {
+                config
+                    .routing
+                    .router
+                    .set_link_weights(weights.try_into().ok())
+                    .unwrap();
+            }
+            WhatAmI::Peer => {
+                config
+                    .routing
+                    .peer
+                    .set_link_weights(weights.try_into().ok())
+                    .unwrap();
+                config
+                    .routing
+                    .peer
+                    .set_mode(Some("linkstate".to_string()))
+                    .unwrap();
+            }
+            WhatAmI::Client => unreachable!(),
         }
 
         let router = ztimeout!(open(config)).unwrap();
@@ -272,6 +326,7 @@ async fn create_net(
         routers,
         source: session_a,
         dest: session_b,
+        wai,
     }
 }
 
@@ -282,7 +337,7 @@ async fn test_link_weights_inner(
     dest: u16,
     port_offset: u16,
 ) -> String {
-    let net = create_net(net, source, dest, port_offset).await;
+    let net = create_routers_net(net, source, dest, port_offset).await;
 
     let sub = ztimeout!(net.dest.declare_subscriber("test/link_weights")).unwrap();
 
@@ -499,7 +554,7 @@ async fn test_link_weights_update_diamond() {
     //      \ /
     //       3
 
-    let mut net = create_net(
+    let mut net = create_routers_net(
         vec![
             (1, vec![(2, Some(10)), (3, None)]),
             (2, vec![(4, None)]),
@@ -571,7 +626,7 @@ async fn test_link_weights_update_hexagon() {
     //      \ / \ /
     //       3 - 6
 
-    let mut net = create_net(
+    let mut net = create_routers_net(
         vec![
             (1, vec![(2, Some(1)), (3, None), (4, None)]),
             (2, vec![(4, Some(1)), (5, None)]),
@@ -622,4 +677,76 @@ async fn test_link_weights_update_hexagon() {
         .to_string();
 
     assert_eq!(msg, "a->1->4->7->b");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_link_weights_update_diamond_peers() {
+    init_log_from_env_or("error");
+    //       2
+    //      / \
+    // a - 1   4 - b
+    //      \ /
+    //       3
+
+    let mut net = create_peers_net(
+        vec![
+            (1, vec![(2, Some(10)), (3, None)]),
+            (2, vec![(4, None)]),
+            (3, vec![(4, None)]),
+            (4, vec![]),
+        ],
+        1,
+        4,
+        33000,
+    )
+    .await;
+
+    let sub = ztimeout!(net.dest.declare_subscriber("test/link_weights")).unwrap();
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+    assert_eq!(msg, "a->1->2->4->b");
+
+    ztimeout!(net.update_weights(vec![
+        (1, vec![(2, None), (3, Some(10))]),
+        (2, vec![(4, None)]),
+        (3, vec![(4, None)]),
+        (4, vec![]),
+    ]));
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+    assert_eq!(msg, "a->1->3->4->b");
+
+    ztimeout!(net.update_weights(vec![
+        (1, vec![(2, None), (3, Some(200))]),
+        (2, vec![(4, None)]),
+        (3, vec![(4, None)]),
+        (4, vec![]),
+    ]));
+
+    tokio::time::sleep(3 * SLEEP).await;
+    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
+
+    let msg = ztimeout!(sub.recv_async())
+        .unwrap()
+        .payload()
+        .try_to_string()
+        .unwrap()
+        .to_string();
+    assert_eq!(msg, "a->1->2->4->b");
 }

@@ -232,7 +232,7 @@ impl Network {
                     ..Default::default()
                 },
             )],
-            |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
+            |_link| true,
         );
         true
     }
