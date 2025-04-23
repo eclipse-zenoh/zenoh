@@ -3195,6 +3195,7 @@ impl Closee for Arc<SessionInner> {
         let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
         let _local_resources = std::mem::take(&mut state.local_resources);
         let _remote_resources = std::mem::take(&mut state.remote_resources);
+        let _queries = std::mem::take(&mut state.queries);
         drop(state);
         #[cfg(feature = "unstable")]
         {
