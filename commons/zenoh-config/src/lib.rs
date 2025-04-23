@@ -172,6 +172,8 @@ pub struct AclConfigSubjects {
 pub struct QosOverwriteItemConf {
     /// Optional identifier for the qos modification configuration item.
     pub id: Option<String>,
+    /// A list of ZIDs on which qos will be overwritten when communicating with.
+    pub zids: Option<NEVec<ZenohId>>,
     /// A list of interfaces to which the qos will be applied.
     /// QosOverwrite will be applied for all interfaces if the parameter is None.
     pub interfaces: Option<NEVec<String>>,
