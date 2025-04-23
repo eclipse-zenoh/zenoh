@@ -457,7 +457,7 @@ validated_struct::validator! {
                 /// connected to each other.
                 /// The failover brokering only works if gossip discovery is enabled.
                 peers_failover_brokering: Option<bool>,
-                /// Optional weights of the outgoing links.
+                /// Optional weights of the outgoing links on routers net.
                 /// For non-specified destination nodes the corresponding link weight will be set to 100,
                 /// unless the weight on the same link is provided in the config of destination node, in which case
                 /// it will be used as a link weight. If both link endpoints set a link weight, an average of both will be used.
@@ -468,7 +468,7 @@ validated_struct::validator! {
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
                 mode: Option<String>,
-                /// Optional weights of the outgoing links in linkstate mode.
+                /// Optional weights of the outgoing links on peers net in linkstate mode.
                 /// For non-specified destination nodes the corresponding link weight will be set to 100,
                 /// unless the weight on the same link is provided in the config of destination node, in which case
                 /// it will be used as a link weight. If both link endpoints set a link weight, an average of both will be used.
