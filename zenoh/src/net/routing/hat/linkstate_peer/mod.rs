@@ -487,6 +487,16 @@ impl HatBaseTrait for HatCode {
         }
         Ok(())
     }
+
+    fn links_info(
+        &self,
+        tables: &Tables,
+    ) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
+        match &hat!(tables).linkstatepeers_net {
+            Some(net) => net.links_info(),
+            None => HashMap::new(),
+        }
+    }
 }
 
 struct HatContext {

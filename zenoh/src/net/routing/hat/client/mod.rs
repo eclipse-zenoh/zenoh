@@ -25,10 +25,13 @@ use std::{
 
 use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::{
-    declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-    interest::InterestId,
-    Oam,
+use zenoh_protocol::{
+    core::ZenohIdProto,
+    network::{
+        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+        interest::InterestId,
+        Oam,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -268,6 +271,13 @@ impl HatBaseTrait for HatCode {
 
     fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
         "graph {}".to_string()
+    }
+
+    fn links_info(
+        &self,
+        _tables: &Tables,
+    ) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
+        HashMap::new()
     }
 }
 

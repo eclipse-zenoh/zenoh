@@ -15,6 +15,7 @@
 
 use std::{
     any::Any,
+    collections::HashMap,
     str::{self, FromStr},
 };
 
@@ -22,13 +23,17 @@ use zenoh_buffers::ZBuf;
 use zenoh_config::{InterceptorFlow, LinkWeight};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
+    core::ZenohIdProto,
     network::{NetworkBodyMut, NetworkMessageMut, Push},
     zenoh::PushBody,
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use crate::{
-    net::routing::{interceptor::*, RoutingContext},
+    net::{
+        protocol::linkstate::{LinkEdgeWeight, LinkInfo},
+        routing::{interceptor::*, RoutingContext},
+    },
     Session,
 };
 
@@ -749,4 +754,69 @@ async fn test_link_weights_update_diamond_peers() {
         .unwrap()
         .to_string();
     assert_eq!(msg, "a->1->2->4->b");
+}
+
+async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
+    //       2
+    //      / \
+    // a - 1 - 4 - b
+    //      \ /
+    //       3
+
+    let net = create_net(
+        vec![
+            (1, vec![(2, Some(10)), (3, None), (4, Some(20))]),
+            (2, vec![(4, None)]),
+            (3, vec![(4, None)]),
+            (4, vec![(1, Some(30))]),
+        ],
+        1,
+        4,
+        port_offset,
+        wai,
+    )
+    .await;
+
+    let info = net.routers[0].0.runtime.get_links_info();
+
+    let expected = HashMap::from([
+        (
+            ZenohIdProto::from_str("2").unwrap(),
+            LinkInfo {
+                source_weight: Some(10),
+                dest_weight: None,
+                actual_weight: 10,
+            },
+        ),
+        (
+            ZenohIdProto::from_str("3").unwrap(),
+            LinkInfo {
+                source_weight: None,
+                dest_weight: None,
+                actual_weight: 100,
+            },
+        ),
+        (
+            ZenohIdProto::from_str("4").unwrap(),
+            LinkInfo {
+                source_weight: Some(20),
+                dest_weight: Some(30),
+                actual_weight: 25,
+            },
+        ),
+    ]);
+
+    assert_eq!(info, expected);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_link_weights_info_diamond_routers() {
+    init_log_from_env_or("error");
+    test_link_weights_info_diamond_inner(34000, WhatAmI::Router).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_link_weights_info_diamond_peers() {
+    init_log_from_env_or("error");
+    test_link_weights_info_diamond_inner(35000, WhatAmI::Peer).await;
 }

@@ -86,18 +86,12 @@ impl LinkEdgeWeight {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct LinkEdge {
-    pub(crate) dest: ZenohIdProto,
-    pub(crate) weight: LinkEdgeWeight,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LocalLinkState {
     pub(crate) sn: u64,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     pub(crate) locators: Option<Vec<Locator>>,
-    pub(crate) links: Vec<LinkEdge>,
+    pub(crate) links: HashMap<ZenohIdProto, LinkEdgeWeight>,
 }
 
 impl LinkState {
@@ -193,4 +187,17 @@ pub(crate) fn link_weights_from_config(
         }
     }
     Ok(link_weights_by_zid)
+}
+
+impl Into<Option<u16>> for LinkEdgeWeight {
+    fn into(self) -> Option<u16> {
+        self.is_set().then_some(self.value())
+    }
+}
+
+#[derive(PartialEq, Debug, serde::Serialize)]
+pub(crate) struct LinkInfo {
+    pub(crate) source_weight: Option<u16>,
+    pub(crate) dest_weight: Option<u16>,
+    pub(crate) actual_weight: u16,
 }

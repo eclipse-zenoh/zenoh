@@ -19,7 +19,7 @@ use std::{
 use itertools::Itertools;
 use petgraph::{
     graph::NodeIndex,
-    visit::{IntoNodeReferences, VisitMap, Visitable},
+    visit::{EdgeRef, IntoNodeReferences, VisitMap, Visitable},
 };
 use rand::Rng;
 use vec_map::VecMap;
@@ -36,10 +36,11 @@ use zenoh_protocol::{
 };
 use zenoh_transport::unicast::TransportUnicast;
 
+use super::linkstate::LinkInfo;
 use crate::net::{
     codec::Zenoh080Routing,
     common::AutoConnect,
-    protocol::linkstate::{LinkEdge, LinkEdgeWeight, LinkState, LinkStateList, LocalLinkState},
+    protocol::linkstate::{LinkEdgeWeight, LinkState, LinkStateList, LocalLinkState},
     routing::dispatcher::tables::NodeId,
     runtime::Runtime,
 };
@@ -57,7 +58,7 @@ pub(crate) struct Node {
     pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) sn: u64,
-    pub(crate) links: Vec<LinkEdge>,
+    pub(crate) links: HashMap<ZenohIdProto, LinkEdgeWeight>,
 }
 
 impl std::fmt::Debug for Node {
@@ -157,7 +158,7 @@ impl Network {
             whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
-            links: vec![],
+            links: HashMap::new(),
         });
 
         Network {
@@ -188,13 +189,13 @@ impl Network {
     ) -> bool {
         let mut dests_to_update = Vec::new();
         for l in &mut self.graph[self.idx].links {
-            let old_weight = self.link_weights.get(&l.dest);
-            let new_weight = link_weights.get(&l.dest);
+            let old_weight = self.link_weights.get(&l.0);
+            let new_weight = link_weights.get(&l.0);
             if old_weight == new_weight {
                 continue;
             }
-            l.weight = new_weight.copied().unwrap_or_default();
-            dests_to_update.push(l.dest);
+            *l.1 = new_weight.copied().unwrap_or_default();
+            dests_to_update.push(*l.0);
         }
 
         self.link_weights = link_weights;
@@ -209,8 +210,7 @@ impl Network {
                 if self.full_linkstate
                     && self.graph[dest_idx]
                         .links
-                        .iter()
-                        .any(|l| l.dest == self.graph[self.idx].zid)
+                        .contains_key(&self.graph[self.idx].zid)
                 {
                     tracing::trace!(
                         "Update edge (link_weight) {} {}",
@@ -303,18 +303,18 @@ impl Network {
         let mut links = vec![];
         let mut has_non_default_weight = false;
         if details.links {
-            for l in &self.graph[idx].links {
-                match self.get_idx(&l.dest) {
+            for (dest, weight) in &self.graph[idx].links {
+                match self.get_idx(&dest) {
                     Some(idx2) => {
                         links.push(idx2.index().try_into().unwrap());
-                        weights.push(l.weight.as_raw());
-                        has_non_default_weight = has_non_default_weight || l.weight.is_set();
+                        weights.push(weight.as_raw());
+                        has_non_default_weight = has_non_default_weight || weight.is_set();
                     }
                     None => {
                         tracing::error!(
                             "{} Internal error building link state: cannot get index of {}",
                             self.name,
-                            l.dest
+                            dest
                         );
                         continue;
                     }
@@ -436,13 +436,13 @@ impl Network {
         let w1 = self.graph[idx1]
             .links
             .iter()
-            .find(|l| l.dest == zid2)
-            .and_then(|l| l.weight.is_set().then_some(l.weight.value()));
+            .find(|(dest, _weight)| *dest == &zid2)
+            .and_then(|(_dest, weight)| weight.is_set().then_some(weight.value()));
         let w2 = self.graph[idx2]
             .links
             .iter()
-            .find(|l| l.dest == zid1)
-            .and_then(|l| l.weight.is_set().then_some(l.weight.value()));
+            .find(|(dest, _weight)| *dest == &zid1)
+            .and_then(|(_dest, weight)| weight.is_set().then_some(weight.value()));
         let w = match (w1, w2) {
             (None, None) => LinkEdgeWeight::default().value() as f64,
             (None, Some(w2)) => w2 as f64,
@@ -521,17 +521,17 @@ impl Network {
         link_states
             .into_iter()
             .map(|(zid, whatami, locators, sn, links, weights)| {
-                let mut edges: Vec<LinkEdge> = Vec::with_capacity(links.len());
+                let mut edges = HashMap::with_capacity(links.len());
                 for i in 0..links.len() {
                     match src_link.get_zid(&links[i]) {
                         Some(zid) => {
-                            edges.push(LinkEdge {
-                                dest: *zid,
-                                weight: weights
+                            edges.insert(
+                                *zid,
+                                weights
                                     .as_ref()
                                     .map(|w| LinkEdgeWeight::from_raw(w[i]))
                                     .unwrap_or_default(),
-                            });
+                            );
                         }
                         None => {
                             tracing::error!(
@@ -739,13 +739,9 @@ impl Network {
                 }
             };
             // add, update and remove edges
-            for link in &ls.links {
-                if let Some(idx2) = self.get_idx(&link.dest) {
-                    if self.graph[idx2]
-                        .links
-                        .iter()
-                        .any(|l| l.dest == self.graph[idx1].zid)
-                    {
+            for (dest, _) in &ls.links {
+                if let Some(idx2) = self.get_idx(dest) {
+                    if self.graph[idx2].links.contains_key(&self.graph[idx1].zid) {
                         self.update_edge(idx1, idx2);
                         tracing::trace!(
                             "{} Update edge (state) {} {}",
@@ -756,17 +752,13 @@ impl Network {
                     }
                 } else {
                     let node = Node {
-                        zid: link.dest,
+                        zid: *dest,
                         whatami: None,
                         locators: None,
                         sn: 0,
-                        links: vec![],
+                        links: HashMap::new(),
                     };
-                    tracing::debug!(
-                        "{} Add node (reintroduced) {}",
-                        self.name,
-                        link.dest.clone()
-                    );
+                    tracing::debug!("{} Add node (reintroduced) {}", self.name, dest.clone());
                     let idx = self.add_node(node);
                     new_nodes.push(idx);
                 }
@@ -778,7 +770,7 @@ impl Network {
                 edges.push(edge);
             }
             for (eidx, idx2) in edges {
-                if !ls.links.iter().any(|l| l.dest == self.graph[idx2].zid) {
+                if !ls.links.contains_key(&self.graph[idx2].zid) {
                     tracing::trace!(
                         "{} Remove edge (state) {} {}",
                         self.name,
@@ -840,7 +832,7 @@ impl Network {
                             whatami: Some(whatami),
                             locators: None,
                             sn: 0,
-                            links: vec![],
+                            links: HashMap::new(),
                         }),
                         true,
                     )
@@ -851,16 +843,12 @@ impl Network {
             if self.full_linkstate
                 && self.graph[idx]
                     .links
-                    .iter()
-                    .any(|l| l.dest == self.graph[self.idx].zid)
+                    .contains_key(&self.graph[self.idx].zid)
             {
                 self.update_edge(self.idx, idx);
                 tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
             }
-            self.graph[self.idx].links.push(LinkEdge {
-                dest: zid,
-                weight: link_weight,
-            });
+            self.graph[self.idx].links.insert(zid, link_weight);
             self.graph[self.idx].sn += 1;
 
             // Send updated self linkstate on all existing links except new one
@@ -941,7 +929,7 @@ impl Network {
     pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
-        self.graph[self.idx].links.retain(|link| link.dest != *zid);
+        self.graph[self.idx].links.retain(|dest, _| dest != zid);
 
         if self.full_linkstate {
             if let Some((edge, _)) = self
@@ -997,8 +985,8 @@ impl Network {
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
             if visit_map.visit(node) {
-                for succzid in &self.graph[node].links {
-                    if let Some(succ) = self.get_idx(&succzid.dest) {
+                for (succzid, _) in &self.graph[node].links {
+                    if let Some(succ) = self.get_idx(succzid) {
                         if !visit_map.is_visited(&succ) {
                             dfs_stack.push(succ);
                         }
@@ -1119,10 +1107,42 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_links(&self, node: ZenohIdProto) -> &[LinkEdge] {
-        self.get_node(&node)
-            .map(|node| &node.links[..])
-            .unwrap_or_default()
+    pub(crate) fn get_links(
+        &self,
+        node: ZenohIdProto,
+    ) -> Option<&HashMap<ZenohIdProto, LinkEdgeWeight>> {
+        self.get_node(&node).map(|node| &node.links)
+    }
+
+    pub(crate) fn links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
+        let mut out = HashMap::new();
+        for e in self
+            .graph
+            .edges_directed(self.idx, petgraph::Direction::Outgoing)
+        {
+            let actual_weight: u16 = *e.weight() as u16;
+            let dest_weight = self.graph[e.target()]
+                .links
+                .get(&self.graph[self.idx].zid)
+                .copied()
+                .unwrap_or_default()
+                .into();
+            let source_weight = self.graph[self.idx]
+                .links
+                .get(&self.graph[e.target()].zid)
+                .copied()
+                .unwrap_or_default()
+                .into();
+            out.insert(
+                self.graph[e.target()].zid,
+                LinkInfo {
+                    source_weight,
+                    dest_weight,
+                    actual_weight,
+                },
+            );
+        }
+        out
     }
 }
 

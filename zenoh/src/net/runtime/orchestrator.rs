@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     net::{IpAddr, Ipv6Addr, SocketAddr},
     str::FromStr,
     time::Duration,
@@ -40,7 +40,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
-use crate::net::common::AutoConnect;
+use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo};
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -1245,5 +1245,12 @@ impl Runtime {
         let mut tables = zwrite!(router.tables.tables);
         let hat_code = tables.hat_code.clone();
         hat_code.update_from_config(&mut tables, &router.tables, self)
+    }
+
+    pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
+        let router = self.router();
+        let tables = zread!(router.tables.tables);
+        let hat_code = tables.hat_code.clone();
+        hat_code.links_info(&tables)
     }
 }

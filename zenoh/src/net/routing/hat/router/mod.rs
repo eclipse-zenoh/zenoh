@@ -56,7 +56,7 @@ use super::{
 use crate::net::{
     codec::Zenoh080Routing,
     protocol::{
-        linkstate::{link_weights_from_config, LinkEdge, LinkStateList},
+        linkstate::{link_weights_from_config, LinkEdgeWeight, LinkStateList},
         network::{shared_nodes, Network},
         PEERS_NET_NAME, ROUTERS_NET_NAME,
     },
@@ -229,15 +229,16 @@ impl HatTables {
             .as_ref()
             .unwrap()
             .get_links(peer)
-            .iter()
+            .map(|h| h.keys())
+            .into_iter()
+            .flatten()
             .filter(move |nid| {
-                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(&nid.dest) {
+                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(*nid) {
                     node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
                 } else {
                     false
                 }
             })
-            .map(|n| &n.dest)
     }
 
     #[inline]
@@ -275,9 +276,12 @@ impl HatTables {
     }
 
     #[inline]
-    fn failover_brokering_to(source_links: &[LinkEdge], dest: ZenohIdProto) -> bool {
+    fn failover_brokering_to(
+        source_links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
+        dest: &ZenohIdProto,
+    ) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
-        !source_links.is_empty() && !source_links.iter().any(|e| e.dest == dest)
+        !source_links.is_empty() && !source_links.contains_key(dest)
     }
 
     #[inline]
@@ -287,8 +291,10 @@ impl HatTables {
                 .linkstatepeers_net
                 .as_ref()
                 .map(|net| {
-                    let links = net.get_links(peer1);
-                    let res = HatTables::failover_brokering_to(links, peer2);
+                    let res = match net.get_links(peer1) {
+                        Some(links) => HatTables::failover_brokering_to(links, &peer2),
+                        None => false,
+                    };
                     tracing::trace!("failover_brokering {} {} : {}", peer1, peer2, res);
                     res
                 })
@@ -857,6 +863,20 @@ impl HatBaseTrait for HatCode {
             }
         }
         Ok(())
+    }
+
+    fn links_info(
+        &self,
+        tables: &Tables,
+    ) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
+        let mut out = HashMap::new();
+        if let Some(net) = &hat!(tables).routers_net {
+            out.extend(net.links_info());
+        }
+        if let Some(net) = &hat!(tables).linkstatepeers_net {
+            out.extend(net.links_info());
+        }
+        out
     }
 }
 

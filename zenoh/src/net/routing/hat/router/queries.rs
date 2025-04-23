@@ -43,7 +43,7 @@ use super::{
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
-    protocol::{linkstate::LinkEdge, network::Network},
+    protocol::{linkstate::LinkEdgeWeight, network::Network},
     routing::{
         dispatcher::{
             face::FaceState,
@@ -949,7 +949,7 @@ pub(super) fn queries_remove_node(
 pub(super) fn queries_linkstate_change(
     tables: &mut Tables,
     zid: &ZenohIdProto,
-    links: &[LinkEdge],
+    links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {
@@ -967,7 +967,7 @@ pub(super) fn queries_linkstate_change(
                         && !res.session_ctxs.values().any(|ctx| {
                             ctx.face.whatami == WhatAmI::Peer
                                 && src_face.id != ctx.face.id
-                                && HatTables::failover_brokering_to(links, ctx.face.zid)
+                                && HatTables::failover_brokering_to(links, &ctx.face.zid)
                         })
                 })
                 .cloned()
@@ -996,7 +996,7 @@ pub(super) fn queries_linkstate_change(
 
             for mut dst_face in tables.faces.values().cloned() {
                 if src_face.id != dst_face.id
-                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                    && HatTables::failover_brokering_to(links, &dst_face.zid)
                 {
                     for res in face_hat!(src_face).remote_qabls.values() {
                         if !face_hat!(dst_face).local_qabls.contains_key(res) {

@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, sync::Arc};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
@@ -30,8 +30,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
-#[cfg(feature = "unstable")]
-use {crate::key_expr::KeyExpr, std::collections::HashMap};
 
 use super::{
     dispatcher::{
@@ -41,7 +39,9 @@ use super::{
     },
     RoutingContext,
 };
-use crate::net::runtime::Runtime;
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
+use crate::net::{protocol::linkstate::LinkInfo, runtime::Runtime};
 
 mod client;
 mod linkstate_peer;
@@ -146,6 +146,8 @@ pub(crate) trait HatBaseTrait {
     ) -> ZResult<()> {
         Ok(())
     }
+
+    fn links_info(&self, tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo>;
 }
 
 pub(crate) trait HatInterestTrait {
