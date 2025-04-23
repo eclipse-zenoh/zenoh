@@ -13,6 +13,7 @@
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
+    mem,
     sync::{Arc, Mutex},
 };
 
@@ -316,7 +317,7 @@ impl AdminSpace {
         let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.send_declare(Declare {
+        primitives.send_declare(&mut Declare {
             interest_id: None,
 
             ext_qos: ext::QoSType::DECLARE,
@@ -329,7 +330,7 @@ impl AdminSpace {
             }),
         });
 
-        primitives.send_declare(Declare {
+        primitives.send_declare(&mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -359,13 +360,13 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn send_interest(&self, msg: Interest) {
+    fn send_interest(&self, msg: &mut Interest) {
         tracing::trace!("Recv interest {:?}", msg);
     }
 
-    fn send_declare(&self, msg: Declare) {
+    fn send_declare(&self, msg: &mut Declare) {
         tracing::trace!("Recv declare {:?}", msg);
-        if let DeclareBody::DeclareKeyExpr(m) = msg.body {
+        if let DeclareBody::DeclareKeyExpr(m) = &msg.body {
             match self.key_expr_to_string(&m.wire_expr) {
                 Ok(s) => {
                     zlock!(self.mappings).insert(m.id, s.into());
@@ -375,7 +376,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_push(&self, msg: Push, _reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         {
             let conf = &self.context.runtime.state.config.lock().0;
@@ -392,7 +393,7 @@ impl Primitives for AdminSpace {
             "@/{}/{}/config/",
             self.context.runtime.state.zid, self.context.runtime.state.whatami,
         )) {
-            match msg.payload {
+            match &msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
                         tracing::trace!(
@@ -433,9 +434,9 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_request(&self, msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
-        match msg.payload {
+        match &mut msg.payload {
             RequestBody::Query(query) => {
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
@@ -445,7 +446,7 @@ impl Primitives for AdminSpace {
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
-                        primitives.send_response_final(ResponseFinal {
+                        primitives.send_response_final(&mut ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
@@ -458,7 +459,7 @@ impl Primitives for AdminSpace {
                     Ok(key_expr) => key_expr.into_owned(),
                     Err(e) => {
                         tracing::error!("Unknown KeyExpr: {}", e);
-                        primitives.send_response_final(ResponseFinal {
+                        primitives.send_response_final(&mut ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
@@ -471,16 +472,15 @@ impl Primitives for AdminSpace {
                 let query = Query {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
-                        parameters: query.parameters.into(),
+                        parameters: mem::take(&mut query.parameters).into(),
                         qid: msg.id,
                         zid: zid.into(),
                         primitives,
                     }),
                     eid: self.queryable_id,
-                    value: query
-                        .ext_body
+                    value: mem::take(&mut query.ext_body)
                         .map(|b| (b.payload.into(), b.encoding.into())),
-                    attachment: query.ext_attachment.map(Into::into),
+                    attachment: query.ext_attachment.take().map(Into::into),
                 };
 
                 for (key, handler) in &self.handlers {
@@ -492,11 +492,11 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_response(&self, msg: Response) {
+    fn send_response(&self, msg: &mut Response) {
         trace!("recv Response {:?}", msg);
     }
 
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
     }
 
@@ -511,32 +511,32 @@ impl Primitives for AdminSpace {
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
     #[inline]
-    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<&mut Interest>) {
         (self as &dyn Primitives).send_interest(ctx.msg)
     }
 
     #[inline]
-    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<&mut Declare>) {
         (self as &dyn Primitives).send_declare(ctx.msg)
     }
 
     #[inline]
-    fn send_push(&self, msg: Push, reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         (self as &dyn Primitives).send_push(msg, reliability)
     }
 
     #[inline]
-    fn send_request(&self, msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         (self as &dyn Primitives).send_request(msg)
     }
 
     #[inline]
-    fn send_response(&self, msg: Response) {
+    fn send_response(&self, msg: &mut Response) {
         (self as &dyn Primitives).send_response(msg)
     }
 
     #[inline]
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         (self as &dyn Primitives).send_response_final(msg)
     }
 

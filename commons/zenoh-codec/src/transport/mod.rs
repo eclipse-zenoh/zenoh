@@ -34,19 +34,19 @@ use zenoh_protocol::{
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 
 // TransportMessageLowLatency
-impl<W> WCodec<&TransportMessageLowLatency, &mut W> for Zenoh080
+impl<W> WCodec<TransportMessageLowLatencyRef<'_>, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &TransportMessageLowLatency) -> Self::Output {
-        let TransportMessageLowLatency { body } = x;
+    fn write(self, writer: &mut W, x: TransportMessageLowLatencyRef) -> Self::Output {
+        let TransportMessageLowLatencyRef { body } = x;
 
         match body {
-            TransportBodyLowLatency::Network(b) => self.write(&mut *writer, b),
-            TransportBodyLowLatency::KeepAlive(b) => self.write(&mut *writer, b),
-            TransportBodyLowLatency::Close(b) => self.write(&mut *writer, b),
+            TransportBodyLowLatencyRef::Network(b) => self.write(&mut *writer, b),
+            TransportBodyLowLatencyRef::KeepAlive(b) => self.write(&mut *writer, &b),
+            TransportBodyLowLatencyRef::Close(b) => self.write(&mut *writer, &b),
         }
     }
 }

@@ -21,7 +21,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
     get_ip_interface_names, tcp::TcpSocketConfig, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -245,13 +245,24 @@ impl LinkManagerUnicastTcp {
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
+
         let config = endpoint.config();
 
-        let link_config = TcpLinkConfig::new(&config)?;
+        // if both `iface`, and `bind` are present, return error
+        if let (Some(_), Some(_)) = (config.get(BIND_INTERFACE), config.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
+
+        let link_config = TcpLinkConfig::new(&config).await?;
         let socket_config = TcpSocketConfig::new(
             link_config.tx_buffer_size,
             link_config.rx_buffer_size,
             link_config.bind_iface,
+            link_config.bind_socket,
         );
 
         let mut errs: Vec<ZError> = vec![];
@@ -280,9 +291,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
+
         let config = endpoint.config();
 
-        let link_config = TcpLinkConfig::new(&config)?;
+        let link_config = TcpLinkConfig::new(&config).await?;
         let socket_config: TcpSocketConfig<'_> = link_config.into();
 
         let mut errs: Vec<ZError> = vec![];

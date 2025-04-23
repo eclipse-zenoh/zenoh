@@ -115,7 +115,7 @@ impl TransportMulticastInner {
         }
 
         #[cfg(feature = "stats")]
-        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
+        let stats = TransportStats::new(Some(Arc::downgrade(&manager.get_stats())), HashMap::new());
 
         #[cfg(feature = "shared-memory")]
         let shm = match manager.config.multicast.is_shm {
