@@ -25,20 +25,23 @@ use zenoh_protocol::{
         key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
         EMPTY_EXPR_ID,
     },
-    network::{ext, Declare, DeclareBody, DeclareKeyExpr},
+    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
     zenoh::{PushBody, Put},
 };
 
-use crate::net::{
-    primitives::{DummyPrimitives, EPrimitives, Primitives},
-    routing::{
-        dispatcher::{
-            face::{Face, FaceState},
-            pubsub::SubscriberInfo,
-            tables::Tables,
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        primitives::{DummyPrimitives, EPrimitives, Primitives},
+        routing::{
+            dispatcher::{
+                face::{Face, FaceState},
+                pubsub::SubscriberInfo,
+                tables::Tables,
+            },
+            router::*,
+            RoutingContext,
         },
-        router::*,
-        RoutingContext,
     },
 };
 
@@ -79,7 +82,7 @@ fn base_test() {
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
 
     Tables::print(&zread!(tables.tables));
@@ -201,7 +204,7 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
@@ -217,7 +220,7 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     assert!(res.upgrade().is_some());
 
@@ -228,7 +231,7 @@ fn multisub_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     assert!(res.upgrade().is_some());
 
@@ -239,7 +242,7 @@ fn multisub_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     assert!(res.upgrade().is_none());
 
@@ -321,7 +324,7 @@ async fn clean_test() {
         &"todrop1/todrop11".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
@@ -337,7 +340,7 @@ async fn clean_test() {
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
@@ -353,7 +356,7 @@ async fn clean_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
 
     println!("COUNT2: {}", res3.strong_count());
@@ -369,7 +372,7 @@ async fn clean_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -390,7 +393,7 @@ async fn clean_test() {
         &"todrop3".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
@@ -405,7 +408,7 @@ async fn clean_test() {
         2,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     assert!(res1.upgrade().is_some());
 
@@ -423,7 +426,7 @@ async fn clean_test() {
         &"todrop5".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     declare_subscription(
         zlock!(tables.ctrl_lock).as_ref(),
@@ -433,7 +436,7 @@ async fn clean_test() {
         &"todrop6".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
 
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
@@ -511,10 +514,10 @@ impl ClientPrimitives {
 }
 
 impl Primitives for ClientPrimitives {
-    fn send_interest(&self, _msg: zenoh_protocol::network::Interest) {}
+    fn send_interest(&self, _msg: &mut zenoh_protocol::network::Interest) {}
 
-    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
-        match msg.body {
+    fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
+        match &msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
                 zlock!(self.mapping).insert(d.id, name);
@@ -526,15 +529,15 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_request(&self, _msg: zenoh_protocol::network::Request) {}
+    fn send_request(&self, _msg: &mut zenoh_protocol::network::Request) {}
 
-    fn send_response(&self, _msg: zenoh_protocol::network::Response) {}
+    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
 
-    fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
 
     fn send_close(&self) {}
 
@@ -544,10 +547,10 @@ impl Primitives for ClientPrimitives {
 }
 
 impl EPrimitives for ClientPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<zenoh_protocol::network::Interest>) {}
+    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) {}
 
-    fn send_declare(&self, ctx: RoutingContext<zenoh_protocol::network::Declare>) {
-        match ctx.msg.body {
+    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) {
+        match &ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
                 zlock!(self.mapping).insert(d.id, name);
@@ -559,19 +562,19 @@ impl EPrimitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_request(&self, msg: zenoh_protocol::network::Request) {
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_response(&self, msg: zenoh_protocol::network::Response) {
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -602,7 +605,7 @@ fn client_test() {
     );
     Primitives::send_declare(
         primitives0.as_ref(),
-        Declare {
+        &mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -621,7 +624,7 @@ fn client_test() {
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     register_expr(
         &tables,
@@ -631,7 +634,7 @@ fn client_test() {
     );
     Primitives::send_declare(
         primitives0.as_ref(),
-        Declare {
+        &mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -653,7 +656,7 @@ fn client_test() {
     );
     Primitives::send_declare(
         primitives1.as_ref(),
-        Declare {
+        &mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -672,7 +675,7 @@ fn client_test() {
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     register_expr(
         &tables,
@@ -682,7 +685,7 @@ fn client_test() {
     );
     Primitives::send_declare(
         primitives1.as_ref(),
-        Declare {
+        &mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -704,7 +707,7 @@ fn client_test() {
     );
     Primitives::send_declare(
         primitives2.as_ref(),
-        Declare {
+        &mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -723,7 +726,7 @@ fn client_test() {
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| p.send_declare(m),
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
 
     primitives0.clear_data();
@@ -734,12 +737,12 @@ fn client_test() {
         route_data(
             &tables,
             &face.upgrade().unwrap(),
-            wire_expr,
-            ext::QoSType::DEFAULT,
-            None,
-            ext::NodeIdType { node_id: 0 },
-            || {
-                PushBody::Put(Put {
+            &mut Push {
+                wire_expr,
+                ext_qos: ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType { node_id: 0 },
+                payload: PushBody::Put(Put {
                     timestamp: None,
                     encoding: Encoding::empty(),
                     ext_sinfo: None,
@@ -748,7 +751,7 @@ fn client_test() {
                     ext_unknown: vec![],
                     payload: ZBuf::empty(),
                     ext_attachment: None,
-                })
+                }),
             },
             Reliability::Reliable,
         );
@@ -888,4 +891,28 @@ fn get_best_key_test() {
     assert_wire_expr!(get_best_key("a", "/b", &face2), { scope: 2, suffix: "" });
     assert_wire_expr!(get_best_key("a", "/d", &face2), { scope: 0, suffix: "a/d" });
     assert_wire_expr!(get_best_key("a/b", "", &face2), { scope: 2, suffix: "" });
+}
+
+#[test]
+fn big_key_expr() {
+    let config = Config::default();
+    let router = Router::new(
+        ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        None,
+        &config,
+    )
+    .unwrap();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face = router.new_primitives(primitives.clone());
+
+    let root = zread!(router.tables.tables)._get_root().clone();
+    let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();
+    let wire_expr = WireExpr::from(&**key_expr);
+    register_expr(&router.tables, &mut face.state.clone(), 1, &wire_expr);
+    let res = Resource::get_resource(&root, &key_expr).unwrap();
+    root.get_best_key(&key_expr, face.state.id);
+    res.get_best_key("/a", face.state.id + 1);
+    Resource::get_matches(&face.tables.tables.read().unwrap(), &key_expr);
 }

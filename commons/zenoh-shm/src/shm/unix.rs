@@ -124,6 +124,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+                tracing::trace!(
+                    "open(name={:?}, flag={:?}, mode={:?})",
+                    lockpath,
+                    flags,
+                    mode
+                );
                 open(&lockpath, flags, mode).map_err(|e| SegmentOpenError::OsError(e as _))
             }?)
         };
@@ -180,6 +186,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         })
     }
 
+    pub fn ensure_not_persistent(id: ID) {
+        if Self::is_dangling_segment(id) {
+            Self::cleanup_segment(id);
+        }
+    }
+
     pub fn id(&self) -> ID {
         self.id
     }
@@ -195,6 +207,51 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
 // PRIVATE
 impl<ID: SegmentID> SegmentImpl<ID> {
+    fn is_dangling_segment(id: ID) -> bool {
+        // we use separate lockfile on non-tmpfs for bsd
+        #[cfg(shm_external_lockfile)]
+        let lock_fd = unsafe {
+            OwnedFd::from_raw_fd({
+                let lockpath = std::env::temp_dir().join(Self::id_str(id));
+                let flags = OFlag::O_RDWR;
+                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+                tracing::trace!(
+                    "open(name={:?}, flag={:?}, mode={:?})",
+                    lockpath,
+                    flags,
+                    mode
+                );
+                match open(&lockpath, flags, mode) {
+                    Ok(val) => val,
+                    Err(nix::errno::Errno::ENOENT) => return true,
+                    Err(_) => return false,
+                }
+            })
+        };
+
+        // open shm fd
+        #[cfg(not(shm_external_lockfile))]
+        let lock_fd = {
+            let id = Self::id_str(id);
+            let flags = OFlag::O_RDWR;
+
+            // TODO: these flags probably can be exposed to the config
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+
+            tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
+            match shm_open(id.as_str(), flags, mode) {
+                Ok(v) => v,
+                Err(nix::errno::Errno::ENOENT) => return true,
+                Err(_) => return false,
+            }
+        };
+
+        lock_fd
+            .as_raw_fd()
+            .try_lock(FileLockMode::Exclusive)
+            .is_ok()
+    }
+
     fn id_str(id: ID) -> String {
         format!("{id}.zenoh")
     }
@@ -213,6 +270,22 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         unsafe { mmap(None, len, prot, flags, fd, 0) }
     }
+
+    fn cleanup_segment(id: ID) {
+        let id = Self::id_str(id);
+        tracing::trace!("shm_unlink(name={})", id);
+        if let Err(e) = shm_unlink(id.as_str()) {
+            tracing::debug!("shm_unlink() failed : {}", e);
+        };
+        #[cfg(shm_external_lockfile)]
+        {
+            let lockpath = std::env::temp_dir().join(id);
+            tracing::trace!("remove_file(name={:?})", lockpath);
+            if let Err(e) = std::fs::remove_file(lockpath) {
+                tracing::debug!("remove_file() failed : {}", e);
+            }
+        }
+    }
 }
 
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
@@ -228,14 +301,7 @@ impl<ID: SegmentID> Drop for SegmentImpl<ID> {
             .try_lock(FileLockMode::Exclusive)
             .is_ok()
         {
-            let id = Self::id_str(self.id);
-            tracing::trace!("shm_unlink(name={})", id);
-            let _ = shm_unlink(id.as_str());
-            #[cfg(shm_external_lockfile)]
-            {
-                let lockpath = std::env::temp_dir().join(id);
-                let _ = std::fs::remove_file(lockpath);
-            }
+            Self::cleanup_segment(self.id);
         }
     }
 }

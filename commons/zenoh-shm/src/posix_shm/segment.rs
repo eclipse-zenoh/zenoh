@@ -30,6 +30,20 @@ where
     shmem: shm::Segment<ID>,
 }
 
+impl<ID> Drop for Segment<ID>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: shm::SegmentID,
+{
+    fn drop(&mut self) {
+        // this drop might be executed inside static drop callstack, so statics might not be available here
+        if let Ok(val) = CLEANUP.try_read() {
+            // Unregister unnecessary cleanup routine as Segment will be unlinked here
+            val.unregister_cleanup(self.id());
+        }
+    }
+}
+
 impl<ID> Debug for Segment<ID>
 where
     ID: Debug,
@@ -54,16 +68,14 @@ where
             // Generate random id
             let id: ID = rand::thread_rng().gen();
 
-            // Register cleanup routine to make sure Segment will be unlinked on exit
-            CLEANUP.read().register_cleanup(Box::new(move || {
-                shm::Segment::ensure_not_persistent(id);
-            }));
-
             // Try to create a new segment identified by prefix and generated id.
             // If creation fails because segment already exists for this id,
             // the creation attempt will be repeated with another id
             match shm::Segment::create(id, len) {
                 Ok(shmem) => {
+                    // Register cleanup routine to make sure Segment will be unlinked on exit
+                    CLEANUP.read().register_cleanup(id);
+
                     tracing::debug!("Created SHM segment, len: {len}, id: {id}");
                     return Ok(Segment { shmem });
                 }
@@ -88,6 +100,9 @@ where
                 bail!("Unable to create POSIX shm segment: {}", e);
             }
         };
+
+        // Register cleanup routine to make sure Segment will be unlinked on exit
+        CLEANUP.read().register_cleanup(id);
 
         tracing::debug!("Opened SHM segment, id: {id}");
 

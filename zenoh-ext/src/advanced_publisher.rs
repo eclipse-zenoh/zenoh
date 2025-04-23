@@ -302,6 +302,7 @@ impl<'a> AdvancedPublisher<'a> {
             Some(meta) => Some(meta?),
             None => None,
         };
+        tracing::debug!("Create AdvancedPublisher{{key_expr: {}}}", &key_expr);
 
         let publisher = conf
             .session
@@ -323,7 +324,7 @@ impl<'a> AdvancedPublisher<'a> {
         };
         let suffix = match meta {
             Some(meta) => suffix / &meta,
-            // We need this empty chunk because af a routing matching bug
+            // We need this empty chunk because of a routing matching bug
             _ => suffix / KE_EMPTY,
         };
 
@@ -354,6 +355,11 @@ impl<'a> AdvancedPublisher<'a> {
         };
 
         let token = if conf.liveliness {
+            tracing::debug!(
+                "AdvancedPublisher{{key_expr: {}}}: Declare liveliness token {}",
+                key_expr,
+                &key_expr / &suffix,
+            );
             Some(
                 conf.session
                     .liveliness()
@@ -368,6 +374,13 @@ impl<'a> AdvancedPublisher<'a> {
             conf.miss_config.as_ref().and_then(|c| c.state_publisher)
         {
             if let Some(seqnum) = seqnum.as_ref() {
+                tracing::debug!(
+                    "AdvancedPublisher{{key_expr: {}}}: Enable {}heartbeat on {} with period {:?}",
+                    key_expr,
+                    if sporadic { "sporadic " } else { "" },
+                    &key_expr / &suffix,
+                    period
+                );
                 let seqnum = seqnum.clone();
                 if !sporadic {
                     let publisher = conf.session.declare_publisher(&key_expr / &suffix).wait()?;
@@ -475,10 +488,16 @@ impl<'a> AdvancedPublisher<'a> {
     {
         let mut builder = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
-            builder = builder.source_info(SourceInfo::new(
+            let info = SourceInfo::new(
                 Some(self.publisher.id()),
                 Some(seqnum.fetch_add(1, Ordering::Relaxed)),
-            ));
+            );
+            tracing::trace!(
+                "AdvancedPublisher{{key_expr: {}}}: Put data with {:?}",
+                self.publisher.key_expr(),
+                info
+            );
+            builder = builder.source_info(info);
         }
         if let Some(hlc) = self.publisher.session().hlc() {
             builder = builder.timestamp(hlc.new_timestamp());
@@ -590,6 +609,10 @@ impl<'a> AdvancedPublisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        tracing::debug!(
+            "AdvancedPublisher{{key_expr: {}}}: : Undeclare",
+            self.key_expr()
+        );
         self.publisher.undeclare()
     }
 }

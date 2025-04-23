@@ -56,7 +56,7 @@ shared-memory = [
   "zenoh-transport/shared-memory",
   "zenoh-buffers/shared-memory",
 ]
-stats = ["zenoh-transport/stats", "zenoh-protocol/stats"]
+stats = ["zenoh-transport/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_compression = ["zenoh-transport/transport_compression"]
 transport_quic = ["zenoh-transport/transport_quic"]
@@ -82,7 +82,7 @@ tracing-instrument = [
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
 tokio-util = { workspace = true }
-ahash = { workspace = true }
+ahash = { workspace = true, default-features = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
@@ -145,7 +145,7 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../LICENSE", "0"]
-depends = "zenohd (=1.3.0), zenoh-plugin-rest (=1.3.0), zenoh-plugin-storage-manager (=1.3.0)"
+depends = "zenohd (=1.3.3), zenoh-plugin-rest (=1.3.3), zenoh-plugin-storage-manager (=1.3.3)"
 maintainer-scripts = ".deb"
 assets = [["../README.md", "README.md", "644"]]
 

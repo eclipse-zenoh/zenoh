@@ -654,9 +654,9 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13003).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13004).parse().unwrap();
 
-    let connect_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13003)
+    let connect_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13004)
         .parse()
         .unwrap();
 
@@ -672,11 +672,11 @@ async fn openclose_udp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
 
     zenoh_util::init_log_from_env_or("error");
-    let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13004)
+    let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13005)
         .parse()
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13004).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13005).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
@@ -701,7 +701,7 @@ async fn openclose_quic_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13005).parse().unwrap();
+    let mut listen_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13006).parse().unwrap();
     listen_endpoint
         .config_mut()
         .extend_from_iter(
@@ -715,7 +715,7 @@ async fn openclose_quic_only_connect_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], 13005)
+    let connect_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], 13006)
         .parse()
         .unwrap();
 
@@ -734,7 +734,7 @@ async fn openclose_quic_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], 13006)
+    let mut listen_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], 13007)
         .parse()
         .unwrap();
     listen_endpoint
@@ -750,7 +750,7 @@ async fn openclose_quic_only_listen_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13006).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13007).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
@@ -767,7 +767,7 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13007).parse().unwrap();
+    let mut listen_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13008).parse().unwrap();
     listen_endpoint
         .config_mut()
         .extend_from_iter(
@@ -781,7 +781,7 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13007)
+    let connect_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13008)
         .parse()
         .unwrap();
 
@@ -800,7 +800,7 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13008)
+    let mut listen_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13009)
         .parse()
         .unwrap();
     listen_endpoint
@@ -816,7 +816,7 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13008).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13009).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;

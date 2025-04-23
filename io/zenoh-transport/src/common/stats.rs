@@ -16,8 +16,8 @@ macro_rules! stats_struct {
     (@field_type $field_type:ident) => {std::sync::Arc<$field_type>};
     (@report_field_type ) => {usize};
     (@report_field_type $field_type:ident) => {paste::paste! {[<$field_type Report>]}};
-    (@new($parent:expr) ) => {AtomicUsize::new(0)};
-    (@new($parent:expr) $field_type:ident) => {std::sync::Arc::new($field_type::new($parent))};
+    (@new($parent:expr, $id:expr) ) => {AtomicUsize::new(0)};
+    (@new($parent:expr, $id:expr) $field_type:ident) => {$field_type::new($parent, $id)};
     (@report_default ) => {0};
     (@report_default $field_type:ident) => {paste::paste! {[<$field_type Report>]::default()}};
     (@get $vis:vis $field_name:ident) => {
@@ -38,7 +38,7 @@ macro_rules! stats_struct {
         paste::paste! {
             $vis fn [<inc_ $field_name>](&self, nb: usize) {
                 self.$field_name.fetch_add(nb, Ordering::Relaxed);
-                if let Some(parent) = self.parent.as_ref() {
+                if let Some(parent) = self.parent.as_ref().and_then(|p| p.upgrade()) {
                     parent.[<inc_ $field_name>](nb);
                 }
             }
@@ -51,9 +51,32 @@ macro_rules! stats_struct {
         $string.push_str($stats.$field_name.to_string().as_str());
         $string.push_str("\n");
     };
+    (@openmetrics_labels($stats:expr, $string:expr, $labels:expr) $field_name:ident) => {
+        if (!$stats.labels.is_empty()) {
+            $string.push_str(stringify!($field_name));
+            $string.push_str("{");
+            for (k, v) in &$stats.labels {
+                $string.push_str(k);
+                $string.push_str("=\"");
+                $string.push_str(v);
+                $string.push_str("\",")
+            }
+            $string.pop();
+            $string.push_str("} ");
+            $string.push_str($stats.$field_name.to_string().as_str());
+            $string.push_str("\n");
+        }
+    };
+
     (@openmetrics($stats:expr, $string:expr) $field_name:ident $field_type:ident) => {
         $string.push_str(&$stats.$field_name.sub_openmetrics_text(stringify!($field_name)));
     };
+    (@openmetrics_labels($stats:expr, $string:expr, $labels:expr) $field_name:ident $field_type:ident) => {
+        if (!$stats.labels.is_empty()) {
+            $string.push_str(&$stats.$field_name.labelled_sub_openmetrics_text(stringify!($field_name), &$stats.labels));
+        }
+    };
+
     (@openmetrics_val($stats:expr) $field_name:ident) => {
         $stats.$field_name.to_string().as_str()
     };
@@ -72,7 +95,9 @@ macro_rules! stats_struct {
     ) => {
         paste::paste! {
             $vis struct $struct_name {
-                parent: Option<std::sync::Arc<$struct_name>>,
+                labels: std::collections::HashMap<String, String>,
+                parent: Option<std::sync::Weak<$struct_name>>,
+                children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
@@ -81,6 +106,10 @@ macro_rules! stats_struct {
 
             $(#[$meta])*
             $vis struct [<$struct_name Report>] {
+                #[serde(skip)]
+                labels: std::collections::HashMap<String, String>,
+                #[serde(skip)]
+                children: std::vec::Vec<[<$struct_name Report>]>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@report_field_type $($field_type)?),
@@ -88,17 +117,31 @@ macro_rules! stats_struct {
             }
 
             impl $struct_name {
-                $vis fn new(parent: Option<std::sync::Arc<$struct_name>>) -> Self {
-                    $struct_name {
+                $vis fn new(parent: Option<std::sync::Weak<$struct_name>>, labels: std::collections::HashMap<String, String>) -> std::sync::Arc<Self> {
+                    let s = $struct_name {
+                        labels: labels.clone(),
                         parent: parent.clone(),
-                        $($field_name: stats_struct!(@new(parent.as_ref().map(|p|p.$field_name.clone())) $($field_type)?),)*
-                    }
+                        $($field_name: stats_struct!(@new(parent.as_ref().and_then(|p| p.upgrade()).map(|p| std::sync::Arc::downgrade(&p.$field_name)), labels.clone()) $($field_type)?),)*
+                        ..Default::default()
+                    };
+                    let a = std::sync::Arc::new(s);
+                    match parent.and_then(|p| p.upgrade()) {
+                        Some(p) => p.children.lock().unwrap().push(a.clone()),
+                        None => {}
+                    };
+                    a
                 }
 
                 $vis fn report(&self) -> [<$struct_name Report>] {
-                    [<$struct_name Report>] {
+                    let report = [<$struct_name Report>] {
+                        labels: self.labels.clone(),
+                        children: self.children.lock().unwrap().iter().map(|c| c.report()).collect(),
                         $($field_name: self.[<get_ $field_name>](),)*
-                    }
+                    };
+                    // remove already dropped children
+                    self.children.lock().unwrap().retain(|c| std::sync::Arc::strong_count(c) > 1);
+
+                    report
                 }
 
                 $(
@@ -110,8 +153,10 @@ macro_rules! stats_struct {
             impl Default for $struct_name {
                 fn default() -> Self {
                     Self {
+                        labels: std::collections::HashMap::default(),
                         parent: None,
-                        $($field_name: stats_struct!(@new(None) $($field_type)?),)*
+                        children: std::sync::Arc::new(std::sync::Mutex::new(std::vec::Vec::new())),
+                        $($field_name: stats_struct!(@new(None, std::collections::HashMap::default()) $($field_type)?),)*
                     }
                 }
             }
@@ -124,6 +169,28 @@ macro_rules! stats_struct {
                         s.push_str(prefix);
                         s.push_str("{space=\"");
                         s.push_str(stringify!($field_name));
+                        s.push_str("\"} ");
+                        s.push_str(
+                            stats_struct!(@openmetrics_val(self) $field_name $($field_type)?)
+                        );
+                        s.push_str("\n");
+                    )*
+                    s
+                }
+
+                #[allow(dead_code)]
+                fn labelled_sub_openmetrics_text(&self, prefix: &str, labels: &std::collections::HashMap<String, String>) -> String {
+                    let mut s = String::new();
+                    $(
+                        s.push_str(prefix);
+                        s.push_str("{space=\"");
+                        s.push_str(stringify!($field_name));
+                        for (k, v) in labels {
+                            s.push_str("\",");
+                            s.push_str(k);
+                            s.push_str("=\"");
+                            s.push_str(v);
+                        }
                         s.push_str("\"} ");
                         s.push_str(
                             stats_struct!(@openmetrics_val(self) $field_name $($field_type)?)
@@ -151,6 +218,9 @@ macro_rules! stats_struct {
                             s.push_str("\n");
                         )?
                         stats_struct!(@openmetrics(self, s) $field_name $($field_type)?);
+                        for c in &self.children {
+                            stats_struct!(@openmetrics_labels(c, s, c.labels) $field_name $($field_type)?)
+                        }
                     )*
                     s
                 }
@@ -159,6 +229,8 @@ macro_rules! stats_struct {
             impl Default for [<$struct_name Report>] {
                 fn default() -> Self {
                     Self {
+                        labels: std::collections::HashMap::default(),
+                        children: std::vec::Vec::default(),
                         $($field_name: stats_struct!(@report_default $($field_type)?),)*
                     }
                 }
@@ -276,5 +348,29 @@ stats_struct! {
         # HELP "Counter of received bytes in zenoh reply message payloads."
         # TYPE "counter"
         pub rx_z_reply_pl_bytes DiscriminatedStats,
+
+        # HELP "Counter of messages dropped by ingress downsampling."
+        # TYPE "counter"
+        pub rx_downsampler_dropped_msgs,
+
+        # HELP "Counter of messages dropped by egress downsampling."
+        # TYPE "counter"
+        pub tx_downsampler_dropped_msgs,
+
+        # HELP "Counter of bytes dropped by ingress low-pass filter."
+        # TYPE "counter"
+        pub rx_low_pass_dropped_bytes,
+
+        # HELP "Counter of bytes dropped by egress low-pass filter."
+        # TYPE "counter"
+        pub tx_low_pass_dropped_bytes,
+
+        # HELP "Counter of messages dropped by ingress low-pass filter."
+        # TYPE "counter"
+        pub rx_low_pass_dropped_msgs,
+
+        # HELP "Counter of messages dropped by egress low-pass filter."
+        # TYPE "counter"
+        pub tx_low_pass_dropped_msgs,
     }
 }

@@ -35,7 +35,6 @@ std = [
     "zenoh-result/std",
 ]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
-stats = []
 test = ["rand", "zenoh-buffers/test"]
 
 [dependencies]

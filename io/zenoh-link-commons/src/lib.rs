@@ -44,6 +44,7 @@ use zenoh_result::ZResult;
 /*            GENERAL                */
 /*************************************/
 
+pub const BIND_SOCKET: &str = "bind";
 pub const BIND_INTERFACE: &str = "iface";
 pub const TCP_SO_SND_BUF: &str = "so_sndbuf";
 pub const TCP_SO_RCV_BUF: &str = "so_rcvbuf";
