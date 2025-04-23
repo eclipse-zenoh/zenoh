@@ -31,7 +31,7 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use crate::{
     net::{
-        protocol::linkstate::{LinkEdgeWeight, LinkInfo},
+        protocol::linkstate::LinkInfo,
         routing::{interceptor::*, RoutingContext},
     },
     Session,

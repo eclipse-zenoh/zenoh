@@ -189,8 +189,8 @@ impl Network {
     ) -> bool {
         let mut dests_to_update = Vec::new();
         for l in &mut self.graph[self.idx].links {
-            let old_weight = self.link_weights.get(&l.0);
-            let new_weight = link_weights.get(&l.0);
+            let old_weight = self.link_weights.get(l.0);
+            let new_weight = link_weights.get(l.0);
             if old_weight == new_weight {
                 continue;
             }
@@ -304,7 +304,7 @@ impl Network {
         let mut has_non_default_weight = false;
         if details.links {
             for (dest, weight) in &self.graph[idx].links {
-                match self.get_idx(&dest) {
+                match self.get_idx(dest) {
                     Some(idx2) => {
                         links.push(idx2.index().try_into().unwrap());
                         weights.push(weight.as_raw());
@@ -739,7 +739,7 @@ impl Network {
                 }
             };
             // add, update and remove edges
-            for (dest, _) in &ls.links {
+            for dest in ls.links.keys() {
                 if let Some(idx2) = self.get_idx(dest) {
                     if self.graph[idx2].links.contains_key(&self.graph[idx1].zid) {
                         self.update_edge(idx1, idx2);
@@ -985,7 +985,7 @@ impl Network {
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
             if visit_map.visit(node) {
-                for (succzid, _) in &self.graph[node].links {
+                for succzid in self.graph[node].links.keys() {
                     if let Some(succ) = self.get_idx(succzid) {
                         if !visit_map.is_visited(&succ) {
                             dfs_stack.push(succ);

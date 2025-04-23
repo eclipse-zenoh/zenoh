@@ -585,7 +585,7 @@ fn local_data(context: &AdminContext, query: Query) {
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.dst.to_string()).collect()
             ),
-            "weight": transport.get_zid().ok().map(|zid| links_info.get(&zid)).flatten()
+            "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
         });
         #[cfg(feature = "stats")]
         {

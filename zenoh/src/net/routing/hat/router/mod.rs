@@ -233,7 +233,7 @@ impl HatTables {
             .into_iter()
             .flatten()
             .filter(move |nid| {
-                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(*nid) {
+                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
                     node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
                 } else {
                     false

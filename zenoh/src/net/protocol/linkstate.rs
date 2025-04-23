@@ -189,9 +189,9 @@ pub(crate) fn link_weights_from_config(
     Ok(link_weights_by_zid)
 }
 
-impl Into<Option<u16>> for LinkEdgeWeight {
-    fn into(self) -> Option<u16> {
-        self.is_set().then_some(self.value())
+impl From<LinkEdgeWeight> for Option<u16> {
+    fn from(value: LinkEdgeWeight) -> Self {
+        value.is_set().then_some(value.value())
     }
 }
 
