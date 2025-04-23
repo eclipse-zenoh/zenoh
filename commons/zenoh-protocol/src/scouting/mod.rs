@@ -33,8 +33,6 @@ pub enum ScoutingBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScoutingMessage {
     pub body: ScoutingBody,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
 }
 
 impl ScoutingMessage {
@@ -55,11 +53,7 @@ impl ScoutingMessage {
 
 impl From<ScoutingBody> for ScoutingMessage {
     fn from(body: ScoutingBody) -> Self {
-        Self {
-            body,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
+        Self { body }
     }
 }
 

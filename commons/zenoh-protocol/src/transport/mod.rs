@@ -31,7 +31,7 @@ pub use keepalive::KeepAlive;
 pub use oam::Oam;
 pub use open::{OpenAck, OpenSyn};
 
-use crate::network::NetworkMessage;
+use crate::network::{NetworkMessage, NetworkMessageRef};
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
@@ -66,6 +66,11 @@ pub struct TransportMessageLowLatency {
     pub body: TransportBodyLowLatency,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TransportMessageLowLatencyRef<'a> {
+    pub body: TransportBodyLowLatencyRef<'a>,
+}
+
 impl TryFrom<NetworkMessage> for TransportMessageLowLatency {
     type Error = zenoh_result::Error;
     fn try_from(msg: NetworkMessage) -> Result<Self, Self::Error> {
@@ -81,6 +86,14 @@ pub enum TransportBodyLowLatency {
     Close(Close),
     KeepAlive(KeepAlive),
     Network(NetworkMessage),
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, Copy)]
+pub enum TransportBodyLowLatencyRef<'a> {
+    Close(Close),
+    KeepAlive(KeepAlive),
+    Network(NetworkMessageRef<'a>),
 }
 
 pub type TransportSn = u32;
@@ -127,8 +140,6 @@ pub enum TransportBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportMessage {
     pub body: TransportBody,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
 }
 
 impl TransportMessage {
@@ -152,21 +163,13 @@ impl TransportMessage {
             _ => unreachable!(),
         };
 
-        Self {
-            body,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
+        Self { body }
     }
 }
 
 impl From<TransportBody> for TransportMessage {
     fn from(body: TransportBody) -> Self {
-        Self {
-            body,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
+        Self { body }
     }
 }
 

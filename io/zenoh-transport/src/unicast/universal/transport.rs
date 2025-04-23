@@ -23,7 +23,7 @@ use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -72,6 +72,7 @@ impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -95,9 +96,6 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
-
-        #[cfg(feature = "stats")]
-        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
 
         let t = Arc::new(TransportUnicastUniversal {
             manager,
@@ -398,7 +396,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
         self.internal_schedule(msg).map(|_| ())
     }
 

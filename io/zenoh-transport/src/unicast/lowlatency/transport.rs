@@ -23,8 +23,10 @@ use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
-    transport::{close, Close, TransportBodyLowLatency, TransportMessageLowLatency, TransportSn},
+    network::NetworkMessageMut,
+    transport::{
+        close, Close, TransportBodyLowLatencyRef, TransportMessageLowLatencyRef, TransportSn,
+    },
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -68,9 +70,8 @@ impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> Arc<dyn TransportUnicastTrait> {
-        #[cfg(feature = "stats")]
-        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
         Arc::new(TransportUnicastLowlatency {
             manager,
             config,
@@ -95,8 +96,8 @@ impl TransportUnicastLowlatency {
         );
 
         // Send close message on the link
-        let close = TransportMessageLowLatency {
-            body: TransportBodyLowLatency::Close(Close {
+        let close = TransportMessageLowLatencyRef {
+            body: TransportBodyLowLatencyRef::Close(Close {
                 reason,
                 session: false,
             }),
@@ -227,7 +228,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
         self.internal_schedule(msg)
     }
 
