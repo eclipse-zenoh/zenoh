@@ -5241,6 +5241,9 @@ dependencies = [
 [[package]]
 name = "zenoh-collections"
 version = "1.3.3"
+dependencies = [
+ "ahash",
+]
 
 [[package]]
 name = "zenoh-config"
