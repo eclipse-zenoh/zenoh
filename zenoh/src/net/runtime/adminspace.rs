@@ -22,8 +22,10 @@ use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
+use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
-use zenoh_plugin_trait::{PluginControl, PluginDiff, PluginStatus};
+use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
@@ -39,7 +41,7 @@ use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
-#[cfg(feature = "plugins")]
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
@@ -95,7 +97,7 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(feature = "plugins")]
+    #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
@@ -220,7 +222,7 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        #[cfg(feature = "plugins")]
+        #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
