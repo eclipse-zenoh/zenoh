@@ -477,8 +477,8 @@ async fn test_link_weights_triangle() {
     let res = test_link_weights_inner(
         vec![
             (1, vec![(2, Some(10)), (3, None)]),
-            (2, vec![(1, Some(100)), (3, Some(10))]),
-            (3, vec![(2, Some(100))]),
+            (2, vec![(1, Some(55)), (3, Some(10))]),
+            (3, vec![(2, Some(55))]),
         ],
         1,
         3,
@@ -491,9 +491,9 @@ async fn test_link_weights_triangle() {
     // should resolve weights to 45 on 1-2 and 2-3, so will pick 1-2-3 path with total cost of 2 * 45 = 90
     let res = test_link_weights_inner(
         vec![
-            (1, vec![(2, Some(10)), (3, None)]),
-            (2, vec![(1, Some(80)), (3, Some(10))]),
-            (3, vec![(2, Some(80))]),
+            (1, vec![(2, Some(45)), (3, None)]),
+            (2, vec![(1, Some(10)), (3, Some(45))]),
+            (3, vec![(2, Some(10))]),
         ],
         1,
         3,
@@ -801,7 +801,7 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
             LinkInfo {
                 source_weight: Some(20),
                 dest_weight: Some(30),
-                actual_weight: 25,
+                actual_weight: 30,
             },
         ),
     ]);

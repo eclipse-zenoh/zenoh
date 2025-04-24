@@ -444,12 +444,13 @@ impl Network {
             .find(|(dest, _weight)| *dest == &zid1)
             .and_then(|(_dest, weight)| weight.is_set().then_some(weight.value()));
         let w = match (w1, w2) {
-            (None, None) => LinkEdgeWeight::default().value() as f64,
-            (None, Some(w2)) => w2 as f64,
-            (Some(w1), None) => w1 as f64,
-            (Some(w1), Some(w2)) => 0.5 * (w1 as f64 + w2 as f64),
+            (None, None) => LinkEdgeWeight::default().value(),
+            (None, Some(w2)) => w2,
+            (Some(w1), None) => w1,
+            (Some(w1), Some(w2)) => w1.max(w2),
         };
-        let weight = w * (1.0 + 0.01 * (((hasher.finish() as u32) as f64) / u32::MAX as f64));
+        let weight =
+            w as f64 * (1.0 + 0.01 * (((hasher.finish() as u32) as f64) / u32::MAX as f64));
         self.graph.update_edge(idx1, idx2, weight);
     }
 
