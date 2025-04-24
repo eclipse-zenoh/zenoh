@@ -119,6 +119,7 @@ impl<'a> Querier<'a> {
         .into()
     }
 
+    /// Returns the [`KeyExpr`] this querier sends queries on.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
