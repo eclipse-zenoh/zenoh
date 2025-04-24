@@ -378,7 +378,11 @@ impl VolumeConfig {
             let required = match config.get("__required__") {
                 Some(serde_json::Value::Bool(b)) => *b,
                 None => true,
-                _ => todo!(),
+                _ => bail!(
+                    "`__required__` field of `{}`'s `{}` volume configuration must be a boolean",
+                    plugin_name,
+                    name
+                ),
             };
             volumes.push(VolumeConfig {
                 name: name.clone(),
