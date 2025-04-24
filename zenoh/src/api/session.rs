@@ -23,6 +23,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use ahash::HashMapExt;
 use async_trait::async_trait;
 #[cfg(feature = "unstable")]
 use once_cell::sync::OnceCell;
@@ -134,8 +135,8 @@ pub(crate) struct SessionState {
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
-    pub(crate) local_resources: HashMap<ExprId, Resource>,
-    pub(crate) remote_resources: HashMap<ExprId, Resource>,
+    pub(crate) local_resources: ahash::HashMap<ExprId, Resource>,
+    pub(crate) remote_resources: ahash::HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
@@ -168,8 +169,8 @@ impl SessionState {
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
             liveliness_qid_counter: AtomicRequestId::new(0),
-            local_resources: HashMap::new(),
-            remote_resources: HashMap::new(),
+            local_resources: ahash::HashMap::new(),
+            remote_resources: ahash::HashMap::new(),
             #[cfg(feature = "unstable")]
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
@@ -3194,6 +3195,7 @@ impl Closee for Arc<SessionInner> {
         let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
         let _local_resources = std::mem::take(&mut state.local_resources);
         let _remote_resources = std::mem::take(&mut state.remote_resources);
+        let _queries = std::mem::take(&mut state.queries);
         drop(state);
         #[cfg(feature = "unstable")]
         {

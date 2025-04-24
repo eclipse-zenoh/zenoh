@@ -91,7 +91,7 @@ pub struct LinkWeight {
     pub weight: NonZeroU16,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum InterceptorFlow {
     Egress,
@@ -107,6 +107,7 @@ pub enum DownsamplingMessage {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct DownsamplingRuleConf {
     /// A list of key-expressions to which the downsampling will be applied.
     /// Downsampling will be applied for all key extensions if the parameter is None
@@ -116,6 +117,7 @@ pub struct DownsamplingRuleConf {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct DownsamplingItemConf {
     /// Optional identifier for the downsampling configuration item
     pub id: Option<String>,
@@ -134,6 +136,7 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct LowPassFilterConf {
     pub id: Option<String>,
     pub interfaces: Option<NEVec<String>>,
@@ -154,6 +157,7 @@ pub enum LowPassFilterMessage {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AclConfigRule {
     pub id: String,
     pub key_exprs: NEVec<OwnedKeyExpr>,
@@ -163,6 +167,7 @@ pub struct AclConfigRule {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AclConfigSubjects {
     pub id: String,
     pub interfaces: Option<NEVec<Interface>>,
@@ -172,9 +177,12 @@ pub struct AclConfigSubjects {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct QosOverwriteItemConf {
     /// Optional identifier for the qos modification configuration item.
     pub id: Option<String>,
+    /// A list of ZIDs on which qos will be overwritten when communicating with.
+    pub zids: Option<NEVec<ZenohId>>,
     /// A list of interfaces to which the qos will be applied.
     /// QosOverwrite will be applied for all interfaces if the parameter is None.
     pub interfaces: Option<NEVec<String>>,
@@ -239,6 +247,7 @@ impl std::fmt::Display for InterceptorLink {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct AclConfigPolicyEntry {
     pub id: Option<String>,
     pub rules: Vec<String>,
@@ -246,6 +255,7 @@ pub struct AclConfigPolicyEntry {
 }
 
 #[derive(Clone, Serialize, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PolicyRule {
     pub subject_id: usize,
     pub key_expr: OwnedKeyExpr,
