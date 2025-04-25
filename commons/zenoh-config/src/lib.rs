@@ -84,9 +84,9 @@ impl Zeroize for SecretString {
 pub type SecretValue = Secret<SecretString>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct LinkWeight {
+pub struct TransportWeight {
     /// A zid of destination node.
-    pub destination: ZenohId,
+    pub destination_zid: ZenohId,
     /// A weight of link from this node to the destination.
     pub weight: NonZeroU16,
 }
@@ -467,11 +467,12 @@ validated_struct::validator! {
                 /// connected to each other.
                 /// The failover brokering only works if gossip discovery is enabled.
                 peers_failover_brokering: Option<bool>,
-                /// Optional weights of the outgoing links on routers net.
-                /// For non-specified destination nodes the corresponding link weight will be set to 100,
-                /// unless the weight on the same link is provided in the config of destination node, in which case
-                /// it will be used as a link weight. If both link endpoints set a link weight, the greater value will be used.
-                link_weights: Option<NEVec<LinkWeight>>,
+                /// Optional weights of the outgoing transports on peers net in linkstate mode.
+                /// For non-specified destination nodes the corresponding transport weight will be set to 100,
+                /// unless the weight on the same transport is provided in the config of destination node, in which case
+                /// the destination node configured weight will be used.
+                /// If both endpoints set a transport weight, the greater value will be used.
+                transport_weights: Option<NEVec<TransportWeight>>,
             },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
@@ -482,7 +483,7 @@ validated_struct::validator! {
                 /// For non-specified destination nodes the corresponding link weight will be set to 100,
                 /// unless the weight on the same link is provided in the config of destination node, in which case
                 /// it will be used as a link weight. If both link endpoints set a link weight, the greater value will be used.
-                link_weights: Option<NEVec<LinkWeight>>,
+                transport_weights: Option<NEVec<TransportWeight>>,
             },
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).

@@ -339,8 +339,8 @@ impl HatBaseTrait for HatCode {
             unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
-        let router_link_weights = config.routing().router().link_weights().clone();
-        let peer_link_weights = config.routing().peer().link_weights().clone();
+        let router_link_weights = config.routing().router().transport_weights().clone();
+        let peer_link_weights = config.routing().peer().transport_weights().clone();
         drop(config_guard);
 
         if router_full_linkstate | gossip {
@@ -844,11 +844,11 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         let config = runtime.config().lock();
         let router_link_weights = link_weights_from_config(
-            config.0.routing().router().link_weights().clone(),
+            config.0.routing().router().transport_weights().clone(),
             ROUTERS_NET_NAME,
         )?;
         let peer_link_weights = link_weights_from_config(
-            config.0.routing().peer().link_weights().clone(),
+            config.0.routing().peer().transport_weights().clone(),
             PEERS_NET_NAME,
         )?;
         drop(config);

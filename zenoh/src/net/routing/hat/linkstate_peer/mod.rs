@@ -205,7 +205,7 @@ impl HatBaseTrait for HatCode {
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
 
-        let peer_link_weights = config.routing().peer().link_weights().clone();
+        let peer_link_weights = config.routing().peer().transport_weights().clone();
         drop(config_guard);
 
         hat_mut!(tables).linkstatepeers_net = Some(Network::new(
@@ -476,7 +476,7 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         let config = runtime.config().lock();
         let peer_link_weights = link_weights_from_config(
-            config.0.routing().peer().link_weights().clone(),
+            config.0.routing().peer().transport_weights().clone(),
             PEERS_NET_NAME,
         )?;
         drop(config);

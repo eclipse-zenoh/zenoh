@@ -20,7 +20,7 @@ use std::{
 };
 
 use zenoh_buffers::ZBuf;
-use zenoh_config::{InterceptorFlow, LinkWeight};
+use zenoh_config::{InterceptorFlow, TransportWeight};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::ZenohIdProto,
@@ -192,8 +192,8 @@ impl Net {
             let weights =
                 v.1.iter()
                     .filter_map(|(e, w)| {
-                        w.map(|w| LinkWeight {
-                            destination: ZenohId::from_str(&e.to_string()).unwrap(),
+                        w.map(|w| TransportWeight {
+                            destination_zid: ZenohId::from_str(&e.to_string()).unwrap(),
                             weight: w.try_into().unwrap(),
                         })
                     })
@@ -207,7 +207,7 @@ impl Net {
                     .lock()
                     .routing
                     .router
-                    .set_link_weights(weights.try_into().ok())
+                    .set_transport_weights(weights.try_into().ok())
                     .unwrap(),
                 WhatAmI::Peer => self.routers[i]
                     .0
@@ -216,7 +216,7 @@ impl Net {
                     .lock()
                     .routing
                     .peer
-                    .set_link_weights(weights.try_into().ok())
+                    .set_transport_weights(weights.try_into().ok())
                     .unwrap(),
                 WhatAmI::Client => unreachable!(),
             };
@@ -285,8 +285,8 @@ async fn create_net(
         let weights =
             v.1.iter()
                 .filter_map(|(e, w)| {
-                    w.map(|w| LinkWeight {
-                        destination: ZenohId::from_str(&e.to_string()).unwrap(),
+                    w.map(|w| TransportWeight {
+                        destination_zid: ZenohId::from_str(&e.to_string()).unwrap(),
                         weight: w.try_into().unwrap(),
                     })
                 })
@@ -296,14 +296,14 @@ async fn create_net(
                 config
                     .routing
                     .router
-                    .set_link_weights(weights.try_into().ok())
+                    .set_transport_weights(weights.try_into().ok())
                     .unwrap();
             }
             WhatAmI::Peer => {
                 config
                     .routing
                     .peer
-                    .set_link_weights(weights.try_into().ok())
+                    .set_transport_weights(weights.try_into().ok())
                     .unwrap();
                 config
                     .routing
