@@ -521,7 +521,7 @@ impl<Handler> Queryable<Handler> {
 
     /// Returns the [`KeyExpr`] this queryable responds to.
     #[inline]
-    pub fn key_expr(&self) -> &KeyExpr {
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
     }
 }
