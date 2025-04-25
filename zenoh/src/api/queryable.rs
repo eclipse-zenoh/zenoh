@@ -351,6 +351,7 @@ pub(crate) struct QueryableInner {
     pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
+    pub(crate) key_expr: KeyExpr<'static>,
 }
 
 /// A [`Resolvable`] returned when undeclaring a queryable.
@@ -516,6 +517,12 @@ impl<Handler> Queryable<Handler> {
     #[zenoh_macros::internal]
     pub fn set_background(&mut self, background: bool) {
         self.inner.undeclare_on_drop = !background;
+    }
+
+    /// Returns the [`KeyExpr`] this queryable responds to.
+    #[inline]
+    pub fn key_expr(&self) -> &KeyExpr {
+        &self.inner.key_expr
     }
 }
 
