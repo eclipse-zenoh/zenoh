@@ -177,7 +177,7 @@ pub(crate) fn link_weights_from_config(
             .is_some()
         {
             bail!(
-                "{} config contains a duplicate zid value for link weight: {}",
+                "{} config contains a duplicate zid value for transport weight: {}",
                 network_name,
                 lw.dst_zid
             );
