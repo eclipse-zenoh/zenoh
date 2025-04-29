@@ -411,7 +411,7 @@ impl InterceptorTrait for LowPassInterceptor {
 
     fn intercept(
         &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
+        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
         cache: Option<&Box<dyn std::any::Any + Send + Sync>>,
     ) -> bool {
         let cache = cache.and_then(|i| i.downcast_ref::<Cache>());

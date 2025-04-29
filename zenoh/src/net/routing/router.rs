@@ -76,11 +76,12 @@ impl Router {
         let zid = tables.zid;
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let newface = tables
+        let mut face = tables
             .faces
             .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
+            .or_insert_with(|| Face {
+                tables: self.tables.clone(),
+                state: FaceState::new(
                     fid,
                     zid,
                     WhatAmI::Client,
@@ -89,27 +90,24 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
+                    None,
                     ctrl_lock.new_face(),
                     true,
-                )
+                ),
             })
             .clone();
-        tracing::debug!("New {}", newface);
+        tracing::debug!("New {}", face);
 
-        let mut face = Face {
-            tables: self.tables.clone(),
-            state: newface,
-        };
         let mut declares = vec![];
         ctrl_lock
-            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
-                declares.push((p.clone(), m))
+            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m, r| {
+                declares.push((p.clone(), m, r))
             })
             .unwrap();
         drop(tables);
         drop(ctrl_lock);
-        for (p, m) in declares {
-            m.with_mut(|m| p.send_declare(m));
+        for (p, mut m, r) in declares {
+            p.intercept_declare(&mut m, r.as_ref());
         }
         Arc::new(face)
     }
@@ -125,13 +123,15 @@ impl Router {
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
 
-        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
-        let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
-        let newface = tables
+        let ingress = ArcSwap::new(InterceptorsChain::empty().into());
+        let egress = ArcSwap::new(InterceptorsChain::empty().into());
+        let mux = Arc::new(Mux::new(transport.clone()));
+        let mut face = tables
             .faces
             .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
+            .or_insert_with(|| Face {
+                tables: self.tables.clone(),
+                state: FaceState::new(
                     fid,
                     zid,
                     whatami,
@@ -139,24 +139,18 @@ impl Router {
                     Some(stats),
                     mux.clone(),
                     None,
-                    Some(ingress.clone()),
+                    Some(ingress),
+                    Some(egress),
                     ctrl_lock.new_face(),
                     false,
-                )
+                ),
             })
             .clone();
-        newface.set_interceptors_from_factories(
+        face.state.set_interceptors_from_factories(
             &tables.interceptors,
             tables.next_interceptor_version.load(Ordering::SeqCst),
         );
-        tracing::debug!("New {}", newface);
-
-        let mut face = Face {
-            tables: self.tables.clone(),
-            state: newface,
-        };
-
-        let _ = mux.face.set(Face::downgrade(&face));
+        tracing::debug!("New {}", face);
 
         let mut declares = vec![];
         ctrl_lock.new_transport_unicast_face(
@@ -164,15 +158,15 @@ impl Router {
             &self.tables,
             &mut face,
             &transport,
-            &mut |p, m| declares.push((p.clone(), m)),
+            &mut |p, m, r| declares.push((p.clone(), m, r)),
         )?;
         drop(tables);
         drop(ctrl_lock);
-        for (p, m) in declares {
-            m.with_mut(|m| p.send_declare(m));
+        for (p, mut m, r) in declares {
+            p.intercept_declare(&mut m, r.as_ref());
         }
 
-        Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
+        Ok(Arc::new(DeMux::new(face, Some(transport))))
     }
 
     pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
@@ -180,7 +174,8 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
+        let mux = Arc::new(McastMux::new(transport.clone()));
+        let egress = ArcSwap::new(Arc::new(InterceptorsChain::empty()));
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
@@ -190,6 +185,7 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
+            Some(egress),
             ctrl_lock.new_face(),
             false,
         );
@@ -197,10 +193,10 @@ impl Router {
             &tables.interceptors,
             tables.next_interceptor_version.load(Ordering::SeqCst),
         );
-        let _ = mux.face.set(Face {
+        let face = Face {
             state: face.clone(),
             tables: self.tables.clone(),
-        });
+        };
         tables.mcast_groups.push(face);
 
         tables.disable_all_routes();
@@ -216,7 +212,8 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let ingress = ArcSwap::new(InterceptorsChain::empty().into());
+        let egress = ArcSwap::new(InterceptorsChain::empty().into());
         let face_state = FaceState::new(
             fid,
             peer.zid,
@@ -225,7 +222,8 @@ impl Router {
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
-            Some(interceptor.clone()),
+            Some(ingress),
+            Some(egress),
             ctrl_lock.new_face(),
             false,
         );
@@ -242,7 +240,6 @@ impl Router {
                 state: face_state,
             },
             None,
-            interceptor,
         )))
     }
 }

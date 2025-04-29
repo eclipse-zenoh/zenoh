@@ -29,7 +29,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use super::face::FaceState;
+use super::face::{Face, FaceState};
 pub use super::resource::*;
 use crate::net::{
     routing::{
@@ -75,8 +75,8 @@ pub struct Tables {
     pub(crate) queries_default_timeout: Duration,
     pub(crate) interests_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
-    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
-    pub(crate) mcast_groups: Vec<Arc<FaceState>>,
+    pub(crate) faces: HashMap<usize, Face>,
+    pub(crate) mcast_groups: Vec<Face>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
@@ -136,7 +136,7 @@ impl Tables {
     pub(crate) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        expr_id: &ExprId,
+        expr_id: ExprId,
         mapping: Mapping,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {
@@ -149,7 +149,7 @@ impl Tables {
     pub(crate) fn get_sent_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        expr_id: &ExprId,
+        expr_id: ExprId,
         mapping: Mapping,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {
@@ -159,8 +159,8 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
-        self.faces.values().find(|face| face.zid == *zid)
+    pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Face> {
+        self.faces.values().find(|face| face.state.zid == *zid)
     }
 
     pub(crate) fn disable_all_routes(&mut self) {
@@ -185,7 +185,8 @@ impl TablesLock {
             .next_interceptor_version
             .fetch_add(1, Ordering::SeqCst);
         tables.faces.values().for_each(|face| {
-            face.set_interceptors_from_factories(&tables.interceptors, version + 1);
+            face.state
+                .set_interceptors_from_factories(&tables.interceptors, version + 1);
         });
         Ok(())
     }

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use zenoh_protocol::network::{
     declare::ext,
@@ -26,13 +26,12 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
+        face::{Face, FaceState},
         interests::RemoteInterest,
         resource::Resource,
         tables::{Tables, TablesLock},
     },
     hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
-    RoutingContext,
 };
 
 impl HatInterestTrait for HatCode {
@@ -40,7 +39,7 @@ impl HatInterestTrait for HatCode {
         &self,
         tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
@@ -81,25 +80,28 @@ impl HatInterestTrait for HatCode {
             )
         }
         if mode.future() {
-            face_hat_mut!(face).remote_interests.insert(
-                id,
-                RemoteInterest {
-                    res: res.cloned(),
-                    options,
-                    mode,
-                },
-            );
+            face_hat_mut!(&mut face.state.clone())
+                .remote_interests
+                .insert(
+                    id,
+                    RemoteInterest {
+                        res: res.as_ref().map(|res| res.deref().clone()),
+                        options,
+                        mode,
+                    },
+                );
         }
         if mode.current() {
             send_declare(
-                &face.primitives,
-                RoutingContext::new(Declare {
+                face,
+                Declare {
                     interest_id: Some(id),
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
+                },
+                None,
             );
         }
     }

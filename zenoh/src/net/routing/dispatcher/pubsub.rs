@@ -25,7 +25,7 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face::FaceState,
+    face::{Face, FaceState},
     resource::{Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
@@ -43,7 +43,7 @@ pub(crate) struct SubscriberInfo;
 pub(crate) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
-    face: &mut Arc<FaceState>,
+    face: &Face,
     id: SubscriberId,
     expr: &WireExpr,
     sub_info: &SubscriberInfo,
@@ -52,7 +52,7 @@ pub(crate) fn declare_subscription(
 ) {
     let rtables = zread!(tables.tables);
     match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
+        .get_mapping(&face.state, expr.scope, expr.mapping)
         .cloned()
     {
         Some(mut prefix) => {
@@ -119,7 +119,7 @@ pub(crate) fn undeclare_subscription(
         None
     } else {
         let rtables = zread!(tables.tables);
-        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+        match rtables.get_mapping(face, expr.scope, expr.mapping) {
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
@@ -287,7 +287,7 @@ pub fn route_data(
 ) {
     let tables = zread!(tables_ref.tables);
     match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        .get_mapping(face, msg.wire_expr.scope, msg.wire_expr.mapping)
         .cloned()
     {
         Some(prefix) => {
@@ -320,26 +320,30 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables
                             .hat_code
-                            .egress_filter(&tables, face, outface, &mut expr)
+                            .egress_filter(&tables, face, &outface.state, &mut expr)
                         {
                             drop(tables);
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(outface, tx, user, msg.payload);
+                                inc_stats!(outface.state, tx, user, msg.payload);
                             } else {
-                                inc_stats!(outface, tx, admin, msg.payload);
+                                inc_stats!(outface.state, tx, admin, msg.payload);
                             }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            outface.primitives.send_push(msg, reliability)
+
+                            outface.intercept_push(msg, reliability);
                         }
                     } else {
                         let route = route
                             .values()
-                            .filter(|(outface, _key_expr, _context)| {
-                                tables
-                                    .hat_code
-                                    .egress_filter(&tables, face, outface, &mut expr)
+                            .filter(|(outface, _key_expr, _context)| -> bool {
+                                tables.hat_code.egress_filter(
+                                    &tables,
+                                    face,
+                                    &outface.state,
+                                    &mut expr,
+                                )
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();
@@ -348,21 +352,20 @@ pub fn route_data(
                         for (outface, key_expr, context) in route {
                             #[cfg(feature = "stats")]
                             if !admin {
-                                inc_stats!(outface, tx, user, msg.payload)
+                                inc_stats!(outface.state, tx, user, msg.payload)
                             } else {
-                                inc_stats!(outface, tx, admin, msg.payload)
+                                inc_stats!(outface.state, tx, admin, msg.payload)
                             }
 
-                            outface.primitives.send_push(
-                                &mut Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
-                                },
-                                reliability,
-                            )
+                            let msg = &mut Push {
+                                wire_expr: key_expr,
+                                ext_qos: msg.ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: context },
+                                payload: msg.payload.clone(),
+                            };
+
+                            outface.intercept_push(msg, reliability)
                         }
                     }
                 }

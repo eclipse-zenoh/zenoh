@@ -83,6 +83,13 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
     }
 }
 
+/// Interceptor interface.
+///
+/// # Requirements
+///
+/// - Implementors SHOULD NOT filter out [`zenoh_protocol::network::ResponseFinal`] messages since
+///   the router relies on them to respond to queries that get filtered out; this is because Zenoh
+///   returns empty replies when no queryable matching a query exists.
 pub(crate) trait InterceptorTrait {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>>;
 
@@ -175,7 +182,7 @@ impl InterceptorTrait for InterceptorsChain {
                 .and_then(|caches| caches.get(idx).map(|k| k.as_ref()))
                 .flatten();
             if !interceptor.intercept(ctx, cache) {
-                tracing::trace!("Msg intercepted!");
+                tracing::trace!("Msg {:?} intercepted!", &ctx.msg);
                 return false;
             }
         }

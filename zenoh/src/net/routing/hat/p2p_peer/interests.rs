@@ -30,7 +30,7 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::{
-        face::{FaceState, InterestState},
+        face::{Face, FaceState, InterestState},
         interests::{
             CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
         },
@@ -38,34 +38,30 @@ use crate::net::routing::{
         tables::{Tables, TablesLock},
     },
     hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
-    RoutingContext,
 };
 
-pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    if face.whatami != WhatAmI::Client {
-        for mut src_face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            if face.whatami == WhatAmI::Router {
+pub(super) fn interests_new_face(tables: &mut Tables, face: &Face) {
+    if face.state.whatami != WhatAmI::Client {
+        for mut src_face in tables.faces.values().cloned().collect::<Vec<_>>() {
+            if face.state.whatami == WhatAmI::Router {
                 for RemoteInterest { res, options, .. } in
-                    face_hat_mut!(&mut src_face).remote_interests.values()
+                    face_hat_mut!(&mut src_face.state).remote_interests.values()
                 {
-                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                    get_mut_unchecked(face).local_interests.insert(
-                        id,
-                        InterestState {
-                            options: *options,
-                            res: res.as_ref().map(|res| (*res).clone()),
-                            finalized: false,
-                        },
-                    );
+                    let id = face_hat!(face.state).next_id.fetch_add(1, Ordering::SeqCst);
+                    get_mut_unchecked(&mut face.state.clone())
+                        .local_interests
+                        .insert(
+                            id,
+                            InterestState {
+                                options: *options,
+                                res: res.as_ref().map(|res| (*res).clone()),
+                                finalized: false,
+                            },
+                        );
                     let wire_expr = res.as_ref().map(|res| {
-                        Resource::decl_key(res, face, super::push_declaration_profile(face))
+                        Resource::decl_key(res, face, super::push_declaration_profile(&face.state))
                     });
-                    face.primitives.send_interest(RoutingContext::with_expr(
+                    face.intercept_interest(
                         &mut Interest {
                             id,
                             mode: InterestMode::CurrentFuture,
@@ -75,10 +71,8 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                         },
-                        res.as_ref()
-                            .map(|res| res.expr().to_string())
-                            .unwrap_or_default(),
-                    ));
+                        res.as_ref(),
+                    );
                 }
             }
         }
@@ -90,7 +84,7 @@ impl HatInterestTrait for HatCode {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
@@ -130,14 +124,16 @@ impl HatInterestTrait for HatCode {
                 send_declare,
             )
         }
-        face_hat_mut!(face).remote_interests.insert(
-            id,
-            RemoteInterest {
-                res: res.as_ref().map(|res| (*res).clone()),
-                options,
-                mode,
-            },
-        );
+        face_hat_mut!(&mut face.state.clone())
+            .remote_interests
+            .insert(
+                id,
+                RemoteInterest {
+                    res: res.as_ref().map(|res| (*res).clone()),
+                    options,
+                    mode,
+                },
+            );
 
         let interest = Arc::new(CurrentInterest {
             src_face: face.clone(),
@@ -145,30 +141,36 @@ impl HatInterestTrait for HatCode {
             mode,
         });
 
-        if face.whatami == WhatAmI::Client {
+        if face.state.whatami == WhatAmI::Client {
             let propagated_mode = if mode.future() {
                 InterestMode::CurrentFuture
             } else {
                 mode
             };
             for dst_face in tables.faces.values_mut().filter(|f| {
-                f.whatami == WhatAmI::Router
-                    || (f.whatami == WhatAmI::Peer
+                f.state.whatami == WhatAmI::Router
+                    || (f.state.whatami == WhatAmI::Peer
                         && options.tokens()
                         && mode == InterestMode::Current
-                        && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
+                        && !initial_interest(&f.state)
+                            .map(|i| i.finalized)
+                            .unwrap_or(true))
             }) {
-                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                get_mut_unchecked(dst_face).local_interests.insert(
-                    id,
-                    InterestState {
-                        options,
-                        res: res.as_ref().map(|res| (*res).clone()),
-                        finalized: propagated_mode == InterestMode::Future,
-                    },
-                );
+                let id = face_hat!(dst_face.state)
+                    .next_id
+                    .fetch_add(1, Ordering::SeqCst);
+                get_mut_unchecked(&mut dst_face.state)
+                    .local_interests
+                    .insert(
+                        id,
+                        InterestState {
+                            options,
+                            res: res.as_ref().map(|res| (*res).clone()),
+                            finalized: propagated_mode == InterestMode::Future,
+                        },
+                    );
                 if mode.current() {
-                    let dst_face_mut = get_mut_unchecked(dst_face);
+                    let dst_face_mut = get_mut_unchecked(&mut dst_face.state);
                     let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
                     let rejection_token = dst_face_mut.task_controller.get_cancellation_token();
                     dst_face_mut.pending_current_interests.insert(
@@ -180,16 +182,20 @@ impl HatInterestTrait for HatCode {
                         },
                     );
                     CurrentInterestCleanup::spawn_interest_clean_up_task(
-                        dst_face,
+                        &dst_face.state,
                         tables_ref,
                         id,
                         tables.interests_timeout,
                     );
                 }
                 let wire_expr = res.as_ref().map(|res| {
-                    Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face))
+                    Resource::decl_key(
+                        res,
+                        dst_face,
+                        super::push_declaration_profile(&dst_face.state),
+                    )
                 });
-                dst_face.primitives.send_interest(RoutingContext::with_expr(
+                dst_face.intercept_interest(
                     &mut Interest {
                         id,
                         mode: propagated_mode,
@@ -199,10 +205,8 @@ impl HatInterestTrait for HatCode {
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                     },
-                    res.as_ref()
-                        .map(|res| res.expr().to_string())
-                        .unwrap_or_default(),
-                ));
+                    res.as_deref(),
+                );
             }
         }
 
@@ -214,14 +218,15 @@ impl HatInterestTrait for HatCode {
                     interest.src_interest_id
                 );
                 send_declare(
-                    &interest.src_face.primitives,
-                    RoutingContext::new(Declare {
+                    &interest.src_face,
+                    Declare {
                         interest_id: Some(interest.src_interest_id),
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareFinal(DeclareFinal),
-                    }),
+                    },
+                    None,
                 );
             }
         }
@@ -230,8 +235,8 @@ impl HatInterestTrait for HatCode {
     fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
         if let Some(interest) = face_hat_mut!(face).remote_interests.remove(&id) {
             if !tables.faces.values().any(|f| {
-                f.whatami == WhatAmI::Client
-                    && face_hat!(f)
+                f.state.whatami == WhatAmI::Client
+                    && face_hat!(f.state)
                         .remote_interests
                         .values()
                         .any(|i| *i == interest)
@@ -239,19 +244,20 @@ impl HatInterestTrait for HatCode {
                 for dst_face in tables
                     .faces
                     .values_mut()
-                    .filter(|f| f.whatami == WhatAmI::Router)
+                    .filter(|f| f.state.whatami == WhatAmI::Router)
                 {
                     for id in dst_face
+                        .state
                         .local_interests
                         .keys()
                         .cloned()
                         .collect::<Vec<InterestId>>()
                     {
-                        let local_interest = dst_face.local_interests.get(&id).unwrap();
+                        let local_interest = dst_face.state.local_interests.get(&id).unwrap();
                         if local_interest.res == interest.res
                             && local_interest.options == interest.options
                         {
-                            dst_face.primitives.send_interest(RoutingContext::with_expr(
+                            dst_face.intercept_interest(
                                 &mut Interest {
                                     id,
                                     mode: InterestMode::Final,
@@ -263,13 +269,11 @@ impl HatInterestTrait for HatCode {
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::DEFAULT,
                                 },
-                                local_interest
-                                    .res
-                                    .as_ref()
-                                    .map(|res| res.expr().to_string())
-                                    .unwrap_or_default(),
-                            ));
-                            get_mut_unchecked(dst_face).local_interests.remove(&id);
+                                local_interest.res.as_ref(),
+                            );
+                            get_mut_unchecked(&mut dst_face.state)
+                                .local_interests
+                                .remove(&id);
                         }
                     }
                 }

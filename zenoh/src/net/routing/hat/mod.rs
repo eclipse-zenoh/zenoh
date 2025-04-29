@@ -33,13 +33,10 @@ use zenoh_transport::unicast::TransportUnicast;
 #[cfg(feature = "unstable")]
 use {crate::key_expr::KeyExpr, std::collections::HashMap};
 
-use super::{
-    dispatcher::{
-        face::{Face, FaceState},
-        pubsub::SubscriberInfo,
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
-    },
-    RoutingContext,
+use super::dispatcher::{
+    face::{Face, FaceState},
+    pubsub::SubscriberInfo,
+    tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
 };
 use crate::net::runtime::Runtime;
 
@@ -69,8 +66,7 @@ impl Sources {
     }
 }
 
-pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
-    + 'a;
+pub(crate) type SendDeclare<'a> = dyn FnMut(&Face, Declare, Option<Arc<Resource>>) + 'a;
 pub(crate) trait HatTrait:
     HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
@@ -145,7 +141,7 @@ pub(crate) trait HatInterestTrait {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
@@ -161,7 +157,7 @@ pub(crate) trait HatPubSubTrait {
     fn declare_subscription(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
@@ -203,7 +199,7 @@ pub(crate) trait HatQueriesTrait {
     fn declare_queryable(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -260,7 +256,7 @@ pub(crate) trait HatTokenTrait {
     fn declare_token(
         &self,
         tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        face: &Face,
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
