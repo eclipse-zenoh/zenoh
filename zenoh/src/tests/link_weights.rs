@@ -787,24 +787,24 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
         (
             ZenohIdProto::from_str("2").unwrap(),
             LinkInfo {
-                source_weight: Some(10),
-                dest_weight: None,
+                src_weight: Some(10),
+                dst_weight: None,
                 actual_weight: 10,
             },
         ),
         (
             ZenohIdProto::from_str("3").unwrap(),
             LinkInfo {
-                source_weight: None,
-                dest_weight: None,
+                src_weight: None,
+                dst_weight: None,
                 actual_weight: 100,
             },
         ),
         (
             ZenohIdProto::from_str("4").unwrap(),
             LinkInfo {
-                source_weight: Some(20),
-                dest_weight: Some(30),
+                src_weight: Some(20),
+                dst_weight: Some(30),
                 actual_weight: 30,
             },
         ),

@@ -1122,13 +1122,13 @@ impl Network {
             .edges_directed(self.idx, petgraph::Direction::Outgoing)
         {
             let actual_weight: u16 = *e.weight() as u16;
-            let dest_weight = self.graph[e.target()]
+            let dst_weight = self.graph[e.target()]
                 .links
                 .get(&self.graph[self.idx].zid)
                 .copied()
                 .unwrap_or_default()
                 .into();
-            let source_weight = self.graph[self.idx]
+            let src_weight = self.graph[self.idx]
                 .links
                 .get(&self.graph[e.target()].zid)
                 .copied()
@@ -1137,8 +1137,8 @@ impl Network {
             out.insert(
                 self.graph[e.target()].zid,
                 LinkInfo {
-                    source_weight,
-                    dest_weight,
+                    src_weight,
+                    dst_weight,
                     actual_weight,
                 },
             );

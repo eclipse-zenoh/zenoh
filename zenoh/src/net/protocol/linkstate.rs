@@ -194,7 +194,7 @@ impl From<LinkEdgeWeight> for Option<u16> {
 
 #[derive(PartialEq, Debug, serde::Serialize)]
 pub(crate) struct LinkInfo {
-    pub(crate) source_weight: Option<u16>,
-    pub(crate) dest_weight: Option<u16>,
+    pub(crate) src_weight: Option<u16>,
+    pub(crate) dst_weight: Option<u16>,
     pub(crate) actual_weight: u16,
 }
