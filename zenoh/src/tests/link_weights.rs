@@ -207,7 +207,8 @@ impl Net {
                     .lock()
                     .routing
                     .router
-                    .set_transport_weights(weights.try_into().ok())
+                    .linkstate
+                    .set_transport_weights(weights)
                     .unwrap(),
                 WhatAmI::Peer => self.routers[i]
                     .0
@@ -216,7 +217,8 @@ impl Net {
                     .lock()
                     .routing
                     .peer
-                    .set_transport_weights(weights.try_into().ok())
+                    .linkstate
+                    .set_transport_weights(weights)
                     .unwrap(),
                 WhatAmI::Client => unreachable!(),
             };
@@ -296,14 +298,16 @@ async fn create_net(
                 config
                     .routing
                     .router
-                    .set_transport_weights(weights.try_into().ok())
+                    .linkstate
+                    .set_transport_weights(weights)
                     .unwrap();
             }
             WhatAmI::Peer => {
                 config
                     .routing
                     .peer
-                    .set_transport_weights(weights.try_into().ok())
+                    .linkstate
+                    .set_transport_weights(weights)
                     .unwrap();
                 config
                     .routing

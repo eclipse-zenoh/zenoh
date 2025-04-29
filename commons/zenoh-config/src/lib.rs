@@ -467,23 +467,23 @@ validated_struct::validator! {
                 /// connected to each other.
                 /// The failover brokering only works if gossip discovery is enabled.
                 peers_failover_brokering: Option<bool>,
-                /// Optional weights of the outgoing transports on peers net in linkstate mode.
-                /// For non-specified destination nodes the corresponding transport weight will be set to 100,
-                /// unless the weight on the same transport is provided in the config of destination node, in which case
-                /// the destination node configured weight will be used.
-                /// If both endpoints set a transport weight, the greater value will be used.
-                transport_weights: Option<NEVec<TransportWeight>>,
+                /// Linkstate mode configuration.
+                pub linkstate: #[derive(Default)]
+                LinkstateConf {
+                    /// Weights of the outgoing links in linkstate mode.
+                    /// For non-specified destination nodes the corresponding link weight will be set to 100,
+                    /// unless the weight on the same link is provided in the config of destination node, in which case
+                    /// it will be used as a link weight. If both link endpoints set a link weight, the greater value will be used.
+                    pub transport_weights: Vec<TransportWeight>,
+                },
             },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
                 mode: Option<String>,
-                /// Optional weights of the outgoing links on peers net in linkstate mode.
-                /// For non-specified destination nodes the corresponding link weight will be set to 100,
-                /// unless the weight on the same link is provided in the config of destination node, in which case
-                /// it will be used as a link weight. If both link endpoints set a link weight, the greater value will be used.
-                transport_weights: Option<NEVec<TransportWeight>>,
+                /// Linkstate mode configuration (only taken into account if mode == "linkstate").
+                pub linkstate: LinkstateConf,
             },
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).
@@ -755,7 +755,7 @@ validated_struct::validator! {
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
 
-        ///Configuration of the access control (ACL)
+        /// Configuration of the access control (ACL)
         pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,

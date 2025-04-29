@@ -13,7 +13,6 @@
 //
 use std::{collections::HashMap, num::NonZeroU16};
 
-use nonempty_collections::NEVec;
 use zenoh_config::TransportWeight;
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
@@ -168,22 +167,20 @@ impl LinkStateList {
 }
 
 pub(crate) fn link_weights_from_config(
-    link_weights: Option<NEVec<TransportWeight>>,
+    link_weights: Vec<TransportWeight>,
     network_name: &str,
 ) -> ZResult<HashMap<ZenohIdProto, LinkEdgeWeight>> {
     let mut link_weights_by_zid = HashMap::new();
-    if let Some(link_weights) = link_weights {
-        for lw in link_weights {
-            if link_weights_by_zid
-                .insert(lw.destination_zid.into(), LinkEdgeWeight::new(lw.weight))
-                .is_some()
-            {
-                bail!(
-                    "{} config contains a duplicate zid value for link weight: {}",
-                    network_name,
-                    lw.destination_zid
-                );
-            }
+    for lw in link_weights {
+        if link_weights_by_zid
+            .insert(lw.destination_zid.into(), LinkEdgeWeight::new(lw.weight))
+            .is_some()
+        {
+            bail!(
+                "{} config contains a duplicate zid value for link weight: {}",
+                network_name,
+                lw.destination_zid
+            );
         }
     }
     Ok(link_weights_by_zid)
