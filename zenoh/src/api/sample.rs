@@ -300,6 +300,7 @@ impl TryFrom<u64> for SampleKind {
 }
 
 /// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
+#[derive(Debug, Clone)]
 pub struct SampleFields {
     pub key_expr: KeyExpr<'static>,
     pub payload: ZBytes,
