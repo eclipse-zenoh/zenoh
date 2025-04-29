@@ -224,8 +224,8 @@
         /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
         /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
  //        transport_weights: [
- //          { destination_zid: "1", weight: "10" },
- //          { destination_zid: "2", weight: "200" },
+ //          { dst_zid: "1", weight: "10" },
+ //          { dst_zid: "2", weight: "200" },
  //        ]
       }
     },
@@ -241,8 +241,8 @@
         /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
         /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
  //        transport_weights: [
- //          { destination_zid: "1", weight: "10" },
- //          { destination_zid: "2", weight: "200" },
+ //          { dst_zid: "1", weight: "10" },
+ //          { dst_zid: "2", weight: "200" },
  //        ]
       }
     },

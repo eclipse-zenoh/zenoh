@@ -193,7 +193,7 @@ impl Net {
                 v.1.iter()
                     .filter_map(|(e, w)| {
                         w.map(|w| TransportWeight {
-                            destination_zid: ZenohId::from_str(&e.to_string()).unwrap(),
+                            dst_zid: ZenohId::from_str(&e.to_string()).unwrap(),
                             weight: w.try_into().unwrap(),
                         })
                     })
@@ -288,7 +288,7 @@ async fn create_net(
             v.1.iter()
                 .filter_map(|(e, w)| {
                     w.map(|w| TransportWeight {
-                        destination_zid: ZenohId::from_str(&e.to_string()).unwrap(),
+                        dst_zid: ZenohId::from_str(&e.to_string()).unwrap(),
                         weight: w.try_into().unwrap(),
                     })
                 })

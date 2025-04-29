@@ -173,13 +173,13 @@ pub(crate) fn link_weights_from_config(
     let mut link_weights_by_zid = HashMap::new();
     for lw in link_weights {
         if link_weights_by_zid
-            .insert(lw.destination_zid.into(), LinkEdgeWeight::new(lw.weight))
+            .insert(lw.dst_zid.into(), LinkEdgeWeight::new(lw.weight))
             .is_some()
         {
             bail!(
                 "{} config contains a duplicate zid value for link weight: {}",
                 network_name,
-                lw.destination_zid
+                lw.dst_zid
             );
         }
     }

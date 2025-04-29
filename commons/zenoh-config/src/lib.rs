@@ -86,7 +86,7 @@ pub type SecretValue = Secret<SecretString>;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TransportWeight {
     /// A zid of destination node.
-    pub destination_zid: ZenohId,
+    pub dst_zid: ZenohId,
     /// A weight of link from this node to the destination.
     pub weight: NonZeroU16,
 }
