@@ -471,9 +471,9 @@ validated_struct::validator! {
                 pub linkstate: #[derive(Default)]
                 LinkstateConf {
                     /// Weights of the outgoing links in linkstate mode.
-                    /// For non-specified destination nodes the corresponding link weight will be set to 100,
-                    /// unless the weight on the same link is provided in the config of destination node, in which case
-                    /// it will be used as a link weight. If both link endpoints set a link weight, the greater value will be used.
+                    /// If none of the two endpoint nodes of a transport specifies it's weight a weight of 100 is applied.
+                    /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
+                    /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
                     pub transport_weights: Vec<TransportWeight>,
                 },
             },
@@ -481,6 +481,7 @@ validated_struct::validator! {
             pub peer: #[derive(Default)]
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+                /// This option needs to be set to the same value in all peers and routers of the subsystem.
                 mode: Option<String>,
                 /// Linkstate mode configuration (only taken into account if mode == "linkstate").
                 pub linkstate: LinkstateConf,

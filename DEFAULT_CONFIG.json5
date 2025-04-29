@@ -220,31 +220,30 @@
       /// Linkstate mode configuration.
       linkstate: {
         /// Weights of the outgoing transports in linkstate mode.
-        /// For non-specified destination nodes the corresponding transport weight will be set to 100,
-        /// unless the weight on the same transport is provided in the config of destination node, in which case
-        /// the destination node configured weight will be used.
-        /// If both endpoints set a transport weight, the greater value will be used.
-//      transport_weights: [
-//        { destination_zid: "1", weight: "10" },
-//        { destination_zid: "2", weight: "200" },
-//      ]
+        /// If none of the two endpoint nodes of a transport specifies it's weight a weight of 100 is applied.
+        /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
+        /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
+ //        transport_weights: [
+ //          { destination_zid: "1", weight: "10" },
+ //          { destination_zid: "2", weight: "200" },
+ //        ]
       }
     },
     /// The routing strategy to use in peers and it's configuration.
     peer: {
       /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+      /// This option needs to be set to the same value in all peers and routers of the subsystem.
       mode: "peer_to_peer",
         /// Linkstate mode configuration (only taken into account if mode == "linkstate").
         linkstate: {
         /// Weights of the outgoing transports in linkstate mode.
-        /// For non-specified destination nodes the corresponding transport weight will be set to 100,
-        /// unless the weight on the same transport is provided in the config of destination node, in which case
-        /// the destination node configured weight will be used.
-        /// If both endpoints set a transport weight, the greater value will be used.
-//      transport_weights: [
-//        { destination_zid: "1", weight: "10" },
-//        { destination_zid: "2", weight: "200" },
-//      ]
+        /// If none of the two endpoint nodes of a transport specifies it's weight a weight of 100 is applied.
+        /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
+        /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
+ //        transport_weights: [
+ //          { destination_zid: "1", weight: "10" },
+ //          { destination_zid: "2", weight: "200" },
+ //        ]
       }
     },
     /// The interests-based routing configuration.
