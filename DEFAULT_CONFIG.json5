@@ -217,11 +217,34 @@
       /// The failover brokering only works if gossip discovery is enabled
       /// and peers are configured with gossip target "router".
       peers_failover_brokering: true,
+      /// Linkstate mode configuration.
+      linkstate: {
+        /// Weights of the outgoing transports in linkstate mode.
+        /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
+        /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
+        /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
+ //        transport_weights: [
+ //          { dst_zid: "1", weight: "10" },
+ //          { dst_zid: "2", weight: "200" },
+ //        ]
+      }
     },
     /// The routing strategy to use in peers and it's configuration.
     peer: {
       /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+      /// This option needs to be set to the same value in all peers and routers of the subsystem.
       mode: "peer_to_peer",
+        /// Linkstate mode configuration (only taken into account if mode == "linkstate").
+        linkstate: {
+        /// Weights of the outgoing transports in linkstate mode.
+        /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
+        /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
+        /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
+ //        transport_weights: [
+ //          { dst_zid: "1", weight: "10" },
+ //          { dst_zid: "2", weight: "200" },
+ //        ]
+      }
     },
     /// The interests-based routing configuration.
     /// This configuration applies regardless of the mode (router, peer or client).

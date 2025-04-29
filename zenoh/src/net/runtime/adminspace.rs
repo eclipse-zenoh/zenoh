@@ -576,6 +576,7 @@ fn local_data(context: &AdminContext, query: Query) {
         .map(|locator| json!(locator.as_str()))
         .collect();
 
+    let links_info = context.runtime.get_links_info();
     // transports info
     let transport_to_json = |transport: &TransportUnicast| {
         #[allow(unused_mut)]
@@ -586,6 +587,7 @@ fn local_data(context: &AdminContext, query: Query) {
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.dst.to_string()).collect()
             ),
+            "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
         });
         #[cfg(feature = "stats")]
         {

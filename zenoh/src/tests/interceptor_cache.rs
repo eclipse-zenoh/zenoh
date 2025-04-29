@@ -114,7 +114,7 @@ use std::{any::Any, time::Duration};
 use zenoh_config::{InterceptorFlow, ZenohId};
 use zenoh_core::ztimeout;
 
-use super::{config::WhatAmI, Config};
+use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -145,28 +145,28 @@ async fn get_basic_client_config(port: u16) -> Config {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_ingress() {
-    let router_id = ZenohId::from_str("1").unwrap();
+    let router_id = ZenohId::from_str("a1").unwrap();
     let c = TestInterceptorConf {
         flow: InterceptorFlow::Ingress,
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
         .insert(router_id, Box::new(f));
 
-    super::init_log_from_env_or("error");
+    init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27701).await;
     config_router.set_id(router_id).unwrap();
 
     let config_client1 = get_basic_client_config(27701).await;
     let config_client2 = get_basic_client_config(27701).await;
 
-    let router = ztimeout!(super::open(config_router.clone())).unwrap();
+    let router = ztimeout!(open(config_router.clone())).unwrap();
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(super::open(config_client1)).unwrap();
-    let session2 = ztimeout!(super::open(config_client2)).unwrap();
+    let session1 = ztimeout!(open(config_client1)).unwrap();
+    let session2 = ztimeout!(open(config_client2)).unwrap();
     tokio::time::sleep(SLEEP).await;
     let sub = ztimeout!(session2.declare_subscriber("test/cache")).unwrap();
     let pub1 = ztimeout!(session1.declare_publisher("test/cache")).unwrap();
@@ -193,7 +193,7 @@ async fn test_interceptors_cache_update_ingress() {
         data: "2".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
         .insert(router_id, Box::new(f));
@@ -235,28 +235,28 @@ async fn test_interceptors_cache_update_ingress() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_egress() {
-    let router_id = ZenohId::from_str("1").unwrap();
+    let router_id = ZenohId::from_str("a1").unwrap();
     let c = TestInterceptorConf {
         flow: InterceptorFlow::Egress,
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
         .insert(router_id, Box::new(f));
 
-    super::init_log_from_env_or("error");
+    init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27702).await;
     config_router.set_id(router_id).unwrap();
 
     let config_client1 = get_basic_client_config(27702).await;
     let config_client2 = get_basic_client_config(27702).await;
 
-    let router = ztimeout!(super::open(config_router.clone())).unwrap();
+    let router = ztimeout!(open(config_router.clone())).unwrap();
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(super::open(config_client1)).unwrap();
-    let session2 = ztimeout!(super::open(config_client2)).unwrap();
+    let session1 = ztimeout!(open(config_client1)).unwrap();
+    let session2 = ztimeout!(open(config_client2)).unwrap();
     tokio::time::sleep(SLEEP).await;
     let sub = ztimeout!(session2.declare_subscriber("test/cache")).unwrap();
     let pub1 = ztimeout!(session1.declare_publisher("test/cache")).unwrap();
@@ -283,7 +283,7 @@ async fn test_interceptors_cache_update_egress() {
         data: "2".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
         .insert(router_id, Box::new(f));
@@ -325,28 +325,28 @@ async fn test_interceptors_cache_update_egress() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_egress_then_ingress() {
-    let router_id = ZenohId::from_str("1").unwrap();
+    let router_id = ZenohId::from_str("a1").unwrap();
     let c = TestInterceptorConf {
         flow: InterceptorFlow::Egress,
         data: "1".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
         .insert(router_id, Box::new(f));
 
-    super::init_log_from_env_or("error");
+    init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27703).await;
     config_router.set_id(router_id).unwrap();
 
     let config_client1 = get_basic_client_config(27703).await;
     let config_client2 = get_basic_client_config(27703).await;
 
-    let router = ztimeout!(super::open(config_router.clone())).unwrap();
+    let router = ztimeout!(open(config_router.clone())).unwrap();
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(super::open(config_client1)).unwrap();
-    let session2 = ztimeout!(super::open(config_client2)).unwrap();
+    let session1 = ztimeout!(open(config_client1)).unwrap();
+    let session2 = ztimeout!(open(config_client2)).unwrap();
     tokio::time::sleep(SLEEP).await;
     let sub = ztimeout!(session2.declare_subscriber("test/cache")).unwrap();
     let pub1 = ztimeout!(session1.declare_publisher("test/cache")).unwrap();
@@ -373,7 +373,7 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
         data: "2".to_string(),
     };
     let f = move || test_interceptor_factories(&vec![c.clone()]);
-    let _ = super::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
+    let _ = crate::net::routing::interceptor::tests::ID_TO_INTERCEPTOR_FACTORIES
         .lock()
         .unwrap()
         .insert(router_id, Box::new(f));
