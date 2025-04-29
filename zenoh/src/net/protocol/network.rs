@@ -188,14 +188,14 @@ impl Network {
         link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
     ) -> bool {
         let mut dests_to_update = Vec::new();
-        for l in &mut self.graph[self.idx].links {
-            let old_weight = self.link_weights.get(l.0);
-            let new_weight = link_weights.get(l.0);
+        for (dst_zid, weight) in &mut self.graph[self.idx].links {
+            let old_weight = self.link_weights.get(dst_zid);
+            let new_weight = link_weights.get(dst_zid);
             if old_weight == new_weight {
                 continue;
             }
-            *l.1 = new_weight.copied().unwrap_or_default();
-            dests_to_update.push(*l.0);
+            *weight = new_weight.copied().unwrap_or_default();
+            dests_to_update.push(*dst_zid);
         }
 
         self.link_weights = link_weights;
