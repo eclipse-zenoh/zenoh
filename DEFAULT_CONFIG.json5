@@ -220,9 +220,9 @@
       /// Linkstate mode configuration.
       linkstate: {
         /// Weights of the outgoing transports in linkstate mode.
-        /// If none of the two endpoint nodes of a transport specifies it's weight a weight of 100 is applied.
-        /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
-        /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
+        /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
+        /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
+        /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
  //        transport_weights: [
  //          { dst_zid: "1", weight: "10" },
  //          { dst_zid: "2", weight: "200" },
@@ -237,9 +237,9 @@
         /// Linkstate mode configuration (only taken into account if mode == "linkstate").
         linkstate: {
         /// Weights of the outgoing transports in linkstate mode.
-        /// If none of the two endpoint nodes of a transport specifies it's weight a weight of 100 is applied.
-        /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
-        /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
+        /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
+        /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
+        /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
  //        transport_weights: [
  //          { dst_zid: "1", weight: "10" },
  //          { dst_zid: "2", weight: "200" },

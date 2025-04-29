@@ -471,9 +471,9 @@ validated_struct::validator! {
                 pub linkstate: #[derive(Default)]
                 LinkstateConf {
                     /// Weights of the outgoing links in linkstate mode.
-                    /// If none of the two endpoint nodes of a transport specifies it's weight a weight of 100 is applied.
-                    /// If only one of the two endpoint nodes of a transport specifies it's weight the specified weight is applied.
-                    /// If both of the two endpoint nodes of a transport specifies it's weight the greater weight is applied.
+                    /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
+                    /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
+                    /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
                     pub transport_weights: Vec<TransportWeight>,
                 },
             },
