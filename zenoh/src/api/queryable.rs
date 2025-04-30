@@ -26,6 +26,7 @@ use zenoh_protocol::{
     zenoh::{self, reply::ReplyBody, Del, Put, ResponseBody},
 };
 use zenoh_result::ZResult;
+use zenoh_util::handler::KeyedEvent;
 #[zenoh_macros::unstable]
 use {
     crate::api::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
@@ -224,6 +225,12 @@ impl Query {
             value: None,
             attachment: None,
         }
+    }
+}
+
+impl KeyedEvent for Query {
+    fn key_expr(&self) -> &zenoh_keyexpr::keyexpr {
+        self.key_expr()
     }
 }
 

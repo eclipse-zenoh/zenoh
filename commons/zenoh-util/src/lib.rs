@@ -31,6 +31,7 @@ pub use timer::*;
 pub mod log;
 pub use lib_search_dirs::*;
 pub use log::*;
+pub mod handler;
 
 /// The "ZENOH_HOME" environment variable name
 pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
