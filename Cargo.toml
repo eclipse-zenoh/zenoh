@@ -100,8 +100,8 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 event-listener = "5.3.1"
 flume = "0.11"
 form_urlencoded = "1.2.1"
-futures = "0.3.30"
-futures-util = { version = "0.3.30", default-features = false } # Default features are disabled due to some crates' requirements
+futures = "0.3.31"
+futures-util = { version = "0.3.31", default-features = false } # Default features are disabled due to some crates' requirements
 git-version = "0.3.9"
 getrandom = { version = "0.2" }
 hashbrown = "0.14"
