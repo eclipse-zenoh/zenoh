@@ -69,6 +69,7 @@ Then you can start run `zenohd`.
 -------------------------------
 
 ## How to build it
+
 Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be successfully compiled with Rust stable (>= 1.75.0), so no special configuration is required from your side. If you already have the Rust toolchain installed, make sure it is up-to-date with:
 
 ```bash
