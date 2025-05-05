@@ -238,10 +238,7 @@ impl Network {
     }
 
     pub(crate) fn dot(&self) -> String {
-        std::format!(
-            "{:?}",
-            petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
-        )
+        std::format!("{:?}", petgraph::dot::Dot::new(&self.graph))
     }
 
     #[inline]
