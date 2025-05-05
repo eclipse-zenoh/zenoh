@@ -209,14 +209,16 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
+        let ke = self.key_expr?;
         session
             .0
-            .declare_queryable_inner(&self.key_expr?, self.complete, self.origin, callback)
+            .declare_queryable_inner(&ke, self.complete, self.origin, callback)
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
                     session: self.session.downgrade(),
                     id: qable_state.id,
                     undeclare_on_drop: true,
+                    key_expr: ke.into_owned(),
                 },
                 handler: receiver,
             })

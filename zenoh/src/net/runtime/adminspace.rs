@@ -22,8 +22,10 @@ use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
+use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
-use zenoh_plugin_trait::{PluginControl, PluginDiff, PluginStatus};
+use zenoh_plugin_trait::{PluginControl, PluginStatus};
 #[cfg(feature = "plugins")]
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
@@ -39,7 +41,7 @@ use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
-#[cfg(feature = "plugins")]
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
@@ -95,7 +97,7 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(feature = "plugins")]
+    #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
@@ -220,7 +222,7 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        #[cfg(feature = "plugins")]
+        #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
@@ -574,6 +576,7 @@ fn local_data(context: &AdminContext, query: Query) {
         .map(|locator| json!(locator.as_str()))
         .collect();
 
+    let links_info = context.runtime.get_links_info();
     // transports info
     let transport_to_json = |transport: &TransportUnicast| {
         #[cfg(not(feature = "stats"))]
@@ -602,6 +605,7 @@ fn local_data(context: &AdminContext, query: Query) {
             "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": links,
+            "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
         });
         #[cfg(feature = "stats")]
         {
