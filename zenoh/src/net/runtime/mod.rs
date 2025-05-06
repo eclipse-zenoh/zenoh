@@ -36,6 +36,7 @@ use async_trait::async_trait;
 use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+use tracing::debug;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_config::{unwrap_or_default, ModeDependent, ZenohId};
 use zenoh_link::{EndPoint, Link};
@@ -66,7 +67,7 @@ use crate::api::plugins::PluginsManager;
 use crate::session::CloseBuilder;
 use crate::{
     api::{
-        builders::close::{Closeable, Closee},
+        builders::close::Closee,
         config::{Config, Notifier},
     },
     GIT_VERSION, LONG_VERSION,
@@ -249,6 +250,12 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
+impl std::fmt::Display for Runtime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.state)
+    }
+}
+
 impl StructVersion for Runtime {
     fn struct_version() -> u64 {
         1
@@ -282,8 +289,12 @@ impl Runtime {
     }
 
     #[cfg(feature = "internal")]
-    pub fn close(&self) -> CloseBuilder<Self> {
-        CloseBuilder::new(self)
+    pub fn close(&self) -> CloseBuilder<impl Closee> {
+        CloseBuilder::new(self.closee())
+    }
+
+    pub(crate) fn closee(&self) -> Arc<RuntimeState> {
+        self.state.clone()
     }
 
     pub fn is_closed(&self) -> bool {
@@ -537,31 +548,39 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
     }
 }
 
+impl std::fmt::Display for RuntimeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.zid)
+    }
+}
+
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
     async fn close_inner(&self) {
-        tracing::trace!("Runtime::close())");
+        debug!(zid = %self.zid, "Close Runtime");
+
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
+
+        debug!(zid = %self.zid, "Close runtime manager");
         self.manager.close().await;
+
+        debug!(zid = %self.zid, "Close transport handlers");
         // clean up to break cyclic reference of self.state to itself
         self.transport_handlers.write().unwrap().clear();
+
+        debug!(zid = %self.zid, "Locking router tables...");
         // TODO: the call below is needed to prevent intermittent leak
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
         // This should be resolved by identfying correspodning task, and placing
         // cancellation token manually inside it.
-        let mut tables = self.router.tables.tables.write().unwrap();
+        let mut tables = zwrite!(self.router.tables.tables);
+        debug!(zid = %self.zid, "Close root resource");
         tables.root_res.close();
+        debug!(zid = %self.zid, "Close clear faces");
         tables.faces.clear();
-    }
-}
-
-impl Closeable for Runtime {
-    type TClosee = Arc<RuntimeState>;
-
-    fn get_closee(&self) -> Self::TClosee {
-        self.state.clone()
+        debug!(zid = %self.zid, "Runtime closed!");
     }
 }
