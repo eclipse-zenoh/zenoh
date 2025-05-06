@@ -174,10 +174,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         let handle = tokio::runtime::Handle::current();
         let guard =
             tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
-        if let Some(val) = guard.as_ref() {
-            return [val.link()].to_vec();
-        }
-        vec![]
+        guard.as_ref().map(|l| vec![l.link()]).unwrap_or_default()
     }
 
     fn get_zid(&self) -> ZenohIdProto {
@@ -221,8 +218,16 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
+    fn stats(&self) -> Arc<TransportStats> {
         self.stats.clone()
+    }
+
+    #[cfg(feature = "stats")]
+    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
+        self.get_links()
+            .into_iter()
+            .map(|l| (l, self.stats.clone()))
+            .collect()
     }
 
     /*************************************/

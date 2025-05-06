@@ -345,8 +345,16 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
+    fn stats(&self) -> Arc<TransportStats> {
         self.stats.clone()
+    }
+
+    #[cfg(feature = "stats")]
+    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
+        zread!(self.links)
+            .iter()
+            .map(|l| (l.link.link(), l.stats.clone()))
+            .collect()
     }
 
     /*************************************/

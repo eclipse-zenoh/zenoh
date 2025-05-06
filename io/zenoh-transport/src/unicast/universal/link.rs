@@ -44,6 +44,8 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The task handling substruct
     tracker: TaskTracker,
     token: CancellationToken,
+    #[cfg(feature = "stats")]
+    pub(super) stats: Arc<TransportStats>,
 }
 
 impl TransportLinkUnicastUniversal {
@@ -77,6 +79,8 @@ impl TransportLinkUnicastUniversal {
             pipeline: producer,
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
+            #[cfg(feature = "stats")]
+            stats: TransportStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
         };
 
         (result, consumer)
@@ -91,6 +95,8 @@ impl TransportLinkUnicastUniversal {
         // Spawn the TX task
         let mut tx = self.link.tx();
         let token = self.token.clone();
+        #[cfg(feature = "stats")]
+        let stats = self.stats.clone();
         let task = async move {
             let res = tx_task(
                 consumer,
@@ -98,7 +104,7 @@ impl TransportLinkUnicastUniversal {
                 keep_alive,
                 token,
                 #[cfg(feature = "stats")]
-                transport.stats.clone(),
+                stats,
             )
             .await;
 
@@ -120,6 +126,8 @@ impl TransportLinkUnicastUniversal {
         let reliability = self.link.config.reliability;
         let mut rx = self.link.rx();
         let token = self.token.clone();
+        #[cfg(feature = "stats")]
+        let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
             let res = rx_task(
@@ -128,6 +136,8 @@ impl TransportLinkUnicastUniversal {
                 lease,
                 transport.manager.config.link_rx_buffer_size,
                 token,
+                #[cfg(feature = "stats")]
+                stats,
             )
             .await;
 
@@ -243,6 +253,7 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
     token: CancellationToken,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
@@ -280,10 +291,9 @@ async fn rx_task(
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {
-
-                    transport.stats.inc_rx_bytes(2 + batch.len()); // Account for the batch len encoding (16 bits)
+                    stats.inc_rx_bytes(2 + batch.len()); // Account for the batch len encoding (16 bits)
                 }
-                transport.read_messages(batch, &l)?;
+                transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
             }
 
             _ = token.cancelled() => break
