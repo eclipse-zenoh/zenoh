@@ -28,7 +28,6 @@ use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::ZenohIdProto,
     network::{
         declare::{
             ext::{NodeIdType, QoSType},
@@ -387,13 +386,6 @@ impl HatBaseTrait for HatCode {
 
     fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
         "graph {}".to_string()
-    }
-
-    fn links_info(
-        &self,
-        _tables: &Tables,
-    ) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
-        HashMap::new()
     }
 }
 
