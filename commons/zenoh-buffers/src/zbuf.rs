@@ -12,7 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, iter, num::NonZeroUsize, ptr::NonNull};
+use core::{
+    cmp::{self, Ordering},
+    iter,
+    num::NonZeroUsize,
+    ptr::NonNull,
+};
 #[cfg(feature = "std")]
 use std::io;
 
@@ -81,6 +86,17 @@ impl ZBuf {
     #[inline]
     fn opt_zslice_writer(&mut self) -> Option<ZSliceWriter> {
         self.slices.last_mut().and_then(|s| s.writer())
+    }
+
+    pub fn chunks(&self, chunk_size: usize) -> ZBufChunkIterator<'_> {
+        assert_ne!(chunk_size, 0, "cannot split ZBuf into chunks of size 0");
+
+        ZBufChunkIterator {
+            chunk_size,
+            buf: self,
+            slice_cursor: 0,
+            byte_cursor: 0,
+        }
     }
 }
 
@@ -667,5 +683,99 @@ mod tests {
 
         assert_eq!(reader.seek(std::io::SeekFrom::Start(10)).unwrap(), 10);
         reader.seek(std::io::SeekFrom::Current(-100)).unwrap_err();
+    }
+}
+
+pub struct ZBufChunkIterator<'a> {
+    chunk_size: usize,
+    buf: &'a ZBuf,
+    slice_cursor: usize,
+    byte_cursor: usize,
+}
+
+impl ZBufChunkIterator<'_> {
+    fn inc_slice_cursor(&mut self) {
+        self.slice_cursor += 1;
+        self.byte_cursor = 0;
+    }
+
+    fn inc_byte_cursor(&mut self, mut amt: usize) {
+        while let Some(slice) = self.buf.slices.get(self.slice_cursor) {
+            let rem = slice.len() - self.byte_cursor;
+
+            match rem.cmp(&amt) {
+                Ordering::Less => {
+                    self.inc_slice_cursor();
+                    amt -= rem;
+                    continue;
+                }
+                Ordering::Equal => {
+                    self.inc_slice_cursor();
+                    break;
+                }
+                Ordering::Greater => {
+                    self.byte_cursor += amt;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for ZBufChunkIterator<'_> {
+    type Item = ZBuf;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let slice = self.buf.slices.get(self.slice_cursor)?;
+
+        let rem = slice.len() - self.byte_cursor;
+
+        match rem.cmp(&self.chunk_size) {
+            Ordering::Less => {
+                let mut buf = ZBuf::empty();
+                let subslice = slice.subslice(self.byte_cursor..).unwrap();
+                buf.push_zslice(subslice);
+                self.inc_slice_cursor();
+
+                while let Some(slice) = self.buf.slices.get(self.slice_cursor) {
+                    let missing = self.chunk_size - buf.len();
+
+                    match slice.len().cmp(&missing) {
+                        Ordering::Less => {
+                            buf.push_zslice(slice.clone());
+                            self.inc_slice_cursor();
+                            continue;
+                        }
+                        Ordering::Equal => {
+                            buf.push_zslice(slice.clone());
+                            self.inc_slice_cursor();
+                            break;
+                        }
+                        Ordering::Greater => {
+                            let subslice = slice.subslice(..missing).unwrap();
+                            buf.push_zslice(subslice);
+                            self.inc_byte_cursor(missing);
+                            break;
+                        }
+                    }
+                }
+
+                Some(buf)
+            }
+            Ordering::Equal => {
+                let subslice = slice.subslice(self.byte_cursor..).unwrap();
+
+                self.inc_slice_cursor();
+                Some(ZBuf::from(subslice))
+            }
+            Ordering::Greater => {
+                let subslice = slice
+                    .subslice(self.byte_cursor..self.byte_cursor + self.chunk_size)
+                    .unwrap();
+
+                self.inc_byte_cursor(self.chunk_size);
+                Some(ZBuf::from(subslice))
+            }
+        }
     }
 }
