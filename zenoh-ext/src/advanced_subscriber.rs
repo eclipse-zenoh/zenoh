@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::F
 
 use zenoh::{
     config::ZenohId,
-    handlers::{Callback, IntoHandler},
+    handlers::{Callback, CallbackParameter, IntoHandler},
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::SubscriberBuilder,
@@ -193,7 +193,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
     where
         F: Fn(Sample) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Add callback to `AdvancedSubscriber`.
@@ -1430,6 +1430,14 @@ impl Miss {
     }
 }
 
+impl CallbackParameter for Miss {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
+
 /// A listener to detect missed samples.
 ///
 /// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
@@ -1534,7 +1542,7 @@ impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
     where
         F: Fn(Miss) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the sample miss notification with a mutable callback.
