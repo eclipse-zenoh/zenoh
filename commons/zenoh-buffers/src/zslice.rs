@@ -453,8 +453,10 @@ mod tests {
 
     #[test]
     fn hash() {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
 
         let buf = vec![1, 2, 3, 4, 5];
         let mut buf_hasher = DefaultHasher::new();
