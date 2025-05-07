@@ -31,14 +31,28 @@ pub trait KeyedHandlerMut<Event> {
     fn handle(&mut self, event: &Event);
 }
 
-#[derive(Default)]
 pub struct KeyedHandlers<Event> {
     handlers: Vec<(OwnedKeyExpr, Box<dyn KeyedHandler<Event> + Send + Sync>)>,
 }
 
-#[derive(Default)]
+impl<Event> Default for KeyedHandlers<Event> {
+    fn default() -> Self {
+        Self {
+            handlers: Vec::default(),
+        }
+    }
+}
+
 pub struct KeyedHandlersMut<Event> {
     handlers: Vec<(OwnedKeyExpr, Box<dyn KeyedHandlerMut<Event> + Send + Sync>)>,
+}
+
+impl<Event> Default for KeyedHandlersMut<Event> {
+    fn default() -> Self {
+        Self {
+            handlers: Vec::default(),
+        }
+    }
 }
 
 impl<Event> KeyedHandlers<Event> {
