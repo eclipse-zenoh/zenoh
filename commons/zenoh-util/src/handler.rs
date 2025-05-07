@@ -27,18 +27,32 @@ pub trait KeyedHandler<Event> {
     fn handle(&self, event: &Event);
 }
 
+pub trait KeyedHandlerMut<Event> {
+    fn handle(&mut self, event: &Event);
+}
+
+#[derive(Default)]
 pub struct KeyedHandlers<Event> {
     handlers: Vec<(OwnedKeyExpr, Box<dyn KeyedHandler<Event> + Send + Sync>)>,
 }
 
-impl<Event> Default for KeyedHandlers<Event> {
-    fn default() -> Self {
-        KeyedHandlers { handlers: vec![] }
-    }
+#[derive(Default)]
+pub struct KeyedHandlersMut<Event> {
+    handlers: Vec<(OwnedKeyExpr, Box<dyn KeyedHandlerMut<Event> + Send + Sync>)>,
 }
 
 impl<Event> KeyedHandlers<Event> {
     pub fn insert<Handler: KeyedHandler<Event> + Send + Sync + 'static>(
+        &mut self,
+        key_expr: OwnedKeyExpr,
+        handler: Handler,
+    ) {
+        self.handlers.push((key_expr, Box::new(handler)));
+    }
+}
+
+impl<Event> KeyedHandlersMut<Event> {
+    pub fn insert<Handler: KeyedHandlerMut<Event> + Send + Sync + 'static>(
         &mut self,
         key_expr: OwnedKeyExpr,
         handler: Handler,
@@ -53,6 +67,19 @@ where
 {
     fn handle(&self, event: &Event) {
         for (k, h) in &self.handlers {
+            if event.key_expr().intersects(k) {
+                h.handle(event);
+            }
+        }
+    }
+}
+
+impl<Event> KeyedHandlerMut<Event> for KeyedHandlersMut<Event>
+where
+    Event: KeyedEvent,
+{
+    fn handle(&mut self, event: &Event) {
+        for (k, h) in &mut self.handlers {
             if event.key_expr().intersects(k) {
                 h.handle(event);
             }
