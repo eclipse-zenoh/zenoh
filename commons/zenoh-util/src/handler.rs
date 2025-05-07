@@ -28,7 +28,7 @@ pub trait KeyedHandler<Event> {
 }
 
 pub trait KeyedHandlerMut<Event> {
-    fn handle(&mut self, event: &Event);
+    fn handle_mut(&mut self, event: &Event);
 }
 
 pub struct KeyedHandlers<Event> {
@@ -92,10 +92,10 @@ impl<Event> KeyedHandlerMut<Event> for KeyedHandlersMut<Event>
 where
     Event: KeyedEvent,
 {
-    fn handle(&mut self, event: &Event) {
+    fn handle_mut(&mut self, event: &Event) {
         for (k, h) in &mut self.handlers {
             if event.key_expr().intersects(k) {
-                h.handle(event);
+                h.handle_mut(event);
             }
         }
     }
