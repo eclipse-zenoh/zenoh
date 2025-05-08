@@ -123,16 +123,16 @@ impl TransportUnicastLowlatency {
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
+        if let Some(val) = zasyncwrite!(self.link).as_ref() {
+            let _ = val.close(Some(close::reason::GENERIC)).await;
+        }
+
         // Close and drop the link
         self.token.cancel();
         self.tracker.close();
         self.tracker.wait().await;
         // self.stop_keepalive().await;
         // self.stop_rx().await;
-
-        if let Some(val) = zasyncwrite!(self.link).as_ref() {
-            let _ = val.close(Some(close::reason::GENERIC)).await;
-        }
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {

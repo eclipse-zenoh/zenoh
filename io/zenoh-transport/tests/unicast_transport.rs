@@ -262,6 +262,10 @@ impl SHRouter {
     fn get_count(&self) -> usize {
         self.count.load(Ordering::SeqCst)
     }
+
+    fn reset_count(&self) {
+        self.count.store(0, Ordering::SeqCst);
+    }
 }
 
 impl TransportEventHandler for SHRouter {
@@ -357,6 +361,9 @@ async fn open_transport_unicast(
     TransportManager,
     TransportUnicast,
 ) {
+    // Short timeout for connectionless protocols like udp and quick
+    let open_timeout = Duration::from_secs(5);
+
     // Define client and router IDs
     let client_id = ZenohIdProto::try_from([1]).unwrap();
     let router_id = ZenohIdProto::try_from([2]).unwrap();
@@ -369,7 +376,9 @@ async fn open_transport_unicast(
         #[cfg(feature = "shared-memory")]
         false,
         lowlatency_transport,
-    );
+    )
+    .open_timeout(open_timeout);
+
     let router_manager = TransportManager::builder()
         .zid(router_id)
         .whatami(WhatAmI::Router)
@@ -390,7 +399,9 @@ async fn open_transport_unicast(
         #[cfg(feature = "shared-memory")]
         false,
         lowlatency_transport,
-    );
+    )
+    .open_timeout(open_timeout);
+
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
@@ -437,9 +448,9 @@ async fn close_transport(
     });
 
     // Stop the locators on the manager
-    for e in endpoints.iter() {
+    for e in router_manager.get_listeners().await {
         println!("Del locator: {}", e);
-        ztimeout!(router_manager.del_listener(e)).unwrap();
+        ztimeout!(router_manager.del_listener(&e)).unwrap();
     }
 
     ztimeout!(async {
@@ -549,6 +560,34 @@ async fn run_single(
         msg_size,
     )
     .await;
+
+    // Check transport still works despite closing listener endpoints:
+    println!("Closing router listeners...");
+    for endpoint in router_manager.get_listeners().await {
+        println!("Del listener: {}", endpoint);
+        router_manager.del_listener(&endpoint).await.unwrap();
+    }
+    tokio::time::sleep(SLEEP).await;
+
+    println!("Testing back the transports after closing the router listeners...");
+    router_handler.reset_count();
+    test_transport(
+        router_handler.clone(),
+        client_transport.clone(),
+        channel,
+        msg_size,
+    )
+    .await;
+    println!("Transports kept working after closing the router listeners...");
+
+    // Open transport against closed endpoints -> This should fail or timeout
+    for e in client_endpoints.iter() {
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap_err();
+        println!(
+            "Attempt to open new transport with '{}' (closed router listener) failed as expected.",
+            e
+        );
+    }
 
     #[cfg(feature = "stats")]
     {
