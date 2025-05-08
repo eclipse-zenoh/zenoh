@@ -104,7 +104,10 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
                 match serde_json::to_vec(&peer) {
                     Ok(bytes) => {
                         let reply_expr = KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
-                        let _ = query.reply(reply_expr, bytes).wait();
+                        let _ = query
+                            .reply(reply_expr, bytes)
+                            .encoding(Encoding::APPLICATION_JSON)
+                            .wait();
                     }
                     Err(e) => tracing::debug!("Admin query error: {}", e),
                 }
@@ -126,7 +129,10 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
                                     / zid
                                     / KE_LINK
                                     / lid;
-                                let _ = query.reply(reply_expr, bytes).wait();
+                                let _ = query
+                                    .reply(reply_expr, bytes)
+                                    .encoding(Encoding::APPLICATION_JSON)
+                                    .wait();
                             }
                             Err(e) => tracing::debug!("Admin query error: {}", e),
                         }
