@@ -189,6 +189,9 @@ impl<Handler> Subscriber<Handler> {
 
     /// Undeclare the [`Subscriber`].
     ///
+    /// This subscriber's [`crate::handlers::Callback`] will be dropped as part of the
+    /// undeclaration.
+    ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
