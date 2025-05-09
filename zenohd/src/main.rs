@@ -70,6 +70,9 @@ struct Args {
     /// - `--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     #[arg(long)]
     cfg: Vec<String>,
+    /// An inline configuration passed as a string. Notice that this takes precedence over (overrides) the file-based config.
+    #[arg(long, value_name = "CONFIG")]
+    inline_config: Option<String>,
     /// Configure the read and/or write permissions on the admin space. Default is read only.
     #[arg(long, value_name = "[r|w|rw|none]")]
     adminspace_permissions: Option<String>,
@@ -99,12 +102,13 @@ fn main() {
 }
 
 fn config_from_args(args: &Args) -> Config {
-    let mut config = args
-        .config
-        .as_ref()
-        .map_or_else(Config::default, |conf_file| {
-            Config::from_file(conf_file).unwrap()
-        });
+    let mut config = if let Some(str) = args.inline_config.as_ref() {
+        Config::from_json5(str).expect("failed to parse inline config")
+    } else if let Some(fname) = args.config.as_ref() {
+        Config::from_file(fname).expect("Failed to open config file")
+    } else {
+        Config::default()
+    };
 
     if config.mode().is_none() {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
