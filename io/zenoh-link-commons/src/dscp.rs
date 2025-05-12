@@ -25,7 +25,7 @@ fn parse_int(s: &str) -> Result<u32, ParseIntError> {
     } else if let Some(s) = ["0xb", "0B"].iter().find_map(|pfx| s.strip_prefix(pfx)) {
         u32::from_str_radix(s, 2)
     } else {
-        u32::from_str_radix(s, 10)
+        s.parse::<u32>()
     }
 }
 
