@@ -254,15 +254,17 @@ fn config_from_args(args: &Args) -> Config {
     }
     for json in &args.cfg {
         if let Some((key, value)) = json.split_once(':') {
-            match json5::Deserializer::from_str(value) {
-                Ok(mut deserializer) => {
-                    if let Err(e) =
-                        config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
-                    {
-                        tracing::warn!("Couldn't perform configuration {}: {}", json, e);
+            if !key.is_empty() {
+                match json5::Deserializer::from_str(value) {
+                    Ok(mut deserializer) => {
+                        if let Err(e) =
+                            config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
+                        {
+                            tracing::warn!("Couldn't perform configuration {}: {}", json, e);
+                        }
                     }
+                    Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
                 }
-                Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
             }
         } else {
             panic!(
