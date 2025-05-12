@@ -113,6 +113,9 @@ jobs:
       - name: Clippy zenoh
         run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
 
+      - name: Clippy zenoh internal_config
+        run: cargo +stable clippy -p zenoh --all-targets --features internal_config -- --deny warnings
+
       - name: Clippy zenoh unstable
         run: cargo +stable clippy -p zenoh --all-targets --features unstable -- --deny warnings
 
@@ -186,7 +189,10 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
-      - name: Run tests
+      - name: Run tests stable
+        run: cargo nextest run -p zenoh -F internal_config
+
+      - name: Run tests with unstable
         run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report

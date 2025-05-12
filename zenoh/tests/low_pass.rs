@@ -21,11 +21,9 @@ use std::sync::{
 };
 
 use nonempty_collections::{nev, NEVec};
-use zenoh::{
-    bytes::ZBytes,
-    query::{ConsolidationMode, Reply},
-    Config, Wait,
-};
+#[cfg(feature = "unstable")]
+use zenoh::query::{ConsolidationMode, Reply};
+use zenoh::{bytes::ZBytes, Config, Wait};
 use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
 
 static SMALL_MSG_STR: &str = "S";
@@ -470,6 +468,7 @@ fn lowpass_pub_sub_query_reply_test(
         .wait()
         .unwrap();
 
+    #[cfg(feature = "unstable")]
     let _queryable = reader_session
         .declare_queryable(format!("{ke_prefix}/*"))
         .callback({
@@ -514,6 +513,7 @@ fn lowpass_pub_sub_query_reply_test(
         .declare_publisher(format!("{ke_prefix}/pub"))
         .wait()
         .unwrap();
+    #[cfg(feature = "unstable")]
     let querier = writer_session
         .declare_querier(format!("{ke_prefix}/query"))
         .consolidation(ConsolidationMode::None)
@@ -533,6 +533,7 @@ fn lowpass_pub_sub_query_reply_test(
         .wait()
         .unwrap();
 
+    #[cfg(feature = "unstable")]
     let query_callback = {
         let test_results = test_results.clone();
         move |reply: Reply| match reply.into_result() {
@@ -564,13 +565,14 @@ fn lowpass_pub_sub_query_reply_test(
             }
         }
     };
-    std::thread::sleep(std::time::Duration::from_millis(DECLARATION_DELAY_MS));
+    #[cfg(feature = "unstable")]
     querier
         .get()
         .payload(small_payload.clone())
         .callback(query_callback.clone())
         .wait()
         .unwrap();
+    #[cfg(feature = "unstable")]
     querier
         .get()
         .payload(big_payload.clone())
