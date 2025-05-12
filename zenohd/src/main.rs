@@ -112,7 +112,7 @@ fn config_from_args(args: &Args) -> Config {
     };
 
     let mut config = if let Some(cfg) = inline_config {
-        Config::from_json5(cfg).expect("Invalid Zenoh onfig")
+        Config::from_json5(cfg).expect("Invalid Zenoh config")
     } else if let Some(fname) = args.config.as_ref() {
         Config::from_file(fname).expect("Failed to open config file")
     } else {
