@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::net::SocketAddr;
+use std::{net::SocketAddr, num::ParseIntError};
 
 use tracing::warn;
 use zenoh_protocol::core::Config;
@@ -19,14 +19,37 @@ use zenoh_result::{zerror, ZResult};
 
 use crate::DSCP;
 
-pub fn parse_dscp(config: &Config) -> ZResult<Option<u32>> {
-    let parse = |dscp: &str| {
-        dscp.parse()
-            .map_err(|_| zerror!("Unknown DSCP argument: {dscp}"))
-    };
-    Ok(config.get(DSCP).map(parse).transpose()?)
+fn parse_int(s: &str) -> Result<u32, ParseIntError> {
+    if let Some(s) = ["0x", "0X"].iter().find_map(|pfx| s.strip_prefix(pfx)) {
+        u32::from_str_radix(s, 16)
+    } else if let Some(s) = ["0xb", "0B"].iter().find_map(|pfx| s.strip_prefix(pfx)) {
+        u32::from_str_radix(s, 2)
+    } else {
+        u32::from_str_radix(s, 10)
+    }
 }
 
+/// Parse DSCP config.
+///
+/// It supports hexa/binary prefixes, as well as `|` operator, e.g. `dscp=0x04|0x10`.
+pub fn parse_dscp(config: &Config) -> ZResult<Option<u32>> {
+    let Some(dscp) = config.get(DSCP) else {
+        return Ok(None);
+    };
+    Ok(Some(
+        dscp.split('|')
+            .map(parse_int)
+            .map(Result::ok)
+            .reduce(|a, b| Some(a? | b?))
+            .flatten()
+            .ok_or_else(|| zerror!("Unknown DSCP argument: {dscp}"))?,
+    ))
+}
+
+/// Set DSCP option to the socket if supported by the target.
+///
+/// If the target doesn't support it, a warning is emitted.
+/// IPv4 uses IP_TOS, while IPv6 uses IPV6_TCLASS
 pub fn set_dscp<'a>(
     socket: impl Into<socket2::SockRef<'a>>,
     addr: SocketAddr,

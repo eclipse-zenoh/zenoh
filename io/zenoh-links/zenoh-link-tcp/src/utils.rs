@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, DSCP,
+    parse_dscp, tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET,
     TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{parameters, Address, Config};
@@ -66,7 +66,7 @@ impl<'a> TcpLinkConfig<'a> {
             tx_buffer_size: None,
             bind_iface: config.get(BIND_INTERFACE),
             bind_socket,
-            dscp: None,
+            dscp: parse_dscp(config)?,
         };
 
         if let Some(size) = config.get(TCP_SO_RCV_BUF) {
@@ -81,12 +81,6 @@ impl<'a> TcpLinkConfig<'a> {
                     .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
             );
         };
-        if let Some(dscp) = config.get(DSCP) {
-            tcp_config.dscp = Some(
-                dscp.parse()
-                    .map_err(|_| zerror!("Unknown DSCP argument: {}", dscp))?,
-            )
-        }
 
         Ok(tcp_config)
     }

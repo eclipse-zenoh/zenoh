@@ -32,8 +32,8 @@ use secrecy::ExposeSecret;
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
-    BIND_SOCKET, DSCP, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
+    parse_dscp, tcp::TcpSocketConfig, tls::WebPkiVerifierAnyServerName, ConfigurationInspector,
+    BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
@@ -275,14 +275,6 @@ impl<'a> TlsServerConfig<'a> {
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
             bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
         };
-        let mut dscp = None;
-        if let Some(dscp_str) = config.get(DSCP) {
-            dscp = Some(
-                dscp_str
-                    .parse()
-                    .map_err(|_| zerror!("Unknown DSCP argument: {}", dscp_str))?,
-            )
-        }
 
         Ok(TlsServerConfig {
             server_config: sc,
@@ -293,7 +285,7 @@ impl<'a> TlsServerConfig<'a> {
                 tcp_rx_buffer_size,
                 config.get(BIND_INTERFACE),
                 bind_socket,
-                dscp,
+                parse_dscp(config)?,
             ),
         })
     }
@@ -456,14 +448,6 @@ impl<'a> TlsClientConfig<'a> {
         if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
             bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
         };
-        let mut dscp = None;
-        if let Some(dscp_str) = config.get(DSCP) {
-            dscp = Some(
-                dscp_str
-                    .parse()
-                    .map_err(|_| zerror!("Unknown DSCP argument: {}", dscp_str))?,
-            )
-        }
 
         Ok(TlsClientConfig {
             client_config: cc,
@@ -473,7 +457,7 @@ impl<'a> TlsClientConfig<'a> {
                 tcp_rx_buffer_size,
                 config.get(BIND_INTERFACE),
                 bind_socket,
-                dscp,
+                parse_dscp(config)?,
             ),
         })
     }
