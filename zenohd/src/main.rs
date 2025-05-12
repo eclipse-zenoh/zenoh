@@ -61,18 +61,17 @@ struct Args {
     ///   - `none` to disable the REST API
     #[arg(long, value_name = "SOCKET")]
     rest_http_port: Option<String>,
-    /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
-    ///   - KEY must be a valid config path.
+    /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs,
+    /// where the empty key is used to represent the entire configuration:
+    ///   - KEY must be a valid config path, or empty string if the whole configuration is configured.
     ///   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
     ///
     /// Examples:
     /// - `--cfg='startup/subscribe:["demo/**"]'`
     /// - `--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
+    /// - `--cfg=':{metadata:{name:"My App"},adminspace:{enabled:true,permissions:{read:true,write:true}}'`
     #[arg(long)]
     cfg: Vec<String>,
-    /// An inline configuration passed as a string. Notice that this takes precedence over (overrides) the file-based config.
-    #[arg(long, value_name = "CONFIG")]
-    inline_config: Option<String>,
     /// Configure the read and/or write permissions on the admin space. Default is read only.
     #[arg(long, value_name = "[r|w|rw|none]")]
     adminspace_permissions: Option<String>,
@@ -102,8 +101,18 @@ fn main() {
 }
 
 fn config_from_args(args: &Args) -> Config {
-    let mut config = if let Some(str) = args.inline_config.as_ref() {
-        Config::from_json5(str).expect("failed to parse inline config")
+    let inline_config = if !args.cfg.is_empty() {
+        if let Some(("", cfg)) = args.cfg[0].split_once(':') {
+            Some(cfg)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let mut config = if let Some(cfg) = inline_config {
+        Config::from_json5(cfg).expect("Invalid Zenoh onfig")
     } else if let Some(fname) = args.config.as_ref() {
         Config::from_file(fname).expect("Failed to open config file")
     } else {
