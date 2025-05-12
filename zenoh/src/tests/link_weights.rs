@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
+#![cfg(feature = "unstable")]
 
 use std::{
     any::Any,
