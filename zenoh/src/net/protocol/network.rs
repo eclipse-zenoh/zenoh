@@ -1152,7 +1152,11 @@ impl Network {
         })
     }
 
-    pub(crate) fn successor(&self, src: ZenohIdProto, dst: ZenohIdProto) -> Option<ZenohIdProto> {
+    pub(crate) fn route_successor(
+        &self,
+        src: ZenohIdProto,
+        dst: ZenohIdProto,
+    ) -> Option<ZenohIdProto> {
         let (mut src_idx, mut dst_idx) = (None, None);
         for (idx, node) in self.graph.node_references() {
             if node.zid == src {
@@ -1171,7 +1175,7 @@ impl Network {
         Some(self.successor_entry(src_idx?, dst_idx?)?.successor)
     }
 
-    pub(crate) fn successors(&self) -> Vec<SuccessorEntry> {
+    pub(crate) fn route_successors(&self) -> Vec<SuccessorEntry> {
         self.graph
             .node_indices()
             .cartesian_product(self.graph.node_indices())

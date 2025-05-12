@@ -154,7 +154,7 @@ pub(crate) trait HatBaseTrait {
         HashMap::new()
     }
 
-    fn successor(
+    fn route_successor(
         &self,
         _tables: &Tables,
         _src: ZenohIdProto,
@@ -163,8 +163,8 @@ pub(crate) trait HatBaseTrait {
         None
     }
 
-    fn successors(&self, _tables: &Tables) -> Option<Vec<SuccessorEntry>> {
-        None
+    fn route_successors(&self, _tables: &Tables) -> Vec<SuccessorEntry> {
+        Vec::new()
     }
 }
 

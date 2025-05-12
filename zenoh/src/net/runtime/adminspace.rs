@@ -847,17 +847,14 @@ fn route_successor(context: &AdminContext, query: Query) {
     let suffix = query.key_expr().as_str().strip_prefix(&prefix);
     if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
         if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
-            if let Some(successor) = tables.hat_code.successor(&tables, src_zid, dst_zid) {
+            if let Some(successor) = tables.hat_code.route_successor(&tables, src_zid, dst_zid) {
                 reply(query.key_expr(), successor);
                 return;
             }
         }
     }
     // Reply with every successor suffix matching the keyexpr.
-    let successors = tables
-        .hat_code
-        .successors(&tables)
-        .expect("router should be able to compute paths");
+    let successors = tables.hat_code.route_successors(&tables);
     drop(tables);
     for entry in successors.iter() {
         let keyexpr = KeyExpr::new(format!(

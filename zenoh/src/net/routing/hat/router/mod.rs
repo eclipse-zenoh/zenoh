@@ -901,17 +901,21 @@ impl HatBaseTrait for HatCode {
         out
     }
 
-    fn successor(
+    fn route_successor(
         &self,
         tables: &Tables,
         src: ZenohIdProto,
         dst: ZenohIdProto,
     ) -> Option<ZenohIdProto> {
-        hat!(tables).routers_net.as_ref()?.successor(src, dst)
+        hat!(tables).routers_net.as_ref()?.route_successor(src, dst)
     }
 
-    fn successors(&self, tables: &Tables) -> Option<Vec<SuccessorEntry>> {
-        Some(hat!(tables).routers_net.as_ref()?.successors())
+    fn route_successors(&self, tables: &Tables) -> Vec<SuccessorEntry> {
+        hat!(tables)
+            .routers_net
+            .as_ref()
+            .map(|net| net.route_successors())
+            .unwrap_or_default()
     }
 }
 
