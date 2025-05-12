@@ -101,15 +101,12 @@ fn main() {
 }
 
 fn config_from_args(args: &Args) -> Config {
-    let inline_config = if !args.cfg.is_empty() {
-        if let Some(("", cfg)) = args.cfg[0].split_once(':') {
-            Some(cfg)
-        } else {
-            None
+    let mut inline_config = None;
+    for json in &args.cfg {
+        if let Some(("", cfg)) = json.split_once(':') {
+            inline_config = Some(cfg);
         }
-    } else {
-        None
-    };
+    }
 
     let mut config = if let Some(cfg) = inline_config {
         Config::from_json5(cfg).expect("Invalid Zenoh config")
