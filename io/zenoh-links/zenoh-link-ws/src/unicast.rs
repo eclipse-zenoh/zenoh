@@ -30,7 +30,11 @@ use tokio::{
     sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock},
     task::JoinHandle,
 };
-use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    accept_async,
+    tungstenite::{Bytes, Message},
+    MaybeTlsStream, WebSocketStream,
+};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
@@ -57,7 +61,7 @@ pub struct LinkUnicastWs {
     dst_addr: SocketAddr,
     dst_locator: Locator,
     // The leftovers if reading less than what available on the web socket.
-    leftovers: AsyncMutex<Option<(Vec<u8>, usize, usize)>>,
+    leftovers: AsyncMutex<Option<(Bytes, usize, usize)>>,
 }
 
 impl LinkUnicastWs {
@@ -93,7 +97,7 @@ impl LinkUnicastWs {
         }
     }
 
-    async fn recv(&self) -> ZResult<Vec<u8>> {
+    async fn recv(&self) -> ZResult<Bytes> {
         let mut guard = zasynclock!(self.recv);
 
         match guard.next().await {

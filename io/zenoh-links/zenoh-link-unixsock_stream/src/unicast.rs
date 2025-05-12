@@ -12,8 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, os::unix::io::RawFd,
-    path::PathBuf, sync::Arc, time::Duration,
+    cell::UnsafeCell,
+    collections::HashMap,
+    fmt,
+    fs::remove_file,
+    os::{fd::AsRawFd, unix::io::RawFd},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -330,8 +336,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         // We try to acquire the lock
         // @TODO: flock is deprecated and upgrading to new Flock will require some refactoring of this module
         #[allow(deprecated)]
-        nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock).map_err(|e| {
-            let _ = nix::unistd::close(lock_fd);
+        nix::fcntl::flock(
+            lock_fd.as_raw_fd(),
+            nix::fcntl::FlockArg::LockExclusiveNonblock,
+        )
+        .map_err(|e| {
+            let _ = nix::unistd::close(lock_fd.as_raw_fd());
             let e = zerror!(
                 "Can not create a new UnixSocketStream listener on {} - Unable to acquire lock: {}",
                 path,
@@ -407,7 +417,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let handle = zenoh_runtime::ZRuntime::Acceptor.spawn(task);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnixSocketStream::new(endpoint, token, handle, lock_fd);
+        let listener = ListenerUnixSocketStream::new(endpoint, token, handle, lock_fd.as_raw_fd());
         listeners.insert(local_path_str.to_owned(), listener);
 
         Ok(locator)

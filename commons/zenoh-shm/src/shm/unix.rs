@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(shm_external_lockfile)]
-use std::os::fd::FromRawFd;
 use std::{
     ffi::c_void,
     num::NonZeroUsize,
@@ -47,17 +45,15 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
-        let lock_fd = unsafe {
-            OwnedFd::from_raw_fd({
-                let lockpath = std::env::temp_dir().join(Self::id_str(id));
-                let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
-                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-                open(&lockpath, flags, mode).map_err(|e| match e {
-                    nix::Error::EEXIST => SegmentCreateError::SegmentExists,
-                    e => SegmentCreateError::OsError(e as u32),
-                })
-            }?)
-        };
+        let lock_fd = {
+            let lockpath = std::env::temp_dir().join(Self::id_str(id));
+            let flags = OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_RDWR;
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+            open(&lockpath, flags, mode).map_err(|e| match e {
+                nix::Error::EEXIST => SegmentCreateError::SegmentExists,
+                e => SegmentCreateError::OsError(e as u32),
+            })
+        }?;
 
         // create unique shm fd
         let fd = {
@@ -101,7 +97,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         // get real segment size
         let len = {
-            let stat = fstat(fd.as_raw_fd()).map_err(|e| SegmentCreateError::OsError(e as u32))?;
+            let stat = fstat(fd).map_err(|e| SegmentCreateError::OsError(e as u32))?;
             NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentCreateError::OsError(0))?
         };
 
@@ -119,20 +115,18 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn open(id: ID) -> ShmOpenResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
-        let lock_fd = unsafe {
-            OwnedFd::from_raw_fd({
-                let lockpath = std::env::temp_dir().join(Self::id_str(id));
-                let flags = OFlag::O_RDWR;
-                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-                tracing::trace!(
-                    "open(name={:?}, flag={:?}, mode={:?})",
-                    lockpath,
-                    flags,
-                    mode
-                );
-                open(&lockpath, flags, mode).map_err(|e| SegmentOpenError::OsError(e as _))
-            }?)
-        };
+        let lock_fd = {
+            let lockpath = std::env::temp_dir().join(Self::id_str(id));
+            let flags = OFlag::O_RDWR;
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+            tracing::trace!(
+                "open(name={:?}, flag={:?}, mode={:?})",
+                lockpath,
+                flags,
+                mode
+            );
+            open(&lockpath, flags, mode).map_err(|e| SegmentOpenError::OsError(e as _))
+        }?;
 
         // open shm fd
         let fd = {
@@ -171,7 +165,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         // get real segment size
         let len = {
-            let stat = fstat(fd.as_raw_fd()).map_err(|e| SegmentOpenError::OsError(e as u32))?;
+            let stat = fstat(fd).map_err(|e| SegmentOpenError::OsError(e as u32))?;
             NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentOpenError::InvalidatedSegment)?
         };
 
@@ -210,24 +204,22 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     fn is_dangling_segment(id: ID) -> bool {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
-        let lock_fd = unsafe {
-            OwnedFd::from_raw_fd({
-                let lockpath = std::env::temp_dir().join(Self::id_str(id));
-                let flags = OFlag::O_RDWR;
-                let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-                // TODO: we cannot use our logger inside of atexit() callstack!
-                // tracing::trace!(
-                //     "open(name={:?}, flag={:?}, mode={:?})",
-                //     lockpath,
-                //     flags,
-                //     mode
-                // );
-                match open(&lockpath, flags, mode) {
-                    Ok(val) => val,
-                    Err(nix::errno::Errno::ENOENT) => return true,
-                    Err(_) => return false,
-                }
-            })
+        let lock_fd = {
+            let lockpath = std::env::temp_dir().join(Self::id_str(id));
+            let flags = OFlag::O_RDWR;
+            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+            // TODO: we cannot use our logger inside of atexit() callstack!
+                //tracing::trace!(
+                //"open(name={:?}, flag={:?}, mode={:?})",
+                //lockpath,
+                //flags,
+                //mode
+            //);
+            match open(&lockpath, flags, mode) {
+                Ok(val) => val,
+                Err(nix::errno::Errno::ENOENT) => return true,
+                Err(_) => return false,
+            }
         };
 
         // open shm fd
