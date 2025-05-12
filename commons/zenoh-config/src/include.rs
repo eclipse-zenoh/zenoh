@@ -33,20 +33,17 @@ where
             if let Err(e) = f.read_to_string(&mut content) {
                 bail!(e)
             }
-            match path.as_ref()
-                .extension()
-                .map(|s| s.to_str().unwrap())
-            {
-                Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
-                    Ok(mut d) => T::deserialize(&mut d).map_err(|e| zerror!("JSON5 error: {}", e).into()),
-                    Err(e) => Err(zerror!("JSON5 error: {}", e).into()),
-                },
+            match path.as_ref().extension().map(|s| s.to_str().unwrap()) {
                 Some("yaml") => {
                     let d = serde_yaml::Deserializer::from_str(&content);
                     T::deserialize(d).map_err(|e| zerror!("YAML error: {}", e).into())
+                }
+                _ => match json5::Deserializer::from_str(&content) {
+                    Ok(mut d) => {
+                        T::deserialize(&mut d).map_err(|e| zerror!("JSON5 error: {}", e).into())
+                    }
+                    Err(e) => Err(zerror!("JSON5 error: {}", e).into()),
                 },
-                Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
-                None => bail!("Unsupported file type. File must have an extension (.json, .json5 and .yaml supported)")
             }
         }
         Err(e) => {

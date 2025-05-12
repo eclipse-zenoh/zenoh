@@ -1,0 +1,66 @@
+//
+// Copyright (c) 2025 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+use std::net::SocketAddr;
+
+use tracing::warn;
+use zenoh_protocol::core::Config;
+use zenoh_result::{zerror, ZResult};
+
+use crate::DSCP;
+
+pub fn parse_dscp(config: &Config) -> ZResult<Option<u32>> {
+    let parse = |dscp: &str| {
+        dscp.parse()
+            .map_err(|_| zerror!("Unknown DSCP argument: {dscp}"))
+    };
+    Ok(config.get(DSCP).map(parse).transpose()?)
+}
+
+pub fn set_dscp<'a>(
+    socket: impl Into<socket2::SockRef<'a>>,
+    addr: SocketAddr,
+    dscp: u32,
+) -> std::io::Result<()> {
+    match addr {
+        #[cfg(not(any(
+            target_os = "fuchsia",
+            target_os = "redox",
+            target_os = "solaris",
+            target_os = "illumos",
+        )))]
+        SocketAddr::V4(_) => socket.into().set_tos(dscp)?,
+        #[cfg(any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd"
+        ))]
+        SocketAddr::V6(_) => socket.into().set_tclass_v6(dscp)?,
+        #[allow(unreachable_patterns)]
+        SocketAddr::V4(_) => warn!(
+            "IPv4 DSCP is unsupported on platform {}",
+            std::env::consts::OS
+        ),
+        #[allow(unreachable_patterns)]
+        SocketAddr::V6(_) => warn!(
+            "IPv6 DSCP is unsupported on platform {}",
+            std::env::consts::OS
+        ),
+    }
+    Ok(())
+}
