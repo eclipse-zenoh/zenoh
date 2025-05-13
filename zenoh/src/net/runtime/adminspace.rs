@@ -23,15 +23,14 @@ use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
+use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-#[cfg(feature = "plugins")]
-use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, ZenohIdProto, EMPTY_EXPR_ID},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
@@ -209,6 +208,14 @@ impl AdminSpace {
                 .unwrap(),
             Arc::new(queriers_data),
         );
+        if runtime.state.whatami == WhatAmI::Router {
+            handlers.insert(
+                format!("@/{zid_str}/{whatami_str}/route/successor/**")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(route_successor),
+            );
+        }
 
         #[cfg(feature = "plugins")]
         handlers.insert(
@@ -827,6 +834,46 @@ fn queriers_data(context: &AdminContext, query: Query) {
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
+        }
+    }
+}
+
+fn route_successor(context: &AdminContext, query: Query) {
+    let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
+        if let Err(e) = query
+            .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
+            .encoding(Encoding::APPLICATION_JSON)
+            .wait()
+        {
+            tracing::error!("Error sending AdminSpace reply: {:?}", e);
+        }
+    };
+    let prefix = format!("@/{}/router/route/successor", context.runtime.zid());
+    let router = context.runtime.router();
+    let tables = zread!(router.tables.tables);
+    // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
+
+    let suffix = query.key_expr().as_str().strip_prefix(&prefix);
+    if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
+        if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
+            if let Some(successor) = tables.hat_code.route_successor(&tables, src_zid, dst_zid) {
+                reply(query.key_expr(), successor);
+                return;
+            }
+        }
+    }
+    // Reply with every successor suffix matching the keyexpr.
+    let successors = tables.hat_code.route_successors(&tables);
+    drop(tables);
+    for entry in successors.iter() {
+        let keyexpr = KeyExpr::new(format!(
+            "{prefix}/src/{src}/dst/{dst}",
+            src = entry.source,
+            dst = entry.destination
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&keyexpr) {
+            reply(&keyexpr, entry.successor);
         }
     }
 }

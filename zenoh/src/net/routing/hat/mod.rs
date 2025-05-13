@@ -41,7 +41,10 @@ use super::{
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::{protocol::linkstate::LinkInfo, runtime::Runtime};
+use crate::net::{
+    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    runtime::Runtime,
+};
 
 mod client;
 mod linkstate_peer;
@@ -147,7 +150,22 @@ pub(crate) trait HatBaseTrait {
         Ok(())
     }
 
-    fn links_info(&self, tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo>;
+    fn links_info(&self, _tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo> {
+        HashMap::new()
+    }
+
+    fn route_successor(
+        &self,
+        _tables: &Tables,
+        _src: ZenohIdProto,
+        _dst: ZenohIdProto,
+    ) -> Option<ZenohIdProto> {
+        None
+    }
+
+    fn route_successors(&self, _tables: &Tables) -> Vec<SuccessorEntry> {
+        Vec::new()
+    }
 }
 
 pub(crate) trait HatInterestTrait {
