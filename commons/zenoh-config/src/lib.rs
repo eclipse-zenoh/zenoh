@@ -1000,21 +1000,23 @@ impl Config {
                 if let Err(e) = f.read_to_string(&mut content) {
                     bail!(e)
                 }
-                match path.extension().map(|s| s.to_str().unwrap()) {
-                    Some("yaml") | Some("yml") => {
-                        Config::from_deserializer(serde_yaml::Deserializer::from_str(&content))
-                            .map_err(|e| match e {
-                                Ok(c) => zerror!("Invalid configuration: {}", c).into(),
-                                Err(e) => zerror!("YAML error: {:?}", e).into(),
-                            })
-                    }
-                    _ => match json5::Deserializer::from_str(&content) {
+                match path
+                    .extension()
+                    .map(|s| s.to_str().unwrap())
+                {
+                    Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
                         Ok(mut d) => Config::from_deserializer(&mut d).map_err(|e| match e {
                             Ok(c) => zerror!("Invalid configuration: {}", c).into(),
                             Err(e) => zerror!("JSON error: {:?}", e).into(),
                         }),
                         Err(e) => bail!(e),
                     },
+                    Some("yaml") | Some("yml") => Config::from_deserializer(serde_yaml::Deserializer::from_str(&content)).map_err(|e| match e {
+                        Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                        Err(e) => zerror!("YAML error: {:?}", e).into(),
+                    }),
+                    Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
+                    None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")
                 }
             }
             Err(e) => bail!(e),
