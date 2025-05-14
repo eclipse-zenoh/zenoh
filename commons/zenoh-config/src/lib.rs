@@ -28,7 +28,8 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, ops, path::Path, sync::Weak,
+    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZeroU16, ops,
+    path::Path, sync::Weak,
 };
 
 use include::recursive_include;
@@ -82,7 +83,15 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TransportWeight {
+    /// A zid of destination node.
+    pub dst_zid: ZenohId,
+    /// A weight of link from this node to the destination.
+    pub weight: NonZeroU16,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum InterceptorFlow {
     Egress,
@@ -98,6 +107,7 @@ pub enum DownsamplingMessage {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct DownsamplingRuleConf {
     /// A list of key-expressions to which the downsampling will be applied.
     /// Downsampling will be applied for all key extensions if the parameter is None
@@ -107,6 +117,7 @@ pub struct DownsamplingRuleConf {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct DownsamplingItemConf {
     /// Optional identifier for the downsampling configuration item
     pub id: Option<String>,
@@ -125,6 +136,7 @@ pub struct DownsamplingItemConf {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct LowPassFilterConf {
     pub id: Option<String>,
     pub interfaces: Option<NEVec<String>>,
@@ -145,6 +157,7 @@ pub enum LowPassFilterMessage {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AclConfigRule {
     pub id: String,
     pub key_exprs: NEVec<OwnedKeyExpr>,
@@ -154,6 +167,7 @@ pub struct AclConfigRule {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AclConfigSubjects {
     pub id: String,
     pub interfaces: Option<NEVec<Interface>>,
@@ -163,9 +177,12 @@ pub struct AclConfigSubjects {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct QosOverwriteItemConf {
     /// Optional identifier for the qos modification configuration item.
     pub id: Option<String>,
+    /// A list of ZIDs on which qos will be overwritten when communicating with.
+    pub zids: Option<NEVec<ZenohId>>,
     /// A list of interfaces to which the qos will be applied.
     /// QosOverwrite will be applied for all interfaces if the parameter is None.
     pub interfaces: Option<NEVec<String>>,
@@ -230,6 +247,7 @@ impl std::fmt::Display for InterceptorLink {
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(deny_unknown_fields)]
 pub struct AclConfigPolicyEntry {
     pub id: Option<String>,
     pub rules: Vec<String>,
@@ -237,6 +255,7 @@ pub struct AclConfigPolicyEntry {
 }
 
 #[derive(Clone, Serialize, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PolicyRule {
     pub subject_id: usize,
     pub key_expr: OwnedKeyExpr,
@@ -448,12 +467,24 @@ validated_struct::validator! {
                 /// connected to each other.
                 /// The failover brokering only works if gossip discovery is enabled.
                 peers_failover_brokering: Option<bool>,
+                /// Linkstate mode configuration.
+                pub linkstate: #[derive(Default)]
+                LinkstateConf {
+                    /// Weights of the outgoing links in linkstate mode.
+                    /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
+                    /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
+                    /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
+                    pub transport_weights: Vec<TransportWeight>,
+                },
             },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+                /// This option needs to be set to the same value in all peers and routers of the subsystem.
                 mode: Option<String>,
+                /// Linkstate mode configuration (only taken into account if mode == "linkstate").
+                pub linkstate: LinkstateConf,
             },
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).
@@ -725,7 +756,7 @@ validated_struct::validator! {
         /// Configuration of the downsampling.
         downsampling: Vec<DownsamplingItemConf>,
 
-        ///Configuration of the access control (ACL)
+        /// Configuration of the access control (ACL)
         pub access_control: AclConfig {
             pub enabled: bool,
             pub default_permission: Permission,
