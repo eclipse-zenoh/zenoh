@@ -61,13 +61,15 @@ struct Args {
     ///   - `none` to disable the REST API
     #[arg(long, value_name = "SOCKET")]
     rest_http_port: Option<String>,
-    /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
-    ///   - KEY must be a valid config path.
+    /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs,
+    /// where the empty key is used to represent the entire configuration:
+    ///   - KEY must be a valid config path, or empty string if the whole configuration is defined.
     ///   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
     ///
     /// Examples:
     /// - `--cfg='startup/subscribe:["demo/**"]'`
     /// - `--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
+    /// - `--cfg=':{metadata:{name:"My App"},adminspace:{enabled:true,permissions:{read:true,write:true}}'`
     #[arg(long)]
     cfg: Vec<String>,
     /// Configure the read and/or write permissions on the admin space. Default is read only.
@@ -99,12 +101,20 @@ fn main() {
 }
 
 fn config_from_args(args: &Args) -> Config {
-    let mut config = args
-        .config
-        .as_ref()
-        .map_or_else(Config::default, |conf_file| {
-            Config::from_file(conf_file).unwrap()
-        });
+    let mut inline_config = None;
+    for json in &args.cfg {
+        if let Some(("", cfg)) = json.split_once(':') {
+            inline_config = Some(cfg);
+        }
+    }
+
+    let mut config = if let Some(cfg) = inline_config {
+        Config::from_json5(cfg).expect("Invalid Zenoh config")
+    } else if let Some(fname) = args.config.as_ref() {
+        Config::from_file(fname).expect("Failed to open config file")
+    } else {
+        Config::default()
+    };
 
     if config.mode().is_none() {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -241,15 +251,17 @@ fn config_from_args(args: &Args) -> Config {
     }
     for json in &args.cfg {
         if let Some((key, value)) = json.split_once(':') {
-            match json5::Deserializer::from_str(value) {
-                Ok(mut deserializer) => {
-                    if let Err(e) =
-                        config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
-                    {
-                        tracing::warn!("Couldn't perform configuration {}: {}", json, e);
+            if !key.is_empty() {
+                match json5::Deserializer::from_str(value) {
+                    Ok(mut deserializer) => {
+                        if let Err(e) =
+                            config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
+                        {
+                            tracing::warn!("Couldn't perform configuration {}: {}", json, e);
+                        }
                     }
+                    Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
                 }
-                Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
             }
         } else {
             panic!(

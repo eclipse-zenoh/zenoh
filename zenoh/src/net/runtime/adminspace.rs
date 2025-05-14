@@ -17,19 +17,20 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use itertools::Itertools;
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
+use zenoh_keyexpr::keyexpr;
+use zenoh_link::Link;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-#[cfg(feature = "plugins")]
-use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, ZenohIdProto, EMPTY_EXPR_ID},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
@@ -38,6 +39,8 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
@@ -205,6 +208,14 @@ impl AdminSpace {
                 .unwrap(),
             Arc::new(queriers_data),
         );
+        if runtime.state.whatami == WhatAmI::Router {
+            handlers.insert(
+                format!("@/{zid_str}/{whatami_str}/route/successor/**")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(route_successor),
+            );
+        }
 
         #[cfg(feature = "plugins")]
         handlers.insert(
@@ -557,6 +568,21 @@ fn local_data(context: &AdminContext, query: Query) {
 
     let transport_mgr = context.runtime.manager().clone();
 
+    #[cfg(feature = "stats")]
+    let export_stats = query
+        .parameters()
+        .iter()
+        .any(|(k, v)| k == "_stats" && v != "false");
+    #[cfg(feature = "stats")]
+    let insert_stats = |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
+        if export_stats {
+            json.as_object_mut()
+                .unwrap()
+                .insert("stats".into(), json!(stats.map(|s| s.report())));
+        }
+        json
+    };
+
     // plugins info
     #[cfg(feature = "plugins")]
     let plugins: serde_json::Value = {
@@ -579,31 +605,34 @@ fn local_data(context: &AdminContext, query: Query) {
     let links_info = context.runtime.get_links_info();
     // transports info
     let transport_to_json = |transport: &TransportUnicast| {
-        #[allow(unused_mut)]
-        let mut json = json!({
+        let link_to_json = |link: &Link| {
+            json!({
+                "src": link.src.to_string(),
+                "dst": link.dst.to_string()
+            })
+        };
+        #[cfg(not(feature = "stats"))]
+        let links = transport
+            .get_links()
+            .unwrap_or_default()
+            .iter()
+            .map(link_to_json)
+            .collect_vec();
+        #[cfg(feature = "stats")]
+        let links = transport
+            .get_link_stats()
+            .unwrap_or_default()
+            .iter()
+            .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats)))
+            .collect_vec();
+        let json = json!({
             "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
-            "links": transport.get_links().map_or_else(
-                |_| Vec::new(),
-                |links| links.iter().map(|link| link.dst.to_string()).collect()
-            ),
+            "links": links,
             "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
         });
         #[cfg(feature = "stats")]
-        {
-            let stats = query
-                .parameters()
-                .iter()
-                .any(|(k, v)| k == "_stats" && v != "false");
-            if stats {
-                json.as_object_mut().unwrap().insert(
-                    "stats".to_string(),
-                    transport
-                        .get_stats()
-                        .map_or_else(|_| json!({}), |p| json!(p.report())),
-                );
-            }
-        }
+        let json = insert_stats(json, transport.get_stats().ok().as_ref());
         json
     };
     let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
@@ -612,8 +641,7 @@ fn local_data(context: &AdminContext, query: Query) {
         .map(transport_to_json)
         .collect();
 
-    #[allow(unused_mut)]
-    let mut json = json!({
+    let json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
         "metadata": context.runtime.config().lock().0.metadata(),
@@ -621,20 +649,8 @@ fn local_data(context: &AdminContext, query: Query) {
         "sessions": transports,
         "plugins": plugins,
     });
-
     #[cfg(feature = "stats")]
-    {
-        let stats = query
-            .parameters()
-            .iter()
-            .any(|(k, v)| k == "_stats" && v != "false");
-        if stats {
-            json.as_object_mut().unwrap().insert(
-                "stats".to_string(),
-                json!(transport_mgr.get_stats().report()),
-            );
-        }
-    }
+    let json = insert_stats(json, Some(&transport_mgr.get_stats()));
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
     let payload = match serde_json::to_vec(&json) {
@@ -818,6 +834,46 @@ fn queriers_data(context: &AdminContext, query: Query) {
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
+        }
+    }
+}
+
+fn route_successor(context: &AdminContext, query: Query) {
+    let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
+        if let Err(e) = query
+            .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
+            .encoding(Encoding::APPLICATION_JSON)
+            .wait()
+        {
+            tracing::error!("Error sending AdminSpace reply: {:?}", e);
+        }
+    };
+    let prefix = format!("@/{}/router/route/successor", context.runtime.zid());
+    let router = context.runtime.router();
+    let tables = zread!(router.tables.tables);
+    // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
+
+    let suffix = query.key_expr().as_str().strip_prefix(&prefix);
+    if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
+        if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
+            if let Some(successor) = tables.hat_code.route_successor(&tables, src_zid, dst_zid) {
+                reply(query.key_expr(), successor);
+                return;
+            }
+        }
+    }
+    // Reply with every successor suffix matching the keyexpr.
+    let successors = tables.hat_code.route_successors(&tables);
+    drop(tables);
+    for entry in successors.iter() {
+        let keyexpr = KeyExpr::new(format!(
+            "{prefix}/src/{src}/dst/{dst}",
+            src = entry.source,
+            dst = entry.destination
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&keyexpr) {
+            reply(&keyexpr, entry.successor);
         }
     }
 }

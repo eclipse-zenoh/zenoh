@@ -1142,6 +1142,46 @@ impl Network {
         }
         out
     }
+
+    fn successor_entry(&self, src: NodeIndex, dst: NodeIndex) -> Option<SuccessorEntry> {
+        let succ = self.trees[src.index()].directions[dst.index()]?;
+        Some(SuccessorEntry {
+            source: self.graph[src].zid,
+            destination: self.graph[dst].zid,
+            successor: self.graph[succ].zid,
+        })
+    }
+
+    pub(crate) fn route_successor(
+        &self,
+        src: ZenohIdProto,
+        dst: ZenohIdProto,
+    ) -> Option<ZenohIdProto> {
+        let (mut src_idx, mut dst_idx) = (None, None);
+        for (idx, node) in self.graph.node_references() {
+            if node.zid == src {
+                src_idx = Some(idx);
+                if dst_idx.is_some() {
+                    break;
+                }
+            }
+            if node.zid == dst {
+                dst_idx = Some(idx);
+                if src_idx.is_some() {
+                    break;
+                }
+            }
+        }
+        Some(self.successor_entry(src_idx?, dst_idx?)?.successor)
+    }
+
+    pub(crate) fn route_successors(&self) -> Vec<SuccessorEntry> {
+        self.graph
+            .node_indices()
+            .cartesian_product(self.graph.node_indices())
+            .filter_map(|(src, dst)| self.successor_entry(src, dst))
+            .collect()
+    }
 }
 
 #[inline]
@@ -1155,4 +1195,10 @@ pub(crate) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohIdProto> 
                 .then_some(node1.zid)
         })
         .collect()
+}
+
+pub(crate) struct SuccessorEntry {
+    pub(crate) source: ZenohIdProto,
+    pub(crate) destination: ZenohIdProto,
+    pub(crate) successor: ZenohIdProto,
 }
