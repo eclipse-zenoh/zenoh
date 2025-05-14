@@ -236,12 +236,14 @@ const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
+    feature = "transport_ws",
 ))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
+    feature = "transport_ws",
 ))]
 const MSG_SIZE_LOWLATENCY: [usize; 1] = MSG_SIZE_NOFRAG;
 
