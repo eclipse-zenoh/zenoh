@@ -26,7 +26,9 @@ use std::{
     },
 };
 
-use api::common::types::ProtocolID;
+use api::{
+    buffer::{traits::BufferRelayoutError, zshm::{zshm, ZShm}, zshmmut::{zshmmut, ZShmMut}}, common::types::ProtocolID, provider::types::MemoryLayout,
+};
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
 use zenoh_buffers::ZSliceBuffer;
@@ -128,8 +130,40 @@ impl ShmBufInner {
             .load(Ordering::Relaxed)
     }
 
+    pub unsafe fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
+        if self.capacity() < new_size {
+            return None;
+        }
+
+        self.info.data_len = new_size;
+
+        Some(())
+    }
+
+    pub unsafe fn try_relayout(
+        &mut self,
+        new_layout: MemoryLayout,
+    ) -> Result<(), BufferRelayoutError> {
+        let address = self.as_ref().as_ptr() as usize;
+        if address % new_layout.alignment().get_alignment_value().get() != 0 {
+            return Err(BufferRelayoutError::IncompatibleAlignment);
+        }
+
+        if self.capacity() < new_layout.size() {
+            return Err(BufferRelayoutError::SizeTooBig);
+        }
+
+        self.info.data_len = new_layout.size();
+
+        Ok(())
+    }
+
     pub fn len(&self) -> NonZeroUsize {
         self.info.data_len
+    }
+
+    pub fn capacity(&self) -> NonZeroUsize {
+        self.metadata.owned.header().len()
     }
 
     fn is_valid(&self) -> bool {
@@ -238,5 +272,57 @@ impl ZSliceBuffer for ShmBufInner {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+impl From<ShmBufInner> for ZShm {
+    fn from(value: ShmBufInner) -> Self {
+        Self(value)
+    }
+}
+
+impl ZShmMut {
+    pub(crate) unsafe fn new_unchecked(data: ShmBufInner) -> Self {
+        Self(data)
+    }
+}
+
+impl TryFrom<ShmBufInner> for ZShmMut {
+    type Error = ShmBufInner;
+
+    fn try_from(value: ShmBufInner) -> Result<Self, Self::Error> {
+        match value.is_unique() && value.is_valid() {
+            true => Ok(Self(value)),
+            false => Err(value),
+        }
+    }
+}
+
+impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
+    type Error = ();
+
+    fn try_from(value: &mut ShmBufInner) -> Result<Self, Self::Error> {
+        match value.is_unique() && value.is_valid() {
+            // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+            // to ShmBufInner type, so it is safe to transmute them in any direction
+            true => Ok(unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshmmut>(value) }),
+            false => Err(()),
+        }
+    }
+}
+
+impl From<&ShmBufInner> for &zshm {
+    fn from(value: &ShmBufInner) -> Self {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+        // to ShmBufInner type, so it is safe to transmute them in any direction
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl From<&mut ShmBufInner> for &mut zshm {
+    fn from(value: &mut ShmBufInner) -> Self {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+        // to ShmBufInner type, so it is safe to transmute them in any direction
+        unsafe { core::mem::transmute(value) }
     }
 }

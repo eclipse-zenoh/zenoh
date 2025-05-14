@@ -27,11 +27,13 @@ use std::{
 use zenoh::{
     qos::{CongestionControl, Reliability},
     shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
+        AllocAlignment, BlockOn, GarbageCollect, MemoryLayout, PosixShmProviderBackend,
+        ShmProviderBuilder, POSIX_PROTOCOL_ID,
     },
     Session, Wait,
 };
 use zenoh_core::ztimeout;
+use zenoh_shm::api::buffer::traits::ShmBuf;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -82,7 +84,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .endpoints
         .set(vec![endpoint01.parse().unwrap()])
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(true)).unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -92,7 +94,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .endpoints
         .set(vec![endpoint02.parse().unwrap()])
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(true)).unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -106,7 +108,11 @@ async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer02.close()).unwrap();
 }
 
-async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
+async fn test_session_pubsub<const RESIZE_BUFFER: bool>(
+    peer01: &Session,
+    peer02: &Session,
+    reliability: Reliability,
+) {
     let msg_count = match reliability {
         Reliability::Reliable => MSG_COUNT,
         Reliability::BestEffort => 1,
@@ -124,7 +130,9 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         let _sub = ztimeout!(peer01
             .declare_subscriber(&key_expr)
             .callback(move |sample| {
-                assert_eq!(sample.payload().len(), size);
+                let expected_size = if RESIZE_BUFFER { size / 2 } else { size };
+                assert_eq!(sample.payload().len(), expected_size);
+
                 let _ = sample.payload().as_shm().unwrap();
                 c_msgs.fetch_add(1, Ordering::Relaxed);
             }))
@@ -155,7 +163,13 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
         for c in 0..msg_count {
             // Allocate new message
-            let sbuf = ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            if RESIZE_BUFFER {
+                sbuf = sbuf
+                    .try_relayout(MemoryLayout::new(size / 2, AllocAlignment::default()).unwrap())
+                    .unwrap();
+            }
             println!("{c} created");
 
             // Publish this message
@@ -216,7 +230,19 @@ fn zenoh_shm_unicast() {
         zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19447"]).await;
-        test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
+        test_session_pubsub::<false>(&peer01, &peer02, Reliability::Reliable).await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_shm_unicast_with_buffer_shrink() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        // Initiate logging
+        zenoh::init_log_from_env_or("error");
+
+        let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19448"]).await;
+        test_session_pubsub::<true>(&peer01, &peer02, Reliability::Reliable).await;
         close_session(peer01, peer02).await;
     });
 }
@@ -229,7 +255,20 @@ fn zenoh_shm_multicast() {
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
-        test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
+        test_session_pubsub::<false>(&peer01, &peer02, Reliability::BestEffort).await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_shm_multicast_with_buffer_shrink() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        // Initiate logging
+        zenoh::init_log_from_env_or("error");
+
+        let (peer01, peer02) =
+            open_session_multicast("udp/224.0.0.1:19449", "udp/224.0.0.1:19449").await;
+        test_session_pubsub::<true>(&peer01, &peer02, Reliability::BestEffort).await;
         close_session(peer01, peer02).await;
     });
 }
