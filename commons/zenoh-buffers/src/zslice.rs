@@ -222,6 +222,7 @@ impl<Rhs: AsRef<[u8]> + ?Sized> PartialEq<Rhs> for ZSlice {
 
 impl Eq for ZSlice {}
 
+#[cfg(feature = "std")]
 impl std::hash::Hash for ZSlice {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state);
