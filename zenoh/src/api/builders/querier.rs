@@ -13,7 +13,6 @@
 //
 use std::{
     future::{IntoFuture, Ready},
-    sync::Arc,
     time::Duration,
 };
 
@@ -287,7 +286,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
     where
         F: Fn(Reply) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the replies for this query with a mutable callback.
