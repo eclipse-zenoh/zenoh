@@ -171,7 +171,7 @@ syn = "2.0"
 tide = "0.16.0"
 time = "0.3.36"
 token-cell = { version = "1.5.0", default-features = false }
-tokio = { version = "1.40.0", default-features = false } # Default features are disabled due to some crates' requirements
+tokio = { version = "1.44.2", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-util = "0.7.12"
 tokio-tungstenite = "0.24.0"
 tokio-rustls = { version = "0.26.0", default-features = false }
