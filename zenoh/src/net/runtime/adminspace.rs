@@ -41,7 +41,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
-use zenoh_transport::unicast::TransportUnicast;
+use zenoh_transport::{stats::is_link_stats, unicast::TransportUnicast};
 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
@@ -574,14 +574,22 @@ fn local_data(context: &AdminContext, query: Query) {
         .iter()
         .any(|(k, v)| k == "_stats" && v != "false");
     #[cfg(feature = "stats")]
-    let insert_stats = |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
-        if export_stats {
-            json.as_object_mut()
-                .unwrap()
-                .insert("stats".into(), json!(stats.map(|s| s.report())));
-        }
-        json
-    };
+    let insert_stats =
+        |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>, is_link: bool| {
+            if export_stats {
+                let mut stats_json = stats.map_or_else(|| json!({}), |s| json!(s.report()));
+                if is_link {
+                    stats_json
+                        .as_object_mut()
+                        .unwrap()
+                        .retain(|key, _| is_link_stats(key));
+                }
+                json.as_object_mut()
+                    .unwrap()
+                    .insert("stats".into(), stats_json);
+            }
+            json
+        };
 
     // plugins info
     #[cfg(feature = "plugins")]
@@ -623,7 +631,7 @@ fn local_data(context: &AdminContext, query: Query) {
             .get_link_stats()
             .unwrap_or_default()
             .iter()
-            .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats)))
+            .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats), true))
             .collect_vec();
         let json = json!({
             "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
@@ -632,7 +640,7 @@ fn local_data(context: &AdminContext, query: Query) {
             "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
         });
         #[cfg(feature = "stats")]
-        let json = insert_stats(json, transport.get_stats().ok().as_ref());
+        let json = insert_stats(json, transport.get_stats().ok().as_ref(), false);
         json
     };
     let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
@@ -650,7 +658,7 @@ fn local_data(context: &AdminContext, query: Query) {
         "plugins": plugins,
     });
     #[cfg(feature = "stats")]
-    let json = insert_stats(json, Some(&transport_mgr.get_stats()));
+    let json = insert_stats(json, Some(&transport_mgr.get_stats()), false);
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
     let payload = match serde_json::to_vec(&json) {
