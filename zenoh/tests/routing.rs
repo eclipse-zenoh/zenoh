@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "internal_config")]
-
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -23,8 +21,8 @@ use std::{
 };
 
 use itertools::Itertools;
-use tokio_util::sync::CancellationToken;
-use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use zenoh::{config::WhatAmI, qos::CongestionControl, Result, Session};
 use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
@@ -272,7 +270,7 @@ struct Node {
     listen: Vec<String>,
     connect: Vec<String>,
     con_task: ConcurrentTask,
-    config: Option<Config>,
+    config: Option<zenoh_config::Config>,
     warmup: Duration,
 }
 
@@ -536,7 +534,7 @@ async fn static_failover_brokering() -> Result<()> {
     let msg_size = 8;
 
     let disable_autoconnect_config = || {
-        let mut config = Config::default();
+        let mut config = zenoh_config::Config::default();
         config
             .scouting
             .gossip
@@ -581,9 +579,6 @@ async fn static_failover_brokering() -> Result<()> {
     Result::Ok(())
 }
 
-#[cfg(feature = "unstable")]
-use tokio_util::task::TaskTracker;
-#[cfg(feature = "unstable")]
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 // Maximal recipes to run at once
 const PARALLEL_RECIPES: usize = 4;
@@ -594,7 +589,6 @@ const PARALLEL_RECIPES: usize = 4;
 // 3. Spawning order (delay_in_secs for node1, node2, and node3) = 6 (cases)
 //
 // Total cases = 2 x 4 x 6 = 48
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
     zenoh::init_log_from_env_or("error");
@@ -771,7 +765,6 @@ async fn three_node_combination() -> Result<()> {
 // 2. Mode: {Client, Peer} x {Client, Peer} x {IsFirstListen} = 2 x 2 x 2 = 8 (modes)
 //
 // Total cases = 2 x 8 = 16
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn two_node_combination() -> Result<()> {
     zenoh::init_log_from_env_or("error");
@@ -1042,7 +1035,6 @@ async fn three_node_combination_multicast() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn peer_linkstate() -> Result<()> {
     zenoh_util::try_init_log_from_env();
@@ -1060,7 +1052,7 @@ async fn peer_linkstate() -> Result<()> {
     let base_port = 17550;
 
     let linkstate_config = || {
-        let mut config = Config::default();
+        let mut config = zenoh_config::Config::default();
         config
             .routing
             .peer
@@ -1223,7 +1215,6 @@ async fn peer_linkstate() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn router_linkstate() -> Result<()> {
     zenoh_util::try_init_log_from_env();

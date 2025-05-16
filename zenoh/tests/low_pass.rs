@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "internal_config")]
 #![cfg(unix)]
 
 use std::sync::{
@@ -21,11 +20,9 @@ use std::sync::{
 };
 
 use nonempty_collections::{nev, NEVec};
-use zenoh::{
-    bytes::ZBytes,
-    query::{ConsolidationMode, Reply},
-    Config, Wait,
-};
+#[cfg(feature = "unstable")]
+use zenoh::query::{ConsolidationMode, Reply};
+use zenoh::{bytes::ZBytes, Wait};
 use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
 
 static SMALL_MSG_STR: &str = "S";
@@ -388,15 +385,18 @@ fn lowpass_del_filter_test(
     assertions(&test_res);
 }
 
-fn build_config(lpf_config: Vec<LowPassFilterConf>, flow: InterceptorFlow) -> (Config, Config) {
-    let mut sender_config = Config::default();
+fn build_config(
+    lpf_config: Vec<LowPassFilterConf>,
+    flow: InterceptorFlow,
+) -> (zenoh_config::Config, zenoh_config::Config) {
+    let mut sender_config = zenoh_config::Config::default();
     sender_config
         .scouting
         .multicast
         .set_enabled(Some(false))
         .unwrap();
 
-    let mut receiver_config = Config::default();
+    let mut receiver_config = zenoh_config::Config::default();
     receiver_config
         .scouting
         .multicast
@@ -411,7 +411,11 @@ fn build_config(lpf_config: Vec<LowPassFilterConf>, flow: InterceptorFlow) -> (C
     (sender_config, receiver_config)
 }
 
-fn set_locators(locator: &str, listen_config: &mut Config, connect_config: &mut Config) {
+fn set_locators(
+    locator: &str,
+    listen_config: &mut zenoh_config::Config,
+    connect_config: &mut zenoh_config::Config,
+) {
     listen_config
         .listen
         .endpoints
@@ -426,8 +430,8 @@ fn set_locators(locator: &str, listen_config: &mut Config, connect_config: &mut 
 
 fn lowpass_pub_sub_query_reply_test(
     locator: &str,
-    mut writer_config: Config,
-    mut reader_config: Config,
+    mut writer_config: zenoh_config::Config,
+    mut reader_config: zenoh_config::Config,
     ke_prefix: &str,
 ) -> Arc<LowPassTestResult> {
     let test_results = Arc::new(LowPassTestResult::default());
@@ -470,6 +474,7 @@ fn lowpass_pub_sub_query_reply_test(
         .wait()
         .unwrap();
 
+    #[cfg(feature = "unstable")]
     let _queryable = reader_session
         .declare_queryable(format!("{ke_prefix}/*"))
         .callback({
@@ -514,6 +519,7 @@ fn lowpass_pub_sub_query_reply_test(
         .declare_publisher(format!("{ke_prefix}/pub"))
         .wait()
         .unwrap();
+    #[cfg(feature = "unstable")]
     let querier = writer_session
         .declare_querier(format!("{ke_prefix}/query"))
         .consolidation(ConsolidationMode::None)
@@ -533,6 +539,7 @@ fn lowpass_pub_sub_query_reply_test(
         .wait()
         .unwrap();
 
+    #[cfg(feature = "unstable")]
     let query_callback = {
         let test_results = test_results.clone();
         move |reply: Reply| match reply.into_result() {
@@ -564,13 +571,14 @@ fn lowpass_pub_sub_query_reply_test(
             }
         }
     };
-    std::thread::sleep(std::time::Duration::from_millis(DECLARATION_DELAY_MS));
+    #[cfg(feature = "unstable")]
     querier
         .get()
         .payload(small_payload.clone())
         .callback(query_callback.clone())
         .wait()
         .unwrap();
+    #[cfg(feature = "unstable")]
     querier
         .get()
         .payload(big_payload.clone())
