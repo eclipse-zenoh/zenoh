@@ -23,7 +23,8 @@ use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{
-    LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait, BIND_SOCKET,
+    parse_dscp, set_dscp, LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
+    BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Config, EndPoint, Locator},
@@ -189,6 +190,7 @@ impl LinkManagerMulticastUdp {
         mcast_addr: &SocketAddr,
         config: Config<'_>,
         bind_socket: Option<&str>,
+        dscp: Option<u32>,
     ) -> ZResult<(UdpSocket, UdpSocket, SocketAddr)> {
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
@@ -279,6 +281,10 @@ impl LinkManagerMulticastUdp {
         ucast_sock
             .bind(&local_addr.into())
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+
+        if let Some(dscp) = dscp {
+            set_dscp(&ucast_sock, *mcast_addr, dscp)?;
+        }
 
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
@@ -390,11 +396,12 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
             .collect::<Vec<SocketAddr>>();
         let config = endpoint.config();
         let bind_socket = config.get(BIND_SOCKET);
+        let dscp = parse_dscp(&config)?;
 
         let mut errs: Vec<ZError> = vec![];
         for maddr in mcast_addrs {
             match self
-                .new_link_inner(&maddr, endpoint.config(), bind_socket)
+                .new_link_inner(&maddr, endpoint.config(), bind_socket, dscp)
                 .await
             {
                 Ok((mcast_sock, ucast_sock, ucast_addr)) => {

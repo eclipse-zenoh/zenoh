@@ -5385,6 +5385,7 @@ dependencies = [
  "rustls",
  "rustls-webpki",
  "serde",
+ "socket2 0.5.7",
  "time 0.3.36",
  "tokio",
  "tokio-util",

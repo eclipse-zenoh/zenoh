@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 extern crate alloc;
 
+mod dscp;
 mod listener;
 mod multicast;
 pub mod tcp;
@@ -30,6 +31,7 @@ use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
 use core::{cmp::PartialEq, fmt, hash::Hash};
 
 use async_trait::async_trait;
+pub use dscp::*;
 pub use listener::*;
 pub use multicast::*;
 use serde::Serialize;
@@ -48,6 +50,7 @@ pub const BIND_SOCKET: &str = "bind";
 pub const BIND_INTERFACE: &str = "iface";
 pub const TCP_SO_SND_BUF: &str = "so_sndbuf";
 pub const TCP_SO_RCV_BUF: &str = "so_rcvbuf";
+pub const DSCP: &str = "dscp";
 
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
