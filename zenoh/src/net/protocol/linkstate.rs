@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, num::NonZeroU16};
+use std::{collections::HashMap, fmt::Debug, num::NonZeroU16};
 
 use zenoh_config::TransportWeight;
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohIdProto};
@@ -51,8 +51,17 @@ pub(crate) struct LinkState {
     pub(crate) link_weights: Option<Vec<u16>>,
 }
 
-#[derive(Default, Copy, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, PartialEq, Eq)]
 pub(crate) struct LinkEdgeWeight(pub(crate) Option<NonZeroU16>);
+
+impl Debug for LinkEdgeWeight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Some(w) => w.fmt(f),
+            None => self.0.fmt(f),
+        }
+    }
+}
 
 impl LinkEdgeWeight {
     const DEFAULT_LINK_WEIGHT: u16 = 100;
