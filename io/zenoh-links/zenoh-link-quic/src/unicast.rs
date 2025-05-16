@@ -289,9 +289,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let mut quic_endpoint = {
             // create the Endpoint with this socket
-            let runtime = quinn::default_runtime().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-            })?;
+            let runtime = quinn::default_runtime()
+                .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
             ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
                 EndpointConfig::default(),
                 None,
@@ -410,9 +409,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
 
                 // create the Endpoint with this socket
-                let runtime = quinn::default_runtime().ok_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-                })?;
+                let runtime = quinn::default_runtime()
+                    .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
                 ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
                     EndpointConfig::default(),
                     Some(server_config),
