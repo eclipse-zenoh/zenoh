@@ -94,4 +94,5 @@ futures-util = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }
+rstest = { workspace = true }
 zenoh-link-commons = { workspace = true }
