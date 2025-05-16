@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use rstest::rstest;
 use std::{
     any::Any,
     convert::TryFrom,
@@ -23,6 +22,7 @@ use std::{
     time::Duration,
 };
 
+use rstest::rstest;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
