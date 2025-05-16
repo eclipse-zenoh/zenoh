@@ -33,7 +33,8 @@ default = ["std"]
 std = [
     "tracing",
     "uhlc/std",
-    "zenoh-protocol/std"
+    "zenoh-protocol/std",
+    "zenoh-buffers/std"
 ]
 shared-memory = [
     "std",
