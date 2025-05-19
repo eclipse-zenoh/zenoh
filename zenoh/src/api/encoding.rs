@@ -69,7 +69,7 @@ use zenoh_protocol::core::EncodingId;
 /// assert_eq!("text/plain;utf-8", &encoding2.to_string());
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Encoding(zenoh_protocol::core::Encoding);
 
 impl Encoding {
@@ -708,5 +708,35 @@ impl Encoding {
     #[zenoh_macros::internal]
     pub fn new(id: EncodingId, schema: Option<ZSlice>) -> Self {
         Encoding(zenoh_protocol::core::Encoding { id, schema })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
+    use super::*;
+
+    #[test]
+    fn hash() {
+        let encodings = [
+            Encoding::ZENOH_BYTES,
+            Encoding::ZENOH_STRING,
+            Encoding::ZENOH_STRING.with_schema("utf-8"),
+            Encoding::ZENOH_STRING.with_schema("utf-8"),
+        ];
+        let hashes = encodings.map(|e| {
+            let mut hasher = DefaultHasher::new();
+            e.hash(&mut hasher);
+            hasher.finish()
+        });
+
+        assert_ne!(hashes[0], hashes[1]);
+        assert_ne!(hashes[0], hashes[2]);
+        assert_ne!(hashes[1], hashes[2]);
+        assert_eq!(hashes[2], hashes[3]);
     }
 }

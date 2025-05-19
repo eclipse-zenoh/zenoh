@@ -90,6 +90,9 @@ jobs:
       - name: Update Stable Rust toolchain
         run: rustup update stable
 
+      - name: Make sure necessary tools are installed
+        run: rustup component add clippy rustfmt
+
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:

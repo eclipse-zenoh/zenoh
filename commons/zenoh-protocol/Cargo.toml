@@ -33,6 +33,7 @@ std = [
     "uhlc/std",
     "zenoh-keyexpr/std",
     "zenoh-result/std",
+    "zenoh-buffers/std",
 ]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
 test = ["rand", "zenoh-buffers/test"]
