@@ -183,7 +183,7 @@ impl RuntimeBuilder {
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
                 router,
-                config: config.clone(),
+                config,
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
@@ -206,33 +206,6 @@ impl RuntimeBuilder {
         // Start plugins
         #[cfg(feature = "plugins")]
         start_plugins(&runtime);
-
-        // Start notifier task
-        let receiver = config.subscribe();
-        let token = runtime.get_cancellation_token();
-        runtime.spawn({
-            let runtime2 = runtime.clone();
-            async move {
-                let mut stream = receiver.into_stream();
-                loop {
-                    tokio::select! {
-                        res = stream.next() => {
-                            match res {
-                                Some(event) => {
-                                    if &*event == "connect/endpoints" {
-                                        if let Err(e) = runtime2.update_peers().await {
-                                            tracing::error!("Error updating peers: {}", e);
-                                        }
-                                    }
-                                },
-                                None => { break; }
-                            }
-                        }
-                        _ = token.cancelled() => { break; }
-                    }
-                }
-            }
-        });
 
         #[cfg(feature = "shared-memory")]
         match shm_init_mode {
