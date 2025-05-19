@@ -30,7 +30,10 @@
   /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
   /// For TCP, UDP, Quic and TLS links, it is possible to specify a `bind` address for the local socket:
   /// E.g. tcp/192.168.0.1:7447#bind=192.168.0.1:0
-  //  Note!: Currently it is unsupported to specify both `bind` and `iface`. 
+  ///  Note!: Currently it is unsupported to specify both `bind` and `iface`.
+  ///
+  /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
+  /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -77,6 +80,9 @@
   ///
   /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
   /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
+  ///
+  /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
+  /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
