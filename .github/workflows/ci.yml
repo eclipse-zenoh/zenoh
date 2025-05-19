@@ -302,6 +302,8 @@ jobs:
               --skip three_node_combination_multicast \
               --skip two_node_combination \
               --skip test_gossip
+            env:
+              RUST_LOG: None
 
           - name: Upload coverage to Codecov
             uses: codecov/codecov-action@v5
