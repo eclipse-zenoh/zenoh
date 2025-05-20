@@ -438,11 +438,15 @@ impl HatBaseTrait for HatCode {
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId {
-        hat!(tables)
-            .linkstatepeers_net
-            .as_ref()
-            .unwrap()
-            .get_local_context(routing_context, face_hat!(face).link_id)
+        if face.whatami != WhatAmI::Client {
+            hat!(tables)
+                .linkstatepeers_net
+                .as_ref()
+                .unwrap()
+                .get_local_context(routing_context, face_hat!(face).link_id)
+        } else {
+            0
+        }
     }
 
     #[inline]
