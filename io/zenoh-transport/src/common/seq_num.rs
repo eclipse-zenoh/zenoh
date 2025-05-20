@@ -57,7 +57,9 @@ impl SeqNum {
     ///   - 16_386 (i.e., 2^14)
     ///   - 2_097_152 (i.e., 2^21)
     ///
-    /// This function will panic if `value` is out of bound w.r.t. `resolution`. That is if
+    /// # Errors
+    ///
+    /// This function will return an error if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
     pub(crate) fn make(value: TransportSn, resolution: Bits) -> ZResult<SeqNum> {
@@ -179,8 +181,10 @@ impl SeqNumGenerator {
     ///   As a consequence of wire zenoh's representation of sequence numbers
     ///   this should be a multiple of 7.
     ///
-    /// This function will panic if `value` is out of bound w.r.t. `resolution`. That is if
-    ///   `value` is greater or equal than `resolution`.
+    /// # Errors
+    ///
+    /// This function will return an error if `initial_sn` is out of bound w.r.t. `resolution`. That is if
+    ///   `initial_sn` is greater or equal than `resolution`.
     ///
     pub(crate) fn make(initial_sn: TransportSn, resolution: Bits) -> ZResult<SeqNumGenerator> {
         let sn = SeqNum::make(initial_sn, resolution)?;
