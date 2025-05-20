@@ -70,9 +70,6 @@ Then you can start run `zenohd`.
 
 ## How to build it
 
-> [!WARNING]
-> Zenoh and its ecosystem are under active development. When you build from git, make sure you also build from git any other Zenoh repository you plan to use (e.g. binding, plugin, backend, etc.). It may happen that some changes in git are not compatible with the most recent packaged Zenoh release (e.g. deb, docker, pip). We put particular effort in maintaining compatibility between the various git repositories in the Zenoh project.
-
 Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be successfully compiled with Rust stable (>= 1.75.0), so no special configuration is required from your side. If you already have the Rust toolchain installed, make sure it is up-to-date with:
 
 ```bash
@@ -243,9 +240,6 @@ built with the exact same Rust version as `zenohd`, and using for `zenoh` depend
 set of features. A plugin compiled with different Rust version or with different set of `zenoh` crate features will be rejected when `zenohd` attempts to load it. Otherwise, incompatibilities in memory mapping of structures shared between `zenohd` and the library could lead to a `"SIGSEGV"` crash.
 
 By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
-
-> [!WARNING]
-> Since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Once `zenohd` is running, plugins can be hot-loaded and, if they support it, reconfigured at runtime by editing their configuration through the adminspace.
 
 **[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
 This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.

@@ -60,6 +60,7 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
 }
 
 /// An enumeration of items which can be annotated with `#[zenoh_macros::unstable_doc]`, #[zenoh_macros::unstable]`, `#[zenoh_macros::internal]`
+#[allow(clippy::large_enum_variant)]
 enum AnnotableItem {
     /// Wrapper around [`syn::Item`].
     Item(Item),

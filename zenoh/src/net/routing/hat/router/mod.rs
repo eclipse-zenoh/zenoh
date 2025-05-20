@@ -118,7 +118,7 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
-use crate::net::common::AutoConnect;
+use crate::net::{common::AutoConnect, protocol::network::SuccessorEntry};
 
 struct TreesComputationWorker {
     _task: TerminatableTask,
@@ -899,6 +899,23 @@ impl HatBaseTrait for HatCode {
             out.extend(net.links_info());
         }
         out
+    }
+
+    fn route_successor(
+        &self,
+        tables: &Tables,
+        src: ZenohIdProto,
+        dst: ZenohIdProto,
+    ) -> Option<ZenohIdProto> {
+        hat!(tables).routers_net.as_ref()?.route_successor(src, dst)
+    }
+
+    fn route_successors(&self, tables: &Tables) -> Vec<SuccessorEntry> {
+        hat!(tables)
+            .routers_net
+            .as_ref()
+            .map(|net| net.route_successors())
+            .unwrap_or_default()
     }
 }
 
