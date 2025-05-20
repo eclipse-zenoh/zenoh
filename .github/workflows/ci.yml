@@ -275,6 +275,9 @@ jobs:
             rust: [nightly]
         runs-on: ${{ matrix.os }}
         steps:
+          - name: Uninstall pre-installed packages
+            run: sudo apt remove dotnet* azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox temurin-8-jdk powershell mysql-server-core-8.0 mono-devel -y
+
           - name: Checkout sources
             uses: actions/checkout@v4
 
@@ -302,6 +305,8 @@ jobs:
               --skip three_node_combination_multicast \
               --skip two_node_combination \
               --skip test_gossip
+            env:
+              RUST_LOG: None
 
           - name: Upload coverage to Codecov
             uses: codecov/codecov-action@v5
