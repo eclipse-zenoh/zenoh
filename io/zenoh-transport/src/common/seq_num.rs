@@ -57,6 +57,8 @@ impl SeqNum {
     ///   - 16_386 (i.e., 2^14)
     ///   - 2_097_152 (i.e., 2^21)
     ///
+    /// # Errors
+    ///
     /// This function will return an error if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
@@ -178,6 +180,8 @@ impl SeqNumGenerator {
     /// * `sn_resolution` - The resolution, in bits, to be used for the sequence number generator.
     ///   As a consequence of wire zenoh's representation of sequence numbers
     ///   this should be a multiple of 7.
+    ///
+    /// # Errors
     ///
     /// This function will return an error if `initial_sn` is out of bound w.r.t. `resolution`. That is if
     ///   `initial_sn` is greater or equal than `resolution`.
