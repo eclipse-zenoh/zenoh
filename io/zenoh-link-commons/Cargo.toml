@@ -35,6 +35,7 @@ futures = { workspace = true }
 rustls = { workspace = true, optional = true }
 rustls-webpki = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
+socket2 = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true, features = [
   "fs",
