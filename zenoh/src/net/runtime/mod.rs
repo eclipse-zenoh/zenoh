@@ -33,7 +33,7 @@ use std::{
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
-use futures::{stream::StreamExt, Future};
+use futures::Future;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
