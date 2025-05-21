@@ -228,7 +228,7 @@ impl AdminSpace {
                 format!("@/{zid_str}/{whatami_str}/route/successor/**")
                     .try_into()
                     .unwrap(),
-                RouteSuccesorHandler {
+                RouteSuccessorHandler {
                     runtime: runtime.clone(),
                 },
             );
@@ -894,10 +894,10 @@ impl KeyedHandler<Query> for QueriersDataHandler {
     }
 }
 
-struct RouteSuccesorHandler {
+struct RouteSuccessorHandler {
     runtime: Runtime,
 }
-impl KeyedHandler<Query> for RouteSuccesorHandler {
+impl KeyedHandler<Query> for RouteSuccessorHandler {
     fn handle(&self, query: &Query) {
         let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
             if let Err(e) = query
