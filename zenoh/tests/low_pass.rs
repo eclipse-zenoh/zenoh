@@ -43,26 +43,37 @@ struct LowPassTestResult {
     big_put: AtomicBool,
     small_del: AtomicBool,
     big_del: AtomicBool,
+    #[cfg(feature = "unstable")]
     small_query: AtomicBool,
+    #[cfg(feature = "unstable")]
     big_query: AtomicBool,
+    #[cfg(feature = "unstable")]
     small_reply_put: AtomicBool,
+    #[cfg(feature = "unstable")]
     big_reply_put: AtomicBool,
+    #[cfg(feature = "unstable")]
     small_reply_del: AtomicBool,
+    #[cfg(feature = "unstable")]
     big_reply_del: AtomicBool,
+    #[cfg(feature = "unstable")]
     small_reply_err: AtomicBool,
+    #[cfg(feature = "unstable")]
     big_reply_err: AtomicBool,
 }
 
 impl LowPassTestResult {
     fn all_small(&self) -> bool {
-        self.small_put.load(Ordering::Relaxed)
-            && self.small_del.load(Ordering::Relaxed)
+        let all = self.small_put.load(Ordering::Relaxed) && self.small_del.load(Ordering::Relaxed);
+        #[cfg(feature = "unstable")]
+        let all = all
             && self.small_query.load(Ordering::Relaxed)
             && self.small_reply_put.load(Ordering::Relaxed)
             && self.small_reply_del.load(Ordering::Relaxed)
-            && self.small_reply_err.load(Ordering::Relaxed)
+            && self.small_reply_err.load(Ordering::Relaxed);
+        all
     }
 
+    #[cfg(feature = "unstable")]
     fn big_query(&self) -> bool {
         self.big_query.load(Ordering::Relaxed)
     }
@@ -75,12 +86,14 @@ impl LowPassTestResult {
         self.big_del.load(Ordering::Relaxed)
     }
 
+    #[cfg(feature = "unstable")]
     fn all_big_replies(&self) -> bool {
         self.big_reply_put.load(Ordering::Relaxed)
             && self.big_reply_del.load(Ordering::Relaxed)
             && self.big_reply_err.load(Ordering::Relaxed)
     }
 
+    #[cfg(feature = "unstable")]
     fn no_big_replies(&self) -> bool {
         !(self.big_reply_put.load(Ordering::Relaxed)
             || self.big_reply_del.load(Ordering::Relaxed)
@@ -94,16 +107,19 @@ fn lowpass_query_test() {
 
     let nominal_assertions = |test_res: &LowPassTestResult| {
         assert!(test_res.all_small());
+        #[cfg(feature = "unstable")]
         assert!(test_res.all_big_replies());
         assert!(test_res.big_put());
         assert!(test_res.big_del());
     };
     let assert_applied = |test_res: &LowPassTestResult| {
         nominal_assertions(test_res);
+        #[cfg(feature = "unstable")]
         assert!(!test_res.big_query());
     };
     let assert_not_applied = |test_res: &LowPassTestResult| {
         nominal_assertions(test_res);
+        #[cfg(feature = "unstable")]
         assert!(test_res.big_query());
     };
 
@@ -143,16 +159,19 @@ fn lowpass_reply_test() {
 
     let nominal_assertions = |test_res: &LowPassTestResult| {
         assert!(test_res.all_small());
+        #[cfg(feature = "unstable")]
         assert!(test_res.big_query());
         assert!(test_res.big_put());
         assert!(test_res.big_del());
     };
     let assert_applied = |test_res: &LowPassTestResult| {
         nominal_assertions(test_res);
+        #[cfg(feature = "unstable")]
         assert!(test_res.no_big_replies());
     };
     let assert_not_applied = |test_res: &LowPassTestResult| {
         nominal_assertions(test_res);
+        #[cfg(feature = "unstable")]
         assert!(test_res.all_big_replies());
     };
 
@@ -192,7 +211,9 @@ fn lowpass_put_test() {
 
     let nominal_assertions = |test_res: &LowPassTestResult| {
         assert!(test_res.all_small());
+        #[cfg(feature = "unstable")]
         assert!(test_res.all_big_replies());
+        #[cfg(feature = "unstable")]
         assert!(test_res.big_query());
         assert!(test_res.big_del());
     };
@@ -241,7 +262,9 @@ fn lowpass_del_test() {
 
     let nominal_assertions = |test_res: &LowPassTestResult| {
         assert!(test_res.all_small());
+        #[cfg(feature = "unstable")]
         assert!(test_res.all_big_replies());
+        #[cfg(feature = "unstable")]
         assert!(test_res.big_query());
         assert!(test_res.big_put());
     };
