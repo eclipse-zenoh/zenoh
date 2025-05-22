@@ -301,7 +301,7 @@
   //        /// List of message types to apply to.
   //        messages: [
   //          "put", // put publications
-  //          "delete" // delete publications
+  //          "delete", // delete publications
   //          "query", // get queries
   //          "reply", // replies to queries
   //        ],
