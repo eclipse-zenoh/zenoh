@@ -657,7 +657,7 @@ impl From<&Encoding> for Cow<'static, str> {
         ) {
             // Perfect match
             (Some(i), None) => Cow::Borrowed(i),
-            // Custom enoding, both id and schema are in the schema field
+            // Custom encoding, both id and schema are in the schema field
             (Some(""), Some(s)) => Cow::Owned(su8_to_str(s).into()),
             // ID and schema
             (Some(i), Some(s)) => {
