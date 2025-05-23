@@ -517,6 +517,9 @@ impl Encoding {
         50u16 => "video/raw",
         51u16 => "video/vp8",
         52u16 => "video/vp9",
+        // The 0xFFFFu16 is used to indicate an custom encoding where both encoding and schema
+        // are stored in the schema field.
+        0xFFFFu16 => "",
     };
 
     const STR_TO_ID: phf::Map<&'static str, EncodingId> = phf_map! {
@@ -612,7 +615,12 @@ impl From<&str> for Encoding {
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
         // if id is not recognized, e.g. `t == "my_encoding"`, put it in the schema
+        // and set the id to 0xFFFF
+        } else if let Some(id) = Encoding::STR_TO_ID.get("").copied() {
+            inner.id = id;
+            schema = t;
         } else {
+            inner.id = 0xFFFF;
             schema = t;
         }
         if !schema.is_empty() {
@@ -649,6 +657,8 @@ impl From<&Encoding> for Cow<'static, str> {
         ) {
             // Perfect match
             (Some(i), None) => Cow::Borrowed(i),
+            // Custom enoding, both id and schema are in the schema field
+            (Some(""), Some(s)) => Cow::Owned(su8_to_str(s).into()),
             // ID and schema
             (Some(i), Some(s)) => {
                 Cow::Owned(format!("{}{}{}", i, Encoding::SCHEMA_SEP, su8_to_str(s)))
