@@ -763,7 +763,10 @@ mod tests {
         assert_eq!(Encoding::from("zenoh/bytes"), Encoding::ZENOH_BYTES);
         assert_eq!(Encoding::from("zenoh/string"), Encoding::ZENOH_STRING);
         assert_eq!(Encoding::from("text/plain"), Encoding::TEXT_PLAIN);
-        assert_eq!(Encoding::from("application/json"), Encoding::APPLICATION_JSON);
+        assert_eq!(
+            Encoding::from("application/json"),
+            Encoding::APPLICATION_JSON
+        );
     }
 
     #[test]
@@ -789,5 +792,4 @@ mod tests {
         let unknown_with_schema = Encoding::from("custom/format;v1.0");
         assert_eq!(unknown_with_schema.to_string(), "custom/format;v1.0");
     }
-
 }
