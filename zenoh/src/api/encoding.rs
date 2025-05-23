@@ -739,4 +739,45 @@ mod tests {
         assert_ne!(hashes[1], hashes[2]);
         assert_eq!(hashes[2], hashes[3]);
     }
+
+    #[test]
+    fn test_default_encoding() {
+        let default = Encoding::default();
+        assert_eq!(default, Encoding::ZENOH_BYTES);
+        assert_eq!(default.to_string(), "zenoh/bytes");
+    }
+
+    #[test]
+    fn test_from_str() {
+        // Test constants conversion
+        assert_eq!(Encoding::from("zenoh/bytes"), Encoding::ZENOH_BYTES);
+        assert_eq!(Encoding::from("zenoh/string"), Encoding::ZENOH_STRING);
+        assert_eq!(Encoding::from("text/plain"), Encoding::TEXT_PLAIN);
+        assert_eq!(Encoding::from("application/json"), Encoding::APPLICATION_JSON);
+    }
+
+    #[test]
+    fn test_to_string() {
+        // Test constants to string
+        assert_eq!(Encoding::ZENOH_BYTES.to_string(), "zenoh/bytes");
+        assert_eq!(Encoding::ZENOH_STRING.to_string(), "zenoh/string");
+        assert_eq!(Encoding::TEXT_PLAIN.to_string(), "text/plain");
+        assert_eq!(Encoding::APPLICATION_JSON.to_string(), "application/json");
+    }
+
+    #[test]
+    fn test_schema() {
+        // Test with schema using with_schema method
+        let with_schema = Encoding::TEXT_PLAIN.with_schema("utf-8");
+        assert_eq!(with_schema.to_string(), "text/plain;utf-8");
+
+        // Test from string with schema
+        let from_str = Encoding::from("text/plain;utf-8");
+        assert_eq!(from_str.to_string(), "text/plain;utf-8");
+
+        // Unknown encoding with schema
+        let unknown_with_schema = Encoding::from("custom/format;v1.0");
+        assert_eq!(unknown_with_schema.to_string(), "custom/format;v1.0");
+    }
+
 }
