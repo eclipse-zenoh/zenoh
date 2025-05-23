@@ -614,7 +614,8 @@ impl From<&str> for Encoding {
         let (id, mut schema) = t.split_once(Encoding::SCHEMA_SEP).unwrap_or((t, ""));
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
-        // if id is not recognized, e.g. `t == "my_encoding"`, set the id to 0xFFFF
+        // if id is not recognized, e.g. `t == "my_encoding"`, put it in the schema
+        // and set the id to 0xFFFF
         } else {
             inner.id = 0xFFFF;
             schema = t;
