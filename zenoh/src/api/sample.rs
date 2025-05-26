@@ -23,6 +23,7 @@ use zenoh_protocol::{
     core::{CongestionControl, Timestamp},
     network::declare::ext::QoSType,
 };
+use zenoh_util::handler::KeyedEvent;
 
 use crate::api::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
@@ -447,6 +448,12 @@ impl Sample {
             source_info: SourceInfo::empty(),
             attachment: None,
         }
+    }
+}
+
+impl KeyedEvent for Sample {
+    fn key_expr(&self) -> &zenoh_keyexpr::keyexpr {
+        self.key_expr()
     }
 }
 
