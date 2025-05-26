@@ -115,10 +115,18 @@ async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer02.close()).unwrap();
 }
 
-async fn test_session_pubsub<const RESIZE_BUFFER: bool, const NO_SHM_FOR_2ND_PEER: bool>(
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResizeBuffer {
+    NoResize,
+    Resize,
+    Relayout,
+}
+
+async fn test_session_pubsub<const NO_SHM_FOR_2ND_PEER: bool>(
     peer01: &Session,
     peer02: &Session,
     reliability: Reliability,
+    resize_buffer: ResizeBuffer,
 ) {
     let msg_count = match reliability {
         Reliability::Reliable => MSG_COUNT,
@@ -137,7 +145,11 @@ async fn test_session_pubsub<const RESIZE_BUFFER: bool, const NO_SHM_FOR_2ND_PEE
         let _sub = ztimeout!(peer01
             .declare_subscriber(&key_expr)
             .callback(move |sample| {
-                let expected_size = if RESIZE_BUFFER { size / 2 } else { size };
+                let expected_size = if resize_buffer != ResizeBuffer::NoResize {
+                    size / 2
+                } else {
+                    size
+                };
                 assert_eq!(sample.payload().len(), expected_size);
 
                 if NO_SHM_FOR_2ND_PEER {
@@ -176,9 +188,12 @@ async fn test_session_pubsub<const RESIZE_BUFFER: bool, const NO_SHM_FOR_2ND_PEE
             // Allocate new message
             let mut sbuf =
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
-            if RESIZE_BUFFER {
-                sbuf.try_relayout(MemoryLayout::new(size / 2, AllocAlignment::default()).unwrap())
-                    .unwrap();
+            match resize_buffer {
+                ResizeBuffer::Relayout => sbuf
+                    .try_relayout(MemoryLayout::new(size / 2, AllocAlignment::default()).unwrap())
+                    .unwrap(),
+                ResizeBuffer::Resize => sbuf.try_resize((size / 2).try_into().unwrap()).unwrap(),
+                ResizeBuffer::NoResize => {}
             }
             println!("{c} created");
 
@@ -240,7 +255,13 @@ fn zenoh_shm_unicast() {
         zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19447"]).await;
-        test_session_pubsub::<false, false>(&peer01, &peer02, Reliability::Reliable).await;
+        test_session_pubsub::<false>(
+            &peer01,
+            &peer02,
+            Reliability::Reliable,
+            ResizeBuffer::NoResize,
+        )
+        .await;
         close_session(peer01, peer02).await;
     });
 }
@@ -252,31 +273,85 @@ fn zenoh_shm_unicast_to_non_shm() {
         zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19447"]).await;
-        test_session_pubsub::<false, true>(&peer01, &peer02, Reliability::Reliable).await;
+        test_session_pubsub::<true>(
+            &peer01,
+            &peer02,
+            Reliability::Reliable,
+            ResizeBuffer::NoResize,
+        )
+        .await;
         close_session(peer01, peer02).await;
     });
 }
 
 #[test]
-fn zenoh_shm_unicast_with_buffer_shrink() {
+fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
-        test_session_pubsub::<true, false>(&peer01, &peer02, Reliability::Reliable).await;
+        test_session_pubsub::<false>(
+            &peer01,
+            &peer02,
+            Reliability::Reliable,
+            ResizeBuffer::Relayout,
+        )
+        .await;
         close_session(peer01, peer02).await;
     });
 }
 
 #[test]
-fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm() {
+fn zenoh_shm_unicast_with_buffer_shrink_resize() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        // Initiate logging
+        zenoh::init_log_from_env_or("error");
+
+        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
+        test_session_pubsub::<false>(
+            &peer01,
+            &peer02,
+            Reliability::Reliable,
+            ResizeBuffer::Resize,
+        )
+        .await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
-        test_session_pubsub::<true, true>(&peer01, &peer02, Reliability::Reliable).await;
+        test_session_pubsub::<true>(
+            &peer01,
+            &peer02,
+            Reliability::Reliable,
+            ResizeBuffer::Relayout,
+        )
+        .await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        // Initiate logging
+        zenoh::init_log_from_env_or("error");
+
+        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
+        test_session_pubsub::<true>(
+            &peer01,
+            &peer02,
+            Reliability::Reliable,
+            ResizeBuffer::Resize,
+        )
+        .await;
         close_session(peer01, peer02).await;
     });
 }
@@ -289,20 +364,32 @@ fn zenoh_shm_multicast() {
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
-        test_session_pubsub::<false, false>(&peer01, &peer02, Reliability::BestEffort).await;
+        test_session_pubsub::<false>(
+            &peer01,
+            &peer02,
+            Reliability::BestEffort,
+            ResizeBuffer::NoResize,
+        )
+        .await;
         close_session(peer01, peer02).await;
     });
 }
 
 #[test]
-fn zenoh_shm_multicast_with_buffer_shrink() {
+fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19449", "udp/224.0.0.1:19449").await;
-        test_session_pubsub::<true, false>(&peer01, &peer02, Reliability::BestEffort).await;
+        test_session_pubsub::<false>(
+            &peer01,
+            &peer02,
+            Reliability::BestEffort,
+            ResizeBuffer::Relayout,
+        )
+        .await;
         close_session(peer01, peer02).await;
     });
 }
