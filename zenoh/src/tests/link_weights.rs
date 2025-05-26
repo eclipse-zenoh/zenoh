@@ -816,7 +816,7 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_link_weights_info_diamond_routers() {
     init_log_from_env_or("error");
-    test_link_weights_info_diamond_inner(34000, WhatAmI::Router).await;
+    test_link_weights_info_diamond_inner(36000, WhatAmI::Router).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

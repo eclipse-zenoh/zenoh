@@ -30,7 +30,7 @@ use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names,
+    get_ip_interface_names, parse_dscp, set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
@@ -281,6 +281,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
 
         let socket = tokio::net::UdpSocket::bind(src_addr).await?;
+        if let Some(dscp) = parse_dscp(&epconf)? {
+            set_dscp(&socket, src_addr, dscp)?;
+        }
 
         // Initialize the Endpoint
         if let Some(iface) = client_crypto.bind_iface {
