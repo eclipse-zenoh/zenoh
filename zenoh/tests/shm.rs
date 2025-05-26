@@ -41,7 +41,9 @@ const SLEEP: Duration = Duration::from_secs(1);
 const MSG_COUNT: usize = 1_00;
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
-async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
+async fn open_session_unicast<const NO_SHM_FOR_2ND_PEER: bool>(
+    endpoints: &[&str],
+) -> (Session, Session) {
     // Open the sessions
     let mut config = zenoh::Config::default();
     config
@@ -70,6 +72,11 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config
+        .transport
+        .shared_memory
+        .set_enabled(!NO_SHM_FOR_2ND_PEER)
+        .unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -108,7 +115,7 @@ async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer02.close()).unwrap();
 }
 
-async fn test_session_pubsub<const RESIZE_BUFFER: bool>(
+async fn test_session_pubsub<const RESIZE_BUFFER: bool, const NO_SHM_FOR_2ND_PEER: bool>(
     peer01: &Session,
     peer02: &Session,
     reliability: Reliability,
@@ -133,7 +140,11 @@ async fn test_session_pubsub<const RESIZE_BUFFER: bool>(
                 let expected_size = if RESIZE_BUFFER { size / 2 } else { size };
                 assert_eq!(sample.payload().len(), expected_size);
 
-                let _ = sample.payload().as_shm().unwrap();
+                if NO_SHM_FOR_2ND_PEER {
+                    assert!(sample.payload().as_shm().is_none());
+                } else {
+                    assert!(sample.payload().as_shm().is_some());
+                }
                 c_msgs.fetch_add(1, Ordering::Relaxed);
             }))
         .unwrap();
@@ -228,8 +239,20 @@ fn zenoh_shm_unicast() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19447"]).await;
-        test_session_pubsub::<false>(&peer01, &peer02, Reliability::Reliable).await;
+        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19447"]).await;
+        test_session_pubsub::<false, false>(&peer01, &peer02, Reliability::Reliable).await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_shm_unicast_to_non_shm() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        // Initiate logging
+        zenoh::init_log_from_env_or("error");
+
+        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19447"]).await;
+        test_session_pubsub::<false, true>(&peer01, &peer02, Reliability::Reliable).await;
         close_session(peer01, peer02).await;
     });
 }
@@ -240,8 +263,20 @@ fn zenoh_shm_unicast_with_buffer_shrink() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:19448"]).await;
-        test_session_pubsub::<true>(&peer01, &peer02, Reliability::Reliable).await;
+        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
+        test_session_pubsub::<true, false>(&peer01, &peer02, Reliability::Reliable).await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        // Initiate logging
+        zenoh::init_log_from_env_or("error");
+
+        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
+        test_session_pubsub::<true, true>(&peer01, &peer02, Reliability::Reliable).await;
         close_session(peer01, peer02).await;
     });
 }
@@ -254,7 +289,7 @@ fn zenoh_shm_multicast() {
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
-        test_session_pubsub::<false>(&peer01, &peer02, Reliability::BestEffort).await;
+        test_session_pubsub::<false, false>(&peer01, &peer02, Reliability::BestEffort).await;
         close_session(peer01, peer02).await;
     });
 }
@@ -267,7 +302,7 @@ fn zenoh_shm_multicast_with_buffer_shrink() {
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:19449", "udp/224.0.0.1:19449").await;
-        test_session_pubsub::<true>(&peer01, &peer02, Reliability::BestEffort).await;
+        test_session_pubsub::<true, false>(&peer01, &peer02, Reliability::BestEffort).await;
         close_session(peer01, peer02).await;
     });
 }
