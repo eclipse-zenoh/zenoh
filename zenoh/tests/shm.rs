@@ -33,7 +33,7 @@ use zenoh::{
     Session, Wait,
 };
 use zenoh_core::ztimeout;
-use zenoh_shm::api::buffer::traits::ShmBuf;
+use zenoh_shm::api::buffer::traits::OwnedShmBuf;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

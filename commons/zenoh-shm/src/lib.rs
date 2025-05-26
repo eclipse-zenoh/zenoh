@@ -27,7 +27,13 @@ use std::{
 };
 
 use api::{
-    buffer::{traits::BufferRelayoutError, zshm::{zshm, ZShm}, zshmmut::{zshmmut, ZShmMut}}, common::types::ProtocolID, provider::types::MemoryLayout,
+    buffer::{
+        traits::BufferRelayoutError,
+        zshm::{zshm, ZShm},
+        zshmmut::{zshmmut, ZShmMut},
+    },
+    common::types::ProtocolID,
+    provider::types::MemoryLayout,
 };
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
