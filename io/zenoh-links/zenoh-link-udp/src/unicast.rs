@@ -24,8 +24,11 @@ use tokio::{net::UdpSocket, sync::Mutex as AsyncMutex};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait,
-    LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    get_ip_interface_names, get_ip_interface_names, parse_dscp, set_dscp,
+    ConstructibleLinkManagerUnicast, ConstructibleLinkManagerUnicast, LinkAuthId, LinkAuthId,
+    LinkManagerUnicastTrait, LinkManagerUnicastTrait, LinkUnicast, LinkUnicast, LinkUnicastTrait,
+    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkChannelSender,
+    BIND_INTERFACE, BIND_INTERFACE, BIND_SOCKET, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Address, EndPoint, Locator},
@@ -278,6 +281,7 @@ impl LinkManagerUnicastUdp {
         dst_addr: &SocketAddr,
         iface: Option<&str>,
         bind_socket: Option<&str>,
+        dscp: Option<u32>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         let src_socket_addr = if let Some(bind_socket) = bind_socket {
             let address = Address::from(bind_socket);
@@ -304,6 +308,10 @@ impl LinkManagerUnicastUdp {
 
         if let Some(iface) = iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
+
+        if let Some(dscp) = dscp {
+            set_dscp(&socket, *dst_addr, dscp)?;
         }
 
         // Connect the socket to the remote address
@@ -343,6 +351,7 @@ impl LinkManagerUnicastUdp {
         &self,
         addr: &SocketAddr,
         iface: Option<&str>,
+        dscp: Option<u32>,
     ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
@@ -353,6 +362,10 @@ impl LinkManagerUnicastUdp {
 
         if let Some(iface) = iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
+
+        if let Some(dscp) = dscp {
+            set_dscp(&socket, *addr, dscp)?;
         }
 
         let local_addr = socket.local_addr().map_err(|e| {
@@ -383,10 +396,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         }
 
         let bind_socket = config.get(BIND_SOCKET);
+        let dscp = parse_dscp(&config)?;
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da, iface, bind_socket).await {
+            match self.new_link_inner(&da, iface, bind_socket, dscp).await {
                 Ok((socket, src_addr, dst_addr)) => {
                     // Create UDP link
                     let link = Arc::new(LinkUnicastUdp::new(
@@ -422,10 +436,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             .filter(|a| !a.ip().is_multicast());
         let config = endpoint.config();
         let iface = config.get(BIND_INTERFACE);
+        let dscp = parse_dscp(&config)?;
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da, iface).await {
+            match self.new_listener_inner(&da, iface, dscp).await {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
