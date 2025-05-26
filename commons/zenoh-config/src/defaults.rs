@@ -167,15 +167,21 @@ pub mod routing {
 impl Default for ListenConfig {
     #[allow(clippy::unnecessary_cast)]
     fn default() -> Self {
+        use std::net::UdpSocket;
+
+        let addr = match UdpSocket::bind("::1:0") {
+            Ok(_) => "[::]",
+            Err(_) => "0.0.0.0",
+        };
         Self {
             timeout_ms: None,
             endpoints: ModeDependentValue::Dependent(ModeValues {
                 #[cfg(feature = "transport_tcp")]
-                router: Some(vec!["tcp/[::]:7447".parse().unwrap()]),
+                router: Some(vec![format!("tcp/{}:7447", addr).parse().unwrap()]),
                 #[cfg(not(feature = "transport_tcp"))]
                 router: Some(vec![]),
                 #[cfg(feature = "transport_tcp")]
-                peer: Some(vec!["tcp/[::]:0".parse().unwrap()]),
+                peer: Some(vec![format!("tcp/{}:0", addr).parse().unwrap()]),
                 #[cfg(not(feature = "transport_tcp"))]
                 peer: Some(vec![]),
                 client: None,
