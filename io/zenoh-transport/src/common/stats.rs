@@ -378,3 +378,8 @@ stats_struct! {
         pub tx_low_pass_dropped_msgs,
     }
 }
+
+pub fn is_link_stats(key: &str) -> bool {
+    let starts_with = |k: &str, prefixes: &[&str]| prefixes.iter().any(|p| k.starts_with(p));
+    starts_with(key, &["rx_", "tx_"]) && starts_with(&key[3..], &["bytes, t_, n_"])
+}
