@@ -166,8 +166,7 @@ async fn test_session_pubsub<const RESIZE_BUFFER: bool>(
             let mut sbuf =
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             if RESIZE_BUFFER {
-                sbuf = sbuf
-                    .try_relayout(MemoryLayout::new(size / 2, AllocAlignment::default()).unwrap())
+                sbuf.try_relayout(MemoryLayout::new(size / 2, AllocAlignment::default()).unwrap())
                     .unwrap();
             }
             println!("{c} created");

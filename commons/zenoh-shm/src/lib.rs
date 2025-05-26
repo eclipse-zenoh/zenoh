@@ -136,6 +136,10 @@ impl ShmBufInner {
             .load(Ordering::Relaxed)
     }
 
+    /// # Safety
+    /// This operation is unsafe because we cannot guarantee that there is no upper level
+    /// ZSlice that have cached the size of underlying ShmBufInner. So this function should be
+    /// used only if it is guaranteed that there is no such situation
     pub unsafe fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
         if self.capacity() < new_size {
             return None;
@@ -146,6 +150,10 @@ impl ShmBufInner {
         Some(())
     }
 
+    /// # Safety
+    /// This operation is unsafe because we cannot guarantee that there is no upper level
+    /// ZSlice that have cached the size of underlying ShmBufInner. So this function should be
+    /// used only if it is guaranteed that there is no such situation
     pub unsafe fn try_relayout(
         &mut self,
         new_layout: MemoryLayout,
