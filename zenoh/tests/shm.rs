@@ -41,7 +41,7 @@ const SLEEP: Duration = Duration::from_secs(1);
 const MSG_COUNT: usize = 1_00;
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
-async fn open_session_unicast<const NO_SHM_FOR_2ND_PEER: bool>(
+async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
     endpoints: &[&str],
 ) -> (Session, Session) {
     // Open the sessions
@@ -75,7 +75,7 @@ async fn open_session_unicast<const NO_SHM_FOR_2ND_PEER: bool>(
     config
         .transport
         .shared_memory
-        .set_enabled(!NO_SHM_FOR_2ND_PEER)
+        .set_enabled(!NO_SHM_FOR_SECOND_PEER)
         .unwrap();
     println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -122,7 +122,7 @@ enum ResizeBuffer {
     Relayout,
 }
 
-async fn test_session_pubsub<const NO_SHM_FOR_2ND_PEER: bool>(
+async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
     peer01: &Session,
     peer02: &Session,
     reliability: Reliability,
@@ -152,7 +152,7 @@ async fn test_session_pubsub<const NO_SHM_FOR_2ND_PEER: bool>(
                 };
                 assert_eq!(sample.payload().len(), expected_size);
 
-                if NO_SHM_FOR_2ND_PEER {
+                if NO_SHM_FOR_SECOND_PEER {
                     assert!(sample.payload().as_shm().is_none());
                 } else {
                     assert!(sample.payload().as_shm().is_some());
