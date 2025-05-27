@@ -14,13 +14,7 @@
 
 #![cfg(feature = "internal_config")]
 
-#[cfg(feature = "internal")]
-use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
-#[cfg(all(feature = "internal", feature = "unstable"))]
-use zenoh::Wait;
 use zenoh_link::EndPoint;
-#[cfg(not(feature = "unstable"))]
-use zenoh_protocol::core::Reliability;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gossip() {
