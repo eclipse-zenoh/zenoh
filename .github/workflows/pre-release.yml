@@ -14,8 +14,6 @@
 name: Pre-Release
 
 on:
-  schedule:
-    - cron: "0 0 * * 1-5"
   workflow_dispatch:
     inputs:
       features:

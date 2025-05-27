@@ -250,6 +250,8 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("ok_put").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
+                #[cfg(feature = "unstable")]
+                assert_eq!(s.replier_id(), Some(qbl.id().zid()));
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
                 assert_eq!(s.payload().len(), size);
@@ -267,6 +269,8 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("ok_del").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
+                #[cfg(feature = "unstable")]
+                assert_eq!(s.replier_id(), Some(qbl.id().zid()));
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
                 assert_eq!(s.payload().len(), 0);
@@ -284,6 +288,8 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("err").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
+                #[cfg(feature = "unstable")]
+                assert_eq!(s.replier_id(), Some(qbl.id().zid()));
                 let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
                 cnt += 1;

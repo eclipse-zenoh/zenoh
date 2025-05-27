@@ -30,7 +30,7 @@ pub(crate) enum TransportLinkUnicastDirection {
     Outbound,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct TransportLinkUnicastConfig {
     // Inbound / outbound
     pub(crate) direction: TransportLinkUnicastDirection,
@@ -39,7 +39,7 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) reliability: Option<Reliability>,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub(crate) struct TransportLinkUnicast {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
@@ -308,9 +308,8 @@ impl MaybeOpenAck {
     }
 }
 
-#[derive(PartialEq, Eq)]
 pub(crate) struct LinkUnicastWithOpenAck {
-    link: TransportLinkUnicast,
+    pub(crate) link: TransportLinkUnicast,
     ack: Option<OpenAck>,
 }
 

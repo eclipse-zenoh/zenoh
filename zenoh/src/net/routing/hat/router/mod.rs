@@ -21,6 +21,7 @@ use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
+    mem,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -42,7 +43,6 @@ use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
-    network::{shared_nodes, Network},
     pubsub::{pubsub_linkstate_change, pubsub_remove_node, undeclare_simple_subscription},
     queries::{queries_linkstate_change, queries_remove_node, undeclare_simple_queryable},
 };
@@ -55,7 +55,11 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::linkstate::LinkStateList,
+    protocol::{
+        linkstate::{link_weights_from_config, LinkEdgeWeight, LinkStateList},
+        network::{shared_nodes, Network},
+        PEERS_NET_NAME, ROUTERS_NET_NAME,
+    },
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
@@ -64,7 +68,6 @@ use crate::net::{
 };
 
 mod interests;
-mod network;
 mod pubsub;
 mod queries;
 mod token;
@@ -115,7 +118,7 @@ macro_rules! face_hat_mut {
 }
 use face_hat_mut;
 
-use crate::net::common::AutoConnect;
+use crate::net::{common::AutoConnect, protocol::network::SuccessorEntry};
 
 struct TreesComputationWorker {
     _task: TerminatableTask,
@@ -226,7 +229,9 @@ impl HatTables {
             .as_ref()
             .unwrap()
             .get_links(peer)
-            .iter()
+            .map(|h| h.keys())
+            .into_iter()
+            .flatten()
             .filter(move |nid| {
                 if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
                     node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
@@ -271,9 +276,12 @@ impl HatTables {
     }
 
     #[inline]
-    fn failover_brokering_to(source_links: &[ZenohIdProto], dest: ZenohIdProto) -> bool {
+    fn failover_brokering_to(
+        source_links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
+        dest: &ZenohIdProto,
+    ) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
-        !source_links.is_empty() && !source_links.contains(&dest)
+        !source_links.is_empty() && !source_links.contains_key(dest)
     }
 
     #[inline]
@@ -283,8 +291,10 @@ impl HatTables {
                 .linkstatepeers_net
                 .as_ref()
                 .map(|net| {
-                    let links = net.get_links(peer1);
-                    let res = HatTables::failover_brokering_to(links, peer2);
+                    let res = match net.get_links(peer1) {
+                        Some(links) => HatTables::failover_brokering_to(links, &peer2),
+                        None => false,
+                    };
                     tracing::trace!("failover_brokering {} {} : {}", peer1, peer2, res);
                     res
                 })
@@ -329,11 +339,23 @@ impl HatBaseTrait for HatCode {
             unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
+        let router_link_weights = config
+            .routing()
+            .router()
+            .linkstate()
+            .transport_weights()
+            .clone();
+        let peer_link_weights = config
+            .routing()
+            .peer()
+            .linkstate()
+            .transport_weights()
+            .clone();
         drop(config_guard);
 
         if router_full_linkstate | gossip {
             hat_mut!(tables).routers_net = Some(Network::new(
-                "[Routers network]".to_string(),
+                ROUTERS_NET_NAME.to_string(),
                 tables.zid,
                 runtime.clone(),
                 router_full_linkstate,
@@ -342,11 +364,12 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
+                link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
             ));
         }
         if peer_full_linkstate | gossip {
             hat_mut!(tables).linkstatepeers_net = Some(Network::new(
-                "[Peers network]".to_string(),
+                PEERS_NET_NAME.to_string(),
                 tables.zid,
                 runtime,
                 peer_full_linkstate,
@@ -355,6 +378,7 @@ impl HatBaseTrait for HatCode {
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
+                link_weights_from_config(peer_link_weights, PEERS_NET_NAME)?,
             ));
         }
         if router_full_linkstate && peer_full_linkstate {
@@ -617,12 +641,12 @@ impl HatBaseTrait for HatCode {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        oam: Oam,
+        oam: &mut Oam,
         transport: &TransportUnicast,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
-            if let ZExtBody::ZBuf(buf) = oam.body {
+            if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
                 if let Ok(zid) = transport.get_zid() {
                     use zenoh_buffers::reader::HasReader;
                     use zenoh_codec::RCodec;
@@ -820,6 +844,78 @@ impl HatBaseTrait for HatCode {
                 .unwrap_or_else(|| "graph {}".to_string()),
             _ => "graph {}".to_string(),
         }
+    }
+
+    fn update_from_config(
+        &self,
+        tables: &mut Tables,
+        tables_ref: &Arc<TablesLock>,
+        runtime: &Runtime,
+    ) -> ZResult<()> {
+        let config = runtime.config().lock();
+        let router_link_weights = link_weights_from_config(
+            config
+                .0
+                .routing()
+                .router()
+                .linkstate()
+                .transport_weights()
+                .clone(),
+            ROUTERS_NET_NAME,
+        )?;
+        let peer_link_weights = link_weights_from_config(
+            config
+                .0
+                .routing()
+                .peer()
+                .linkstate()
+                .transport_weights()
+                .clone(),
+            PEERS_NET_NAME,
+        )?;
+        drop(config);
+        if let Some(net) = hat_mut!(tables).routers_net.as_mut() {
+            if net.update_link_weights(router_link_weights) {
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
+            }
+        }
+        if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
+            if net.update_link_weights(peer_link_weights) {
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
+            }
+        }
+        Ok(())
+    }
+
+    fn links_info(
+        &self,
+        tables: &Tables,
+    ) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
+        let mut out = HashMap::new();
+        if let Some(net) = &hat!(tables).routers_net {
+            out.extend(net.links_info());
+        }
+        if let Some(net) = &hat!(tables).linkstatepeers_net {
+            out.extend(net.links_info());
+        }
+        out
+    }
+
+    fn route_successor(
+        &self,
+        tables: &Tables,
+        src: ZenohIdProto,
+        dst: ZenohIdProto,
+    ) -> Option<ZenohIdProto> {
+        hat!(tables).routers_net.as_ref()?.route_successor(src, dst)
+    }
+
+    fn route_successors(&self, tables: &Tables) -> Vec<SuccessorEntry> {
+        hat!(tables)
+            .routers_net
+            .as_ref()
+            .map(|net| net.route_successors())
+            .unwrap_or_default()
     }
 }
 

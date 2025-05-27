@@ -46,7 +46,7 @@ hashbrown = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
-ahash = { workspace = true }
+ahash = { workspace = true, default-features = true }
 criterion = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true, features = ["default"] }

@@ -13,20 +13,24 @@
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
+    mem,
     sync::{Arc, Mutex},
 };
 
+use itertools::Itertools;
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
+use zenoh_keyexpr::keyexpr;
+use zenoh_link::Link;
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
+use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
-use zenoh_plugin_trait::{PluginControl, PluginDiff, PluginStatus};
-#[cfg(feature = "plugins")]
-use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, ZenohIdProto, EMPTY_EXPR_ID},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
@@ -35,10 +39,12 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{routing::dispatcher::face::Face, Runtime};
-#[cfg(feature = "plugins")]
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
 use crate::{
     api::{
@@ -94,7 +100,7 @@ impl ConfigValidator for AdminSpace {
 }
 
 impl AdminSpace {
-    #[cfg(feature = "plugins")]
+    #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
@@ -202,6 +208,14 @@ impl AdminSpace {
                 .unwrap(),
             Arc::new(queriers_data),
         );
+        if runtime.state.whatami == WhatAmI::Router {
+            handlers.insert(
+                format!("@/{zid_str}/{whatami_str}/route/successor/**")
+                    .try_into()
+                    .unwrap(),
+                Arc::new(route_successor),
+            );
+        }
 
         #[cfg(feature = "plugins")]
         handlers.insert(
@@ -219,7 +233,7 @@ impl AdminSpace {
             Arc::new(plugins_status),
         );
 
-        #[cfg(feature = "plugins")]
+        #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
         let mut active_plugins = runtime
             .plugins_manager()
             .started_plugins_iter()
@@ -316,7 +330,7 @@ impl AdminSpace {
         let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.send_declare(Declare {
+        primitives.send_declare(&mut Declare {
             interest_id: None,
 
             ext_qos: ext::QoSType::DECLARE,
@@ -329,7 +343,7 @@ impl AdminSpace {
             }),
         });
 
-        primitives.send_declare(Declare {
+        primitives.send_declare(&mut Declare {
             interest_id: None,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
@@ -359,13 +373,13 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn send_interest(&self, msg: Interest) {
+    fn send_interest(&self, msg: &mut Interest) {
         tracing::trace!("Recv interest {:?}", msg);
     }
 
-    fn send_declare(&self, msg: Declare) {
+    fn send_declare(&self, msg: &mut Declare) {
         tracing::trace!("Recv declare {:?}", msg);
-        if let DeclareBody::DeclareKeyExpr(m) = msg.body {
+        if let DeclareBody::DeclareKeyExpr(m) = &msg.body {
             match self.key_expr_to_string(&m.wire_expr) {
                 Ok(s) => {
                     zlock!(self.mappings).insert(m.id, s.into());
@@ -375,7 +389,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_push(&self, msg: Push, _reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         {
             let conf = &self.context.runtime.state.config.lock().0;
@@ -392,7 +406,7 @@ impl Primitives for AdminSpace {
             "@/{}/{}/config/",
             self.context.runtime.state.zid, self.context.runtime.state.whatami,
         )) {
-            match msg.payload {
+            match &msg.payload {
                 PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
                         tracing::trace!(
@@ -433,9 +447,9 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_request(&self, msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
-        match msg.payload {
+        match &mut msg.payload {
             RequestBody::Query(query) => {
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
@@ -445,7 +459,7 @@ impl Primitives for AdminSpace {
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
                         msg.wire_expr
                     );
-                        primitives.send_response_final(ResponseFinal {
+                        primitives.send_response_final(&mut ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
@@ -458,7 +472,7 @@ impl Primitives for AdminSpace {
                     Ok(key_expr) => key_expr.into_owned(),
                     Err(e) => {
                         tracing::error!("Unknown KeyExpr: {}", e);
-                        primitives.send_response_final(ResponseFinal {
+                        primitives.send_response_final(&mut ResponseFinal {
                             rid: msg.id,
                             ext_qos: ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
@@ -471,16 +485,15 @@ impl Primitives for AdminSpace {
                 let query = Query {
                     inner: Arc::new(QueryInner {
                         key_expr: key_expr.clone(),
-                        parameters: query.parameters.into(),
+                        parameters: mem::take(&mut query.parameters).into(),
                         qid: msg.id,
                         zid: zid.into(),
                         primitives,
                     }),
                     eid: self.queryable_id,
-                    value: query
-                        .ext_body
+                    value: mem::take(&mut query.ext_body)
                         .map(|b| (b.payload.into(), b.encoding.into())),
-                    attachment: query.ext_attachment.map(Into::into),
+                    attachment: query.ext_attachment.take().map(Into::into),
                 };
 
                 for (key, handler) in &self.handlers {
@@ -492,11 +505,11 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_response(&self, msg: Response) {
+    fn send_response(&self, msg: &mut Response) {
         trace!("recv Response {:?}", msg);
     }
 
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
     }
 
@@ -511,32 +524,32 @@ impl Primitives for AdminSpace {
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
     #[inline]
-    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<Interest>) {
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<&mut Interest>) {
         (self as &dyn Primitives).send_interest(ctx.msg)
     }
 
     #[inline]
-    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<&mut Declare>) {
         (self as &dyn Primitives).send_declare(ctx.msg)
     }
 
     #[inline]
-    fn send_push(&self, msg: Push, reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         (self as &dyn Primitives).send_push(msg, reliability)
     }
 
     #[inline]
-    fn send_request(&self, msg: Request) {
+    fn send_request(&self, msg: &mut Request) {
         (self as &dyn Primitives).send_request(msg)
     }
 
     #[inline]
-    fn send_response(&self, msg: Response) {
+    fn send_response(&self, msg: &mut Response) {
         (self as &dyn Primitives).send_response(msg)
     }
 
     #[inline]
-    fn send_response_final(&self, msg: ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
         (self as &dyn Primitives).send_response_final(msg)
     }
 
@@ -554,6 +567,21 @@ fn local_data(context: &AdminContext, query: Query) {
     .unwrap();
 
     let transport_mgr = context.runtime.manager().clone();
+
+    #[cfg(feature = "stats")]
+    let export_stats = query
+        .parameters()
+        .iter()
+        .any(|(k, v)| k == "_stats" && v != "false");
+    #[cfg(feature = "stats")]
+    let insert_stats = |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
+        if export_stats {
+            json.as_object_mut()
+                .unwrap()
+                .insert("stats".into(), json!(stats.map(|s| s.report())));
+        }
+        json
+    };
 
     // plugins info
     #[cfg(feature = "plugins")]
@@ -574,32 +602,37 @@ fn local_data(context: &AdminContext, query: Query) {
         .map(|locator| json!(locator.as_str()))
         .collect();
 
+    let links_info = context.runtime.get_links_info();
     // transports info
     let transport_to_json = |transport: &TransportUnicast| {
-        #[allow(unused_mut)]
-        let mut json = json!({
+        let link_to_json = |link: &Link| {
+            json!({
+                "src": link.src.to_string(),
+                "dst": link.dst.to_string()
+            })
+        };
+        #[cfg(not(feature = "stats"))]
+        let links = transport
+            .get_links()
+            .unwrap_or_default()
+            .iter()
+            .map(link_to_json)
+            .collect_vec();
+        #[cfg(feature = "stats")]
+        let links = transport
+            .get_link_stats()
+            .unwrap_or_default()
+            .iter()
+            .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats)))
+            .collect_vec();
+        let json = json!({
             "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
-            "links": transport.get_links().map_or_else(
-                |_| Vec::new(),
-                |links| links.iter().map(|link| link.dst.to_string()).collect()
-            ),
+            "links": links,
+            "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
         });
         #[cfg(feature = "stats")]
-        {
-            let stats = query
-                .parameters()
-                .iter()
-                .any(|(k, v)| k == "_stats" && v != "false");
-            if stats {
-                json.as_object_mut().unwrap().insert(
-                    "stats".to_string(),
-                    transport
-                        .get_stats()
-                        .map_or_else(|_| json!({}), |p| json!(p.report())),
-                );
-            }
-        }
+        let json = insert_stats(json, transport.get_stats().ok().as_ref());
         json
     };
     let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
@@ -608,8 +641,7 @@ fn local_data(context: &AdminContext, query: Query) {
         .map(transport_to_json)
         .collect();
 
-    #[allow(unused_mut)]
-    let mut json = json!({
+    let json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,
         "metadata": context.runtime.config().lock().0.metadata(),
@@ -617,20 +649,8 @@ fn local_data(context: &AdminContext, query: Query) {
         "sessions": transports,
         "plugins": plugins,
     });
-
     #[cfg(feature = "stats")]
-    {
-        let stats = query
-            .parameters()
-            .iter()
-            .any(|(k, v)| k == "_stats" && v != "false");
-        if stats {
-            json.as_object_mut().unwrap().insert(
-                "stats".to_string(),
-                json!(transport_mgr.get_stats().report()),
-            );
-        }
-    }
+    let json = insert_stats(json, Some(&transport_mgr.get_stats()));
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
     let payload = match serde_json::to_vec(&json) {
@@ -814,6 +834,46 @@ fn queriers_data(context: &AdminContext, query: Query) {
             {
                 tracing::error!("Error sending AdminSpace reply: {:?}", e);
             }
+        }
+    }
+}
+
+fn route_successor(context: &AdminContext, query: Query) {
+    let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
+        if let Err(e) = query
+            .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
+            .encoding(Encoding::APPLICATION_JSON)
+            .wait()
+        {
+            tracing::error!("Error sending AdminSpace reply: {:?}", e);
+        }
+    };
+    let prefix = format!("@/{}/router/route/successor", context.runtime.zid());
+    let router = context.runtime.router();
+    let tables = zread!(router.tables.tables);
+    // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
+
+    let suffix = query.key_expr().as_str().strip_prefix(&prefix);
+    if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
+        if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
+            if let Some(successor) = tables.hat_code.route_successor(&tables, src_zid, dst_zid) {
+                reply(query.key_expr(), successor);
+                return;
+            }
+        }
+    }
+    // Reply with every successor suffix matching the keyexpr.
+    let successors = tables.hat_code.route_successors(&tables);
+    drop(tables);
+    for entry in successors.iter() {
+        let keyexpr = KeyExpr::new(format!(
+            "{prefix}/src/{src}/dst/{dst}",
+            src = entry.source,
+            dst = entry.destination
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&keyexpr) {
+            reply(&keyexpr, entry.successor);
         }
     }
 }

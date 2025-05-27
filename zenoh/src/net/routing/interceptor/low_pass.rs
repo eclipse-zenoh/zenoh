@@ -18,7 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{collections::HashSet, iter, sync::Arc};
+use std::{any::Any, collections::HashSet, iter, sync::Arc};
 
 use ahash::HashMap;
 use itertools::Itertools;
@@ -30,10 +30,12 @@ use zenoh_keyexpr::{
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
 };
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push, Request, Response},
+    network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
     zenoh::{PushBody, Reply, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
@@ -188,6 +190,8 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         self.state.clone(),
                         subject_ids.clone(),
                         InterceptorFlow::Ingress,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap_or_default(),
                     )) as IngressInterceptor
                 }),
                 self.state.interface_enabled.egress.then(|| {
@@ -195,6 +199,8 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         self.state.clone(),
                         subject_ids,
                         InterceptorFlow::Egress,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap_or_default(),
                     )) as EgressInterceptor
                 }),
             );
@@ -219,22 +225,31 @@ pub struct LowPassInterceptor {
     subjects: Arc<Vec<usize>>,
     // NOTE: memory usage could be optimized by replacing flow with a PhantomData<T>
     flow: InterceptorFlow,
+    #[cfg(feature = "stats")]
+    stats: Arc<TransportStats>,
 }
 
 impl LowPassInterceptor {
-    fn new(inner: Arc<LowPassFilter>, subjects: Arc<Vec<usize>>, flow: InterceptorFlow) -> Self {
+    fn new(
+        inner: Arc<LowPassFilter>,
+        subjects: Arc<Vec<usize>>,
+        flow: InterceptorFlow,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    ) -> Self {
         Self {
             inner,
             subjects,
             flow,
+            #[cfg(feature = "stats")]
+            stats,
         }
     }
 
     fn message_passes_filters(
         &self,
-        ctx: &RoutingContext<NetworkMessage>,
+        ctx: &RoutingContext<NetworkMessageMut>,
         cache: Option<&Cache>,
-    ) -> bool {
+    ) -> Result<(), usize> {
         let payload_size: usize;
         let attachment_size: usize;
         let message_type: LowPassFilterMessage;
@@ -243,7 +258,7 @@ impl LowPassInterceptor {
         let msg = &ctx.msg;
 
         match &msg.body {
-            NetworkBody::Request(Request {
+            NetworkBodyMut::Request(Request {
                 payload: RequestBody::Query(query),
                 ..
             }) => {
@@ -260,7 +275,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.query);
             }
-            NetworkBody::Response(Response {
+            NetworkBodyMut::Response(Response {
                 payload:
                     ResponseBody::Reply(Reply {
                         payload: PushBody::Put(put),
@@ -277,7 +292,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::Response(Response {
+            NetworkBodyMut::Response(Response {
                 payload:
                     ResponseBody::Reply(Reply {
                         payload: PushBody::Del(delete),
@@ -294,7 +309,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(put),
                 ..
             }) => {
@@ -307,7 +322,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.put);
             }
-            NetworkBody::Push(Push {
+            NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(delete),
                 ..
             }) => {
@@ -320,7 +335,7 @@ impl LowPassInterceptor {
                     .unwrap_or(0);
                 max_allowed_size = cache.map(|c| c.delete);
             }
-            NetworkBody::Response(Response {
+            NetworkBodyMut::Response(Response {
                 payload: ResponseBody::Err(zenoh_protocol::zenoh::Err { payload, .. }),
                 ..
             }) => {
@@ -329,28 +344,28 @@ impl LowPassInterceptor {
                 attachment_size = 0;
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBody::ResponseFinal(_) => return true,
-            NetworkBody::Interest(_) => return true,
-            NetworkBody::Declare(_) => return true,
-            NetworkBody::OAM(_) => return true,
+            NetworkBodyMut::ResponseFinal(_) => return Ok(()),
+            NetworkBodyMut::Interest(_) => return Ok(()),
+            NetworkBodyMut::Declare(_) => return Ok(()),
+            NetworkBodyMut::OAM(_) => return Ok(()),
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
-            None => match ctx.full_expr().and_then(|e| keyexpr::new(e).ok()) {
+            None => match ctx.full_keyexpr() {
                 Some(ke) => self.get_max_allowed_message_size(message_type, ke),
                 None => 0,
             },
         };
         match payload_size.checked_add(attachment_size) {
-            Some(msg_size) => msg_size <= max_allowed_size,
-            None => false,
+            Some(msg_size) => (msg_size <= max_allowed_size).then_some(()).ok_or(msg_size),
+            None => Err(usize::MAX),
         }
     }
 
     fn get_max_allowed_message_size(
         &self,
         message: LowPassFilterMessage,
-        key_expr: &zenoh_keyexpr::keyexpr,
+        key_expr: &keyexpr,
     ) -> usize {
         match self
             .subjects
@@ -385,10 +400,7 @@ struct Cache {
 }
 
 impl InterceptorTrait for LowPassInterceptor {
-    fn compute_keyexpr_cache(
-        &self,
-        key_expr: &crate::key_expr::KeyExpr<'_>,
-    ) -> Option<Box<dyn std::any::Any + Send + Sync>> {
+    fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(Cache {
             put: self.get_max_allowed_message_size(LowPassFilterMessage::Put, key_expr),
             delete: self.get_max_allowed_message_size(LowPassFilterMessage::Delete, key_expr),
@@ -399,12 +411,29 @@ impl InterceptorTrait for LowPassInterceptor {
 
     fn intercept(
         &self,
-        ctx: RoutingContext<NetworkMessage>,
+        ctx: &mut RoutingContext<NetworkMessageMut>,
         cache: Option<&Box<dyn std::any::Any + Send + Sync>>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
+    ) -> bool {
         let cache = cache.and_then(|i| i.downcast_ref::<Cache>());
 
-        self.message_passes_filters(&ctx, cache).then_some(ctx)
+        match self.message_passes_filters(ctx, cache) {
+            Ok(_) => true,
+            #[allow(unused_variables)] // only used for stats
+            Err(msg_size) => {
+                #[cfg(feature = "stats")]
+                match self.flow {
+                    InterceptorFlow::Egress => {
+                        self.stats.inc_tx_low_pass_dropped_bytes(msg_size);
+                        self.stats.inc_tx_low_pass_dropped_msgs(1);
+                    }
+                    InterceptorFlow::Ingress => {
+                        self.stats.inc_rx_low_pass_dropped_bytes(msg_size);
+                        self.stats.inc_rx_low_pass_dropped_msgs(1);
+                    }
+                }
+                false
+            }
+        }
     }
 }
 

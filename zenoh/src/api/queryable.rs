@@ -74,7 +74,7 @@ impl QueryInner {
 
 impl Drop for QueryInner {
     fn drop(&mut self) {
-        self.primitives.send_response_final(ResponseFinal {
+        self.primitives.send_response_final(&mut ResponseFinal {
             rid: self.qid,
             ext_qos: response::ext::QoSType::RESPONSE_FINAL,
             ext_tstamp: None,
@@ -289,7 +289,7 @@ impl Query {
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.into();
-        self.inner.primitives.send_response(Response {
+        self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
@@ -351,6 +351,7 @@ pub(crate) struct QueryableInner {
     pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
+    pub(crate) key_expr: KeyExpr<'static>,
 }
 
 /// A [`Resolvable`] returned when undeclaring a queryable.
@@ -516,6 +517,12 @@ impl<Handler> Queryable<Handler> {
     #[zenoh_macros::internal]
     pub fn set_background(&mut self, background: bool) {
         self.inner.undeclare_on_drop = !background;
+    }
+
+    /// Returns the [`KeyExpr`] this queryable responds to.
+    #[inline]
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        &self.inner.key_expr
     }
 }
 

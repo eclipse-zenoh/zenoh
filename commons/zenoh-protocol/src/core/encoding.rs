@@ -25,6 +25,7 @@ pub type EncodingId = u16;
 /// Nevertheless, it is worth highlighting that Zenoh still provides a default mapping as part
 /// of the API as per user convenience. That mapping has no impact on the Zenoh protocol definition.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Hash))]
 pub struct Encoding {
     pub id: EncodingId,
     pub schema: Option<ZSlice>,

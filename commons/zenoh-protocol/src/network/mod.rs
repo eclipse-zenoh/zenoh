@@ -30,7 +30,7 @@ pub use push::Push;
 pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
-use crate::core::{CongestionControl, Priority, Reliability};
+use crate::core::{CongestionControl, Priority, Reliability, WireExpr};
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -80,12 +80,178 @@ pub enum NetworkBody {
     OAM(Oam),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum NetworkBodyRef<'a> {
+    Push(&'a Push),
+    Request(&'a Request),
+    Response(&'a Response),
+    ResponseFinal(&'a ResponseFinal),
+    Interest(&'a Interest),
+    Declare(&'a Declare),
+    OAM(&'a Oam),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum NetworkBodyMut<'a> {
+    Push(&'a mut Push),
+    Request(&'a mut Request),
+    Response(&'a mut Response),
+    ResponseFinal(&'a mut ResponseFinal),
+    Interest(&'a mut Interest),
+    Declare(&'a mut Declare),
+    OAM(&'a mut Oam),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkMessage {
     pub body: NetworkBody,
     pub reliability: Reliability,
-    #[cfg(feature = "stats")]
-    pub size: Option<core::num::NonZeroUsize>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct NetworkMessageRef<'a> {
+    pub body: NetworkBodyRef<'a>,
+    pub reliability: Reliability,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct NetworkMessageMut<'a> {
+    pub body: NetworkBodyMut<'a>,
+    pub reliability: Reliability,
+}
+
+pub trait NetworkMessageExt {
+    #[doc(hidden)]
+    fn body(&self) -> NetworkBodyRef;
+    #[doc(hidden)]
+    fn reliability(&self) -> Reliability;
+
+    #[inline]
+    fn is_reliable(&self) -> bool {
+        self.reliability() == Reliability::Reliable
+    }
+
+    #[inline]
+    fn is_express(&self) -> bool {
+        match self.body() {
+            NetworkBodyRef::Push(msg) => msg.ext_qos.is_express(),
+            NetworkBodyRef::Request(msg) => msg.ext_qos.is_express(),
+            NetworkBodyRef::Response(msg) => msg.ext_qos.is_express(),
+            NetworkBodyRef::ResponseFinal(msg) => msg.ext_qos.is_express(),
+            NetworkBodyRef::Interest(msg) => msg.ext_qos.is_express(),
+            NetworkBodyRef::Declare(msg) => msg.ext_qos.is_express(),
+            NetworkBodyRef::OAM(msg) => msg.ext_qos.is_express(),
+        }
+    }
+
+    #[inline]
+    fn is_droppable(&self) -> bool {
+        if !self.is_reliable() {
+            return true;
+        }
+
+        let cc = match self.body() {
+            NetworkBodyRef::Push(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Request(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Response(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Interest(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Declare(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::OAM(msg) => msg.ext_qos.get_congestion_control(),
+        };
+
+        cc == CongestionControl::Drop
+    }
+
+    #[inline]
+    fn priority(&self) -> Priority {
+        match self.body() {
+            NetworkBodyRef::Push(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::Request(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::Response(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::ResponseFinal(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::Interest(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::Declare(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::OAM(msg) => msg.ext_qos.get_priority(),
+        }
+    }
+
+    #[inline]
+    fn wire_expr(&self) -> Option<&WireExpr> {
+        match &self.body() {
+            NetworkBodyRef::Push(m) => Some(&m.wire_expr),
+            NetworkBodyRef::Request(m) => Some(&m.wire_expr),
+            NetworkBodyRef::Response(m) => Some(&m.wire_expr),
+            NetworkBodyRef::ResponseFinal(_) => None,
+            NetworkBodyRef::Interest(m) => m.wire_expr.as_ref(),
+            NetworkBodyRef::Declare(m) => match &m.body {
+                DeclareBody::DeclareKeyExpr(m) => Some(&m.wire_expr),
+                DeclareBody::UndeclareKeyExpr(_) => None,
+                DeclareBody::DeclareSubscriber(m) => Some(&m.wire_expr),
+                DeclareBody::UndeclareSubscriber(m) => Some(&m.ext_wire_expr.wire_expr),
+                DeclareBody::DeclareQueryable(m) => Some(&m.wire_expr),
+                DeclareBody::UndeclareQueryable(m) => Some(&m.ext_wire_expr.wire_expr),
+                DeclareBody::DeclareToken(m) => Some(&m.wire_expr),
+                DeclareBody::UndeclareToken(m) => Some(&m.ext_wire_expr.wire_expr),
+                DeclareBody::DeclareFinal(_) => None,
+            },
+            NetworkBodyRef::OAM(_) => None,
+        }
+    }
+
+    #[inline]
+    fn as_ref(&self) -> NetworkMessageRef {
+        NetworkMessageRef {
+            body: self.body(),
+            reliability: self.reliability(),
+        }
+    }
+}
+
+impl NetworkMessageExt for NetworkMessage {
+    fn body(&self) -> NetworkBodyRef {
+        match &self.body {
+            NetworkBody::Push(body) => NetworkBodyRef::Push(body),
+            NetworkBody::Request(body) => NetworkBodyRef::Request(body),
+            NetworkBody::Response(body) => NetworkBodyRef::Response(body),
+            NetworkBody::ResponseFinal(body) => NetworkBodyRef::ResponseFinal(body),
+            NetworkBody::Interest(body) => NetworkBodyRef::Interest(body),
+            NetworkBody::Declare(body) => NetworkBodyRef::Declare(body),
+            NetworkBody::OAM(body) => NetworkBodyRef::OAM(body),
+        }
+    }
+
+    fn reliability(&self) -> Reliability {
+        self.reliability
+    }
+}
+
+impl NetworkMessageExt for NetworkMessageRef<'_> {
+    fn body(&self) -> NetworkBodyRef {
+        self.body
+    }
+
+    fn reliability(&self) -> Reliability {
+        self.reliability
+    }
+}
+
+impl NetworkMessageExt for NetworkMessageMut<'_> {
+    fn body(&self) -> NetworkBodyRef {
+        match &self.body {
+            NetworkBodyMut::Push(body) => NetworkBodyRef::Push(body),
+            NetworkBodyMut::Request(body) => NetworkBodyRef::Request(body),
+            NetworkBodyMut::Response(body) => NetworkBodyRef::Response(body),
+            NetworkBodyMut::ResponseFinal(body) => NetworkBodyRef::ResponseFinal(body),
+            NetworkBodyMut::Interest(body) => NetworkBodyRef::Interest(body),
+            NetworkBodyMut::Declare(body) => NetworkBodyRef::Declare(body),
+            NetworkBodyMut::OAM(body) => NetworkBodyRef::OAM(body),
+        }
+    }
+
+    fn reliability(&self) -> Reliability {
+        self.reliability
+    }
 }
 
 impl NetworkMessage {
@@ -109,68 +275,65 @@ impl NetworkMessage {
     }
 
     #[inline]
-    pub fn is_reliable(&self) -> bool {
-        self.reliability == Reliability::Reliable
-    }
-
-    #[inline]
-    pub fn is_express(&self) -> bool {
-        match &self.body {
-            NetworkBody::Push(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Request(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Response(msg) => msg.ext_qos.is_express(),
-            NetworkBody::ResponseFinal(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Interest(msg) => msg.ext_qos.is_express(),
-            NetworkBody::Declare(msg) => msg.ext_qos.is_express(),
-            NetworkBody::OAM(msg) => msg.ext_qos.is_express(),
-        }
-    }
-
-    #[inline]
-    pub fn is_droppable(&self) -> bool {
-        if !self.is_reliable() {
-            return true;
-        }
-
-        let cc = match &self.body {
-            NetworkBody::Push(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::Request(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::Response(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::Interest(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::Declare(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBody::OAM(msg) => msg.ext_qos.get_congestion_control(),
+    pub fn as_mut(&mut self) -> NetworkMessageMut {
+        let body = match &mut self.body {
+            NetworkBody::Push(body) => NetworkBodyMut::Push(body),
+            NetworkBody::Request(body) => NetworkBodyMut::Request(body),
+            NetworkBody::Response(body) => NetworkBodyMut::Response(body),
+            NetworkBody::ResponseFinal(body) => NetworkBodyMut::ResponseFinal(body),
+            NetworkBody::Interest(body) => NetworkBodyMut::Interest(body),
+            NetworkBody::Declare(body) => NetworkBodyMut::Declare(body),
+            NetworkBody::OAM(body) => NetworkBodyMut::OAM(body),
         };
-
-        cc == CongestionControl::Drop
+        NetworkMessageMut {
+            body,
+            reliability: self.reliability,
+        }
     }
+}
 
+impl NetworkMessageMut<'_> {
     #[inline]
-    pub fn priority(&self) -> Priority {
+    pub fn as_mut(&mut self) -> NetworkMessageMut {
+        let body = match &mut self.body {
+            NetworkBodyMut::Push(body) => NetworkBodyMut::Push(body),
+            NetworkBodyMut::Request(body) => NetworkBodyMut::Request(body),
+            NetworkBodyMut::Response(body) => NetworkBodyMut::Response(body),
+            NetworkBodyMut::ResponseFinal(body) => NetworkBodyMut::ResponseFinal(body),
+            NetworkBodyMut::Interest(body) => NetworkBodyMut::Interest(body),
+            NetworkBodyMut::Declare(body) => NetworkBodyMut::Declare(body),
+            NetworkBodyMut::OAM(body) => NetworkBodyMut::OAM(body),
+        };
+        NetworkMessageMut {
+            body,
+            reliability: self.reliability,
+        }
+    }
+}
+
+impl fmt::Display for NetworkMessageRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.body {
-            NetworkBody::Push(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::Request(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::Response(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::ResponseFinal(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::Interest(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::Declare(msg) => msg.ext_qos.get_priority(),
-            NetworkBody::OAM(msg) => msg.ext_qos.get_priority(),
+            NetworkBodyRef::OAM(_) => write!(f, "OAM"),
+            NetworkBodyRef::Push(_) => write!(f, "Push"),
+            NetworkBodyRef::Request(_) => write!(f, "Request"),
+            NetworkBodyRef::Response(_) => write!(f, "Response"),
+            NetworkBodyRef::ResponseFinal(_) => write!(f, "ResponseFinal"),
+            NetworkBodyRef::Interest(_) => write!(f, "Interest"),
+            NetworkBodyRef::Declare(_) => write!(f, "Declare"),
         }
     }
 }
 
 impl fmt::Display for NetworkMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use NetworkBody::*;
-        match &self.body {
-            OAM(_) => write!(f, "OAM"),
-            Push(_) => write!(f, "Push"),
-            Request(_) => write!(f, "Request"),
-            Response(_) => write!(f, "Response"),
-            ResponseFinal(_) => write!(f, "ResponseFinal"),
-            Interest(_) => write!(f, "Interest"),
-            Declare(_) => write!(f, "Declare"),
-        }
+        self.as_ref().fmt(f)
+    }
+}
+
+impl fmt::Display for NetworkMessageMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.as_ref().fmt(f)
     }
 }
 
@@ -180,8 +343,6 @@ impl From<NetworkBody> for NetworkMessage {
         Self {
             body,
             reliability: Reliability::DEFAULT,
-            #[cfg(feature = "stats")]
-            size: None,
         }
     }
 }
