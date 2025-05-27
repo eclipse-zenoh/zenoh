@@ -11,47 +11,36 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
 
-use zenoh::{key_expr::OwnedNonWildKeyExpr, sample::SampleKind};
-use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
+mod common;
+
+use std::time::Duration;
+
+use zenoh::{internal::ztimeout, key_expr::OwnedNonWildKeyExpr, sample::SampleKind};
 use zenoh_ext::{
     AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt, CacheConfig, HistoryConfig,
     MissDetectionConfig, RecoveryConfig,
 };
 use zenoh_macros::nonwild_ke;
 
+use crate::common::{open_client, open_peer, open_router, TcpForward};
+
+const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_secs(1);
+const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
+
 async fn test_advanced_history_inner(
     pub_ke: &str,
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-
     zenoh_util::init_log_from_env_or("error");
 
-    let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.timestamping
-            .set_enabled(Some(ModeDependentValue::Unique(true)))
-            .unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (1) ZID: {}", s.zid());
-        s
-    };
+    let peer1 = ztimeout!(open_peer()
+        .with("timestamping/enabled", true)
+        .with("namespace", pub_namespace));
 
     let publ = ztimeout!(peer1
         .declare_publisher(pub_ke)
@@ -64,19 +53,9 @@ async fn test_advanced_history_inner(
 
     tokio::time::sleep(SLEEP).await;
 
-    let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (2) ZID: {}", s.zid());
-        s
-    };
+    let peer2 = ztimeout!(open_peer()
+        .connect_to(&peer1)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(peer2
         .declare_subscriber(sub_ke)
@@ -114,20 +93,12 @@ async fn test_advanced_history_inner(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_advanced_history() {
-    test_advanced_history_inner(
-        "test/advanced/history",
-        "test/advanced/history",
-        None,
-        None,
-        "tcp/localhost:27050",
-    )
-    .await;
+    test_advanced_history_inner("test/advanced/history", "test/advanced/history", None, None).await;
     test_advanced_history_inner(
         "test/advanced/history",
         "ns/test/advanced/history",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27051",
     )
     .await;
     test_advanced_history_inner(
@@ -135,7 +106,6 @@ async fn test_advanced_history() {
         "test/advanced/history",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27052",
     )
     .await;
     test_advanced_history_inner(
@@ -143,7 +113,6 @@ async fn test_advanced_history() {
         "test/advanced/history",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27053",
     )
     .await;
 }
@@ -153,58 +122,17 @@ async fn test_advanced_retransmission_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
-
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let mut forward = TcpForward::connect(&router);
+    let client1 = ztimeout!(open_client()
+        .connect_to(&forward)
+        .with("namespace", pub_namespace));
+    let client2 = ztimeout!(open_client()
+        .connect_to(&router)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(client2
         .declare_subscriber(sub_ke)
@@ -227,7 +155,7 @@ async fn test_advanced_retransmission_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    router.close().await.unwrap();
+    forward.disable();
     tokio::time::sleep(SLEEP).await;
 
     ztimeout!(publ.put("2")).unwrap();
@@ -237,18 +165,7 @@ async fn test_advanced_retransmission_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
+    forward.enable();
     tokio::time::sleep(RECONNECT_SLEEP).await;
 
     ztimeout!(publ.put("5")).unwrap();
@@ -288,7 +205,6 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         None,
         None,
-        "tcp/localhost:27054",
     )
     .await;
     test_advanced_retransmission_inner(
@@ -296,7 +212,6 @@ async fn test_advanced_retransmission() {
         "ns/test/advanced/retransmission",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27055",
     )
     .await;
     test_advanced_retransmission_inner(
@@ -304,7 +219,6 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27056",
     )
     .await;
     test_advanced_retransmission_inner(
@@ -312,7 +226,6 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27057",
     )
     .await;
 }
@@ -322,58 +235,17 @@ async fn test_advanced_retransmission_periodic_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
-
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let mut forward = TcpForward::connect(&router);
+    let client1 = ztimeout!(open_client()
+        .connect_to(&forward)
+        .with("namespace", pub_namespace));
+    let client2 = ztimeout!(open_client()
+        .connect_to(&router)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(client2
         .declare_subscriber(sub_ke)
@@ -396,7 +268,7 @@ async fn test_advanced_retransmission_periodic_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    router.close().await.unwrap();
+    forward.disable();
     tokio::time::sleep(SLEEP).await;
 
     ztimeout!(publ.put("2")).unwrap();
@@ -406,18 +278,7 @@ async fn test_advanced_retransmission_periodic_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
+    forward.enable();
     tokio::time::sleep(RECONNECT_SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
@@ -450,7 +311,6 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         None,
         None,
-        "tcp/localhost:27058",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
@@ -458,7 +318,6 @@ async fn test_advanced_retransmission_periodic() {
         "ns/test/advanced/retransmission/periodic",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27059",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
@@ -466,7 +325,6 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27060",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
@@ -474,7 +332,6 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27061",
     )
     .await;
 }
@@ -484,58 +341,17 @@ async fn test_advanced_sample_miss_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
-
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let mut forward = TcpForward::connect(&router);
+    let client1 = ztimeout!(open_client()
+        .connect_to(&forward)
+        .with("namespace", pub_namespace));
+    let client2 = ztimeout!(open_client()
+        .connect_to(&router)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(client2.declare_subscriber(sub_ke).advanced()).unwrap();
     let miss_listener = ztimeout!(sub.sample_miss_listener()).unwrap();
@@ -555,7 +371,7 @@ async fn test_advanced_sample_miss_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    router.close().await.unwrap();
+    forward.disable();
     tokio::time::sleep(SLEEP).await;
 
     ztimeout!(publ.put("2")).unwrap();
@@ -563,18 +379,7 @@ async fn test_advanced_sample_miss_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
+    forward.enable();
     tokio::time::sleep(RECONNECT_SLEEP).await;
 
     ztimeout!(publ.put("3")).unwrap();
@@ -608,7 +413,6 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         None,
         None,
-        "tcp/localhost:27062",
     )
     .await;
     test_advanced_sample_miss_inner(
@@ -616,7 +420,6 @@ async fn test_advanced_sample_miss() {
         "ns/test/advanced/sample_miss",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27063",
     )
     .await;
     test_advanced_sample_miss_inner(
@@ -624,7 +427,6 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27064",
     )
     .await;
     test_advanced_sample_miss_inner(
@@ -632,7 +434,6 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27065",
     )
     .await;
 }
@@ -642,58 +443,17 @@ async fn test_advanced_retransmission_sample_miss_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
-
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let mut forward = TcpForward::connect(&router);
+    let client1 = ztimeout!(open_client()
+        .connect_to(&forward)
+        .with("namespace", pub_namespace));
+    let client2 = ztimeout!(open_client()
+        .connect_to(&router)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(client2
         .declare_subscriber(sub_ke)
@@ -717,7 +477,7 @@ async fn test_advanced_retransmission_sample_miss_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    router.close().await.unwrap();
+    forward.disable();
     tokio::time::sleep(SLEEP).await;
 
     ztimeout!(publ.put("2")).unwrap();
@@ -727,18 +487,7 @@ async fn test_advanced_retransmission_sample_miss_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
+    forward.enable();
     tokio::time::sleep(RECONNECT_SLEEP).await;
 
     ztimeout!(publ.put("5")).unwrap();
@@ -776,7 +525,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         None,
         None,
-        "tcp/localhost:27066",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
@@ -784,7 +532,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "ns/test/advanced/retransmission/sample_miss",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27067",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
@@ -792,7 +539,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27068",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
@@ -800,7 +546,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27069",
     )
     .await;
 }
@@ -810,48 +555,19 @@ async fn test_advanced_late_joiner_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
-
     zenoh_util::init_log_from_env_or("error");
 
-    let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.timestamping
-            .set_enabled(Some(ModeDependentValue::Unique(true)))
-            .unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (1) ZID: {}", s.zid());
-        s
-    };
-
-    let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (2) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let mut forward = TcpForward::connect(&router);
+    forward.disable();
+    let peer1 = ztimeout!(open_peer()
+        .connect_to(&forward)
+        .with("timestamping/enabled", true)
+        .with("namespace", pub_namespace));
+    let peer2 = ztimeout!(open_peer()
+        .connect_to(&router)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(peer2
         .declare_subscriber(sub_ke)
@@ -871,18 +587,7 @@ async fn test_advanced_late_joiner_inner(
     tokio::time::sleep(SLEEP).await;
 
     assert!(sub.try_recv().unwrap().is_none());
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
+    forward.enable();
     tokio::time::sleep(RECONNECT_SLEEP).await;
 
     ztimeout!(publ.put("4")).unwrap();
@@ -922,7 +627,6 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         None,
         None,
-        "tcp/localhost:27070",
     )
     .await;
     test_advanced_late_joiner_inner(
@@ -930,7 +634,6 @@ async fn test_advanced_late_joiner() {
         "ns/test/advanced/late_joiner",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27071",
     )
     .await;
     test_advanced_late_joiner_inner(
@@ -938,7 +641,6 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27072",
     )
     .await;
     test_advanced_late_joiner_inner(
@@ -946,7 +648,6 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27073",
     )
     .await;
 }
@@ -956,59 +657,19 @@ async fn test_advanced_retransmission_heartbeat_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
     const HEARTBEAT_PERIOD: Duration = Duration::from_secs(4);
 
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = pub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        c.namespace = sub_namespace;
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let mut forward = TcpForward::connect(&router);
+    let client1 = ztimeout!(open_client()
+        .connect_to(&forward)
+        .with("namespace", pub_namespace));
+    let client2 = ztimeout!(open_client()
+        .connect_to(&router)
+        .with("namespace", sub_namespace));
 
     let sub = ztimeout!(client2
         .declare_subscriber(sub_ke)
@@ -1031,7 +692,7 @@ async fn test_advanced_retransmission_heartbeat_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    router.close().await.unwrap();
+    forward.disable();
     tokio::time::sleep(SLEEP).await;
 
     ztimeout!(publ.put("2")).unwrap();
@@ -1041,18 +702,7 @@ async fn test_advanced_retransmission_heartbeat_inner(
 
     assert!(sub.try_recv().unwrap().is_none());
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
+    forward.enable();
     tokio::time::sleep(RECONNECT_SLEEP).await;
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
@@ -1085,7 +735,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         None,
         None,
-        "tcp/localhost:27074",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
@@ -1093,7 +742,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "ns/test/advanced/retransmission/heartbeat",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27075",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
@@ -1101,7 +749,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27076",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
@@ -1109,7 +756,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27077",
     )
     .await;
 }

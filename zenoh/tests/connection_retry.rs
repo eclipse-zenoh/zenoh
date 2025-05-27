@@ -13,8 +13,12 @@
 //
 #![cfg(feature = "unstable")]
 
+mod common;
+
 use zenoh::{Config, Wait};
 use zenoh_config::{ConnectionRetryConf, EndPoint, ModeDependent};
+
+use crate::common::open_peer;
 
 #[test]
 fn retry_config_overriding() {
@@ -168,24 +172,17 @@ fn retry_config_infinite_period() {
 #[test]
 #[should_panic(expected = "Can not create a new TCP listener")]
 fn listen_no_retry() {
-    let mut config = Config::default();
-    config
-        .insert_json5("listen/endpoints", r#"["tcp/8.8.8.8:8"]"#)
-        .unwrap();
-
-    config.insert_json5("listen/timeout_ms", "0").unwrap();
-    zenoh::open(config).wait().unwrap();
+    open_peer()
+        .with("listen/endpoints", ["tcp/8.8.8.8:8"])
+        .with("listen/timeout_ms", 0)
+        .wait();
 }
 
 #[test]
 #[should_panic(expected = "value: Elapsed(())")]
 fn listen_with_retry() {
-    let mut config = Config::default();
-    config
-        .insert_json5("listen/endpoints", r#"["tcp/8.8.8.8:8"]"#)
-        .unwrap();
-
-    config.insert_json5("listen/timeout_ms", "1000").unwrap();
-
-    zenoh::open(config).wait().unwrap();
+    open_peer()
+        .with("listen/endpoints", ["tcp/8.8.8.8:8"])
+        .with("listen/timeout_ms", 1000)
+        .wait();
 }

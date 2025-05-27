@@ -11,40 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
 
 use std::time::Duration;
 
 use zenoh::{query::Reply, sample::SampleKind, Session};
 use zenoh_core::ztimeout;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::common::open_peer;
 
-async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
-    let mut config = zenoh_config::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(
-            listen
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config
-        .connect
-        .endpoints
-        .set(
-            connect
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening session");
-    ztimeout!(zenoh::open(config)).unwrap()
-}
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 async fn close_session(session: Session) {
     println!("[  ][01d] Closing session");
@@ -53,7 +29,8 @@ async fn close_session(session: Session) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_events() {
-    let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
+    println!("[  ][01a] Opening session");
+    let session = ztimeout!(open_peer());
     let zid = session.zid();
     let sub1 =
         ztimeout!(session.declare_subscriber(format!("@/{zid}/session/transport/unicast/*")))
@@ -63,7 +40,8 @@ async fn zenoh_events() {
     )
     .unwrap();
 
-    let session2 = open_session(&["tcp/127.0.0.1:18448"], &["tcp/127.0.0.1:18447"]).await;
+    println!("[  ][01a] Opening session");
+    let session2 = ztimeout!(open_peer().connect_to(&session));
     let zid2 = session2.zid();
 
     let sample = ztimeout!(sub1.recv_async());

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
+
 use std::time::Duration;
 
 use zenoh::{
@@ -19,13 +21,15 @@ use zenoh::{
 };
 use zenoh_core::ztimeout;
 
+use crate::common::open_peer;
+
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn qos_pubsub() {
-    let session1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+    let session1 = ztimeout!(open_peer());
+    let session2 = ztimeout!(open_peer());
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("test/qos")
