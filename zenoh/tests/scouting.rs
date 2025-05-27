@@ -14,7 +14,6 @@
 
 #![cfg(feature = "internal_config")]
 
-
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 #[cfg(all(feature = "internal", feature = "unstable"))]
