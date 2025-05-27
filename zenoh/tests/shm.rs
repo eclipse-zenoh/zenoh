@@ -157,13 +157,13 @@ async fn zenoh_shm_unicast() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn zenoh_shm_multicast() {
-    let endpoint = "udp/224.0.0.1:19448";
     // Initiate logging
     zenoh::init_log_from_env_or("error");
     println!("[  ][01a] Opening peer01 session");
-    let peer01 = ztimeout!(open_peer().with("listen/endpoints", [endpoint]));
+    let peer01 = ztimeout!(open_peer().with("listen/endpoints", ["udp/224.0.0.1:0"]));
+    let locator = peer01.info().locators().await[0].clone();
     println!("[  ][02a] Opening peer02 session");
-    let peer02 = ztimeout!(open_peer().with("listen/endpoints", [endpoint]));
+    let peer02 = ztimeout!(open_peer().with("listen/endpoints", [locator]));
 
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
     close_session(peer01, peer02).await;

@@ -53,13 +53,13 @@ async fn open_session_unicast() -> (Session, Session) {
     (peer01, peer02)
 }
 
-async fn open_session_multicast(port: usize) -> (Session, Session) {
-    let endpoint = format!("udp/224.0.0.1:{port}");
+async fn open_session_multicast() -> (Session, Session) {
     // Open the sessions
     println!("[  ][01a] Opening peer01 session");
-    let peer01 = ztimeout!(open_peer().with("listen/endpoints", [&endpoint]));
+    let peer01 = ztimeout!(open_peer().with("listen/endpoints", ["udp/224.0.0.1:0"]));
+    let locator = peer01.info().locators().await[0].clone();
     println!("[  ][02a] Opening peer02 session");
-    let peer02 = ztimeout!(open_peer().with("listen/endpoints", [&endpoint]));
+    let peer02 = ztimeout!(open_peer().with("listen/endpoints", [locator]));
     (peer01, peer02)
 }
 
@@ -314,7 +314,7 @@ async fn zenoh_session_unicast() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
     zenoh::init_log_from_env_or("error");
-    let (peer01, peer02) = open_session_multicast(17448).await;
+    let (peer01, peer02) = open_session_multicast().await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
     close_session(peer01, peer02).await;
 }
