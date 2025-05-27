@@ -29,7 +29,7 @@ const SLEEP: Duration = Duration::from_secs(1);
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn qos_pubsub() {
     let session1 = ztimeout!(open_peer());
-    let session2 = ztimeout!(open_peer());
+    let session2 = ztimeout!(open_peer().connect_to(&session1));
 
     let publisher1 = ztimeout!(session1
         .declare_publisher("test/qos")
@@ -72,37 +72,28 @@ async fn qos_pubsub() {
 async fn qos_pubsub_overwrite_config() {
     use zenoh::{qos::Reliability, sample::Locality};
 
-    let qos_config_overwrite = zenoh::Config::from_json5(
-        r#"
+    let qos_pub_cfg = r#"[
         {
-            qos: {
-                publication: [
-                    {
-                        key_exprs: ["test/qos_overwrite/overwritten", "test/not_applicable/**"],
-                        config: {
-                            congestion_control: "drop",
-                            express: false,
-                            reliability: "best_effort",
-                            allowed_destination: "any",
-                        },
-                    },
-                    {
-                        key_exprs: ["test/not_applicable"],
-                        config: {
-                            congestion_control: "drop",
-                            express: false,
-                            reliability: "best_effort",
-                            allowed_destination: "any",
-                        },
-                    },
-                ]
-            }
-        }
-        "#,
-    )
-    .unwrap();
-    let session1 = ztimeout!(zenoh::open(qos_config_overwrite)).unwrap();
-    let session2 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+            key_exprs: ["test/qos_overwrite/overwritten", "test/not_applicable/**"],
+            config: {
+                congestion_control: "drop",
+                express: false,
+                reliability: "best_effort",
+                allowed_destination: "any",
+            },
+        },
+        {
+            key_exprs: ["test/not_applicable"],
+            config: {
+                congestion_control: "drop",
+                express: false,
+                reliability: "best_effort",
+                allowed_destination: "any",
+            },
+        },
+    ]"#;
+    let session1 = ztimeout!(open_peer().with_json5("qos/publication", qos_pub_cfg));
+    let session2 = ztimeout!(open_peer().connect_to(&session1));
 
     let subscriber = ztimeout!(session2.declare_subscriber("test/qos_overwrite/**")).unwrap();
     tokio::time::sleep(SLEEP).await;
