@@ -138,7 +138,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
 #[tokio::test(flavor = "multi_thread")]
 async fn zenoh_shm_startup_init() {
     // Open the sessions
-    ztimeout!(open_peer().with("transport/shared_memory/mode", "\"init\""));
+    ztimeout!(open_peer().with("transport/shared_memory/mode", "init"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
