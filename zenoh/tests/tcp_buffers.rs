@@ -11,67 +11,40 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
 
-use zenoh::{Config, Wait};
+use zenoh::Wait;
+
+use crate::common::open_peer;
 
 #[test]
 fn buffer_size_config() {
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "transport/link/tcp",
-            r#"
-            {
-                so_sndbuf: 65000,
-                so_rcvbuf: 65000,
-            }
-            "#,
-        )
-        .unwrap();
-
-    config
-        .insert_json5("listen/endpoints", r#"["tcp/[::]:0"]"#)
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+    let tcp_conf = r#"{
+        so_sndbuf: 65000,
+        so_rcvbuf: 65000,
+    }"#;
+    open_peer()
+        .with_json5("transport/link/tcp", tcp_conf)
+        .wait();
 }
 
 #[test]
 fn buffer_size_endpoint() {
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "listen/endpoints",
-            r#"["tcp/[::]:0#so_sndbuf=65000;so_rcvbuf=65000"]"#,
-        )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+    let endpoint = "tcp/[::]:0#so_sndbuf=65000;so_rcvbuf=65000";
+    open_peer().with("listen/endpoints", [endpoint]).wait();
 }
 
 #[test]
 fn buffer_size_endpoint_overwrite() {
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "transport/link/tcp",
-            r#"
-            {
-                so_sndbuf: 0,
-                so_rcvbuf: 0,
-            }
-            "#,
-        )
-        .unwrap();
-
-    config
-        .insert_json5(
-            "listen/endpoints",
-            r#"["tcp/[::]:0#so_sndbuf=65000;so_rcvbuf=65000"]"#,
-        )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+    let tcp_conf = r#"{
+        so_sndbuf: 0,
+        so_rcvbuf: 0,
+    }"#;
+    let endpoint = "tcp/[::]:0#so_sndbuf=65000;so_rcvbuf=65000";
+    open_peer()
+        .with_json5("transport/link/tcp", tcp_conf)
+        .with("listen/endpoints", [endpoint])
+        .wait();
 }
 
 #[cfg(target_os = "macos")]
@@ -88,12 +61,6 @@ fn buffer_size_zero() {
 }
 
 fn listen_zero_buffers() {
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "listen/endpoints",
-            r#"["tcp/[::]:0#so_sndbuf=0;so_rcvbuf=0"]"#,
-        )
-        .unwrap();
-    zenoh::open(config).wait().unwrap();
+    let endpoint = "tcp/[::]:0#so_sndbuf=0;so_rcvbuf=0";
+    open_peer().with("listen/endpoints", [endpoint]).wait();
 }

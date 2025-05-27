@@ -11,13 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
+
 use std::{thread, time::Duration};
 
-use zenoh::{handlers::RingChannel, Config, Wait};
+use zenoh::{handlers::RingChannel, Wait};
+
+use crate::common::open_peer;
 
 #[test]
 fn pubsub_with_ringbuffer() {
-    let zenoh = zenoh::open(Config::default()).wait().unwrap();
+    let zenoh = open_peer().wait();
     let sub = zenoh
         .declare_subscriber("test/ringbuffer")
         .with(RingChannel::new(3))
@@ -42,7 +46,7 @@ fn pubsub_with_ringbuffer() {
 
 #[test]
 fn query_with_ringbuffer() {
-    let zenoh = zenoh::open(Config::default()).wait().unwrap();
+    let zenoh = open_peer().wait();
     let queryable = zenoh
         .declare_queryable("test/ringbuffer_query")
         .with(RingChannel::new(1))

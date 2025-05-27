@@ -11,94 +11,309 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-#![cfg(all(feature = "unstable", feature = "internal_config"))]
+#![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
+
+mod common;
+
 use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
     time::Duration,
 };
 
 use tokio::runtime::Handle;
-use zenoh::{config::WhatAmI, sample::SampleKind, Config, Session};
-use zenoh_core::{zlock, ztimeout};
+use zenoh::{sample::SampleKind, Session};
+use zenoh_core::{zlock, ztimeout, Wait};
+
+use crate::common::{open_client, open_router, TestOpenBuilder};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 const KEY_EXPR: &str = "test/demo";
 const VALUE: &str = "zenoh";
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_acl_config() {
+#[test]
+#[should_panic(expected = "config lists must be provided")]
+fn test_acl_config_missing_list() {
     zenoh::init_log_from_env_or("error");
-    test_acl_config_format(27446).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny"
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
+}
+
+#[test]
+#[should_panic(expected = "Rule id must be unique")]
+fn test_acl_config_repeated_rule_id() {
+    zenoh::init_log_from_env_or("error");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["foo"],
+            },
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["bar"],
+            },
+        ],
+        "subjects": [{id: "all"}],
+        "policies": [
+            {
+                rules: ["r1"],
+                subjects: ["all"],
+            }
+        ],
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
+}
+
+#[test]
+#[should_panic(expected = "Subject id must be unique")]
+fn test_acl_config_repeated_subject_id() {
+    zenoh::init_log_from_env_or("error");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["foo"],
+            },
+        ],
+        "subjects": [
+            {
+                id: "s1",
+                interfaces: ["lo"],
+            },
+            {
+                id: "s1",
+                interfaces: ["lo0"],
+            },
+        ],
+        "policies": [
+            {
+                rules: ["r1"],
+                subjects: ["s1"],
+            }
+        ],
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
+}
+
+#[test]
+#[should_panic(expected = "Policy id must be unique")]
+fn test_acl_config_repeated_policy_id() {
+    zenoh::init_log_from_env_or("error");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["foo"],
+            },
+            {
+                "id": "r2",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["bar"],
+            },
+        ],
+        "subjects": [{id: "all"}],
+        "policies": [
+            {
+                id: "p1",
+                rules: ["r1"],
+                subjects: ["all"],
+            },
+            {
+                id: "p1",
+                rules: ["r2"],
+                subjects: ["all"],
+            }
+        ],
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
+}
+
+#[test]
+#[should_panic(expected = "does not exist in rules list")]
+fn test_acl_config_non_existent_rule_in_policy() {
+    zenoh::init_log_from_env_or("error");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["foo"],
+            },
+            {
+                "id": "r2",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["bar"],
+            },
+        ],
+        "subjects": [{id: "all"}],
+        "policies": [
+            {
+                id: "p1",
+                rules: ["r1"],
+                subjects: ["all"],
+            },
+            {
+                id: "p2",
+                rules: ["NON-EXISTENT"],
+                subjects: ["all"],
+            }
+        ],
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
+}
+
+#[test]
+#[should_panic(expected = "does not exist in subjects list")]
+fn test_acl_config_non_existent_subject_in_policy() {
+    zenoh::init_log_from_env_or("error");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["foo"],
+            },
+            {
+                "id": "r2",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["bar"],
+            },
+        ],
+        "subjects": [{id: "all"}],
+        "policies": [
+            {
+                id: "p1",
+                rules: ["r1"],
+                subjects: ["all"],
+            },
+            {
+                id: "p2",
+                rules: ["r2"],
+                subjects: ["NON-EXISTENT"],
+            }
+        ],
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
+}
+
+#[test]
+#[should_panic(expected = "empty")]
+fn test_acl_config_empty_link_protocols_list() {
+    zenoh::init_log_from_env_or("error");
+
+    // empty link_protocols list
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": ["put"],
+                "key_exprs": ["foo"],
+            },
+        ],
+        "subjects": [
+            {
+                id: "s1",
+                link_protocols: [], // will Err - should not be empty
+            },
+        ],
+        "policies": [
+            {
+                id: "p1",
+                rules: ["r1"],
+                subjects: ["s1"],
+            },
+        ],
+    }"#;
+    open_router().with_json5("access_control", acl_cfg).wait();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_pub_sub() {
     zenoh::init_log_from_env_or("error");
-    test_pub_sub_deny(27447).await;
-    test_pub_sub_allow(27447).await;
-    test_pub_sub_deny_then_allow(27447).await;
-    test_pub_sub_allow_then_deny(27447).await;
+    test_pub_sub_deny().await;
+    test_pub_sub_allow().await;
+    test_pub_sub_deny_then_allow().await;
+    test_pub_sub_allow_then_deny().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_get_queryable() {
     zenoh::init_log_from_env_or("error");
-    test_get_qbl_deny(27448).await;
-    test_get_qbl_allow(27448).await;
-    test_get_qbl_allow_then_deny(27448).await;
-    test_get_qbl_deny_then_allow(27448).await;
+    test_get_qbl_deny().await;
+    test_get_qbl_allow().await;
+    test_get_qbl_allow_then_deny().await;
+    test_get_qbl_deny_then_allow().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_queryable_reply() {
     zenoh::init_log_from_env_or("error");
     // Only test cases not covered by `test_acl_get_queryable`
-    test_reply_deny(27449).await;
-    test_reply_allow_then_deny(27449).await;
+    test_reply_deny().await;
+    test_reply_allow_then_deny().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_liveliness() {
     zenoh::init_log_from_env_or("error");
 
-    test_liveliness_allow(27450).await;
-    test_liveliness_deny(27450).await;
+    test_liveliness_allow().await;
+    test_liveliness_deny().await;
 
-    test_liveliness_allow_deny_token(27450).await;
-    test_liveliness_deny_allow_token(27450).await;
+    test_liveliness_allow_deny_token().await;
+    test_liveliness_deny_allow_token().await;
 
-    test_liveliness_allow_deny_sub(27450).await;
-    test_liveliness_deny_allow_sub(27450).await;
+    test_liveliness_allow_deny_sub().await;
+    test_liveliness_deny_allow_sub().await;
 
-    test_liveliness_allow_deny_query(27450).await;
-    test_liveliness_deny_allow_query(27450).await;
+    test_liveliness_allow_deny_query().await;
+    test_liveliness_deny_allow_query().await;
 }
 
-async fn get_basic_router_config(port: u16) -> Config {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Router)).unwrap();
-    config
-        .listen
-        .endpoints
-        .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config
-}
-
-async fn get_basic_client_config(port: u16) -> Config {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .endpoints
-        .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config
+fn open_router_session(acl_config: &str) -> TestOpenBuilder {
+    println!("Opening router session");
+    open_router().with_json5("access_control", acl_config)
 }
 
 async fn close_router_session(s: Session) {
@@ -106,12 +321,12 @@ async fn close_router_session(s: Session) {
     ztimeout!(s.close()).unwrap();
 }
 
-async fn get_client_sessions(port: u16) -> (Session, Session) {
+async fn open_client_session(router: &Session) -> (Session, Session) {
     println!("Opening client sessions");
-
-    let s01 = ztimeout!(zenoh::open(get_basic_client_config(port).await)).unwrap();
-    let s02 = ztimeout!(zenoh::open(get_basic_client_config(port).await)).unwrap();
-    (s01, s02)
+    tokio::join!(
+        open_client().connect_to(router),
+        open_client().connect_to(router)
+    )
 }
 
 async fn close_sessions(s01: Session, s02: Session) {
@@ -120,278 +335,18 @@ async fn close_sessions(s01: Session, s02: Session) {
     ztimeout!(s02.close()).unwrap();
 }
 
-async fn test_acl_config_format(port: u16) {
-    println!("test_acl_config_format");
-    let mut config_router = get_basic_router_config(port).await;
-
-    // missing lists
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny"
-                }"#,
-        )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("config lists must be provided")));
-
-    // repeated rule id
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["foo"],
-                    },
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["bar"],
-                    },
-                ],
-                "subjects": [{id: "all"}],
-                "policies": [
-                    {
-                        rules: ["r1"],
-                        subjects: ["all"],
-                    }
-                ],
-            }"#,
-        )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("Rule id must be unique")));
-
-    // repeated subject id
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["foo"],
-                    },
-                ],
-                "subjects": [
-                    {
-                        id: "s1",
-                        interfaces: ["lo"],
-                    },
-                    {
-                        id: "s1",
-                        interfaces: ["lo0"],
-                    },
-                ],
-                "policies": [
-                    {
-                        rules: ["r1"],
-                        subjects: ["s1"],
-                    }
-                ],
-            }"#,
-        )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("Subject id must be unique")));
-
-    // repeated policy id
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["foo"],
-                    },
-                    {
-                        "id": "r2",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["bar"],
-                    },
-                ],
-                "subjects": [{id: "all"}],
-                "policies": [
-                    {
-                        id: "p1",
-                        rules: ["r1"],
-                        subjects: ["all"],
-                    },
-                    {
-                        id: "p1",
-                        rules: ["r2"],
-                        subjects: ["all"],
-                    }
-                ],
-            }"#,
-        )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("Policy id must be unique")));
-
-    // non-existent rule in policy
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["foo"],
-                    },
-                    {
-                        "id": "r2",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["bar"],
-                    },
-                ],
-                "subjects": [{id: "all"}],
-                "policies": [
-                    {
-                        id: "p1",
-                        rules: ["r1"],
-                        subjects: ["all"],
-                    },
-                    {
-                        id: "p2",
-                        rules: ["NON-EXISTENT"],
-                        subjects: ["all"],
-                    }
-                ],
-            }"#,
-        )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("does not exist in rules list")));
-
-    // non-existent subject in policy
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["foo"],
-                    },
-                    {
-                        "id": "r2",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["bar"],
-                    },
-                ],
-                "subjects": [{id: "all"}],
-                "policies": [
-                    {
-                        id: "p1",
-                        rules: ["r1"],
-                        subjects: ["all"],
-                    },
-                    {
-                        id: "p2",
-                        rules: ["r2"],
-                        subjects: ["NON-EXISTENT"],
-                    }
-                ],
-            }"#,
-        )
-        .unwrap();
-    assert!(ztimeout!(zenoh::open(config_router.clone()))
-        .is_err_and(|e| e.to_string().contains("does not exist in subjects list")));
-
-    // empty link_protocols list
-    assert!(config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "deny",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "allow",
-                        "flows": ["egress", "ingress"],
-                        "messages": ["put"],
-                        "key_exprs": ["foo"],
-                    },
-                ],
-                "subjects": [
-                    {
-                        id: "s1",
-                        link_protocols: [], // will Err - should not be empty
-                    },
-                ],
-                "policies": [
-                    {
-                        id: "p1",
-                        rules: ["r1"],
-                        subjects: ["s1"],
-                    },
-                ],
-            }"#,
-        )
-        .is_err());
-}
-
-async fn test_pub_sub_deny(port: u16) {
+async fn test_pub_sub_deny() {
     println!("test_pub_sub_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [],
-                    "subjects": [],
-                    "policies": [],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [],
+        "subjects": [],
+        "policies": [],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_session(&router));
     {
         let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -424,28 +379,21 @@ async fn test_pub_sub_deny(port: u16) {
         ztimeout!(subscriber.undeclare()).unwrap();
     }
     close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_pub_sub_allow(port: u16) {
+async fn test_pub_sub_allow() {
     println!("test_pub_sub_allow");
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [],
-                    "subjects": [],
-                    "policies": [],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [],
+        "subjects": [],
+        "policies": [],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_session(&router));
     {
         let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -479,55 +427,47 @@ async fn test_pub_sub_allow(port: u16) {
     }
 
     close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_pub_sub_allow_then_deny(port: u16) {
+async fn test_pub_sub_allow_then_deny() {
     println!("test_pub_sub_allow_then_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "put",
-                                "delete",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "interfaces": [
-                                "lo", "lo0"
-                            ],
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "put",
+                    "delete",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "interfaces": [
+                    "lo", "lo0"
+                ],
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_session(&router));
     {
         let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -560,55 +500,47 @@ async fn test_pub_sub_allow_then_deny(port: u16) {
         ztimeout!(subscriber.undeclare()).unwrap();
     }
     close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_pub_sub_deny_then_allow(port: u16) {
+async fn test_pub_sub_deny_then_allow() {
     println!("test_pub_sub_deny_then_allow");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "put",
-                                "delete",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "interfaces": [
-                                "lo", "lo0"
-                            ],
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "put",
+                    "delete",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "interfaces": [
+                    "lo", "lo0"
+                ],
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_session(&router));
     {
         let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -641,45 +573,36 @@ async fn test_pub_sub_deny_then_allow(port: u16) {
         ztimeout!(subscriber.undeclare()).unwrap();
     }
     close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_get_qbl_deny(port: u16) {
+async fn test_get_qbl_deny() {
     println!("test_get_qbl_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "allow reply",
-                            "permission": "allow",
-                            "messages": ["reply"],
-                            "flows": ["egress", "ingress"],
-                            "key_exprs": ["test/demo"],
-                        }
-                    ],
-                    "subjects": [
-                        { "id": "all" }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["allow reply"],
-                            "subjects": ["all"],
-                        }
-                    ],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "allow reply",
+                "permission": "allow",
+                "messages": ["reply"],
+                "flows": ["egress", "ingress"],
+                "key_exprs": ["test/demo"],
+            }
+        ],
+        "subjects": [
+            { "id": "all" }
+        ],
+        "policies": [
+            {
+                "rules": ["allow reply"],
+                "subjects": ["all"],
+            }
+        ],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (get_session, qbl_session) = ztimeout!(open_client_session(&router));
     {
         let mut received_value = String::new();
 
@@ -709,30 +632,21 @@ async fn test_get_qbl_deny(port: u16) {
         ztimeout!(qbl.undeclare()).unwrap();
     }
     close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_get_qbl_allow(port: u16) {
+async fn test_get_qbl_allow() {
     println!("test_get_qbl_allow");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [],
-                    "subjects": [],
-                    "policies": [],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [],
+        "subjects": [],
+        "policies": [],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (get_session, qbl_session) = ztimeout!(open_client_session(&router));
     {
         let mut received_value = String::new();
 
@@ -762,57 +676,47 @@ async fn test_get_qbl_allow(port: u16) {
         ztimeout!(qbl.undeclare()).unwrap();
     }
     close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_get_qbl_deny_then_allow(port: u16) {
+async fn test_get_qbl_deny_then_allow() {
     println!("test_get_qbl_deny_then_allow");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "interfaces": [
-                                "lo", "lo0"
-                            ],
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-        )
-        .unwrap();
-
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "interfaces": [
+                    "lo", "lo0"
+                ],
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (get_session, qbl_session) = ztimeout!(open_client_session(&router));
     {
         let mut received_value = String::new();
 
@@ -842,55 +746,46 @@ async fn test_get_qbl_deny_then_allow(port: u16) {
         ztimeout!(qbl.undeclare()).unwrap();
     }
     close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_get_qbl_allow_then_deny(port: u16) {
+async fn test_get_qbl_allow_then_deny() {
     println!("test_get_qbl_allow_then_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "interfaces": [
-                                "lo", "lo0"
-                            ],
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "query",
+                    "declare_queryable"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "interfaces": [
+                    "lo", "lo0"
+                ],
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (get_session, qbl_session) = ztimeout!(open_client_session(&router));
     {
         let mut received_value = String::new();
 
@@ -920,44 +815,35 @@ async fn test_get_qbl_allow_then_deny(port: u16) {
         ztimeout!(qbl.undeclare()).unwrap();
     }
     close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_reply_deny(port: u16) {
+async fn test_reply_deny() {
     println!("test_reply_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "allow get/declare qbl",
-                            "permission": "allow",
-                            "messages": ["query", "declare_queryable"],
-                            "key_exprs": ["test/demo"],
-                        }
-                    ],
-                    "subjects": [
-                        { "id": "all" }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["allow get/declare qbl"],
-                            "subjects": ["all"],
-                        }
-                    ],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "allow get/declare qbl",
+                "permission": "allow",
+                "messages": ["query", "declare_queryable"],
+                "key_exprs": ["test/demo"],
+            }
+        ],
+        "subjects": [
+            { "id": "all" }
+        ],
+        "policies": [
+            {
+                "rules": ["allow get/declare qbl"],
+                "subjects": ["all"],
+            }
+        ],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (get_session, qbl_session) = ztimeout!(open_client_session(&router));
     {
         let mut received_value = String::new();
 
@@ -987,50 +873,41 @@ async fn test_reply_deny(port: u16) {
         ztimeout!(qbl.undeclare()).unwrap();
     }
     close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_reply_allow_then_deny(port: u16) {
+async fn test_reply_allow_then_deny() {
     println!("test_reply_allow_then_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                "enabled": true,
-                "default_permission": "allow",
-                "rules": [
-                    {
-                        "id": "r1",
-                        "permission": "deny",
-                        "messages": ["reply"],
-                        "flows": ["egress", "ingress"],
-                        "key_exprs": ["test/demo"],
-                    },
-                ],
-                "subjects": [
-                    {
-                        "id": "s1",
-                        "interfaces": [
-                            "lo", "lo0"
-                        ],
-                    }
-                ],
-                "policies": [
-                    {
-                        "rules": ["r1"],
-                        "subjects": ["s1"],
-                    }
-                ]
-            }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+    "enabled": true,
+    "default_permission": "allow",
+    "rules": [
+        {
+            "id": "r1",
+            "permission": "deny",
+            "messages": ["reply"],
+            "flows": ["egress", "ingress"],
+            "key_exprs": ["test/demo"],
+        },
+    ],
+    "subjects": [
+        {
+            "id": "s1",
+            "interfaces": [
+                "lo", "lo0"
+            ],
+        }
+    ],
+    "policies": [
+        {
+            "rules": ["r1"],
+            "subjects": ["s1"],
+        }
+    ]
+}"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (get_session, qbl_session) = ztimeout!(open_client_session(&router));
     {
         let mut received_value = String::new();
 
@@ -1060,29 +937,21 @@ async fn test_reply_allow_then_deny(port: u16) {
         ztimeout!(qbl.undeclare()).unwrap();
     }
     close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_deny(port: u16) {
+async fn test_liveliness_deny() {
     println!("test_liveliness_deny");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [],
-                    "subjects": [],
-                    "policies": [],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [],
+        "subjects": [],
+        "policies": [],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1138,29 +1007,21 @@ async fn test_liveliness_deny(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_allow(port: u16) {
+async fn test_liveliness_allow() {
     println!("test_liveliness_allow");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [],
-                    "subjects": [],
-                    "policies": [],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [],
+        "subjects": [],
+        "policies": [],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1216,44 +1077,36 @@ async fn test_liveliness_allow(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_allow_deny_token(port: u16) {
+async fn test_liveliness_allow_deny_token() {
     println!("test_liveliness_allow_deny_token");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            id: "filter token",
-                            permission: "deny",
-                            messages: ["liveliness_token"],
-                            flows: ["ingress", "egress"],
-                            key_exprs: ["test/demo"],
-                        },
-                    ],
-                    "subjects": [
-                        { id: "all" },
-                    ],
-                    "policies": [
-                        {
-                            "subjects": ["all"],
-                            "rules": ["filter token"],
-                        },
-                    ],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                id: "filter token",
+                permission: "deny",
+                messages: ["liveliness_token"],
+                flows: ["ingress", "egress"],
+                key_exprs: ["test/demo"],
+            },
+        ],
+        "subjects": [
+            { id: "all" },
+        ],
+        "policies": [
+            {
+                "subjects": ["all"],
+                "rules": ["filter token"],
+            },
+        ],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1309,44 +1162,36 @@ async fn test_liveliness_allow_deny_token(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_deny_allow_token(port: u16) {
+async fn test_liveliness_deny_allow_token() {
     println!("test_liveliness_deny_allow_token");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            id: "filter token",
-                            permission: "allow",
-                            messages: ["liveliness_token"],
-                            flows: ["ingress", "egress"],
-                            key_exprs: ["test/demo"],
-                        },
-                    ],
-                    "subjects": [
-                        { id: "all" },
-                    ],
-                    "policies": [
-                        {
-                            "subjects": ["all"],
-                            "rules": ["filter token"],
-                        },
-                    ],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                id: "filter token",
+                permission: "allow",
+                messages: ["liveliness_token"],
+                flows: ["ingress", "egress"],
+                key_exprs: ["test/demo"],
+            },
+        ],
+        "subjects": [
+            { id: "all" },
+        ],
+        "policies": [
+            {
+                "subjects": ["all"],
+                "rules": ["filter token"],
+            },
+        ],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1402,44 +1247,36 @@ async fn test_liveliness_deny_allow_token(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_allow_deny_sub(port: u16) {
+async fn test_liveliness_allow_deny_sub() {
     println!("test_liveliness_allow_deny_sub");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            id: "filter sub",
-                            permission: "deny",
-                            messages: ["declare_liveliness_subscriber"],
-                            flows: ["ingress", "egress"],
-                            key_exprs: ["test/demo"],
-                        },
-                    ],
-                    "subjects": [
-                        { id: "all" },
-                    ],
-                    "policies": [
-                        {
-                            "subjects": ["all"],
-                            "rules": ["filter sub"],
-                        },
-                    ],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                id: "filter sub",
+                permission: "deny",
+                messages: ["declare_liveliness_subscriber"],
+                flows: ["ingress", "egress"],
+                key_exprs: ["test/demo"],
+            },
+        ],
+        "subjects": [
+            { id: "all" },
+        ],
+        "policies": [
+            {
+                "subjects": ["all"],
+                "rules": ["filter sub"],
+            },
+        ],
+    }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1495,44 +1332,36 @@ async fn test_liveliness_allow_deny_sub(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_deny_allow_sub(port: u16) {
+async fn test_liveliness_deny_allow_sub() {
     println!("test_liveliness_deny_allow_sub");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                        "enabled": true,
-                        "default_permission": "deny",
-                        "rules": [
-                            {
-                                id: "filter sub",
-                                permission: "allow",
-                                messages: ["declare_liveliness_subscriber", "liveliness_token"],
-                                flows: ["ingress", "egress"],
-                                key_exprs: ["test/demo"],
-                            },
-                        ],
-                        "subjects": [
-                            { id: "all" },
-                        ],
-                        "policies": [
-                            {
-                                "subjects": ["all"],
-                                "rules": ["filter sub"],
-                            },
-                        ],
-                    }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+            "enabled": true,
+            "default_permission": "deny",
+            "rules": [
+                {
+                    id: "filter sub",
+                    permission: "allow",
+                    messages: ["declare_liveliness_subscriber", "liveliness_token"],
+                    flows: ["ingress", "egress"],
+                    key_exprs: ["test/demo"],
+                },
+            ],
+            "subjects": [
+                { id: "all" },
+            ],
+            "policies": [
+                {
+                    "subjects": ["all"],
+                    "rules": ["filter sub"],
+                },
+            ],
+        }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1588,17 +1417,13 @@ async fn test_liveliness_deny_allow_sub(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_allow_deny_query(port: u16) {
+async fn test_liveliness_allow_deny_query() {
     println!("test_liveliness_allow_deny_query");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
+    let acl_cfg = r#"{
                     "enabled": true,
                     "default_permission": "allow",
                     "rules": [
@@ -1619,13 +1444,9 @@ async fn test_liveliness_allow_deny_query(port: u16) {
                             "rules": ["filter query"],
                         },
                     ],
-                }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+                }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1681,44 +1502,36 @@ async fn test_liveliness_allow_deny_query(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
-async fn test_liveliness_deny_allow_query(port: u16) {
+async fn test_liveliness_deny_allow_query() {
     println!("test_liveliness_deny_allow_query");
 
-    let mut config_router = get_basic_router_config(port).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-                        "enabled": true,
-                        "default_permission": "deny",
-                        "rules": [
-                            {
-                                id: "filter query",
-                                permission: "allow",
-                                messages: ["liveliness_query", "liveliness_token"],
-                                flows: ["ingress", "egress"],
-                                key_exprs: ["test/demo"],
-                            },
-                        ],
-                        "subjects": [
-                            { id: "all" },
-                        ],
-                        "policies": [
-                            {
-                                "subjects": ["all"],
-                                "rules": ["filter query"],
-                            },
-                        ],
-                    }"#,
-        )
-        .unwrap();
-    println!("Opening router session");
-
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let acl_cfg = r#"{
+            "enabled": true,
+            "default_permission": "deny",
+            "rules": [
+                {
+                    id: "filter query",
+                    permission: "allow",
+                    messages: ["liveliness_query", "liveliness_token"],
+                    flows: ["ingress", "egress"],
+                    key_exprs: ["test/demo"],
+                },
+            ],
+            "subjects": [
+                { id: "all" },
+            ],
+            "policies": [
+                {
+                    "subjects": ["all"],
+                    "rules": ["filter query"],
+                },
+            ],
+        }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (reader_session, writer_session) = ztimeout!(open_client_session(&router));
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1774,43 +1587,37 @@ async fn test_liveliness_deny_allow_query(port: u16) {
 
     ztimeout!(subscriber.undeclare()).unwrap();
     close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    close_router_session(router).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_query_ingress_deny() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27501).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-            "enabled": true,
-            "default_permission": "allow",
-            "rules": [
-                {
-                    "id": "deny query ingress",
-                    "permission": "deny",
-                    "messages": ["query"],
-                    "flows": ["ingress"],
-                    "key_exprs": ["**"],
-                }
-            ],
-            "subjects": [
-                { "id": "all" }
-            ],
-            "policies": [
-                {
-                    "rules": ["deny query ingress"],
-                    "subjects": ["all"],
-                }
-            ],
-          }"#,
-        )
-        .unwrap();
 
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (session1, session2) = get_client_sessions(27501).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "deny query ingress",
+                "permission": "deny",
+                "messages": ["query"],
+                "flows": ["ingress"],
+                "key_exprs": ["**"],
+            }
+        ],
+        "subjects": [
+            { "id": "all" }
+        ],
+        "policies": [
+            {
+                "rules": ["deny query ingress"],
+                "subjects": ["all"],
+            }
+        ],
+      }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (session1, session2) = ztimeout!(open_client_session(&router));
     tokio::time::sleep(SLEEP).await;
 
     let _qbl = session1.declare_queryable("test/ingress").await.unwrap();
@@ -1824,37 +1631,30 @@ async fn test_acl_query_ingress_deny() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_query_egress_deny() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27502).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-            "enabled": true,
-            "default_permission": "allow",
-            "rules": [
-                {
-                    "id": "deny query egress",
-                    "permission": "deny",
-                    "messages": ["query"],
-                    "flows": ["egress"],
-                    "key_exprs": ["**"],
-                }
-            ],
-            "subjects": [
-                { "id": "all" }
-            ],
-            "policies": [
-                {
-                    "rules": ["deny query egress"],
-                    "subjects": ["all"],
-                }
-            ],
-          }"#,
-        )
-        .unwrap();
-
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (session1, session2) = get_client_sessions(27502).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "deny query egress",
+                "permission": "deny",
+                "messages": ["query"],
+                "flows": ["egress"],
+                "key_exprs": ["**"],
+            }
+        ],
+        "subjects": [
+            { "id": "all" }
+        ],
+        "policies": [
+            {
+                "rules": ["deny query egress"],
+                "subjects": ["all"],
+            }
+        ],
+      }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
+    let (session1, session2) = ztimeout!(open_client_session(&router));
     tokio::time::sleep(SLEEP).await;
 
     let _qbl = session1.declare_queryable("test/egress").await.unwrap();
@@ -1867,38 +1667,31 @@ async fn test_acl_query_egress_deny() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_liveliness_query_ingress_deny() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27503).await;
-    config_router
-        .insert_json5(
-            "access_control",
-            r#"{
-            "enabled": true,
-            "default_permission": "allow",
-            "rules": [
-                {
-                    "id": "deny query ingress",
-                    "permission": "deny",
-                    "messages": ["liveliness_query"],
-                    "flows": ["ingress"],
-                    "key_exprs": ["**"],
-                }
-            ],
-            "subjects": [
-                { "id": "all" }
-            ],
-            "policies": [
-                {
-                    "rules": ["deny query ingress"],
-                    "subjects": ["all"],
-                }
-            ],
-          }"#,
-        )
-        .unwrap();
-
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "deny query ingress",
+                "permission": "deny",
+                "messages": ["liveliness_query"],
+                "flows": ["ingress"],
+                "key_exprs": ["**"],
+            }
+        ],
+        "subjects": [
+            { "id": "all" }
+        ],
+        "policies": [
+            {
+                "rules": ["deny query ingress"],
+                "subjects": ["all"],
+            }
+        ],
+      }"#;
+    let router = ztimeout!(open_router_session(acl_cfg));
     tokio::time::sleep(SLEEP).await;
-    let (session1, session2) = get_client_sessions(27503).await;
+    let (session1, session2) = ztimeout!(open_client_session(&router));
     tokio::time::sleep(SLEEP).await;
 
     let _token = session1
@@ -1921,41 +1714,34 @@ async fn test_acl_liveliness_query_ingress_deny() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_liveliness_query_egress_deny() {
     zenoh::init_log_from_env_or("error");
-    let config_router = get_basic_router_config(27504).await;
-    let mut config_client1 = get_basic_client_config(27504).await;
-    let config_client2 = get_basic_client_config(27504).await;
-    config_client1
-        .insert_json5(
-            "access_control",
-            r#"{
-            "enabled": true,
-            "default_permission": "allow",
-            "rules": [
-                {
-                    "id": "deny query egress",
-                    "permission": "deny",
-                    "messages": ["liveliness_query"],
-                    "flows": ["egress"],
-                    "key_exprs": ["**"],
-                }
-            ],
-            "subjects": [
-                { "id": "all" }
-            ],
-            "policies": [
-                {
-                    "rules": ["deny query egress"],
-                    "subjects": ["all"],
-                }
-            ],
-          }"#,
-        )
-        .unwrap();
-
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "deny query egress",
+                "permission": "deny",
+                "messages": ["liveliness_query"],
+                "flows": ["egress"],
+                "key_exprs": ["**"],
+            }
+        ],
+        "subjects": [
+            { "id": "all" }
+        ],
+        "policies": [
+            {
+                "rules": ["deny query egress"],
+                "subjects": ["all"],
+            }
+        ],
+      }"#;
+    let router = ztimeout!(open_router());
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(zenoh::open(config_client1)).unwrap();
-    let session2 = ztimeout!(zenoh::open(config_client2)).unwrap();
+    let session1 = ztimeout!(open_client()
+        .connect_to(&router)
+        .with_json5("access_control", acl_cfg));
+    let session2 = ztimeout!(open_client().connect_to(&router));
     tokio::time::sleep(SLEEP).await;
 
     let _token = session2
