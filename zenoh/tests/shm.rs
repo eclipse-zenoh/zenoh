@@ -272,7 +272,7 @@ fn zenoh_shm_unicast_to_non_shm() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19447"]).await;
+        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
         test_session_pubsub::<true>(
             &peer01,
             &peer02,
@@ -290,7 +290,7 @@ fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
+        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19449"]).await;
         test_session_pubsub::<false>(
             &peer01,
             &peer02,
@@ -308,7 +308,7 @@ fn zenoh_shm_unicast_with_buffer_shrink_resize() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
+        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19450"]).await;
         test_session_pubsub::<false>(
             &peer01,
             &peer02,
@@ -326,7 +326,7 @@ fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
+        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19451"]).await;
         test_session_pubsub::<true>(
             &peer01,
             &peer02,
@@ -344,7 +344,7 @@ fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
         // Initiate logging
         zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
+        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19452"]).await;
         test_session_pubsub::<true>(
             &peer01,
             &peer02,
