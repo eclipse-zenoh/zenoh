@@ -102,7 +102,7 @@ pub struct OwnedMetadataDescriptor {
 
 impl Hash for OwnedMetadataDescriptor {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::ptr::from_ref(self.header).hash(state);
+        (self.header as *const ChunkHeaderType).hash(state);
     }
 }
 
@@ -141,7 +141,7 @@ impl OwnedMetadataDescriptor {
 // The ordering strategy is important. See storage implementation for details
 impl Ord for OwnedMetadataDescriptor {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        std::ptr::from_ref(self.header).cmp(&std::ptr::from_ref(other.header))
+        (self.header as *const ChunkHeaderType).cmp(&(other.header as *const _))
     }
 }
 
