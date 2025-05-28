@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::BTreeSet, time::Duration};
+use std::{collections::BTreeSet, sync::atomic::AtomicI32, time::Duration};
 
+use stabby::sync::Arc;
 use static_init::dynamic;
 
 use super::periodic_task::PeriodicTask;
@@ -30,25 +31,32 @@ enum Transaction {
 
 // TODO: optimize validation by packing descriptors
 pub struct WatchdogValidator {
+    cap: Arc<AtomicI32>,
     sender: crossbeam_channel::Sender<Transaction>,
-    _task: PeriodicTask,
+    task: PeriodicTask,
 }
 
 impl WatchdogValidator {
     pub fn new(interval: Duration) -> Self {
-        let (sender, receiver) = crossbeam_channel::unbounded::<Transaction>();
+        let channel_size = 65536 * 2;
+        let (sender, receiver) = crossbeam_channel::bounded::<Transaction>(channel_size);
+
+        let cap = Arc::new(AtomicI32::new((channel_size / 2) as i32));
 
         // See ordering implementation for OwnedMetadataDescriptor
         #[allow(clippy::mutable_key_type)]
         let mut watchdogs = BTreeSet::default();
+        let c_cap = cap.clone();
         let task = PeriodicTask::new("Watchdog Validator".to_owned(), interval, move || {
             // See ordering implementation for OwnedMetadataDescriptor
             #[allow(clippy::mutable_key_type)]
             fn collect_transactions(
                 receiver: &crossbeam_channel::Receiver<Transaction>,
                 storage: &mut BTreeSet<OwnedMetadataDescriptor>,
+                cap: &Arc<AtomicI32>,
             ) {
                 while let Ok(transaction) = receiver.try_recv() {
+                    cap.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     match transaction {
                         Transaction::Add(descriptor) => {
                             let _old = storage.insert(descriptor);
@@ -62,7 +70,7 @@ impl WatchdogValidator {
                 }
             }
 
-            collect_transactions(&receiver, &mut watchdogs);
+            collect_transactions(&receiver, &mut watchdogs, &c_cap);
 
             watchdogs.retain(|watchdog| {
                 let old_val = watchdog.validate();
@@ -77,17 +85,22 @@ impl WatchdogValidator {
             });
         });
 
-        Self {
-            sender,
-            _task: task,
-        }
+        Self { cap, sender, task }
     }
 
     pub fn add(&self, watchdog: OwnedMetadataDescriptor) {
-        self.sender.try_send(Transaction::Add(watchdog)).unwrap();
+        self.make_transaction(Transaction::Add(watchdog));
     }
 
     pub fn remove(&self, watchdog: OwnedMetadataDescriptor) {
-        self.sender.try_send(Transaction::Remove(watchdog)).unwrap();
+        self.make_transaction(Transaction::Remove(watchdog));
+    }
+
+    fn make_transaction(&self, transaction: Transaction) {
+        if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
+            let _ = self.task.kick();
+        }
+
+        self.sender.send(transaction).unwrap();
     }
 }

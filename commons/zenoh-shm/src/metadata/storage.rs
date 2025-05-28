@@ -18,13 +18,14 @@ use std::{
 
 use static_init::dynamic;
 use zenoh_core::zlock;
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::ZResult;
 
 use super::{
     allocated_descriptor::AllocatedMetadataDescriptor,
     descriptor::{MetadataIndex, OwnedMetadataDescriptor},
     segment::MetadataSegment,
 };
+use crate::api::provider::types::ZAllocError;
 
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_METADATA_STORAGE: MetadataStorage = MetadataStorage::new().unwrap();
@@ -35,19 +36,24 @@ pub struct MetadataStorage {
 
 impl MetadataStorage {
     fn new() -> ZResult<Self> {
-        let initial_segment = Arc::new(MetadataSegment::create()?);
         // See ordering implementation for OwnedMetadataDescriptor
         #[allow(clippy::mutable_key_type)]
         let mut initially_available = BTreeSet::<OwnedMetadataDescriptor>::default();
 
-        for index in 0..initial_segment.data.count() {
-            let (header, watchdog) = unsafe {
-                initial_segment
-                    .data
-                    .fast_elem_compute(index as MetadataIndex)
-            };
-            let descriptor =
-                OwnedMetadataDescriptor::new(initial_segment.clone(), header, watchdog);
+        Self::add_segment(&mut initially_available)?;
+
+        Ok(Self {
+            available: Arc::new(Mutex::new(initially_available)),
+        })
+    }
+
+    fn add_segment(collection: &mut BTreeSet<OwnedMetadataDescriptor>) -> ZResult<()> {
+        let segment = Arc::new(MetadataSegment::create()?);
+
+        for index in 0..segment.data.count() {
+            let (header, watchdog) =
+                unsafe { segment.data.fast_elem_compute(index as MetadataIndex) };
+            let descriptor = OwnedMetadataDescriptor::new(segment.clone(), header, watchdog);
 
             // init generation (this is not really necessary, but we do)
             descriptor
@@ -55,20 +61,21 @@ impl MetadataStorage {
                 .generation
                 .store(0, std::sync::atomic::Ordering::SeqCst);
 
-            initially_available.insert(descriptor);
+            collection.insert(descriptor);
         }
-
-        Ok(Self {
-            available: Arc::new(Mutex::new(initially_available)),
-        })
+        Ok(())
     }
 
-    pub fn allocate(&self) -> ZResult<AllocatedMetadataDescriptor> {
+    pub fn allocate(&self) -> Result<AllocatedMetadataDescriptor, ZAllocError> {
         let mut guard = zlock!(self.available);
-        let popped = guard.pop_first();
+        let descriptor = match guard.pop_first() {
+            Some(val) => val,
+            None => {
+                Self::add_segment(&mut guard)?;
+                guard.pop_first().ok_or(ZAllocError::Other)?
+            }
+        };
         drop(guard);
-
-        let descriptor = popped.ok_or_else(|| zerror!("no free headers available"))?;
 
         Ok(AllocatedMetadataDescriptor::new(descriptor))
     }

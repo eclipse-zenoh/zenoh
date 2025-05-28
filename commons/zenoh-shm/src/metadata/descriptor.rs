@@ -13,6 +13,7 @@
 //
 
 use std::{
+    hash::Hash,
     ops::Deref,
     sync::{atomic::AtomicU64, Arc},
 };
@@ -99,6 +100,12 @@ pub struct OwnedMetadataDescriptor {
     watchdog: OwnedWatchdog,
 }
 
+impl Hash for OwnedMetadataDescriptor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::ptr::from_ref(self.header).hash(state);
+    }
+}
+
 impl Deref for OwnedMetadataDescriptor {
     type Target = OwnedWatchdog;
 
@@ -134,7 +141,7 @@ impl OwnedMetadataDescriptor {
 // The ordering strategy is important. See storage implementation for details
 impl Ord for OwnedMetadataDescriptor {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.watchdog.cmp(&other.watchdog)
+        std::ptr::from_ref(self.header).cmp(&std::ptr::from_ref(other.header))
     }
 }
 
