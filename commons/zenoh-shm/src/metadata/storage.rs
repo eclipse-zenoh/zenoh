@@ -47,6 +47,8 @@ impl MetadataStorage {
         })
     }
 
+    // See ordering implementation for OwnedMetadataDescriptor
+    #[allow(clippy::mutable_key_type)]
     fn add_segment(collection: &mut BTreeSet<OwnedMetadataDescriptor>) -> ZResult<()> {
         let segment = Arc::new(MetadataSegment::create()?);
 

@@ -98,7 +98,7 @@ impl WatchdogValidator {
 
     fn make_transaction(&self, transaction: Transaction) {
         if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
-            let _ = self.task.kick();
+            self.task.kick();
         }
 
         self.sender.send(transaction).unwrap();
