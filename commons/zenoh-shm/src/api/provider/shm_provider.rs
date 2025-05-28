@@ -18,13 +18,12 @@ use std::{
     marker::PhantomData,
     num::NonZeroUsize,
     pin::Pin,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{atomic::Ordering, Mutex},
     time::Duration,
 };
 
 use async_trait::async_trait;
 use zenoh_core::{Resolvable, Wait};
-use zenoh_result::ZResult;
 
 use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
@@ -809,8 +808,8 @@ where
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
-    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZShmMut> {
-        let len = len.try_into()?;
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> Result<ZShmMut, ZAllocError> {
+        let len = len.try_into().map_err(|_| ZAllocError::Other)?;
 
         // allocate resources for SHM buffer
         let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
@@ -892,7 +891,8 @@ where
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
-    fn alloc_resources() -> ZResult<(AllocatedMetadataDescriptor, ConfirmedDescriptor)> {
+    fn alloc_resources() -> Result<(AllocatedMetadataDescriptor, ConfirmedDescriptor), ZAllocError>
+    {
         // allocate metadata
         let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
 
@@ -937,7 +937,7 @@ where
 
         // Create buffer
         let shmb = ShmBufInner {
-            metadata: Arc::new(confirmed_metadata),
+            metadata: confirmed_metadata,
             buf: chunk.data,
             info,
         };
