@@ -12,9 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::BTreeSet, sync::atomic::AtomicI32, time::Duration};
+use std::{collections::BTreeSet, sync::atomic::AtomicI32, sync::Arc, time::Duration};
 
-use stabby::sync::Arc;
 use static_init::dynamic;
 
 use super::periodic_task::PeriodicTask;
