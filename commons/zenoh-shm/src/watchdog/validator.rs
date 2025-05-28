@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::BTreeSet, sync::atomic::AtomicI32, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeSet,
+    sync::{atomic::AtomicI32, Arc},
+    time::Duration,
+};
 
 use static_init::dynamic;
 
