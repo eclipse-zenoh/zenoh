@@ -63,8 +63,8 @@ pub(crate) enum Sequencing {
 /// Enabling sample miss detection allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed samples
 /// through [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
 /// and to recover missed samples through [`recovery`](crate::AdvancedSubscriberBuilder::recovery).
-#[derive(Default)]
 #[zenoh_macros::unstable]
+#[derive(Debug, Default, Clone)]
 pub struct MissDetectionConfig {
     pub(crate) state_publisher: Option<(Duration, bool)>,
 }
