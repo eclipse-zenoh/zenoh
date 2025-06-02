@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
