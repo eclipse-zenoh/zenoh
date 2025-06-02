@@ -16,9 +16,7 @@ use std::time::Duration;
 use clap::Parser;
 use zenoh::{
     query::{QueryTarget, Selector},
-    shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
-    },
+    shm::{BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder},
     Config, Wait,
 };
 use zenoh_examples::CommonArgs;
@@ -44,10 +42,7 @@ async fn main() {
         .wait()
         .unwrap();
     // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::backend(backend).wait();
 
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example

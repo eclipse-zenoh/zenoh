@@ -14,9 +14,7 @@
 use clap::Parser;
 use zenoh::{
     key_expr::KeyExpr,
-    shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
-    },
+    shm::{BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder},
     Config, Wait,
 };
 use zenoh_examples::CommonArgs;
@@ -42,10 +40,7 @@ async fn main() -> zenoh::Result<()> {
         .wait()
         .unwrap();
     // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::backend(backend).wait();
 
     let publisher = session.declare_publisher(&path).await.unwrap();
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,5 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod types;
-pub mod with_id;
+use crate::api::common::types::ProtocolID;
+
+/// Trait for pinning types to specific ProtocolID
+#[zenoh_macros::unstable_doc]
+pub trait WithProtocolID {
+    fn id(&self) -> ProtocolID;
+}

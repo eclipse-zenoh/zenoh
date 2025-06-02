@@ -14,7 +14,7 @@
 use zenoh::{
     shm::{
         AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect, PosixShmProviderBackend,
-        ShmProviderBuilder, POSIX_PROTOCOL_ID,
+        ShmProviderBuilder,
     },
     Config, Wait,
 };
@@ -23,22 +23,44 @@ use zenoh::{
 async fn main() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
-    run().await.unwrap()
+    run_minimal().await.unwrap();
+    run().await.unwrap();
+}
+
+async fn run_minimal() -> zenoh::Result<()> {
+    let provider = ShmProviderBuilder::default_backend().wait()?;
+    let mut sbuf = provider.alloc(512).wait().unwrap();
+
+    // Fill recently-allocated buffer with data
+    sbuf[0..8].fill(0);
+
+    // Declare Session and Publisher (common code)
+    let session = zenoh::open(Config::default()).await?;
+    let publisher = session.declare_publisher("my/key/expr").await?;
+
+    // Publish SHM buffer
+    publisher.put(sbuf).await
 }
 
 async fn run() -> zenoh::Result<()> {
-    // create an SHM backend...
-    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(65536)
-        .unwrap()
-        .wait()
-        .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    // create an SHM provider
+    // there is a simple way to create default ShmProvider initialized with default-configured
+    // SHM backend (PosixShmProviderBackend) and more comprehensive way
+    let provider = {
+        // OPTION: simple ShmProvider creation
+        let _simple = ShmProviderBuilder::default_backend().wait().unwrap();
+
+        // OPTION: comprehensive ShmProvider creation
+        // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+        // create backend...
+        let comprehencive = PosixShmProviderBackend::builder()
+            .with_size(65536)
+            .unwrap()
+            .wait()
+            .unwrap();
+        // ...and an SHM provider
+        ShmProviderBuilder::backend(comprehencive).wait()
+    };
 
     // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
 

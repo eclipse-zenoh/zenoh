@@ -17,9 +17,7 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     key_expr::KeyExpr,
-    shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
-    },
+    shm::{BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder},
     Config, Wait,
 };
 use zenoh_examples::CommonArgs;
@@ -45,10 +43,7 @@ async fn main() {
         .wait()
         .unwrap();
     // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::backend(backend).wait();
 
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
