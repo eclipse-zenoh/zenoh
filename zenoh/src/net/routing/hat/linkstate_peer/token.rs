@@ -27,14 +27,17 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, push_declaration_profile,
-    res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, hat, hat_mut, push_declaration_profile, res_hat, res_hat_mut,
+    HatCode, HatContext, HatFace, HatTables,
 };
-use crate::net::routing::{
-    dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
-    hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
-    router::{NodeId, Resource, SessionContext},
-    RoutingContext,
+use crate::net::{
+    protocol::network::Network,
+    routing::{
+        dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
+        hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
+        router::{NodeId, Resource, SessionContext},
+        RoutingContext,
+    },
 };
 
 #[inline]
@@ -58,7 +61,7 @@ fn send_sourced_token_to_net_clildren(
                         let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
+                            &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
@@ -331,7 +334,7 @@ fn send_forget_sourced_token_to_net_clildren(
                         let wire_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
-                            Declare {
+                            &mut Declare {
                                 interest_id: None,
                                 ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,

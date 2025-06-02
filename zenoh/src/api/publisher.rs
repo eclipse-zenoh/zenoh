@@ -140,6 +140,7 @@ impl<'a> Publisher<'a> {
         .into()
     }
 
+    /// Returns the [`KeyExpr`] of this Publisher.
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr

@@ -24,11 +24,12 @@ use tokio::{net::UdpSocket, sync::Mutex as AsyncMutex};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkAuthId, LinkManagerUnicastTrait,
-    LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
+    get_ip_interface_names, parse_dscp, set_dscp, ConstructibleLinkManagerUnicast, LinkAuthId,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{Address, EndPoint, Locator},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -271,19 +272,28 @@ impl LinkManagerUnicastUdp {
         &self,
         dst_addr: &SocketAddr,
         iface: Option<&str>,
+        bind_socket: Option<&str>,
+        dscp: Option<u32>,
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
+        let src_socket_addr = if let Some(bind_socket) = bind_socket {
+            let address = Address::from(bind_socket);
+            get_udp_addrs(address)
+                .await?
+                .next()
+                .ok_or_else(|| zerror!("No UDP socket addr found bound to {}", address))?
+        } else if dst_addr.is_ipv4() {
+            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+        } else {
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
+        };
+
         // Establish a UDP socket
-        let socket = UdpSocket::bind(SocketAddr::new(
-            if dst_addr.is_ipv4() {
-                Ipv4Addr::UNSPECIFIED.into()
-            } else {
-                Ipv6Addr::UNSPECIFIED.into()
-            }, // UDP addr
-            0, // UDP port
-        ))
-        .await
-        .map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+        let socket = UdpSocket::bind(src_socket_addr).await.map_err(|e| {
+            let e = zerror!(
+                "Can not create a new UDP link bound to {}: {}",
+                src_socket_addr,
+                e
+            );
             tracing::warn!("{}", e);
             e
         })?;
@@ -292,22 +302,36 @@ impl LinkManagerUnicastUdp {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
         }
 
+        if let Some(dscp) = dscp {
+            set_dscp(&socket, *dst_addr, dscp)?;
+        }
+
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!("Can not connect a new UDP link to {}: {}", dst_addr, e);
             tracing::warn!("{}", e);
             e
         })?;
 
         // Get source and destination UDP addresses
         let src_addr = socket.local_addr().map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!(
+                "Can not get local_addr for UDP link bound src {}: to :{} : {}",
+                src_socket_addr,
+                dst_addr,
+                e
+            );
             tracing::warn!("{}", e);
             e
         })?;
 
         let dst_addr = socket.peer_addr().map_err(|e| {
-            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!(
+                "Can not get peer_addr for UDP link bound src {}: to :{} : {}",
+                src_socket_addr,
+                dst_addr,
+                e
+            );
             tracing::warn!("{}", e);
             e
         })?;
@@ -319,6 +343,7 @@ impl LinkManagerUnicastUdp {
         &self,
         addr: &SocketAddr,
         iface: Option<&str>,
+        dscp: Option<u32>,
     ) -> ZResult<(UdpSocket, SocketAddr)> {
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
@@ -329,6 +354,10 @@ impl LinkManagerUnicastUdp {
 
         if let Some(iface) = iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
+        }
+
+        if let Some(dscp) = dscp {
+            set_dscp(&socket, *addr, dscp)?;
         }
 
         let local_addr = socket.local_addr().map_err(|e| {
@@ -350,9 +379,20 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let config = endpoint.config();
         let iface = config.get(BIND_INTERFACE);
 
+        if let (Some(_), Some(_)) = (config.get(BIND_INTERFACE), config.get(BIND_SOCKET)) {
+            bail!(
+                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
+                BIND_INTERFACE,
+                BIND_SOCKET
+            )
+        }
+
+        let bind_socket = config.get(BIND_SOCKET);
+        let dscp = parse_dscp(&config)?;
+
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
-            match self.new_link_inner(&da, iface).await {
+            match self.new_link_inner(&da, iface, bind_socket, dscp).await {
                 Ok((socket, src_addr, dst_addr)) => {
                     // Create UDP link
                     let link = Arc::new(LinkUnicastUdp::new(
@@ -388,10 +428,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             .filter(|a| !a.ip().is_multicast());
         let config = endpoint.config();
         let iface = config.get(BIND_INTERFACE);
+        let dscp = parse_dscp(&config)?;
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da, iface).await {
+            match self.new_listener_inner(&da, iface, dscp).await {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(

@@ -21,6 +21,7 @@ use std::{
     sync::{Arc, RwLock, Weak},
 };
 
+use ahash::HashMapExt;
 use zenoh_collections::SingleOrBoxHashSet;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -79,10 +80,7 @@ impl InterceptorCache {
     ) -> Option<InterceptorCacheValueType> {
         self.0
             .value(interceptor.version, || {
-                // Safety: resource expr is always a valid keyexpr
-                let ke = unsafe { keyexpr::from_str_unchecked(resource.expr()) };
-                let key_expr = ke.into();
-                interceptor.compute_keyexpr_cache(&key_expr)
+                interceptor.compute_keyexpr_cache(resource.keyexpr()?)
             })
             .ok()
     }
@@ -238,7 +236,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
-    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
+    pub(crate) session_ctxs: ahash::HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -315,12 +313,21 @@ impl Resource {
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             context: context.map(Box::new),
-            session_ctxs: HashMap::new(),
+            session_ctxs: ahash::HashMap::new(),
         }
     }
 
     pub fn expr(&self) -> &str {
         &self.expr
+    }
+
+    pub fn keyexpr(&self) -> Option<&keyexpr> {
+        if self.parent.is_none() {
+            None
+        } else {
+            // SAFETY: non-root resources are valid keyexprs
+            unsafe { Some(keyexpr::from_str_unchecked(&self.expr)) }
+        }
     }
 
     pub fn suffix(&self) -> &str {
@@ -371,7 +378,7 @@ impl Resource {
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             context: None,
-            session_ctxs: HashMap::new(),
+            session_ctxs: ahash::HashMap::new(),
         })
     }
 
@@ -535,7 +542,7 @@ impl Resource {
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
-                        Declare {
+                        &mut Declare {
                             interest_id: None,
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,

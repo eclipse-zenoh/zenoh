@@ -354,7 +354,7 @@ impl Scouting {
         tracing::debug!("Waiting for UDP datagram...");
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
-            if local_addrs.iter().any(|addr| *addr == peer) {
+            if local_addrs.contains(&peer) {
                 tracing::trace!("Ignore UDP datagram from own socket");
                 continue;
             }

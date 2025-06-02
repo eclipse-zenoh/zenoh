@@ -16,10 +16,14 @@ use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use zenoh_result::{zerror, ZResult};
 
+use crate::set_dscp;
+
 pub struct TcpSocketConfig<'a> {
     tx_buffer_size: Option<u32>,
     rx_buffer_size: Option<u32>,
     iface: Option<&'a str>,
+    bind_socket: Option<SocketAddr>,
+    dscp: Option<u32>,
 }
 
 impl<'a> TcpSocketConfig<'a> {
@@ -27,11 +31,15 @@ impl<'a> TcpSocketConfig<'a> {
         tx_buffer_size: Option<u32>,
         rx_buffer_size: Option<u32>,
         iface: Option<&'a str>,
+        bind_socket: Option<SocketAddr>,
+        dscp: Option<u32>,
     ) -> Self {
         Self {
             tx_buffer_size,
             rx_buffer_size,
             iface,
+            bind_socket,
+            dscp,
         }
     }
 
@@ -60,6 +68,28 @@ impl<'a> TcpSocketConfig<'a> {
         dst_addr: &SocketAddr,
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
         let socket = self.socket_with_config(dst_addr)?;
+
+        if let Some(bind_addr) = self.bind_socket {
+            match (bind_addr, dst_addr) {
+                (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
+                    return Err(Box::from(format!(
+                        "Protocols must match: Cannot bind to IPv6 {} and connect to IPv4 {}",
+                        local, dest
+                    )));
+                }
+                (SocketAddr::V4(local), SocketAddr::V6(dest)) => {
+                    return Err(Box::from(format!(
+                        "Protocols must match: Cannot bind to IPv4 {} and connect to IPv6 {}",
+                        local, dest
+                    )));
+                }
+                _ => (), // No issue here
+            }
+            socket
+                .bind(bind_addr)
+                .map_err(|e| zerror!("{}: {}", bind_addr, e))?;
+        }
+
         // Build a TcpStream from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         let stream = socket
@@ -93,6 +123,9 @@ impl<'a> TcpSocketConfig<'a> {
         }
         if let Some(size) = self.rx_buffer_size {
             socket.set_recv_buffer_size(size)?;
+        }
+        if let Some(dscp) = self.dscp {
+            set_dscp(&socket, *addr, dscp)?;
         }
 
         Ok(socket)

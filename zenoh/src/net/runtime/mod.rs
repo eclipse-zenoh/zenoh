@@ -54,7 +54,7 @@ use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
     core::{Locator, WhatAmI, ZenohIdProto},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
@@ -544,7 +544,7 @@ pub(super) struct RuntimeSession {
 }
 
 impl TransportPeerEventHandler for RuntimeSession {
-    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, msg: NetworkMessageMut) -> ZResult<()> {
         self.main_handler.handle_message(msg)
     }
 
@@ -615,7 +615,7 @@ pub(super) struct RuntimeMulticastSession {
 }
 
 impl TransportPeerEventHandler for RuntimeMulticastSession {
-    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
+    fn handle_message(&self, msg: NetworkMessageMut) -> ZResult<()> {
         self.main_handler.handle_message(msg)
     }
 

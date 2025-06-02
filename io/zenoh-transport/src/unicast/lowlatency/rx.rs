@@ -43,7 +43,7 @@ impl TransportUnicastLowlatency {
                     }
                 }
             }
-            callback.handle_message(msg)
+            callback.handle_message(msg.as_mut())
         } else {
             tracing::debug!(
                 "Transport: {}. No callback available, dropping message: {}",

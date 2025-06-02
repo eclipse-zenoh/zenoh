@@ -24,6 +24,8 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::transport::TransportUnicastUniversal;
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
 use crate::{
     common::{
         batch::{Decode, RBatch},
@@ -52,7 +54,7 @@ impl TransportUnicastUniversal {
                 }
             }
         }
-        callback.handle_message(msg)
+        callback.handle_message(msg.as_mut())
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
@@ -215,7 +217,12 @@ impl TransportUnicastUniversal {
         Ok(true)
     }
 
-    pub(super) fn read_messages(&self, mut batch: RBatch, link: &Link) -> ZResult<()> {
+    pub(super) fn read_messages(
+        &self,
+        mut batch: RBatch,
+        link: &Link,
+        #[cfg(feature = "stats")] stats: &TransportStats,
+    ) -> ZResult<()> {
         while !batch.is_empty() {
             let msg: TransportMessage = batch
                 .decode()
@@ -225,7 +232,7 @@ impl TransportUnicastUniversal {
 
             #[cfg(feature = "stats")]
             {
-                self.stats.inc_rx_t_msgs(1);
+                stats.inc_rx_t_msgs(1);
             }
 
             match msg.body {
