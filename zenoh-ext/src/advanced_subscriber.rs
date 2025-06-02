@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, marker::PhantomData, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -88,31 +88,16 @@ impl HistoryConfig {
     }
 }
 
-#[derive(Default, Clone, Copy)]
-pub struct Unconfigured;
-#[derive(Default, Clone, Copy)]
-pub struct Configured;
-
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 /// Configure retransmission.
 #[zenoh_macros::unstable]
-pub struct RecoveryConfig<T> {
+pub struct RecoveryConfig<const CONFIGURED: bool = true> {
     periodic_queries: Option<Duration>,
-    heartbeat: Option<()>,
-    phantom: PhantomData<T>,
-}
-
-impl<T> std::fmt::Debug for RecoveryConfig<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = f.debug_struct("RetransmissionConf");
-        s.field("periodic_queries", &self.periodic_queries);
-        s.field("heartbeat", &self.heartbeat);
-        s.finish()
-    }
+    heartbeat: bool,
 }
 
 #[zenoh_macros::unstable]
-impl RecoveryConfig<Unconfigured> {
+impl RecoveryConfig<false> {
     /// Enable periodic queries for not yet received Samples and specify their period.
     ///
     /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
@@ -123,11 +108,10 @@ impl RecoveryConfig<Unconfigured> {
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn periodic_queries(self, period: Duration) -> RecoveryConfig<Configured> {
+    pub fn periodic_queries(self, period: Duration) -> RecoveryConfig<true> {
         RecoveryConfig {
             periodic_queries: Some(period),
-            heartbeat: None,
-            phantom: PhantomData::<Configured>,
+            heartbeat: false,
         }
     }
 
@@ -141,11 +125,10 @@ impl RecoveryConfig<Unconfigured> {
     /// [`sporadic_heartbeat`](crate::advanced_publisher::MissDetectionConfig::sporadic_heartbeat).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn heartbeat(self) -> RecoveryConfig<Configured> {
+    pub fn heartbeat(self) -> RecoveryConfig<true> {
         RecoveryConfig {
             periodic_queries: None,
-            heartbeat: Some(()),
-            phantom: PhantomData::<Configured>,
+            heartbeat: true,
         }
     }
 }
@@ -156,7 +139,7 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
     pub(crate) session: &'a Session,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) origin: Locality,
-    pub(crate) retransmission: Option<RecoveryConfig<Configured>>,
+    pub(crate) retransmission: Option<RecoveryConfig>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
     pub(crate) history: Option<HistoryConfig>,
@@ -275,7 +258,7 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn recovery(mut self, conf: RecoveryConfig<Configured>) -> Self {
+    pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
         self.retransmission = Some(conf);
         self
     }
@@ -1062,7 +1045,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None
         };
 
-        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat.is_some()) {
+        let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat) {
             let ke_heartbeat_sub = &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR;
             let statesref = statesref.clone();
             tracing::debug!(
