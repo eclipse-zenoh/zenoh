@@ -134,7 +134,7 @@ impl RecoveryConfig<false> {
     /// [`sporadic_heartbeat`](crate::advanced_publisher::MissDetectionConfig::sporadic_heartbeat).
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn heartbeat(self) -> RecoveryConfig<false> {
+    pub fn heartbeat(self) -> RecoveryConfig<true> {
         RecoveryConfig {
             periodic_queries: None,
             heartbeat: true,
