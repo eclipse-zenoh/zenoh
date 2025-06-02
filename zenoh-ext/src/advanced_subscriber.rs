@@ -1413,6 +1413,7 @@ impl Drop for TimestampedRepliesHandler {
 
 /// A struct that represent missed samples.
 #[zenoh_macros::unstable]
+#[derive(Debug, Clone)]
 pub struct Miss {
     source: EntityGlobalId,
     nb: u32,
