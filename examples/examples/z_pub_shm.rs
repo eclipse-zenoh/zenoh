@@ -14,12 +14,10 @@
 use clap::Parser;
 use zenoh::{
     key_expr::KeyExpr,
-    shm::{BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder},
+    shm::{BlockOn, GarbageCollect, ShmProviderBuilder},
     Config, Wait,
 };
 use zenoh_examples::CommonArgs;
-
-const N: usize = 10;
 
 #[tokio::main]
 async fn main() -> zenoh::Result<()> {
@@ -32,15 +30,7 @@ async fn main() -> zenoh::Result<()> {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM provider...");
-    // create an SHM backend...
-    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(N * 1024)
-        .unwrap()
-        .wait()
-        .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::backend(backend).wait();
+    let provider = ShmProviderBuilder::default_backend().wait().unwrap();
 
     let publisher = session.declare_publisher(&path).await.unwrap();
 
