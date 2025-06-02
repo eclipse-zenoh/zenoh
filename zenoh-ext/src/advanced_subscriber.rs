@@ -88,21 +88,12 @@ impl HistoryConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 /// Configure retransmission.
 #[zenoh_macros::unstable]
 pub struct RecoveryConfig<const CONFIGURED: bool = true> {
     periodic_queries: Option<Duration>,
     heartbeat: bool,
-}
-
-impl Default for RecoveryConfig<false> {
-    fn default() -> Self {
-        Self {
-            periodic_queries: None,
-            heartbeat: false,
-        }
-    }
 }
 
 #[zenoh_macros::unstable]
