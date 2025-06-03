@@ -11,11 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::{config::Config, Wait};
+mod common;
+
+use zenoh::Wait;
+
+use crate::common::open_peer;
 
 #[test]
 fn attachment_pubsub() {
-    let zenoh = zenoh::open(Config::default()).wait().unwrap();
+    let zenoh = open_peer().wait();
     const ATTACHMENT: &[u8] = b"pubsub attachment";
     zenoh
         .declare_subscriber("test/attachment")
@@ -42,7 +46,7 @@ fn attachment_pubsub() {
 
 #[test]
 fn attachment_queries() {
-    let zenoh = zenoh::open(Config::default()).wait().unwrap();
+    let zenoh = open_peer().wait();
     const QUERY_ATTACHMENT: &[u8] = b"query attachment";
     const REPLY_ATTACHMENT: &[u8] = b"reply attachment";
     zenoh

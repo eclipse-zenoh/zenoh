@@ -11,8 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
 
-#![cfg(feature = "internal_config")]
+use std::sync::OnceLock;
+
+use zenoh::{Session, Wait};
+
+use crate::common::open_peer;
 
 fn run_in_separate_process(main_name: &str, must_panic: bool) {
     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -76,9 +81,6 @@ fn panic_is_seen_in_separate_process_atexit() {
     run_in_separate_process("atexit_panic_in_separate_process", true);
 }
 
-use std::sync::OnceLock;
-
-use zenoh::{Session, Wait};
 static SESSION: OnceLock<Session> = OnceLock::new();
 
 #[ignore]
@@ -89,16 +91,7 @@ async fn session_close_in_atexit_main() {
     }
 
     // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:19446".parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-
-    let s = zenoh::open(config).await.unwrap();
-    let _session = SESSION.get_or_init(move || s);
+    SESSION.set(open_peer().await).unwrap();
 
     unsafe { libc::atexit(close_session_in_atexit) };
 }
@@ -143,10 +136,11 @@ async fn background_session_close_in_atexit_main() {
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
 
-    let s = zenoh::open(config).await.unwrap();
-    let session = BACKGROUND_SESSION.get_or_init(move || s);
-
-    let _close = CLOSE.get_or_init(|| Mutex::new(Some(session.close().in_background().wait())));
+    BACKGROUND_SESSION.set(open_peer().await).unwrap();
+    let session = BACKGROUND_SESSION.get().unwrap();
+    CLOSE
+        .set(Mutex::new(Some(session.close().in_background().wait())))
+        .unwrap_or_else(|_| unreachable!());
 
     unsafe { libc::atexit(background_close_session_in_atexit) };
 }
