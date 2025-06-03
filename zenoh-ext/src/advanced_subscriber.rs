@@ -371,10 +371,7 @@ impl Wait for AdvancedSubscriberBuilder<'_, '_, '_, Callback<Sample>, true> {
     #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let mut sub = AdvancedSubscriber::new(self.with_static_keys())?;
-        sub.subscriber.set_background(true);
-        if let Some(mut liveliness_sub) = sub.liveliness_subscriber.take() {
-            liveliness_sub.set_background(true);
-        }
+        sub.set_background_impl(true);
         Ok(())
     }
 }
@@ -457,7 +454,7 @@ pub struct AdvancedSubscriber<Receiver> {
     subscriber: Subscriber<()>,
     receiver: Receiver,
     liveliness_subscriber: Option<Subscriber<()>>,
-    _heartbeat_subscriber: Option<Subscriber<()>>,
+    heartbeat_subscriber: Option<Subscriber<()>>,
 }
 
 #[zenoh_macros::unstable]
@@ -1179,7 +1176,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             subscriber,
             receiver,
             liveliness_subscriber,
-            _heartbeat_subscriber: heartbeat_subscriber,
+            heartbeat_subscriber,
         };
 
         Ok(reliable_subscriber)
@@ -1246,6 +1243,21 @@ impl<Handler> AdvancedSubscriber<Handler> {
             self.key_expr()
         );
         self.subscriber.undeclare()
+    }
+
+    fn set_background_impl(&mut self, background: bool) {
+        self.subscriber.set_background(background);
+        if let Some(mut liveliness_sub) = self.liveliness_subscriber.take() {
+            liveliness_sub.set_background(background);
+        }
+        if let Some(mut heartbeat_sub) = self.heartbeat_subscriber.take() {
+            heartbeat_sub.set_background(background);
+        }
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.set_background_impl(background)
     }
 }
 
@@ -1423,6 +1435,7 @@ pub struct SampleMissListener<Handler> {
     id: usize,
     statesref: Arc<Mutex<State>>,
     handler: Handler,
+    undeclare_on_drop: bool,
 }
 
 #[zenoh_macros::unstable]
@@ -1438,16 +1451,24 @@ impl<Handler> SampleMissListener<Handler> {
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
+        self.undeclare_on_drop = false;
         zlock!(self.statesref).unregister_miss_callback(&self.id);
         Ok(())
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.undeclare_on_drop = !background;
     }
 }
 
 #[cfg(feature = "unstable")]
 impl<Handler> Drop for SampleMissListener<Handler> {
     fn drop(&mut self) {
-        if let Err(error) = self.undeclare_impl() {
-            tracing::error!(error);
+        if self.undeclare_on_drop {
+            if let Err(error) = self.undeclare_impl() {
+                tracing::error!(error);
+            }
         }
     }
 }
@@ -1582,6 +1603,7 @@ where
             id,
             statesref: self.statesref.clone(),
             handler,
+            undeclare_on_drop: true,
         })
     }
 }
