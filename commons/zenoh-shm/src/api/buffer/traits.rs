@@ -12,7 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    num::NonZeroUsize,
+    ops::{Deref, DerefMut},
+};
+
+use crate::api::provider::types::MemoryLayout;
+
+/// Errors for buffer relayouting operation.
+#[zenoh_macros::unstable_doc]
+#[derive(Debug)]
+pub enum BufferRelayoutError {
+    IncompatibleAlignment,
+    SizeTooBig,
+}
 
 #[zenoh_macros::unstable_doc]
 pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
@@ -22,3 +35,12 @@ pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
 
 #[zenoh_macros::unstable_doc]
 pub trait ShmBufMut: ShmBuf + DerefMut + AsMut<[u8]> {}
+
+#[zenoh_macros::unstable_doc]
+pub trait OwnedShmBuf: ShmBuf {
+    #[zenoh_macros::unstable_doc]
+    fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()>;
+
+    #[zenoh_macros::unstable_doc]
+    fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError>;
+}
