@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use zenoh_config::{
     unwrap_or_default, AutoConnectStrategy, Config, ModeDependent, TargetDependentValue,
 };
@@ -15,7 +17,7 @@ impl AutoConnect {
     /// Builds an `AutoConnect` from multicast config.
     pub(crate) fn multicast(config: &Config, what: WhatAmI) -> Self {
         Self {
-            zid: (*config.id()).into(),
+            zid: (*config.id().deref()).into(),
             matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
             strategy: *unwrap_or_default!(config
                 .scouting()
@@ -28,7 +30,7 @@ impl AutoConnect {
     /// Builds an `AutoConnect` from gossip config.
     pub(crate) fn gossip(config: &Config, what: WhatAmI) -> Self {
         Self {
-            zid: (*config.id()).into(),
+            zid: (*config.id().deref()).into(),
             matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
             strategy: *unwrap_or_default!(config
                 .scouting()

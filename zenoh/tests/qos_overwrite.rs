@@ -14,7 +14,7 @@
 
 #![cfg(all(feature = "unstable", feature = "internal_config"))]
 #![cfg(target_family = "unix")]
-use std::time::Duration;
+use std::{ops::Deref, time::Duration};
 
 use zenoh::{
     config::WhatAmI,
@@ -447,7 +447,7 @@ async fn test_qos_overwrite_zids() {
                 flows: ["egress"]
             }}
         ]"#,
-        config_client2.id()
+        config_client2.id().deref()
     );
     config_router
         .insert_json5("qos/network", &qos_network)
