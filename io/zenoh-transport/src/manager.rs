@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, ops::Deref, sync::Arc, time::Duration};
 
 use rand::{RngCore, SeedableRng};
 use tokio::sync::Mutex as AsyncMutex;
@@ -249,7 +249,7 @@ impl TransportManagerBuilder {
     }
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        self = self.zid((*config.id()).into());
+        self = self.zid((*config.id().deref()).into());
         if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }

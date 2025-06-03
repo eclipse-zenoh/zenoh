@@ -15,7 +15,7 @@ use clap::Parser;
 use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use zenoh::{config::WhatAmI, Config, Result, Wait};
-use zenoh_config::{EndPoint, ModeDependentValue, PermissionsConf};
+use zenoh_config::{EndPoint, ModeDependentValue, PermissionsConf, ZenohId};
 use zenoh_util::LibSearchDirs;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -120,7 +120,9 @@ fn config_from_args(args: &Args) -> Config {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
     }
     if let Some(id) = &args.id {
-        config.set_id(id.parse().unwrap()).unwrap();
+        config
+            .set_id(id.parse::<ZenohId>().unwrap().into())
+            .unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwriting config)
     if args.rest_http_port.is_some() {

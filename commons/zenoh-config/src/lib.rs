@@ -28,15 +28,22 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZeroU16, ops,
-    path::Path, sync::Weak,
+    any::Any,
+    collections::HashSet,
+    fmt,
+    io::Read,
+    net::SocketAddr,
+    num::NonZeroU16,
+    ops::{self, Deref},
+    path::Path,
+    sync::{OnceLock, Weak},
 };
 
 use include::recursive_include;
 use nonempty_collections::NEVec;
 use qos::{PublisherQoSConfList, QosOverwriteMessage, QosOverwrites};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
@@ -356,8 +363,8 @@ validated_struct::validator! {
     #[serde(deny_unknown_fields)]
     #[doc(hidden)]
     Config {
-        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
-        id: ZenohId,
+        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated upon session creation.
+        id: OnceCellZenohId,
         /// The metadata of the instance. Arbitrary json data available from the admin space
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
@@ -1470,4 +1477,76 @@ macro_rules! unwrap_or_default {
     ($val:ident$(.$field:ident($($param:ident)?))*) => {
         $val$(.$field($($param)?))*.clone().unwrap_or(zenoh_config::defaults$(::$field$(($param))?)*.into())
     };
+}
+
+#[derive(Clone, Default)]
+pub struct OnceCellZenohId(OnceLock<ZenohId>);
+
+impl OnceCellZenohId {
+    fn get(&self) -> Option<&ZenohId> {
+        self.0.get()
+    }
+}
+
+impl Deref for OnceCellZenohId {
+    type Target = ZenohId;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.get_or_init(ZenohId::default)
+    }
+}
+
+impl From<ZenohId> for OnceCellZenohId {
+    fn from(value: ZenohId) -> Self {
+        let c = OnceLock::new();
+        c.set(value).unwrap();
+        OnceCellZenohId(c)
+    }
+}
+
+impl From<&OnceCellZenohId> for ZenohId {
+    fn from(val: &OnceCellZenohId) -> ZenohId {
+        *val.deref()
+    }
+}
+
+impl Serialize for OnceCellZenohId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.get() {
+            Some(val) => serializer.serialize_some(val),
+            None => serializer.serialize_none(),
+        }
+    }
+}
+
+struct OnceCellZenohIdVisitor;
+impl<'de> Visitor<'de> for OnceCellZenohIdVisitor {
+    type Value = OnceCellZenohId;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a ZenohId or None")
+    }
+
+    fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+        Ok(OnceCellZenohId::from(ZenohId::deserialize(deserializer)?))
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E> {
+        Ok(OnceCellZenohId::default())
+    }
+}
+
+impl<'de> Deserialize<'de> for OnceCellZenohId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_option(OnceCellZenohIdVisitor)
+    }
+}
+
+impl std::fmt::Debug for OnceCellZenohId {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.get() {
+            Some(zid) => write!(f, "{}", zid),
+            None => write!(f, "None"),
+        }
+    }
 }
