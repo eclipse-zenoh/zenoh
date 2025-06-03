@@ -13,6 +13,10 @@
 //
 
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
+
+use zenoh_core::{Resolve, ResolveClosure};
+use zenoh_protocol::core::Locator;
+
 use crate::{
     api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
     net::runtime::Runtime,
@@ -81,5 +85,21 @@ impl SessionInfo {
     /// ```
     pub fn peers_zid(&self) -> PeersZenohIdBuilder<'_> {
         PeersZenohIdBuilder::new(&self.runtime)
+    }
+
+    /// Return the locators on which the current zenoh [`Session`](crate::Session) is listening to.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// println!("{:?}", session.info().locators().await);
+    /// // print ["tcp/127.0.0.1:7447"]
+    /// # }
+    /// ```
+    pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
+        ResolveClosure::new(|| self.runtime.get_locators())
     }
 }
