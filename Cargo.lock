@@ -5819,6 +5819,7 @@ dependencies = [
  "tracing-subscriber",
  "winapi",
  "zenoh-core",
+ "zenoh-keyexpr",
  "zenoh-result",
 ]
 
