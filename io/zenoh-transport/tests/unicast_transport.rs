@@ -22,6 +22,7 @@ use std::{
     time::Duration,
 };
 
+use rstest::rstest;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -236,12 +237,14 @@ const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
+    feature = "transport_ws",
 ))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
+    feature = "transport_ws",
 ))]
 const MSG_SIZE_LOWLATENCY: [usize; 1] = MSG_SIZE_NOFRAG;
 
@@ -261,6 +264,10 @@ impl Default for SHRouter {
 impl SHRouter {
     fn get_count(&self) -> usize {
         self.count.load(Ordering::SeqCst)
+    }
+
+    fn reset_count(&self) {
+        self.count.store(0, Ordering::SeqCst);
     }
 }
 
@@ -357,6 +364,9 @@ async fn open_transport_unicast(
     TransportManager,
     TransportUnicast,
 ) {
+    // Short timeout for connectionless protocols like udp and quick
+    let open_timeout = Duration::from_secs(5);
+
     // Define client and router IDs
     let client_id = ZenohIdProto::try_from([1]).unwrap();
     let router_id = ZenohIdProto::try_from([2]).unwrap();
@@ -369,7 +379,9 @@ async fn open_transport_unicast(
         #[cfg(feature = "shared-memory")]
         false,
         lowlatency_transport,
-    );
+    )
+    .open_timeout(open_timeout);
+
     let router_manager = TransportManager::builder()
         .zid(router_id)
         .whatami(WhatAmI::Router)
@@ -390,7 +402,9 @@ async fn open_transport_unicast(
         #[cfg(feature = "shared-memory")]
         false,
         lowlatency_transport,
-    );
+    )
+    .open_timeout(open_timeout);
+
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
@@ -437,9 +451,9 @@ async fn close_transport(
     });
 
     // Stop the locators on the manager
-    for e in endpoints.iter() {
+    for e in router_manager.get_listeners().await {
         println!("Del locator: {}", e);
-        ztimeout!(router_manager.del_listener(e)).unwrap();
+        ztimeout!(router_manager.del_listener(&e)).unwrap();
     }
 
     ztimeout!(async {
@@ -549,6 +563,34 @@ async fn run_single(
         msg_size,
     )
     .await;
+
+    // Check transport still works despite closing listener endpoints:
+    println!("Closing router listeners...");
+    for endpoint in router_manager.get_listeners().await {
+        println!("Del listener: {}", endpoint);
+        router_manager.del_listener(&endpoint).await.unwrap();
+    }
+    tokio::time::sleep(SLEEP).await;
+
+    println!("Testing back the transports after closing the router listeners...");
+    router_handler.reset_count();
+    test_transport(
+        router_handler.clone(),
+        client_transport.clone(),
+        channel,
+        msg_size,
+    )
+    .await;
+    println!("Transports kept working after closing the router listeners...");
+
+    // Open transport against closed endpoints -> This should fail or timeout
+    for e in client_endpoints.iter() {
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap_err();
+        println!(
+            "Attempt to open new transport with '{}' (closed router listener) failed as expected.",
+            e
+        );
+    }
 
     #[cfg(feature = "stats")]
     {
@@ -761,64 +803,64 @@ async fn transport_unicast_unix_only_with_lowlatency_transport() {
 }
 
 #[cfg(feature = "transport_ws")]
+#[rstest(
+    priority,
+    reliability,
+    port1,
+    port2,
+    case(Priority::DEFAULT, Reliability::Reliable, 16020, 16021),
+    case(Priority::DEFAULT, Reliability::BestEffort, 16022, 16023),
+    case(Priority::RealTime, Reliability::Reliable, 16024, 16025),
+    case(Priority::RealTime, Reliability::BestEffort, 16026, 16027)
+)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn transport_unicast_ws_only() {
+async fn transport_unicast_ws_only(
+    priority: Priority,
+    reliability: Reliability,
+    port1: u16,
+    port2: u16,
+) {
     zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("ws/127.0.0.1:{}", 16020).parse().unwrap(),
-        format!("ws/[::1]:{}", 16021).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", port1).parse().unwrap(),
+        format!("ws/[::1]:{}", port2).parse().unwrap(),
     ];
     // Define the reliability and congestion control
-    let channel = [
-        Channel {
-            priority: Priority::DEFAULT,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::DEFAULT,
-            reliability: Reliability::BestEffort,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
-    ];
+    let channel = [Channel {
+        priority,
+        reliability,
+    }];
     // Run
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
 #[cfg(feature = "transport_ws")]
+#[rstest(
+    priority,
+    reliability,
+    port1,
+    case(Priority::DEFAULT, Reliability::Reliable, 16120),
+    case(Priority::DEFAULT, Reliability::BestEffort, 16121),
+    case(Priority::RealTime, Reliability::Reliable, 16122),
+    case(Priority::RealTime, Reliability::BestEffort, 16123)
+)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn transport_unicast_ws_only_with_lowlatency_transport() {
+async fn transport_unicast_ws_only_with_lowlatency_transport(
+    priority: Priority,
+    reliability: Reliability,
+    port1: u16,
+) {
     zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 16120).parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", port1).parse().unwrap()];
     // Define the reliability and congestion control
-    let channel = [
-        Channel {
-            priority: Priority::DEFAULT,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::DEFAULT,
-            reliability: Reliability::BestEffort,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
-    ];
+    let channel = [Channel {
+        priority,
+        reliability,
+    }];
     // Run
     run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_LOWLATENCY).await;
 }
@@ -1053,13 +1095,26 @@ async fn transport_unicast_tls_only_server() {
 }
 
 #[cfg(feature = "transport_quic")]
+#[rstest(
+    priority,
+    reliability,
+    port1,
+    case(Priority::DEFAULT, Reliability::Reliable, 16080),
+    case(Priority::DEFAULT, Reliability::BestEffort, 16081),
+    case(Priority::RealTime, Reliability::Reliable, 16082),
+    case(Priority::RealTime, Reliability::BestEffort, 16083)
+)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn transport_unicast_quic_only_server() {
+async fn transport_unicast_quic_only_server(
+    priority: Priority,
+    reliability: Reliability,
+    port1: u16,
+) {
     use zenoh_link::quic::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 16080).parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", port1).parse().unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
@@ -1074,24 +1129,10 @@ async fn transport_unicast_quic_only_server() {
         .unwrap();
 
     // Define the reliability and congestion control
-    let channel = [
-        Channel {
-            priority: Priority::DEFAULT,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::DEFAULT,
-            reliability: Reliability::BestEffort,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
-    ];
+    let channel = [Channel {
+        priority,
+        reliability,
+    }];
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
@@ -1314,8 +1355,21 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
 }
 
 #[cfg(all(feature = "transport_quic", target_family = "unix"))]
+#[rstest(
+    priority,
+    reliability,
+    port1,
+    case(Priority::DEFAULT, Reliability::Reliable, 11461),
+    case(Priority::DEFAULT, Reliability::BestEffort, 11462),
+    case(Priority::RealTime, Reliability::Reliable, 11463),
+    case(Priority::RealTime, Reliability::BestEffort, 11464)
+)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn transport_unicast_quic_only_mutual_success() {
+async fn transport_unicast_quic_only_mutual_success(
+    priority: Priority,
+    reliability: Reliability,
+    port1: u16,
+) {
     use zenoh_link::quic::config::*;
 
     zenoh_util::init_log_from_env_or("error");
@@ -1323,7 +1377,7 @@ async fn transport_unicast_quic_only_mutual_success() {
     let client_auth = "true";
 
     // Define the locator
-    let mut client_endpoint: EndPoint = ("quic/localhost:10461").parse().unwrap();
+    let mut client_endpoint: EndPoint = format!("quic/localhost:{}", port1).parse().unwrap();
     client_endpoint
         .config_mut()
         .extend_from_iter(
@@ -1339,7 +1393,7 @@ async fn transport_unicast_quic_only_mutual_success() {
         .unwrap();
 
     // Define the locator
-    let mut server_endpoint: EndPoint = ("quic/localhost:10461").parse().unwrap();
+    let mut server_endpoint: EndPoint = format!("quic/localhost:{}", port1).parse().unwrap();
     server_endpoint
         .config_mut()
         .extend_from_iter(
@@ -1354,24 +1408,10 @@ async fn transport_unicast_quic_only_mutual_success() {
         )
         .unwrap();
     // Define the reliability and congestion control
-    let channel = [
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::BestEffort,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
-    ];
+    let channel = [Channel {
+        priority,
+        reliability,
+    }];
     // Run
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
