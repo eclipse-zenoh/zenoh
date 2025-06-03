@@ -37,9 +37,7 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{
         api::{
-            protocol_implementations::posix::{
-                posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
-            },
+            protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
             provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
         },
         ShmBufInner,
@@ -162,10 +160,7 @@ mod tests {
             .unwrap()
             .wait()
             .unwrap();
-        let shm01 = ShmProviderBuilder::builder()
-            .protocol_id::<POSIX_PROTOCOL_ID>()
-            .backend(backend)
-            .wait();
+        let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));

@@ -549,17 +549,14 @@ pub mod shm {
                 LayoutedPosixShmProviderBackendBuilder, PosixShmProviderBackend,
                 PosixShmProviderBackendBuilder,
             },
-            protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
             shm_provider::{
                 AllocLayout, AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
                 DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
-                DynamicProtocolID, ForceDeallocPolicy, GarbageCollect, JustAlloc,
-                LayoutAllocBuilder, ProtocolIDSource, ProviderAllocBuilder, ShmProvider,
-                ShmProviderBuilder, ShmProviderBuilderBackendID, ShmProviderBuilderID,
-                StaticProtocolID,
+                ForceDeallocPolicy, GarbageCollect, JustAlloc, LayoutAllocBuilder,
+                ProviderAllocBuilder, ShmProvider, ShmProviderBuilder,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{
