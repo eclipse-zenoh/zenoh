@@ -15,4 +15,3 @@ pub(crate) mod linkstate;
 pub(crate) mod network;
 
 pub(crate) const ROUTERS_NET_NAME: &str = "[Routers Network]";
-pub(crate) const PEERS_NET_NAME: &str = "[Peers Network]";

@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{any::Any, collections::HashMap, sync::Arc};
 
-use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_config::{Config, WhatAmI};
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -47,7 +47,6 @@ use crate::net::{
 };
 
 mod client;
-mod linkstate_peer;
 mod p2p_peer;
 mod router;
 
@@ -270,16 +269,10 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(whatami: WhatAmI, _config: &Config) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
         WhatAmI::Client => Box::new(client::HatCode {}),
-        WhatAmI::Peer => {
-            if unwrap_or_default!(config.routing().peer().mode()) == *"linkstate" {
-                Box::new(linkstate_peer::HatCode {})
-            } else {
-                Box::new(p2p_peer::HatCode {})
-            }
-        }
+        WhatAmI::Peer => Box::new(p2p_peer::HatCode {}),
         WhatAmI::Router => Box::new(router::HatCode {}),
     }
 }
