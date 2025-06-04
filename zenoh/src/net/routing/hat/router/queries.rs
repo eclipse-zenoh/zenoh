@@ -37,13 +37,13 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
+    face_hat, face_hat_mut, get_router, hat, hat_mut, push_declaration_profile, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
-    protocol::{linkstate::LinkEdgeWeight, network::Network},
+    protocol::network::Network,
     routing::{
         dispatcher::{
             face::FaceState,
@@ -63,29 +63,10 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
     this
 }
 
-fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
-    let info = if hat!(tables).full_net(WhatAmI::Peer) {
-        res.context.as_ref().and_then(|_| {
-            res_hat!(res)
-                .linkstatepeer_qabls
-                .iter()
-                .fold(None, |accu, (zid, info)| {
-                    if *zid != tables.zid {
-                        Some(match accu {
-                            Some(accu) => merge_qabl_infos(accu, info),
-                            None => *info,
-                        })
-                    } else {
-                        accu
-                    }
-                })
-        })
-    } else {
-        None
-    };
+fn local_router_qabl_info(_tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
     res.session_ctxs
         .values()
-        .fold(info, |accu, ctx| {
+        .fold(None, |accu, ctx| {
             if let Some(info) = ctx.qabl.as_ref() {
                 Some(match accu {
                     Some(accu) => merge_qabl_infos(accu, info),
@@ -98,7 +79,11 @@ fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo
         .unwrap_or(QueryableInfoType::DEFAULT)
 }
 
-fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
+fn local_qabl_info(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    face: &Arc<FaceState>,
+) -> QueryableInfoType {
     let info = if res.context.is_some() {
         res_hat!(res)
             .router_qabls
@@ -119,61 +104,8 @@ fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoTy
     res.session_ctxs
         .values()
         .fold(info, |accu, ctx| {
-            if let Some(info) = ctx.qabl.as_ref() {
-                Some(match accu {
-                    Some(accu) => merge_qabl_infos(accu, info),
-                    None => *info,
-                })
-            } else {
-                accu
-            }
-        })
-        .unwrap_or(QueryableInfoType::DEFAULT)
-}
-
-fn local_qabl_info(
-    tables: &Tables,
-    res: &Arc<Resource>,
-    face: &Arc<FaceState>,
-) -> QueryableInfoType {
-    let mut info = if res.context.is_some() {
-        res_hat!(res)
-            .router_qabls
-            .iter()
-            .fold(None, |accu, (zid, info)| {
-                if *zid != tables.zid {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            })
-    } else {
-        None
-    };
-    if res.context.is_some() && hat!(tables).full_net(WhatAmI::Peer) {
-        info = res_hat!(res)
-            .linkstatepeer_qabls
-            .iter()
-            .fold(info, |accu, (zid, info)| {
-                if *zid != tables.zid {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            })
-    }
-    res.session_ctxs
-        .values()
-        .fold(info, |accu, ctx| {
             if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
                 || face.whatami != WhatAmI::Peer
-                || hat!(tables).failover_brokering(ctx.face.zid, face.zid)
             {
                 if let Some(info) = ctx.qabl.as_ref() {
                     Some(match accu {
@@ -242,7 +174,6 @@ fn propagate_simple_queryable(
     src_face: Option<&mut Arc<FaceState>>,
     send_declare: &mut SendDeclare,
 ) {
-    let full_peers_net = hat!(tables).full_net(WhatAmI::Peer);
     let faces = tables.faces.values().cloned();
     for mut dst_face in faces {
         let info = local_qabl_info(tables, res, &dst_face);
@@ -256,19 +187,13 @@ fn propagate_simple_queryable(
                 .remote_interests
                 .values()
                 .any(|i| i.options.queryables() && i.matches(res))
-            && if full_peers_net {
-                dst_face.whatami == WhatAmI::Client
-            } else {
-                dst_face.whatami != WhatAmI::Router
-                    && src_face
-                        .as_ref()
-                        .map(|src_face| {
-                            src_face.whatami != WhatAmI::Peer
-                                || dst_face.whatami != WhatAmI::Peer
-                                || hat!(tables).failover_brokering(src_face.zid, dst_face.zid)
-                        })
-                        .unwrap_or(true)
-            }
+            && dst_face.whatami != WhatAmI::Router
+            && src_face
+                .as_ref()
+                .map(|src_face| {
+                    src_face.whatami != WhatAmI::Peer || dst_face.whatami != WhatAmI::Peer
+                })
+                .unwrap_or(true)
         {
             let id = current
                 .map(|c| c.0)
@@ -305,9 +230,8 @@ fn propagate_sourced_queryable(
     qabl_info: &QueryableInfoType,
     src_face: Option<&mut Arc<FaceState>>,
     source: &ZenohIdProto,
-    net_type: WhatAmI,
 ) {
-    let net = hat!(tables).get_net(net_type).unwrap();
+    let net = hat!(tables).routers_net.as_ref().unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
@@ -354,28 +278,7 @@ fn register_router_queryable(
         }
 
         // Propagate queryable to routers
-        propagate_sourced_queryable(
-            tables,
-            res,
-            qabl_info,
-            face.as_deref_mut(),
-            &router,
-            WhatAmI::Router,
-        );
-    }
-
-    if hat!(tables).full_net(WhatAmI::Peer) {
-        // Propagate queryable to peers
-        if face.is_none() || face.as_ref().unwrap().whatami != WhatAmI::Peer {
-            let local_info = local_peer_qabl_info(tables, res);
-            register_linkstatepeer_queryable(
-                tables,
-                face.as_deref_mut(),
-                res,
-                &local_info,
-                tables.zid,
-            )
-        }
+        propagate_sourced_queryable(tables, res, qabl_info, face.as_deref_mut(), &router);
     }
 
     // Propagate queryable to clients
@@ -391,43 +294,6 @@ fn declare_router_queryable(
     send_declare: &mut SendDeclare,
 ) {
     register_router_queryable(tables, Some(face), res, qabl_info, router, send_declare);
-}
-
-fn register_linkstatepeer_queryable(
-    tables: &mut Tables,
-    face: Option<&mut Arc<FaceState>>,
-    res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfoType,
-    peer: ZenohIdProto,
-) {
-    let current_info = res_hat!(res).linkstatepeer_qabls.get(&peer);
-    if current_info.is_none() || current_info.unwrap() != qabl_info {
-        // Register peer queryable
-        {
-            res_hat_mut!(res)
-                .linkstatepeer_qabls
-                .insert(peer, *qabl_info);
-            hat_mut!(tables).linkstatepeer_qabls.insert(res.clone());
-        }
-
-        // Propagate queryable to peers
-        propagate_sourced_queryable(tables, res, qabl_info, face, &peer, WhatAmI::Peer);
-    }
-}
-
-fn declare_linkstatepeer_queryable(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfoType,
-    peer: ZenohIdProto,
-    send_declare: &mut SendDeclare,
-) {
-    let mut face = Some(face);
-    register_linkstatepeer_queryable(tables, face.as_deref_mut(), res, qabl_info, peer);
-    let local_info = local_router_qabl_info(tables, res);
-    let zid = tables.zid;
-    register_router_queryable(tables, face, res, &local_info, zid, send_declare);
 }
 
 fn register_simple_queryable(
@@ -471,15 +337,6 @@ fn remote_router_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
             .router_qabls
             .keys()
             .any(|router| router != &tables.zid)
-}
-
-#[inline]
-fn remote_linkstatepeer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
-    res.context.is_some()
-        && res_hat!(res)
-            .linkstatepeer_qabls
-            .keys()
-            .any(|peer| peer != &tables.zid)
 }
 
 #[inline]
@@ -579,9 +436,7 @@ fn propagate_forget_simple_queryable(
             if !res.context().matches.iter().any(|m| {
                 m.upgrade().is_some_and(|m| {
                     m.context.is_some()
-                        && (remote_simple_qabls(&m, &face)
-                            || remote_linkstatepeer_qabls(tables, &m)
-                            || remote_router_qabls(tables, &m))
+                        && (remote_simple_qabls(&m, &face) || remote_router_qabls(tables, &m))
                 })
             }) {
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
@@ -612,9 +467,7 @@ fn propagate_forget_simple_queryable_to_peers(
     res: &mut Arc<Resource>,
     send_declare: &mut SendDeclare,
 ) {
-    if !hat!(tables).full_net(WhatAmI::Peer)
-        && res_hat!(res).router_qabls.len() == 1
-        && res_hat!(res).router_qabls.contains_key(&tables.zid)
+    if res_hat!(res).router_qabls.len() == 1 && res_hat!(res).router_qabls.contains_key(&tables.zid)
     {
         for mut face in tables
             .faces
@@ -625,11 +478,7 @@ fn propagate_forget_simple_queryable_to_peers(
             if face.whatami == WhatAmI::Peer
                 && face_hat!(face).local_qabls.contains_key(res)
                 && !res.session_ctxs.values().any(|s| {
-                    face.zid != s.face.zid
-                        && s.qabl.is_some()
-                        && (s.face.whatami == WhatAmI::Client
-                            || (s.face.whatami == WhatAmI::Peer
-                                && hat!(tables).failover_brokering(s.face.zid, face.zid)))
+                    face.zid != s.face.zid && s.qabl.is_some() && s.face.whatami == WhatAmI::Client
                 })
             {
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
@@ -660,9 +509,8 @@ fn propagate_forget_sourced_queryable(
     res: &mut Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     source: &ZenohIdProto,
-    net_type: WhatAmI,
 ) {
-    let net = hat!(tables).get_net(net_type).unwrap();
+    let net = hat!(tables).routers_net.as_ref().unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
@@ -703,10 +551,6 @@ fn unregister_router_queryable(
         hat_mut!(tables)
             .router_qabls
             .retain(|qabl| !Arc::ptr_eq(qabl, res));
-
-        if hat!(tables).full_net(WhatAmI::Peer) {
-            undeclare_linkstatepeer_queryable(tables, None, res, &tables.zid.clone());
-        }
         propagate_forget_simple_queryable(tables, res, send_declare);
     }
 
@@ -722,7 +566,7 @@ fn undeclare_router_queryable(
 ) {
     if res_hat!(res).router_qabls.contains_key(router) {
         unregister_router_queryable(tables, res, router, send_declare);
-        propagate_forget_sourced_queryable(tables, res, face, router, WhatAmI::Router);
+        propagate_forget_sourced_queryable(tables, res, face, router);
     }
 }
 
@@ -734,52 +578,6 @@ fn forget_router_queryable(
     send_declare: &mut SendDeclare,
 ) {
     undeclare_router_queryable(tables, Some(face), res, router, send_declare);
-}
-
-fn unregister_linkstatepeer_queryable(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
-    peer: &ZenohIdProto,
-) {
-    res_hat_mut!(res).linkstatepeer_qabls.remove(peer);
-
-    if res_hat!(res).linkstatepeer_qabls.is_empty() {
-        hat_mut!(tables)
-            .linkstatepeer_qabls
-            .retain(|qabl| !Arc::ptr_eq(qabl, res));
-    }
-}
-
-fn undeclare_linkstatepeer_queryable(
-    tables: &mut Tables,
-    face: Option<&Arc<FaceState>>,
-    res: &mut Arc<Resource>,
-    peer: &ZenohIdProto,
-) {
-    if res_hat!(res).linkstatepeer_qabls.contains_key(peer) {
-        unregister_linkstatepeer_queryable(tables, res, peer);
-        propagate_forget_sourced_queryable(tables, res, face, peer, WhatAmI::Peer);
-    }
-}
-
-fn forget_linkstatepeer_queryable(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    res: &mut Arc<Resource>,
-    peer: &ZenohIdProto,
-    send_declare: &mut SendDeclare,
-) {
-    undeclare_linkstatepeer_queryable(tables, Some(face), res, peer);
-
-    let simple_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl.is_some());
-    let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, res);
-    let zid = tables.zid;
-    if !simple_qabls && !linkstatepeer_qabls {
-        undeclare_router_queryable(tables, None, res, &zid, send_declare);
-    } else {
-        let local_info = local_router_qabl_info(tables, res);
-        register_router_queryable(tables, None, res, &local_info, zid, send_declare);
-    }
 }
 
 pub(super) fn undeclare_simple_queryable(
@@ -799,9 +597,8 @@ pub(super) fn undeclare_simple_queryable(
 
         let mut simple_qabls = simple_qabls(res);
         let router_qabls = remote_router_qabls(tables, res);
-        let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, res);
 
-        if simple_qabls.is_empty() && !linkstatepeer_qabls {
+        if simple_qabls.is_empty() {
             undeclare_router_queryable(tables, None, res, &tables.zid.clone(), send_declare);
         } else {
             let local_info = local_router_qabl_info(tables, res);
@@ -809,7 +606,7 @@ pub(super) fn undeclare_simple_queryable(
             propagate_forget_simple_queryable_to_peers(tables, res, send_declare);
         }
 
-        if simple_qabls.len() == 1 && !router_qabls && !linkstatepeer_qabls {
+        if simple_qabls.len() == 1 && !router_qabls {
             let mut face = &mut simple_qabls[0];
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
@@ -838,9 +635,7 @@ pub(super) fn undeclare_simple_queryable(
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade().is_some_and(|m| {
                         m.context.is_some()
-                            && (remote_simple_qabls(&m, face)
-                                || remote_linkstatepeer_qabls(tables, &m)
-                                || remote_router_qabls(tables, &m))
+                            && (remote_simple_qabls(&m, face) || remote_router_qabls(tables, &m))
                     })
                 }) {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
@@ -884,183 +679,36 @@ fn forget_simple_queryable(
 pub(super) fn queries_remove_node(
     tables: &mut Tables,
     node: &ZenohIdProto,
-    net_type: WhatAmI,
     send_declare: &mut SendDeclare,
 ) {
-    match net_type {
-        WhatAmI::Router => {
-            let mut qabls = vec![];
-            for res in hat!(tables).router_qabls.iter() {
-                for qabl in res_hat!(res).router_qabls.keys() {
-                    if qabl == node {
-                        qabls.push(res.clone());
-                    }
-                }
-            }
-            for mut res in qabls {
-                unregister_router_queryable(tables, &mut res, node, send_declare);
-
-                disable_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res);
-            }
-        }
-        WhatAmI::Peer => {
-            let mut qabls = vec![];
-            for res in hat!(tables).router_qabls.iter() {
-                for qabl in res_hat!(res).router_qabls.keys() {
-                    if qabl == node {
-                        qabls.push(res.clone());
-                    }
-                }
-            }
-            for mut res in qabls {
-                unregister_linkstatepeer_queryable(tables, &mut res, node);
-
-                let simple_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl.is_some());
-                let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, &res);
-                if !simple_qabls && !linkstatepeer_qabls {
-                    undeclare_router_queryable(
-                        tables,
-                        None,
-                        &mut res,
-                        &tables.zid.clone(),
-                        send_declare,
-                    );
-                } else {
-                    let local_info = local_router_qabl_info(tables, &res);
-                    register_router_queryable(
-                        tables,
-                        None,
-                        &mut res,
-                        &local_info,
-                        tables.zid,
-                        send_declare,
-                    );
-                }
-
-                disable_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res)
-            }
-        }
-        _ => (),
-    }
-}
-
-pub(super) fn queries_linkstate_change(
-    tables: &mut Tables,
-    zid: &ZenohIdProto,
-    links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
-    send_declare: &mut SendDeclare,
-) {
-    if let Some(mut src_face) = tables.get_face(zid).cloned() {
-        if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
-            let to_forget = face_hat!(src_face)
-                .local_qabls
-                .keys()
-                .filter(|res| {
-                    let client_qabls = res
-                        .session_ctxs
-                        .values()
-                        .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some());
-                    !remote_router_qabls(tables, res)
-                        && !client_qabls
-                        && !res.session_ctxs.values().any(|ctx| {
-                            ctx.face.whatami == WhatAmI::Peer
-                                && src_face.id != ctx.face.id
-                                && HatTables::failover_brokering_to(links, &ctx.face.zid)
-                        })
-                })
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>();
-            for res in to_forget {
-                if let Some((id, _)) = face_hat_mut!(&mut src_face).local_qabls.remove(&res) {
-                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
-                    send_declare(
-                        &src_face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id,
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
-            }
-
-            for mut dst_face in tables.faces.values().cloned() {
-                if src_face.id != dst_face.id
-                    && HatTables::failover_brokering_to(links, &dst_face.zid)
-                {
-                    for res in face_hat!(src_face).remote_qabls.values() {
-                        if !face_hat!(dst_face).local_qabls.contains_key(res) {
-                            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                            let info = local_qabl_info(tables, res, &dst_face);
-                            face_hat_mut!(&mut dst_face)
-                                .local_qabls
-                                .insert(res.clone(), (id, info));
-                            let push_declaration = push_declaration_profile(tables, &dst_face);
-                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
-                            send_declare(
-                                &dst_face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                            id,
-                                            wire_expr: key_expr,
-                                            ext_info: info,
-                                        }),
-                                    },
-                                    res.expr().to_string(),
-                                ),
-                            );
-                        }
-                    }
-                }
+    let mut qabls = vec![];
+    for res in hat!(tables).router_qabls.iter() {
+        for qabl in res_hat!(res).router_qabls.keys() {
+            if qabl == node {
+                qabls.push(res.clone());
             }
         }
     }
+    for mut res in qabls {
+        unregister_router_queryable(tables, &mut res, node, send_declare);
+
+        disable_matches_query_routes(tables, &mut res);
+        Resource::clean(&mut res);
+    }
 }
 
-pub(super) fn queries_tree_change(
-    tables: &mut Tables,
-    new_children: &[Vec<NodeIndex>],
-    net_type: WhatAmI,
-) {
-    let net = match hat!(tables).get_net(net_type) {
-        Some(net) => net,
-        None => {
-            tracing::error!("Error accessing net in queries_tree_change!");
-            return;
-        }
-    };
-    // propagate qabls to new children
+pub(super) fn queries_tree_change(tables: &mut Tables, new_children: &[Vec<NodeIndex>]) {
+    let net = hat!(tables).routers_net.as_ref().unwrap(); // TODO does routers_net still need to be an option?
+                                                          // propagate qabls to new children
     for (tree_sid, tree_children) in new_children.iter().enumerate() {
         if !tree_children.is_empty() {
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].zid;
 
-                let qabls_res = match net_type {
-                    WhatAmI::Router => &hat!(tables).router_qabls,
-                    _ => &hat!(tables).linkstatepeer_qabls,
-                };
-
+                let qabls_res = &hat!(tables).router_qabls;
                 for res in qabls_res {
-                    let qabls = match net_type {
-                        WhatAmI::Router => &res_hat!(res).router_qabls,
-                        _ => &res_hat!(res).linkstatepeer_qabls,
-                    };
+                    let qabls = &res_hat!(res).router_qabls;
                     if let Some(qabl_info) = qabls.get(&tree_id) {
                         send_sourced_queryable_to_net_children(
                             tables,
@@ -1161,18 +809,11 @@ pub(crate) fn declare_qabl_interest(
                     qabl.context.is_some()
                         && qabl.matches(res)
                         && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-                            || res_hat!(qabl)
-                                .linkstatepeer_qabls
-                                .keys()
-                                .any(|r| *r != tables.zid)
                             || qabl.session_ctxs.values().any(|s| {
                                 s.face.id != face.id
                                     && s.qabl.is_some()
                                     && (s.face.whatami == WhatAmI::Client
-                                        || face.whatami == WhatAmI::Client
-                                        || (s.face.whatami == WhatAmI::Peer
-                                            && hat!(tables)
-                                                .failover_brokering(s.face.zid, face.zid)))
+                                        || face.whatami == WhatAmI::Client)
                             }))
                 }) {
                     let info = local_qabl_info(tables, res, face);
@@ -1202,15 +843,10 @@ pub(crate) fn declare_qabl_interest(
                     if qabl.context.is_some()
                         && qabl.matches(res)
                         && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-                            || res_hat!(qabl)
-                                .linkstatepeer_qabls
-                                .keys()
-                                .any(|r| *r != tables.zid)
                             || qabl.session_ctxs.values().any(|s| {
                                 s.qabl.is_some()
                                     && (s.face.whatami != WhatAmI::Peer
-                                        || face.whatami != WhatAmI::Peer
-                                        || hat!(tables).failover_brokering(s.face.zid, face.zid))
+                                        || face.whatami != WhatAmI::Peer)
                             }))
                     {
                         let info = local_qabl_info(tables, qabl, face);
@@ -1240,9 +876,7 @@ pub(crate) fn declare_qabl_interest(
         } else {
             for qabl in hat!(tables).router_qabls.iter() {
                 if qabl.context.is_some()
-                    && (remote_simple_qabls(qabl, face)
-                        || remote_linkstatepeer_qabls(tables, qabl)
-                        || remote_router_qabls(tables, qabl))
+                    && (remote_simple_qabls(qabl, face) || remote_router_qabls(tables, qabl))
                 {
                     let info = local_qabl_info(tables, qabl, face);
                     let id = make_qabl_id(qabl, face, mode, info);
@@ -1288,22 +922,6 @@ impl HatQueriesTrait for HatCode {
                     declare_router_queryable(tables, face, res, qabl_info, router, send_declare)
                 }
             }
-            WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(tables, face, node_id) {
-                        declare_linkstatepeer_queryable(
-                            tables,
-                            face,
-                            res,
-                            qabl_info,
-                            peer,
-                            send_declare,
-                        )
-                    }
-                } else {
-                    declare_simple_queryable(tables, face, id, res, qabl_info, send_declare)
-                }
-            }
             _ => declare_simple_queryable(tables, face, id, res, qabl_info, send_declare),
         }
     }
@@ -1330,28 +948,6 @@ impl HatQueriesTrait for HatCode {
                     None
                 }
             }
-            WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
-                    if let Some(mut res) = res {
-                        if let Some(peer) = get_peer(tables, face, node_id) {
-                            forget_linkstatepeer_queryable(
-                                tables,
-                                face,
-                                &mut res,
-                                &peer,
-                                send_declare,
-                            );
-                            Some(res)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    forget_simple_queryable(tables, face, id, send_declare)
-                }
-            }
             _ => forget_simple_queryable(tables, face, id, send_declare),
         }
     }
@@ -1368,17 +964,14 @@ impl HatQueriesTrait for HatCode {
                     // sources of those queryables
                     Sources {
                         routers: Vec::from_iter(res_hat!(s).router_qabls.keys().cloned()),
-                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
-                            Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned())
-                        } else {
-                            s.session_ctxs
-                                .values()
-                                .filter_map(|f| {
-                                    (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
-                                        .then_some(f.face.zid)
-                                })
-                                .collect()
-                        },
+                        peers: s
+                            .session_ctxs
+                            .values()
+                            .filter_map(|f| {
+                                (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
+                                    .then_some(f.face.zid)
+                            })
+                            .collect(),
                         clients: s
                             .session_ctxs
                             .values()
@@ -1444,9 +1037,7 @@ impl HatQueriesTrait for HatCode {
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-        let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
-                == tables.zid;
+        let master = true;
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -1464,23 +1055,6 @@ impl HatQueriesTrait for HatCode {
                     net,
                     router_source,
                     &res_hat!(mres).router_qabls,
-                    complete,
-                );
-            }
-
-            if (master || source_type != WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
-                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
-                let peer_source = match source_type {
-                    WhatAmI::Peer => source,
-                    _ => net.idx.index() as NodeId,
-                };
-                insert_target_for_qabls(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    peer_source,
-                    &res_hat!(mres).linkstatepeer_qabls,
                     complete,
                 );
             }
@@ -1533,9 +1107,7 @@ impl HatQueriesTrait for HatCode {
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
-        let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
-                == tables.zid;
+        let master = true;
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -1550,17 +1122,6 @@ impl HatQueriesTrait for HatCode {
                     tables,
                     net,
                     &res_hat!(mres).router_qabls,
-                    complete,
-                );
-            }
-
-            if hat!(tables).full_net(WhatAmI::Peer) {
-                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
-                insert_faces_for_qbls(
-                    &mut matching_queryables,
-                    tables,
-                    net,
-                    &res_hat!(mres).linkstatepeer_qabls,
                     complete,
                 );
             }
