@@ -3155,7 +3155,7 @@ impl crate::net::primitives::EPrimitives for WeakSession {
 /// use zenoh::session::ZenohId;
 ///
 /// let mut config = zenoh::Config::default();
-/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
+/// config.set_id(Some(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap()));
 /// config.connect.endpoints.set(
 ///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
 ///

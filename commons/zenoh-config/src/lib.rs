@@ -357,7 +357,8 @@ validated_struct::validator! {
     #[doc(hidden)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
-        id: ZenohId,
+        /// If not specified a random Zenoh ID will be generated upon session creation.
+        id: Option<ZenohId>,
         /// The metadata of the instance. Arbitrary json data available from the admin space
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").

@@ -120,7 +120,7 @@ fn config_from_args(args: &Args) -> Config {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
     }
     if let Some(id) = &args.id {
-        config.set_id(id.parse().unwrap()).unwrap();
+        config.set_id(Some(id.parse().unwrap())).unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwriting config)
     if args.rest_http_port.is_some() {

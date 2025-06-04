@@ -140,7 +140,7 @@ impl RuntimeBuilder {
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = (*config.id()).into();
+        let zid = (*config.id()).unwrap_or_default().into();
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
