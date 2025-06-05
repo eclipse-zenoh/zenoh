@@ -35,6 +35,8 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 
+use crate::pktinfo;
+
 use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
     UDP_MAX_MTU,
@@ -540,20 +542,41 @@ async fn accept_read_task(
         };
     }
 
-    async fn receive(socket: Arc<UdpSocket>, buffer: &mut [u8]) -> ZResult<(usize, SocketAddr)> {
+    #[cfg(not(target_family = "unix"))]
+    async fn receive(
+        socket: Arc<UdpSocket>,
+        buffer: &mut [u8],
+    ) -> ZResult<(usize, SocketAddr, Option<SocketAddr>)> {
         let res = socket.recv_from(buffer).await.map_err(|e| zerror!(e))?;
+        Ok((res.0, res.1, None))
+    }
+
+    #[cfg(target_family = "unix")]
+    async fn receive(
+        socket: Arc<UdpSocket>,
+        buffer: &mut [u8],
+    ) -> ZResult<(usize, SocketAddr, Option<SocketAddr>)> {
+        let res = pktinfo::recv_with_dst(&socket, buffer)
+            .await
+            .map_err(|e| zerror!(e))?;
         Ok(res)
     }
 
-    let src_addr = socket.local_addr().map_err(|e| {
+    let local_src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept UDP connections: {}", e);
         tracing::warn!("{}", e);
         e
     })?;
+    #[cfg(target_family = "unix")]
+    pktinfo::enable_pktinfo(&socket).map_err(|e| {
+        let e = zerror!("Failed to enable IP_PKTINFO: {}", e);
+        tracing::warn!("{}", e);
+        e
+    })?;
 
-    tracing::trace!("Ready to accept UDP connections on: {:?}", src_addr);
+    tracing::trace!("Ready to accept UDP connections on: {:?}", local_src_addr);
 
-    if src_addr.ip().is_unspecified() {
+    if local_src_addr.ip().is_unspecified() {
         tracing::warn!("Interceptors (e.g. Access Control, Downsampling) are not guaranteed to work on UDP when listening on 0.0.0.0 or [::]. Their usage is discouraged. See https://github.com/eclipse-zenoh/zenoh/issues/1126.");
     }
 
@@ -566,7 +589,13 @@ async fn accept_read_task(
 
             res = receive(socket.clone(), &mut buff) => {
                 match res {
-                    Ok((n, dst_addr)) => {
+                    Ok((n, dst_addr, socket_addr)) => {
+                        let src_addr = if local_src_addr.ip().is_unspecified() && socket_addr.is_some() {
+                            unsafe { socket_addr.unwrap_unchecked() } // verified just above that it is not None
+                        } else {
+                            local_src_addr
+                        };
+                        println!("Address {} {}", src_addr, local_src_addr);
                         let link = loop {
                             let res = zgetlink!(src_addr, dst_addr);
                             match res {
