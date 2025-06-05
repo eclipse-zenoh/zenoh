@@ -27,6 +27,12 @@ use thread_priority::{
     ThreadSchedulePolicy::Realtime,
 };
 
+#[derive(PartialEq, Eq)]
+pub enum TaskWakeReason {
+    Timeout,
+    Kick,
+}
+
 #[derive(Debug)]
 pub struct PeriodicTask {
     running: Arc<AtomicBool>,
@@ -51,7 +57,7 @@ impl PeriodicTask {
 
     pub fn new<F>(name: String, interval: Duration, mut f: F) -> Self
     where
-        F: FnMut() + Send + 'static,
+        F: FnMut(TaskWakeReason) + Send + 'static,
     {
         let (send, recv) = std::sync::mpsc::channel::<()>();
 
@@ -102,13 +108,21 @@ impl PeriodicTask {
             while c_running.load(Ordering::Relaxed) {
                 let cycle_start = std::time::Instant::now();
 
-                f();
+                f(TaskWakeReason::Timeout);
 
                 // sleep for next iteration
                 let elapsed = cycle_start.elapsed();
                 if elapsed < interval {
-                    let sleep_interval = interval - elapsed;
-                    let _ = recv.recv_timeout (sleep_interval);
+                    let mut sleep_interval = interval - elapsed;
+                    while recv.recv_timeout (sleep_interval).is_ok() {
+                        f(TaskWakeReason::Kick);
+                        let elapsed = cycle_start.elapsed();
+                        if elapsed < interval {
+                            sleep_interval = interval - elapsed;
+                        } else {
+                            break;
+                        }
+                    }
                 } else {
                     let err = format!("{:?}: timer overrun", std::thread::current().name());
                     #[cfg(not(feature = "test"))]

@@ -76,7 +76,19 @@ struct ConfirmedSegment {
 
 impl ConfirmedSegment {
     fn new(segment: Arc<MetadataSegment>, task_kick: std::sync::mpsc::Sender<()>) -> Self {
-        let channel_size = 65536 * 2;
+        // Our channel here may change it's size (that size that is not capacity) from 0 to
+        // some large number very frequently.
+        // In order to reduce the number of allocations\frees we use bounded channel as this is
+        // much faster in this scenario (profiled).
+        // I believe it is much better to use growing channel that will never (or rarely) shrink,
+        // but I didn't find good one.
+        // Confirmator wakes every 50 milliseconds by default - and on each wakeup it empties the channel.
+        // I assume that our max SHM INCOMING messaging rate may be around 5M msgs*sec, so it might
+        // give 250K of msgs per confirmator wakeup. In order not to store 250K of cells in bounded channel
+        // (that will break all the assumptions if we suddenly jump above 250K msgs per 50 milliseconds)
+        // I select some reasonable and reliable enough capacity - and once our channel will reach half of it's
+        // capacity, I trigger additional confirmator task wakeup - just to collect the channel contents.
+        let channel_size = 32768 * 2;
         let (sender, receiver) = crossbeam_channel::bounded::<Transaction>(channel_size);
         Self {
             _segment: segment,
@@ -149,24 +161,28 @@ impl WatchdogConfirmator {
 
         let c_segment_transactions = segment_transactions.clone();
         let mut segments: Vec<(Arc<ConfirmedSegment>, BTreeMap<OwnedWatchdog, i32>)> = vec![];
-        let task = PeriodicTask::new("Watchdog Confirmator".to_owned(), interval, move || {
-            // add new segments
-            while let Some(new_segment) = c_segment_transactions.as_ref().pop() {
-                segments.push((new_segment, BTreeMap::default()));
-            }
-
-            // collect all existing transactions
-            for (segment, watchdogs) in &mut segments {
-                segment.collect_transactions(watchdogs);
-            }
-
-            // confirm all tracked watchdogs
-            for (_, watchdogs) in &segments {
-                for watchdog in watchdogs {
-                    watchdog.0.confirm();
+        let task = PeriodicTask::new(
+            "Watchdog Confirmator".to_owned(),
+            interval,
+            move |_wake_reason| {
+                // add new segments
+                while let Some(new_segment) = c_segment_transactions.as_ref().pop() {
+                    segments.push((new_segment, BTreeMap::default()));
                 }
-            }
-        });
+
+                // collect all existing transactions
+                for (segment, watchdogs) in &mut segments {
+                    segment.collect_transactions(watchdogs);
+                }
+
+                // confirm all tracked watchdogs
+                for (_, watchdogs) in &segments {
+                    for watchdog in watchdogs {
+                        watchdog.0.confirm();
+                    }
+                }
+            },
+        );
 
         Self {
             confirmed: RwLock::default(),
