@@ -1,6 +1,7 @@
+#[cfg(target_os = "linux")]
+use std::io::ErrorKind;
 use std::{
     future::Future,
-    io::ErrorKind,
     net::{IpAddr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -39,7 +40,9 @@ struct ScoutState {
     /// The multicast address to send scout messages to.
     addr: SocketAddr,
     /// Interface constraints, "auto" or a comma-separated IP address list..
+    #[allow(dead_code)]
     ifaces: String,
+    #[allow(dead_code)]
     multicast_ttl: u32,
     runtime: Runtime,
     sockets: RwLock<ScoutSockets>,
@@ -87,6 +90,7 @@ impl Scouting {
         Ok(Scouting { state })
     }
 
+    #[cfg(target_os = "linux")]
     pub async fn update_addresses(
         &self,
         addrs_to_add: &[IpAddr],
@@ -152,6 +156,7 @@ impl Scouting {
         Ok(())
     }
 
+    #[cfg(target_os = "linux")]
     async fn join_multicast_group(&self, interface_addr: &IpAddr) {
         let sockets = zasyncread!(self.state.sockets);
         if let (IpAddr::V4(new_addr), IpAddr::V4(mcast_addr)) =

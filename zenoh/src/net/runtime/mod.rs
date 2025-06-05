@@ -25,17 +25,16 @@ mod scouting;
 
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
-#[cfg(target_os = "linux")]
-use std::time::Duration;
 use std::{
     any::Any,
     collections::HashSet,
-    net::IpAddr,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
 };
+#[cfg(target_os = "linux")]
+use std::{net::IpAddr, time::Duration};
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
