@@ -1,12 +1,29 @@
+//
+// Copyright (c) 2025 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+/// mostly taken from https://github.com/pixsper/socket-pktinfo/blob/main/src/unix.rs
 use std::io::{Error, IoSliceMut};
-use std::mem::MaybeUninit;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::os::unix::io::{AsRawFd, RawFd};
-use std::{io, mem, ptr};
+use std::{
+    io, mem,
+    mem::MaybeUninit,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    os::unix::io::{AsRawFd, RawFd},
+    ptr,
+};
 
 use socket2::SockAddr;
-use tokio::io::Interest;
-use tokio::net::UdpSocket;
+use tokio::{io::Interest, net::UdpSocket};
 
 unsafe fn setsockopt<T>(
     socket: libc::c_int,
@@ -32,7 +49,11 @@ where
     }
 }
 
-pub(crate) fn enable_pktinfo(socket: &UdpSocket) -> io::Result<()> {
+pub(crate) struct PktInfoRetrievalData {
+    port: u16,
+}
+
+pub(crate) fn enable_pktinfo(socket: &UdpSocket) -> io::Result<PktInfoRetrievalData> {
     let local_src_addr = socket.local_addr()?;
     match local_src_addr.is_ipv6() {
         false => unsafe {
@@ -47,13 +68,15 @@ pub(crate) fn enable_pktinfo(socket: &UdpSocket) -> io::Result<()> {
             )?;
         },
     }
-    Ok(())
+    Ok(PktInfoRetrievalData {
+        port: local_src_addr.port(),
+    })
 }
 
 fn recv_with_dst_inner(
     fd: RawFd,
-    buf: &mut [u8],
     local_port: u16,
+    buf: &mut [u8],
 ) -> io::Result<(usize, SocketAddr, Option<SocketAddr>)> {
     let mut addr_src: MaybeUninit<libc::sockaddr_storage> = MaybeUninit::uninit();
     let mut msg_iov = IoSliceMut::new(buf);
@@ -136,12 +159,17 @@ fn recv_with_dst_inner(
     Ok((bytes_recv as _, addr_src, addr_dst))
 }
 
-
-pub(crate) async fn recv_with_dst(socket: &UdpSocket, buffer: &mut [u8]) -> io::Result<(usize, SocketAddr, Option<SocketAddr>)> {
+pub(crate) async fn recv_with_dst(
+    socket: &UdpSocket,
+    data: &PktInfoRetrievalData,
+    buffer: &mut [u8],
+) -> io::Result<(usize, SocketAddr, Option<SocketAddr>)> {
     let fd = socket.as_raw_fd();
-    let local_port = socket.local_addr().unwrap().port();
-    
-    socket.async_io(Interest::READABLE, || {
-        recv_with_dst_inner(fd, buffer, local_port)
-    }).await
+    let local_port = data.port;
+
+    socket
+        .async_io(Interest::READABLE, || {
+            recv_with_dst_inner(fd, local_port, buffer)
+        })
+        .await
 }

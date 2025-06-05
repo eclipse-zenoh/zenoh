@@ -35,12 +35,11 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 
-use crate::pktinfo;
-
 use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
     UDP_MAX_MTU,
 };
+use crate::pktinfo;
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);
@@ -542,21 +541,12 @@ async fn accept_read_task(
         };
     }
 
-    #[cfg(not(target_family = "unix"))]
     async fn receive(
         socket: Arc<UdpSocket>,
+        data: &pktinfo::PktInfoRetrievalData,
         buffer: &mut [u8],
     ) -> ZResult<(usize, SocketAddr, Option<SocketAddr>)> {
-        let res = socket.recv_from(buffer).await.map_err(|e| zerror!(e))?;
-        Ok((res.0, res.1, None))
-    }
-
-    #[cfg(target_family = "unix")]
-    async fn receive(
-        socket: Arc<UdpSocket>,
-        buffer: &mut [u8],
-    ) -> ZResult<(usize, SocketAddr, Option<SocketAddr>)> {
-        let res = pktinfo::recv_with_dst(&socket, buffer)
+        let res = pktinfo::recv_with_dst(&socket, data, buffer)
             .await
             .map_err(|e| zerror!(e))?;
         Ok(res)
@@ -567,8 +557,8 @@ async fn accept_read_task(
         tracing::warn!("{}", e);
         e
     })?;
-    #[cfg(target_family = "unix")]
-    pktinfo::enable_pktinfo(&socket).map_err(|e| {
+
+    let pktinfo_data = pktinfo::enable_pktinfo(&socket).map_err(|e| {
         let e = zerror!("Failed to enable IP_PKTINFO: {}", e);
         tracing::warn!("{}", e);
         e
@@ -587,7 +577,7 @@ async fn accept_read_task(
         tokio::select! {
             _ = token.cancelled() => break,
 
-            res = receive(socket.clone(), &mut buff) => {
+            res = receive(socket.clone(), &pktinfo_data, &mut buff) => {
                 match res {
                     Ok((n, dst_addr, socket_addr)) => {
                         let src_addr = if local_src_addr.ip().is_unspecified() && socket_addr.is_some() {
@@ -595,7 +585,6 @@ async fn accept_read_task(
                         } else {
                             local_src_addr
                         };
-                        println!("Address {} {}", src_addr, local_src_addr);
                         let link = loop {
                             let res = zgetlink!(src_addr, dst_addr);
                             match res {

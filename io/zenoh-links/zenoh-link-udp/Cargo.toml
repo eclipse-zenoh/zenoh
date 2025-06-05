@@ -37,4 +37,9 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
+
+[target.'cfg(target_family = "windows")'.dependencies]
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_IO"] }
+
+[target.'cfg(target_family = "unix")'.dependencies]
 libc = { workspace = true }

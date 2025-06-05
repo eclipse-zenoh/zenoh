@@ -18,8 +18,8 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod multicast;
-mod unicast;
 mod pktinfo;
+mod unicast;
 
 use std::{net::SocketAddr, str::FromStr};
 

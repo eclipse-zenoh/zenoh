@@ -16,3 +16,13 @@
 mod pktinfo_unix;
 #[cfg(target_family = "unix")]
 pub(crate) use pktinfo_unix::*;
+
+#[cfg(target_family = "windows")]
+mod pktinfo_windows;
+#[cfg(target_family = "windows")]
+pub(crate) use pktinfo_windows::*;
+
+#[cfg(all(not(target_family = "windows"), not(target_family = "unix")))]
+mod pktinfo_generic;
+#[cfg(all(not(target_family = "windows"), not(target_family = "unix")))]
+pub(crate) use pktinfo_generic::*;
