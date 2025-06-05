@@ -677,6 +677,7 @@ impl Closeable for Runtime {
 /// Find the relevant IpAddr in the attributes.
 /// Prefer the IFA_LOCAL address, or else use the IFA_ADDRESS address
 /// TODO: Prove why this choice
+#[cfg(target_os = "linux")]
 fn get_relevant_address(address_message: &AddressMessage) -> Option<&IpAddr> {
     let mut res = None;
     for attribute in &address_message.attributes {
