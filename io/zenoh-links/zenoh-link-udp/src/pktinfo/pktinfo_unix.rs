@@ -49,6 +49,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct PktInfoRetrievalData {
     port: u16,
 }

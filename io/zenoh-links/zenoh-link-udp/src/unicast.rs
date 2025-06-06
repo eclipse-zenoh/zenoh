@@ -542,13 +542,10 @@ async fn accept_read_task(
     }
 
     async fn receive(
-        socket: Arc<UdpSocket>,
-        data: &pktinfo::PktInfoRetrievalData,
+        socket: Arc<pktinfo::PktInfoUdpSocket>,
         buffer: &mut [u8],
-    ) -> ZResult<(usize, SocketAddr, Option<SocketAddr>)> {
-        let res = pktinfo::recv_with_dst(&socket, data, buffer)
-            .await
-            .map_err(|e| zerror!(e))?;
+    ) -> ZResult<(usize, SocketAddr, SocketAddr)> {
+        let res = socket.receive(buffer).await.map_err(|e| zerror!(e))?;
         Ok(res)
     }
 
@@ -557,18 +554,13 @@ async fn accept_read_task(
         tracing::warn!("{}", e);
         e
     })?;
-
-    let pktinfo_data = pktinfo::enable_pktinfo(&socket).map_err(|e| {
+    let socket = Arc::new(pktinfo::PktInfoUdpSocket::new(socket).map_err(|e| {
         let e = zerror!("Failed to enable IP_PKTINFO: {}", e);
         tracing::warn!("{}", e);
         e
-    })?;
+    })?);
 
     tracing::trace!("Ready to accept UDP connections on: {:?}", local_src_addr);
-
-    if local_src_addr.ip().is_unspecified() {
-        tracing::warn!("Interceptors (e.g. Access Control, Downsampling) are not guaranteed to work on UDP when listening on 0.0.0.0 or [::]. Their usage is discouraged. See https://github.com/eclipse-zenoh/zenoh/issues/1126.");
-    }
 
     loop {
         // Buffers for deserialization
@@ -577,14 +569,9 @@ async fn accept_read_task(
         tokio::select! {
             _ = token.cancelled() => break,
 
-            res = receive(socket.clone(), &pktinfo_data, &mut buff) => {
+            res = receive(socket.clone(), &mut buff) => {
                 match res {
-                    Ok((n, dst_addr, socket_addr)) => {
-                        let src_addr = if local_src_addr.ip().is_unspecified() && socket_addr.is_some() {
-                            unsafe { socket_addr.unwrap_unchecked() } // verified just above that it is not None
-                        } else {
-                            local_src_addr
-                        };
+                    Ok((n, dst_addr, src_addr)) => {
                         let link = loop {
                             let res = zgetlink!(src_addr, dst_addr);
                             match res {
@@ -593,7 +580,7 @@ async fn accept_read_task(
                                     // A new peers has sent data to this socket
                                     tracing::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
                                     let unconnected = Arc::new(LinkUnicastUdpUnconnected {
-                                        socket: Arc::downgrade(&socket),
+                                        socket: Arc::downgrade(&socket.socket),
                                         links: links.clone(),
                                         input: Mvar::new(),
                                         leftover: AsyncMutex::new(None),

@@ -15,9 +15,12 @@ use std::net::SocketAddr;
 
 use tokio::net::UdpSocket;
 
+#[derive(Clone)]
 pub(crate) struct PktInfoRetrievalData;
 pub(crate) fn enable_pktinfo(socket: &UdpSocket) -> io::Result<PktInfoRetrievalData> {
-    tracing::warn!("PKTINFO can be only retrieved on windows and unix");
+    if socket.local_addr()?.ip().is_unspecified() {
+        tracing::warn!("PKTINFO can be only retrieved on windows and unix. Interceptors (e.g. Access Control, Downsampling) are not guaranteed to work on UDP when listening on 0.0.0.0 or [::]. Their usage is discouraged.");
+    }
     Ok(PktInfoRetrievalData)
 }
 

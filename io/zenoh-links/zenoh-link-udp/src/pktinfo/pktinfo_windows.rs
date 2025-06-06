@@ -94,6 +94,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct PktInfoRetrievalData {
     port: u16,
     is_ipv6: bool,

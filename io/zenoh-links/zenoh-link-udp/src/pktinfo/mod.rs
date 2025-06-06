@@ -14,15 +14,51 @@
 
 #[cfg(target_family = "unix")]
 mod pktinfo_unix;
+use std::{io, net::SocketAddr, sync::Arc};
+
 #[cfg(target_family = "unix")]
-pub(crate) use pktinfo_unix::*;
+use pktinfo_unix::*;
 
 #[cfg(target_family = "windows")]
 mod pktinfo_windows;
 #[cfg(target_family = "windows")]
-pub(crate) use pktinfo_windows::*;
+use pktinfo_windows::*;
 
 #[cfg(all(not(target_family = "windows"), not(target_family = "unix")))]
 mod pktinfo_generic;
 #[cfg(all(not(target_family = "windows"), not(target_family = "unix")))]
-pub(crate) use pktinfo_generic::*;
+use pktinfo_generic::*;
+use tokio::net::UdpSocket;
+
+#[derive(Clone)]
+pub(crate) struct PktInfoUdpSocket {
+    pub(crate) socket: Arc<UdpSocket>,
+    pktinfo_retrieval_data: PktInfoRetrievalData,
+    local_address: SocketAddr,
+}
+
+impl PktInfoUdpSocket {
+    pub(crate) fn new(socket: Arc<UdpSocket>) -> io::Result<PktInfoUdpSocket> {
+        let pktinfo_retrieval_data = enable_pktinfo(&socket)?;
+        let local_address = socket.local_addr()?;
+        Ok(PktInfoUdpSocket {
+            socket,
+            pktinfo_retrieval_data,
+            local_address,
+        })
+    }
+
+    pub(crate) async fn receive(
+        &self,
+        buffer: &mut [u8],
+    ) -> io::Result<(usize, SocketAddr, SocketAddr)> {
+        let res = recv_with_dst(&self.socket, &self.pktinfo_retrieval_data, buffer).await?;
+
+        let src_addr = if self.local_address.ip().is_unspecified() && res.2.is_some() {
+            unsafe { res.2.unwrap_unchecked() } // verified just above that it is not None
+        } else {
+            self.local_address
+        };
+        Ok((res.0, res.1, src_addr))
+    }
+}
