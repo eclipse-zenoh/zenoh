@@ -70,18 +70,14 @@ fn locate_wsarecvmsg(socket: RawSocket) -> io::Result<WSARecvMsgExtension> {
     }
 
     if mem::size_of::<LPFN_WSARECVMSG>() != byte_len as usize {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "Locating fn pointer to WSARecvMsg returned different expected bytes",
         ));
     }
     let cast_to_fn: LPFN_WSARECVMSG = unsafe { mem::transmute(fn_pointer) };
 
     match cast_to_fn {
-        None => Err(io::Error::new(
-            io::ErrorKind::Other,
-            "WSARecvMsg extension not found",
-        )),
+        None => Err(io::Error::other("WSARecvMsg extension not found")),
         Some(extension) => Ok(extension),
     }
 }
