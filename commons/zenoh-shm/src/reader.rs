@@ -21,7 +21,7 @@ use crate::{
     api::{
         client::shm_segment::ShmSegment,
         client_storage::ShmClientStorage,
-        common::types::{ProtocolID, SegmentID},
+        common::types::{ProtocolID, PtrInSegment, SegmentID},
         provider::chunk::ChunkDescriptor,
     },
     metadata::subscription::GLOBAL_METADATA_SUBSCRIPTION,
@@ -69,7 +69,7 @@ impl ShmReader {
         let buf = segment.map(data_descriptor.chunk)?;
         let shmb = Arc::new(ShmBufInner {
             metadata: confirmed_metadata,
-            buf,
+            buf: PtrInSegment::new(buf, Arc::new(segment)),
             info: info.clone(),
         });
 
