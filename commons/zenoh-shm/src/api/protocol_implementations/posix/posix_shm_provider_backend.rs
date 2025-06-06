@@ -18,8 +18,8 @@ use std::{
     collections::BinaryHeap,
     num::NonZeroUsize,
     sync::{
-        atomic::{AtomicPtr, AtomicUsize, Ordering},
-        Mutex,
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
     },
 };
 
@@ -28,7 +28,7 @@ use zenoh_result::ZResult;
 
 use super::posix_shm_segment::PosixShmSegment;
 use crate::api::{
-    common::types::ChunkID,
+    common::types::{ChunkID, PtrInSegment},
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
         shm_provider_backend::ShmProviderBackend,
@@ -118,7 +118,7 @@ impl<Layout: Borrow<MemoryLayout>> Wait for LayoutedPosixShmProviderBackendBuild
 #[zenoh_macros::unstable_doc]
 pub struct PosixShmProviderBackend {
     available: AtomicUsize,
-    segment: PosixShmSegment,
+    segment: Arc<PosixShmSegment>,
     free_list: Mutex<BinaryHeap<Chunk>>,
     alignment: AllocAlignment,
 }
@@ -131,7 +131,7 @@ impl PosixShmProviderBackend {
     }
 
     fn new(layout: &MemoryLayout) -> ZResult<Self> {
-        let segment = PosixShmSegment::create(layout.size())?;
+        let segment = Arc::new(PosixShmSegment::create(layout.size())?);
 
         // because of platform specific, our shm segment is >= requested size, so in order to utilize
         // additional memory we re-layout the size
@@ -201,10 +201,12 @@ impl ShmProviderBackend for PosixShmProviderBackend {
                 let descriptor =
                     ChunkDescriptor::new(self.segment.segment.id(), chunk.offset, chunk.size);
 
-                Ok(AllocatedChunk {
-                    descriptor,
-                    data: unsafe { AtomicPtr::new(self.segment.segment.elem_mut(chunk.offset)) },
-                })
+                let data = PtrInSegment::new(
+                    unsafe { self.segment.segment.elem_mut(chunk.offset) },
+                    self.segment.clone(),
+                );
+
+                Ok(AllocatedChunk { descriptor, data })
             }
             Some(c) => {
                 tracing::trace!("PosixShmProviderBackend::alloc({:?}) cannot find any big enough chunk\nShmManager::free_list = {:?}", layout, self.free_list);

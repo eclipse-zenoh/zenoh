@@ -15,12 +15,13 @@
 use std::{ops::Deref, sync::atomic::Ordering::Relaxed, time::Duration};
 
 use rand::Rng;
-use zenoh_core::bail;
+use tracing::error;
 use zenoh_result::ZResult;
 
 pub mod common;
 use common::{execute_concurrent, CpuLoad};
 use zenoh_shm::{
+    api::provider::types::ZAllocError,
     metadata::{
         descriptor::MetadataDescriptor, storage::GLOBAL_METADATA_STORAGE,
         subscription::GLOBAL_METADATA_SUBSCRIPTION,
@@ -28,8 +29,9 @@ use zenoh_shm::{
     watchdog::{confirmator::GLOBAL_CONFIRMATOR, validator::GLOBAL_VALIDATOR},
 };
 
-fn metadata_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
-    |_task_index: usize, _iteration: usize| -> ZResult<()> {
+fn metadata_alloc_fn(
+) -> impl Fn(usize, usize) -> Result<(), ZAllocError> + Clone + Send + Sync + 'static {
+    |_task_index: usize, _iteration: usize| {
         let _allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
         Ok(())
     }
@@ -45,7 +47,8 @@ fn metadata_alloc_concurrent() {
     execute_concurrent(100, 1000, metadata_alloc_fn());
 }
 
-fn metadata_link_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
+fn metadata_link_fn(
+) -> impl Fn(usize, usize) -> Result<(), ZAllocError> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| {
         let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
         let descr = MetadataDescriptor::from(allocated_metadata.deref());
@@ -64,8 +67,8 @@ fn metadata_link_concurrent() {
     execute_concurrent(100, 1000, metadata_link_fn());
 }
 
-fn metadata_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static
-{
+fn metadata_link_failure_fn(
+) -> impl Fn(usize, usize) -> Result<(), ZAllocError> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| {
         let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
         let descr = MetadataDescriptor::from(allocated_metadata.deref());
@@ -93,7 +96,7 @@ fn metadata_link_failure_concurrent() {
 }
 
 fn metadata_check_memory_fn(parallel_tasks: usize, iterations: usize) {
-    let task_fun = |_task_index: usize, _iteration: usize| -> ZResult<()> {
+    let task_fun = |_task_index: usize, _iteration: usize| -> Result<(), ZAllocError> {
         let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
         let descr = MetadataDescriptor::from(allocated_metadata.deref());
         let linked_metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&descr)?;
@@ -136,8 +139,9 @@ fn metadata_check_memory_concurrent() {
 const VALIDATION_PERIOD: Duration = Duration::from_millis(100);
 const CONFIRMATION_PERIOD: Duration = Duration::from_millis(50);
 
-fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
-    |_task_index: usize, _iteration: usize| -> ZResult<()> {
+fn watchdog_confirmed_fn(
+) -> impl Fn(usize, usize) -> Result<(), ZAllocError> + Clone + Send + Sync + 'static {
+    |_task_index: usize, _iteration: usize| {
         let allocated = GLOBAL_METADATA_STORAGE.read().allocate()?;
         let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
 
@@ -146,7 +150,8 @@ fn watchdog_confirmed_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
             std::thread::sleep(VALIDATION_PERIOD);
             let valid = confirmed.owned.test_validate() != 0;
             if !valid {
-                bail!("Invalid watchdog, iteration {i}");
+                error!("Invalid watchdog, iteration {i}");
+                return Err(ZAllocError::Other);
             }
         }
         Ok(())
@@ -185,8 +190,9 @@ fn watchdog_confirmed_dangling() {
     }
 }
 
-fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
-    |_task_index: usize, _iteration: usize| -> ZResult<()> {
+fn watchdog_validated_fn(
+) -> impl Fn(usize, usize) -> Result<(), ZAllocError> + Clone + Send + Sync + 'static {
+    |_task_index: usize, _iteration: usize| {
         let allocated = GLOBAL_METADATA_STORAGE.read().allocate()?;
         let confirmed = GLOBAL_CONFIRMATOR.read().add(allocated.clone());
 
@@ -200,7 +206,8 @@ fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
                 .watchdog_invalidated
                 .load(std::sync::atomic::Ordering::SeqCst)
             {
-                bail!("Invalid watchdog, iteration {i}");
+                error!("Invalid watchdog, iteration {i}");
+                return Err(ZAllocError::Other);
             }
         }
 

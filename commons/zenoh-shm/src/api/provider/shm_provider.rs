@@ -13,18 +13,16 @@
 //
 
 use std::{
-    collections::VecDeque,
     future::{Future, IntoFuture},
     marker::PhantomData,
     num::NonZeroUsize,
     pin::Pin,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{atomic::Ordering, Mutex},
     time::Duration,
 };
 
 use async_trait::async_trait;
-use zenoh_core::{Resolvable, Wait};
-use zenoh_result::ZResult;
+use zenoh_core::{zlock, Resolvable, Wait};
 
 use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
@@ -209,16 +207,14 @@ impl ForceDeallocPolicy for DeallocOptimal {
     fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         provider: &ShmProvider<IDSource, Backend>,
     ) -> bool {
-        let mut guard = provider.busy_list.lock().unwrap();
-        let chunk_to_dealloc = match guard.remove(1) {
-            Some(val) => val,
-            None => match guard.pop_front() {
-                Some(val) => val,
-                None => return false,
-            },
+        let chunk_to_dealloc = {
+            let mut guard = zlock!(provider.busy_list);
+            match guard.len() {
+                0 => return false,
+                1 => guard.remove(0),
+                _ => guard.swap_remove(1),
+            }
         };
-        drop(guard);
-
         provider.backend.free(&chunk_to_dealloc.descriptor());
         true
     }
@@ -231,7 +227,7 @@ impl ForceDeallocPolicy for DeallocYoungest {
     fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         provider: &ShmProvider<IDSource, Backend>,
     ) -> bool {
-        match provider.busy_list.lock().unwrap().pop_back() {
+        match zlock!(provider.busy_list).pop() {
             Some(val) => {
                 provider.backend.free(&val.descriptor());
                 true
@@ -248,12 +244,13 @@ impl ForceDeallocPolicy for DeallocEldest {
     fn dealloc<IDSource: ProtocolIDSource, Backend: ShmProviderBackend>(
         provider: &ShmProvider<IDSource, Backend>,
     ) -> bool {
-        match provider.busy_list.lock().unwrap().pop_front() {
-            Some(val) => {
-                provider.backend.free(&val.descriptor());
+        let mut guard = zlock!(provider.busy_list);
+        match guard.is_empty() {
+            true => false,
+            false => {
+                provider.backend.free(&guard.swap_remove(0).descriptor());
                 true
             }
-            None => false,
         }
     }
 }
@@ -784,7 +781,7 @@ where
     Backend: ShmProviderBackend,
 {
     backend: Backend,
-    busy_list: Mutex<VecDeque<BusyChunk>>,
+    busy_list: Mutex<Vec<BusyChunk>>,
     id: IDSource,
 }
 
@@ -809,8 +806,8 @@ where
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
-    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> ZResult<ZShmMut> {
-        let len = len.try_into()?;
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> Result<ZShmMut, ZAllocError> {
+        let len = len.try_into().map_err(|_| ZAllocError::Other)?;
 
         // allocate resources for SHM buffer
         let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
@@ -832,11 +829,24 @@ where
             true
         }
 
+        fn retain_unordered<T>(vec: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) {
+            let mut i = 0;
+            while i < vec.len() {
+                if f(&vec[i]) {
+                    i += 1;
+                } else {
+                    vec.swap_remove(i); // move last into place of vec[i]
+                                        // don't increment i: need to test the swapped-in element
+                }
+            }
+        }
+
         tracing::trace!("Running Garbage Collector");
 
         let mut largest = 0usize;
         let mut guard = self.busy_list.lock().unwrap();
-        guard.retain(|maybe_free| {
+
+        retain_unordered(&mut guard, |maybe_free| {
             if is_free_chunk(maybe_free) {
                 tracing::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
                 let descriptor_to_free = maybe_free.descriptor();
@@ -846,6 +856,7 @@ where
             }
             true
         });
+
         drop(guard);
 
         largest
@@ -867,7 +878,7 @@ where
     fn new(backend: Backend, id: IDSource) -> Self {
         Self {
             backend,
-            busy_list: Mutex::new(VecDeque::default()),
+            busy_list: Mutex::new(Vec::default()),
             id,
         }
     }
@@ -892,7 +903,8 @@ where
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
-    fn alloc_resources() -> ZResult<(AllocatedMetadataDescriptor, ConfirmedDescriptor)> {
+    fn alloc_resources() -> Result<(AllocatedMetadataDescriptor, ConfirmedDescriptor), ZAllocError>
+    {
         // allocate metadata
         let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
 
@@ -937,16 +949,13 @@ where
 
         // Create buffer
         let shmb = ShmBufInner {
-            metadata: Arc::new(confirmed_metadata),
+            metadata: confirmed_metadata,
             buf: chunk.data,
             info,
         };
 
         // Create and store busy chunk
-        self.busy_list
-            .lock()
-            .unwrap()
-            .push_back(BusyChunk::new(allocated_metadata));
+        zlock!(self.busy_list).push(BusyChunk::new(allocated_metadata));
 
         shmb
     }
