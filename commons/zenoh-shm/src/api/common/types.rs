@@ -52,7 +52,7 @@ impl PtrInSegment {
 
 impl PartialEq for PtrInSegment {
     fn eq(&self, other: &Self) -> bool {
-        // it is enough to compare addreses
+        // it is enough to compare addresses
         self.ptr == other.ptr
     }
 }
