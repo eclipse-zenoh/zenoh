@@ -363,6 +363,12 @@ impl<'a> Iterator for ZBytesSliceIterator<'a> {
     }
 }
 
+impl From<&ZBytes> for ZBytes {
+    fn from(value: &ZBytes) -> Self {
+        value.clone()
+    }
+}
+
 impl From<ZBuf> for ZBytes {
     fn from(value: ZBuf) -> Self {
         Self(value)
