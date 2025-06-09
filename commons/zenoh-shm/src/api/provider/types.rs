@@ -14,6 +14,8 @@
 
 use std::{fmt::Display, num::NonZeroUsize};
 
+use zenoh_core::zerror;
+
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::zshmmut::ZShmMut;
 
@@ -32,6 +34,20 @@ pub enum ZAllocError {
 impl From<zenoh_result::Error> for ZAllocError {
     fn from(_value: zenoh_result::Error) -> Self {
         Self::Other
+    }
+}
+
+impl From<ZAllocError> for zenoh_result::Error {
+    fn from(value: ZAllocError) -> Self {
+        zerror!(
+            "Allocation error: {}",
+            match value {
+                ZAllocError::NeedDefragment => "need defragmentation",
+                ZAllocError::OutOfMemory => "out of memory",
+                ZAllocError::Other => "other",
+            }
+        )
+        .into()
     }
 }
 
@@ -221,6 +237,19 @@ pub enum ZLayoutError {
     ProviderIncompatibleLayout,
 }
 
+impl From<ZLayoutError> for zenoh_result::Error {
+    fn from(value: ZLayoutError) -> Self {
+        zerror!(
+            "Layouting error: {}",
+            match value {
+                ZLayoutError::IncorrectLayoutArgs => "Incorrect layout arguments",
+                ZLayoutError::ProviderIncompatibleLayout => "Layout is incompatible with provider",
+            }
+        )
+        .into()
+    }
+}
+
 /// SHM chunk allocation result
 #[zenoh_macros::unstable_doc]
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
@@ -237,6 +266,15 @@ pub enum ZLayoutAllocError {
     Alloc(ZAllocError),
     /// Layout error.
     Layout(ZLayoutError),
+}
+
+impl From<ZLayoutAllocError> for zenoh_result::Error {
+    fn from(value: ZLayoutAllocError) -> Self {
+        match value {
+            ZLayoutAllocError::Alloc(alloc) => alloc.into(),
+            ZLayoutAllocError::Layout(layout) => layout.into(),
+        }
+    }
 }
 
 /// SHM buffer layouting and allocation result

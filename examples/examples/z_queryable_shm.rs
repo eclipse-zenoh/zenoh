@@ -17,7 +17,7 @@ use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
     key_expr::KeyExpr,
-    shm::{BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder},
+    shm::{BlockOn, GarbageCollect, ShmProviderBuilder},
     Config, Wait,
 };
 use zenoh_examples::CommonArgs;
@@ -35,15 +35,11 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM provider...");
-    // create an SHM backend...
+    // Create SHM provider with default backend
     // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(N * 1024)
-        .unwrap()
+    let provider = ShmProviderBuilder::default_backend(N * 1024)
         .wait()
         .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::backend(backend).wait();
 
     println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session

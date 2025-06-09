@@ -30,7 +30,11 @@ async fn main() -> zenoh::Result<()> {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM provider...");
-    let provider = ShmProviderBuilder::default_backend().wait().unwrap();
+    // Create SHM provider with default backend
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let provider = ShmProviderBuilder::default_backend(1024 * 1024)
+        .wait()
+        .unwrap();
 
     let publisher = session.declare_publisher(&path).await.unwrap();
 

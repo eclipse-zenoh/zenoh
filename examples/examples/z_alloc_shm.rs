@@ -28,8 +28,12 @@ async fn main() {
 }
 
 async fn run_minimal() -> zenoh::Result<()> {
-    let provider = ShmProviderBuilder::default_backend().wait()?;
-    let mut sbuf = provider.alloc(512).wait().unwrap();
+    // Create SHM provider with default backend
+    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+    let provider = ShmProviderBuilder::default_backend(1024 * 1024).wait()?;
+
+    // allocate SHM buffer
+    let mut sbuf = provider.alloc(512).wait()?;
 
     // Fill recently-allocated buffer with data
     sbuf[0..8].fill(0);
@@ -48,18 +52,16 @@ async fn run() -> zenoh::Result<()> {
     // SHM backend (PosixShmProviderBackend) and more comprehensive way
     let provider = {
         // OPTION: simple ShmProvider creation
-        let _simple = ShmProviderBuilder::default_backend().wait().unwrap();
+        let _simple = ShmProviderBuilder::default_backend(1024 * 1024).wait()?;
 
         // OPTION: comprehensive ShmProvider creation
         // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
         // create backend...
-        let comprehencive = PosixShmProviderBackend::builder()
-            .with_size(65536)
-            .unwrap()
-            .wait()
-            .unwrap();
+        let comprehensive = PosixShmProviderBackend::builder()
+            .with_size(65536)?
+            .wait()?;
         // ...and an SHM provider
-        ShmProviderBuilder::backend(comprehencive).wait()
+        ShmProviderBuilder::backend(comprehensive).wait()
     };
 
     // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
@@ -70,25 +72,23 @@ async fn run() -> zenoh::Result<()> {
     // allocation API which is shown later in this example...
     let _direct_allocation = {
         // OPTION: Simple allocation
-        let simple = provider.alloc(512).wait().unwrap();
+        let simple = provider.alloc(512).wait()?;
 
         // OPTION: Allocation with custom alignment and alloc policy customization
         let _comprehensive = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2).unwrap())
+            .with_alignment(AllocAlignment::new(2)?)
             // for more examples on policies, please see allocation policy usage below (for layout allocation API)
             .with_policy::<GarbageCollect>()
-            .wait()
-            .unwrap();
+            .wait()?;
 
         // OPTION: Allocation with custom alignment and async alloc policy
         let _async = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2).unwrap())
+            .with_alignment(AllocAlignment::new(2)?)
             // for more examples on policies, please see allocation policy usage below (for layout allocation API)
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
-            .await
-            .unwrap();
+            .await?;
 
         simple
     };
@@ -99,14 +99,13 @@ async fn run() -> zenoh::Result<()> {
     // This layout is reusable and can handle series of similar allocations
     let buffer_layout = {
         // OPTION: Simple configuration:
-        let simple_layout = provider.alloc(512).into_layout().unwrap();
+        let simple_layout = provider.alloc(512).into_layout()?;
 
         // OPTION: Comprehensive configuration:
         let _comprehensive_layout = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2).unwrap())
-            .into_layout()
-            .unwrap();
+            .with_alignment(AllocAlignment::new(2)?)
+            .into_layout()?;
 
         simple_layout
     };
@@ -141,7 +140,7 @@ async fn run() -> zenoh::Result<()> {
         let _comprehensive_alloc = buffer_layout
             .alloc()
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
-            .wait()
+            .await
             .unwrap();
 
         // OPTION: The comprehensive allocation policy that deallocates up to 1000 buffers if provider is not able to allocate

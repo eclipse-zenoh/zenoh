@@ -640,8 +640,8 @@ impl ShmProviderBuilder {
 
     /// Set the default backend
     #[zenoh_macros::unstable_doc]
-    pub fn default_backend() -> ShmProviderBuilderWithDefaultBackend {
-        ShmProviderBuilderWithDefaultBackend
+    pub fn default_backend(size: usize) -> ShmProviderBuilderWithDefaultBackend {
+        ShmProviderBuilderWithDefaultBackend { size }
     }
 }
 
@@ -672,7 +672,9 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct ShmProviderBuilderWithDefaultBackend;
+pub struct ShmProviderBuilderWithDefaultBackend {
+    size: usize,
+}
 
 #[zenoh_macros::unstable_doc]
 impl Resolvable for ShmProviderBuilderWithDefaultBackend {
@@ -685,7 +687,7 @@ impl Wait for ShmProviderBuilderWithDefaultBackend {
     fn wait(self) -> <Self as Resolvable>::To {
         // todo: make growing PosixProvider and get rid of magic number here
         let backend = PosixShmProviderBackend::builder()
-            .with_layout_args(16 * 1024 * 1024, AllocAlignment::default())
+            .with_size(self.size)
             .unwrap()
             .wait()?;
 

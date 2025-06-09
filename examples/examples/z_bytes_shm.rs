@@ -13,20 +13,14 @@
 //
 use zenoh::{
     bytes::ZBytes,
-    shm::{zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut},
+    shm::{zshmmut, ShmProviderBuilder, ZShm, ZShmMut},
     Wait,
 };
 
 fn main() {
-    // create an SHM backend...
+    // Create SHM provider with default backend
     // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(4096)
-        .unwrap()
-        .wait()
-        .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::backend(backend).wait();
+    let provider = ShmProviderBuilder::default_backend(4096).wait().unwrap();
 
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
