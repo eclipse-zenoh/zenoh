@@ -28,8 +28,18 @@ async fn main() {
     println!("Declaring Subscriber on '{}'...", &key_expr);
     let subscriber = session.declare_subscriber(&key_expr).await.unwrap();
 
+    // run task which undeclares the subscriber on CTRL-C
+    let channel = subscriber.handler().clone();
+
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        println!("\nCTRL-C received, undeclaring subscriber...");
+        subscriber.undeclare().await.unwrap();
+        println!("Subscriber undeclared.");
+    });
+
     println!("Press CTRL-C to quit...");
-    while let Ok(sample) = subscriber.recv_async().await {
+    while let Ok(sample) = channel.recv_async().await {
         // Refer to z_bytes.rs to see how to deserialize different types of message
         let payload = sample
             .payload()
@@ -48,6 +58,7 @@ async fn main() {
         }
         println!();
     }
+    println!("Subscriber closed.");
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
