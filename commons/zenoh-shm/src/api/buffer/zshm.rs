@@ -40,10 +40,14 @@ impl ShmBuf for ZShm {
 
 impl OwnedShmBuf for ZShm {
     fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
+        // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment)
         unsafe { self.0.try_resize(new_size) }
     }
 
     fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError> {
+        // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_relayout comment)
         unsafe { self.0.try_relayout(new_layout) }
     }
 }

@@ -117,8 +117,11 @@ async fn close_session(peer01: Session, peer02: Session) {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ResizeBuffer {
+    // Do not change the buffer size
     NoResize,
+    // Halve the buffer size after allocation
     Resize,
+    // Halve the buffer size and change the layout after allocation
     Relayout,
 }
 
@@ -248,148 +251,132 @@ fn zenoh_shm_startup_init() {
     });
 }
 
-#[test]
-fn zenoh_shm_unicast() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_unicast() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19447"]).await;
-        test_session_pubsub::<false>(
-            &peer01,
-            &peer02,
-            Reliability::Reliable,
-            ResizeBuffer::NoResize,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19447"]).await;
+    test_session_pubsub::<false>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::NoResize,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_unicast_to_non_shm() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_unicast_to_non_shm() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
-        test_session_pubsub::<true>(
-            &peer01,
-            &peer02,
-            Reliability::Reliable,
-            ResizeBuffer::NoResize,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
+    test_session_pubsub::<true>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::NoResize,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19449"]).await;
-        test_session_pubsub::<false>(
-            &peer01,
-            &peer02,
-            Reliability::Reliable,
-            ResizeBuffer::Relayout,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19449"]).await;
+    test_session_pubsub::<false>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::Relayout,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_unicast_with_buffer_shrink_resize() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_unicast_with_buffer_shrink_resize() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19450"]).await;
-        test_session_pubsub::<false>(
-            &peer01,
-            &peer02,
-            Reliability::Reliable,
-            ResizeBuffer::Resize,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19450"]).await;
+    test_session_pubsub::<false>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::Resize,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19451"]).await;
-        test_session_pubsub::<true>(
-            &peer01,
-            &peer02,
-            Reliability::Reliable,
-            ResizeBuffer::Relayout,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19451"]).await;
+    test_session_pubsub::<true>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::Relayout,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19452"]).await;
-        test_session_pubsub::<true>(
-            &peer01,
-            &peer02,
-            Reliability::Reliable,
-            ResizeBuffer::Resize,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19452"]).await;
+    test_session_pubsub::<true>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::Resize,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_multicast() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_multicast() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) =
-            open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
-        test_session_pubsub::<false>(
-            &peer01,
-            &peer02,
-            Reliability::BestEffort,
-            ResizeBuffer::NoResize,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) =
+        open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
+    test_session_pubsub::<false>(
+        &peer01,
+        &peer02,
+        Reliability::BestEffort,
+        ResizeBuffer::NoResize,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
 
-#[test]
-fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
-    tokio::runtime::Runtime::new().unwrap().block_on(async {
-        // Initiate logging
-        zenoh::init_log_from_env_or("error");
+#[tokio::test]
+async fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
 
-        let (peer01, peer02) =
-            open_session_multicast("udp/224.0.0.1:19449", "udp/224.0.0.1:19449").await;
-        test_session_pubsub::<false>(
-            &peer01,
-            &peer02,
-            Reliability::BestEffort,
-            ResizeBuffer::Relayout,
-        )
-        .await;
-        close_session(peer01, peer02).await;
-    });
+    let (peer01, peer02) =
+        open_session_multicast("udp/224.0.0.1:19449", "udp/224.0.0.1:19449").await;
+    test_session_pubsub::<false>(
+        &peer01,
+        &peer02,
+        Reliability::BestEffort,
+        ResizeBuffer::Relayout,
+    )
+    .await;
+    close_session(peer01, peer02).await;
 }
