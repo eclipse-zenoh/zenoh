@@ -251,7 +251,7 @@ fn zenoh_shm_startup_init() {
     });
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -267,7 +267,7 @@ async fn zenoh_shm_unicast() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_to_non_shm() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -283,7 +283,7 @@ async fn zenoh_shm_unicast_to_non_shm() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -299,7 +299,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_with_buffer_shrink_resize() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -315,7 +315,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_resize() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -331,7 +331,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -347,7 +347,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_multicast() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
@@ -364,7 +364,7 @@ async fn zenoh_shm_multicast() {
     close_session(peer01, peer02).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
