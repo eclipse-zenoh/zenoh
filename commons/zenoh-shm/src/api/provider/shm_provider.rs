@@ -22,7 +22,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use zenoh_core::{zlock, Resolvable, Wait};
+use zenoh_core::{zlock, zresult::ZResult, Resolvable, Wait};
 
 use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},

@@ -68,6 +68,7 @@ impl ShmClientSetBuilder {
     /// Include default clients
     #[zenoh_macros::unstable_doc]
     pub fn with_default_client_set(self) -> ShmClientStorageBuilder {
+        let client = PosixShmClient {};
         let clients = BTreeMap::from([(client.id(), Arc::new(client) as Arc<dyn ShmClient>)]);
         ShmClientStorageBuilder::new(clients)
     }
