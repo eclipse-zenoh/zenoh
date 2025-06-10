@@ -13,11 +13,12 @@
 //
 use std::{
     collections::BTreeMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
 };
 
 use static_init::dynamic;
-use zenoh_result::{zerror, ZResult};
+use zenoh_core::{zread, zwrite};
+use zenoh_result::ZResult;
 
 use super::{
     descriptor::{MetadataDescriptor, MetadataSegmentID, OwnedMetadataDescriptor},
@@ -28,35 +29,49 @@ use super::{
 pub static mut GLOBAL_METADATA_SUBSCRIPTION: Subscription = Subscription::new();
 
 pub struct Subscription {
-    linked_table: Mutex<BTreeMap<MetadataSegmentID, Arc<MetadataSegment>>>,
+    linked_table: RwLock<BTreeMap<MetadataSegmentID, Arc<MetadataSegment>>>,
 }
 
 impl Subscription {
     fn new() -> Self {
         Self {
-            linked_table: Mutex::default(),
+            linked_table: RwLock::default(),
         }
     }
 
-    pub fn link(&self, descriptor: &MetadataDescriptor) -> ZResult<OwnedMetadataDescriptor> {
-        let mut guard = self.linked_table.lock().map_err(|e| zerror!("{e}"))?;
+    fn ensure_segment(&self, id: MetadataSegmentID) -> ZResult<Arc<MetadataSegment>> {
+        // fastest path: try to utilize already existing segment
+        {
+            let guard = zread!(self.linked_table);
+            if let Some(segment) = guard.get(&id) {
+                return Ok(segment.clone());
+            }
+        }
+
+        // try to create segment
+        let mut guard = zwrite!(self.linked_table);
         // ensure segment
-        let segment = match guard.entry(descriptor.id) {
+        Ok(match guard.entry(id) {
             std::collections::btree_map::Entry::Vacant(vacant) => {
-                let segment = Arc::new(MetadataSegment::open(descriptor.id)?);
+                let segment = Arc::new(MetadataSegment::open(id)?);
                 vacant.insert(segment.clone());
                 segment
             }
-            std::collections::btree_map::Entry::Occupied(occupied) => occupied.get().clone(),
-        };
-        drop(guard);
+            std::collections::btree_map::Entry::Occupied(occupied) => {
+                // this is intentional
+                occupied.get().clone()
+            }
+        })
+    }
+
+    pub fn link(&self, descriptor: &MetadataDescriptor) -> ZResult<OwnedMetadataDescriptor> {
+        let segment = self.ensure_segment(descriptor.id)?;
 
         // construct owned descriptor
         // SAFETY: MetadataDescriptor source guarantees that descriptor.index is valid for segment
-        let (header, watchdog, watchdog_mask) =
-            unsafe { segment.data.fast_elem_compute(descriptor.index) };
-        let owned_descriptor =
-            OwnedMetadataDescriptor::new(segment, header, watchdog, watchdog_mask);
+        let (header, watchdog) = unsafe { segment.data.fast_elem_compute(descriptor.index) };
+
+        let owned_descriptor = OwnedMetadataDescriptor::new(segment, header, watchdog);
         Ok(owned_descriptor)
     }
 }

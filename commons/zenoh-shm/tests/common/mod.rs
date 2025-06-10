@@ -13,6 +13,7 @@
 //
 
 use std::{
+    fmt::Debug,
     sync::{atomic::AtomicBool, Arc},
     thread::JoinHandle,
 };
@@ -35,9 +36,13 @@ pub fn validate_memory(mem1: &mut [u8], mem2: &[u8]) {
     }
 }
 
-pub fn execute_concurrent<TaskFun>(concurrent_tasks: usize, iterations: usize, task_fun: TaskFun)
-where
-    TaskFun: Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static,
+pub fn execute_concurrent<TaskFun, Terror>(
+    concurrent_tasks: usize,
+    iterations: usize,
+    task_fun: TaskFun,
+) where
+    TaskFun: Fn(usize, usize) -> Result<(), Terror> + Clone + Send + Sync + 'static,
+    Terror: Debug,
 {
     let mut tasks = vec![];
     for task_index in 0..concurrent_tasks {
@@ -45,7 +50,7 @@ where
         let task_handle = std::thread::spawn(move || {
             for iteration in 0..iterations {
                 if let Err(e) = c_task_fun(task_index, iteration) {
-                    panic!("task {task_index}: iteration {iteration}: {e}")
+                    panic!("task {task_index}: iteration {iteration}: {:?}", e)
                 }
             }
         });
