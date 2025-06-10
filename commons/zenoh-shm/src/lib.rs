@@ -17,14 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{
-    any::Any,
-    num::NonZeroUsize,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
-};
+use std::{any::Any, num::NonZeroUsize, sync::atomic::Ordering};
 
 use api::{
     buffer::{
@@ -38,6 +31,8 @@ use api::{
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
 use zenoh_buffers::ZSliceBuffer;
+
+use crate::api::common::types::PtrInSegment;
 
 #[macro_export]
 macro_rules! tested_module {
@@ -102,8 +97,8 @@ impl ShmBufInfo {
 
 /// A zenoh buffer in shared memory.
 pub struct ShmBufInner {
-    pub(crate) metadata: Arc<ConfirmedDescriptor>,
-    pub(crate) buf: AtomicPtr<u8>,
+    pub(crate) metadata: ConfirmedDescriptor,
+    pub(crate) buf: PtrInSegment,
     pub info: ShmBufInfo,
 }
 
@@ -111,8 +106,7 @@ impl PartialEq for ShmBufInner {
     fn eq(&self, other: &Self) -> bool {
         // currently there is no API to resize an SHM buffer, but it is intended in the future,
         // so I add size comparison here to avoid future bugs :)
-        self.buf.load(Ordering::Relaxed) == other.buf.load(Ordering::Relaxed)
-            && self.info.data_len == other.info.data_len
+        self.buf == other.buf && self.info.data_len == other.info.data_len
     }
 }
 impl Eq for ShmBufInner {}
@@ -212,8 +206,7 @@ impl ShmBufInner {
     // PRIVATE:
     fn as_slice(&self) -> &[u8] {
         tracing::trace!("ShmBufInner::as_slice() == len = {:?}", self.info.data_len);
-        let bp = self.buf.load(Ordering::SeqCst);
-        unsafe { std::slice::from_raw_parts(bp, self.info.data_len.get()) }
+        unsafe { std::slice::from_raw_parts(self.buf.ptr(), self.info.data_len.get()) }
     }
 
     unsafe fn dec_ref_count(&self) {
@@ -236,8 +229,7 @@ impl ShmBufInner {
     /// In short, whilst this operation is marked as unsafe, you are safe if you can
     /// guarantee that your in applications only one process at the time will actually write.
     unsafe fn as_mut_slice_inner(&mut self) -> &mut [u8] {
-        let bp = self.buf.load(Ordering::SeqCst);
-        std::slice::from_raw_parts_mut(bp, self.info.data_len.get())
+        std::slice::from_raw_parts_mut(self.buf.ptr_mut(), self.info.data_len.get())
     }
 }
 
@@ -252,10 +244,9 @@ impl Clone for ShmBufInner {
     fn clone(&self) -> Self {
         // SAFETY: obviously, we need to increment refcount when cloning ShmBufInner instance
         unsafe { self.inc_ref_count() };
-        let bp = self.buf.load(Ordering::SeqCst);
         ShmBufInner {
             metadata: self.metadata.clone(),
-            buf: AtomicPtr::new(bp),
+            buf: self.buf.clone(),
             info: self.info.clone(),
         }
     }
