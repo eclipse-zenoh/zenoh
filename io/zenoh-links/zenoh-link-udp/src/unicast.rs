@@ -24,11 +24,9 @@ use tokio::{net::UdpSocket, sync::Mutex as AsyncMutex};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, get_ip_interface_names, parse_dscp, set_dscp,
-    ConstructibleLinkManagerUnicast, ConstructibleLinkManagerUnicast, LinkAuthId, LinkAuthId,
-    LinkManagerUnicastTrait, LinkManagerUnicastTrait, LinkUnicast, LinkUnicast, LinkUnicastTrait,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, NewLinkChannelSender,
-    BIND_INTERFACE, BIND_INTERFACE, BIND_SOCKET, BIND_SOCKET,
+    get_ip_interface_names, parse_dscp, set_dscp, ConstructibleLinkManagerUnicast, LinkAuthId,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, BIND_INTERFACE,
+    BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Address, EndPoint, Locator},
