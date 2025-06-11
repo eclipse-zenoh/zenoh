@@ -224,28 +224,29 @@ pub(crate) fn declare_interest(
                     expr.suffix
                 );
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) = if res
-                    .as_ref()
-                    .map(|r| r.context.is_some())
-                    .unwrap_or(false)
-                {
-                    drop(rtables);
-                    let wtables = zwrite!(tables_ref.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr().to_string();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables_ref.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
+                let (mut res, mut wtables) =
+                    if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                        drop(rtables);
+                        let wtables = zwrite!(tables_ref.tables);
+                        (res.unwrap(), wtables)
+                    } else {
+                        let mut fullexpr = prefix.expr().to_string();
+                        fullexpr.push_str(expr.suffix.as_ref());
+                        let mut matches = keyexpr::new(fullexpr.as_str())
+                            .map(|ke| Resource::get_matches(&rtables, ke))
+                            .unwrap_or_default();
+                        drop(rtables);
+                        let mut wtables = zwrite!(tables_ref.tables);
+                        let mut res = Resource::make_resource(
+                            hat_code,
+                            &mut wtables,
+                            &mut prefix,
+                            expr.suffix.as_ref(),
+                        );
+                        matches.push(Arc::downgrade(&res));
+                        Resource::match_resource(&wtables, &mut res, matches);
+                        (res, wtables)
+                    };
 
                 hat_code.declare_interest(
                     &mut wtables,
