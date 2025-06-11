@@ -66,13 +66,16 @@ impl Display for AllocAlignment {
 
 impl Default for AllocAlignment {
     fn default() -> Self {
-        Self {
-            pow: std::mem::align_of::<u32>().ilog2() as _,
-        }
+        Self::ALIGN_1_BYTE
     }
 }
 
 impl AllocAlignment {
+    pub const ALIGN_1_BYTE: AllocAlignment = AllocAlignment { pow: 0 };
+    pub const ALIGN_2_BYTES: AllocAlignment = AllocAlignment { pow: 1 };
+    pub const ALIGN_4_BYTES: AllocAlignment = AllocAlignment { pow: 2 };
+    pub const ALIGN_8_BYTES: AllocAlignment = AllocAlignment { pow: 3 };
+
     /// Try to create a new AllocAlignment from alignment representation in powers of 2.
     ///
     /// # Errors

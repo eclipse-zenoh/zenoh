@@ -41,6 +41,11 @@ pub struct ChunkHeaderType {
 }
 
 impl ChunkHeaderType {
+    pub fn len(&self) -> NonZeroUsize {
+        // SAFETY: this is safe because Write access to self.len is available only from set_data_descriptor
+        unsafe { NonZeroUsize::new_unchecked(self.len.load(Ordering::Relaxed)) }
+    }
+
     pub fn set_data_descriptor(&self, descriptor: &ChunkDescriptor) {
         self.segment.store(descriptor.segment, Ordering::Relaxed);
         self.chunk.store(descriptor.chunk, Ordering::Relaxed);
@@ -51,8 +56,7 @@ impl ChunkHeaderType {
         ChunkDescriptor::new(
             self.segment.load(Ordering::Relaxed),
             self.chunk.load(Ordering::Relaxed),
-            // SAFETY: this is safe because Write access to self.len is available only from set_data_descriptor
-            unsafe { NonZeroUsize::new_unchecked(self.len.load(Ordering::Relaxed)) },
+            self.len(),
         )
     }
 }
