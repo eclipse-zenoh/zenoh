@@ -377,7 +377,7 @@ pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
             IpAddr::V4(a) => Some(a),
             IpAddr::V6(_) => None,
         })
-        .filter(|x| !x.is_loopback() && !x.is_multicast())
+        .filter(|x| (!x.is_loopback() || interface.is_some()) && !x.is_multicast())
         .map(IpAddr::V4)
         .collect()
 }
@@ -397,7 +397,10 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
             IpAddr::V6(_) => None,
         })
         .filter(|x| {
-            !x.is_loopback() && !x.is_link_local() && !x.is_multicast() && !x.is_broadcast()
+            (!x.is_loopback() || interface.is_some())
+                && !x.is_link_local()
+                && !x.is_multicast()
+                && !x.is_broadcast()
         });
 
     // Get next all IPv6 addresses
@@ -409,7 +412,11 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
     // First match non-linklocal IPv6 addresses
     let nll_ipv6_addrs = ipv6_iter
         .clone()
-        .filter(|x| !x.is_loopback() && !x.is_multicast() && !is_unicast_link_local(x))
+        .filter(|x| {
+            (!x.is_loopback() || interface.is_some())
+                && !x.is_multicast()
+                && !is_unicast_link_local(x)
+        })
         .map(|x| IpAddr::V6(*x));
 
     // Second match public IPv4 addresses
