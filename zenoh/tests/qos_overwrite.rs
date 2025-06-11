@@ -11,44 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-#![cfg(all(feature = "unstable", feature = "internal_config"))]
+#![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
+
+mod common;
+
 use std::time::Duration;
 
+use serde_json::json;
 use zenoh::{
-    config::WhatAmI,
     qos::{CongestionControl, Priority},
     Config, Wait,
 };
 use zenoh_core::ztimeout;
 
+use crate::common::{open_client, open_peer, open_router};
+
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
-
-async fn get_basic_router_config(port: u16) -> Config {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Router)).unwrap();
-    config
-        .listen
-        .endpoints
-        .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config
-}
-
-async fn get_basic_client_config(port: u16) -> Config {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .endpoints
-        .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config
-}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_qos_overwrite_pub_sub() {
@@ -72,22 +52,16 @@ async fn test_qos_overwrite_pub_sub() {
             flows: ["ingress"]
         }
     ]"#;
-    test_qos_overwrite_pub_sub_impl(27601, value).await;
+    test_qos_overwrite_pub_sub_impl(value).await;
 }
 
-async fn test_qos_overwrite_pub_sub_impl(port: u16, qos_network_config: &str) {
+async fn test_qos_overwrite_pub_sub_impl(qos_network_config: &str) {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(port).await;
-    let config_client1 = get_basic_client_config(port).await;
-    let config_client2 = get_basic_client_config(port).await;
-    config_router
-        .insert_json5("qos/network", qos_network_config)
-        .unwrap();
 
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    let router = ztimeout!(open_router().with_json5("qos/network", qos_network_config));
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(zenoh::open(config_client1)).unwrap();
-    let session2 = ztimeout!(zenoh::open(config_client2)).unwrap();
+    let session1 = ztimeout!(open_client().connect_to(&router));
+    let session2 = ztimeout!(open_client().connect_to(&router));
     tokio::time::sleep(SLEEP).await;
 
     let subscriber_a = session2.declare_subscriber("a/**").await.unwrap();
@@ -135,39 +109,30 @@ async fn test_qos_overwrite_pub_sub_impl(port: u16, qos_network_config: &str) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_qos_overwrite_get_reply() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27602).await;
-    let config_client1 = get_basic_client_config(27602).await;
-    let config_client2 = get_basic_client_config(27602).await;
-    config_router
-        .insert_json5(
-            "qos/network",
-            r#"[
-                {
-                    messages: ["query"],
-                    key_exprs: ["a/**"],
-                    overwrite: {
-                        priority: "real_time",
-                        congestion_control: "block",
-                        express: true
-                    },
-                    flows: ["egress"]
-                },
-                {
-                    messages: ["reply"],
-                    key_exprs: ["a/b/**"],
-                    overwrite: {
-                        priority: "interactive_high",
-                    },
-                    flows: ["egress"]
-                }
-            ]"#,
-        )
-        .unwrap();
-
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    let qos_network_config = r#"[
+        {
+            messages: ["query"],
+            key_exprs: ["a/**"],
+            overwrite: {
+                priority: "real_time",
+                congestion_control: "block",
+                express: true
+            },
+            flows: ["egress"]
+        },
+        {
+            messages: ["reply"],
+            key_exprs: ["a/b/**"],
+            overwrite: {
+                priority: "interactive_high",
+            },
+            flows: ["egress"]
+        }
+    ]"#;
+    let router = ztimeout!(open_router().with_json5("qos/network", qos_network_config));
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(zenoh::open(config_client1)).unwrap();
-    let session2 = ztimeout!(zenoh::open(config_client2)).unwrap();
+    let session1 = ztimeout!(open_client().connect_to(&router));
+    let session2 = ztimeout!(open_client().connect_to(&router));
     tokio::time::sleep(SLEEP).await;
 
     let queryable = session2.declare_queryable("a/**").await.unwrap();
@@ -239,36 +204,31 @@ async fn test_qos_overwrite_get_reply() {
 fn qos_overwrite_config_error_repeated_id() {
     zenoh::init_log_from_env_or("error");
 
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "qos/network",
-            r#"[
-                {
-                    id: "REPEATED",
-                    messages: ["query"],
-                    key_exprs: ["a/**"],
-                    overwrite: {
-                        priority: "real_time",
-                        congestion_control: "block",
-                        express: true
-                    },
-                    flows: ["egress"]
-                },
-                {
-                    id: "REPEATED",
-                    messages: ["reply"],
-                    key_exprs: ["a/b/**"],
-                    overwrite: {
-                        priority: "interactive_high",
-                    },
-                    flows: ["egress"]
-                }
-            ]"#,
-        )
-        .unwrap();
-
-    zenoh::open(config).wait().unwrap();
+    let qos_network_config = r#"[
+        {
+            id: "REPEATED",
+            messages: ["query"],
+            key_exprs: ["a/**"],
+            overwrite: {
+                priority: "real_time",
+                congestion_control: "block",
+                express: true
+            },
+            flows: ["egress"]
+        },
+        {
+            id: "REPEATED",
+            messages: ["reply"],
+            key_exprs: ["a/b/**"],
+            overwrite: {
+                priority: "interactive_high",
+            },
+            flows: ["egress"]
+        }
+    ]"#;
+    open_peer()
+        .with_json5("qos/network", qos_network_config)
+        .wait();
 }
 
 #[test]
@@ -425,38 +385,30 @@ async fn test_qos_overwrite_link_protocols() {
             flows: ["ingress"]
         }
     ]"#;
-    test_qos_overwrite_pub_sub_impl(27603, value).await;
+    test_qos_overwrite_pub_sub_impl(value).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_qos_overwrite_zids() {
     zenoh::init_log_from_env_or("error");
-    let port = 27604;
-    let mut config_router = get_basic_router_config(port).await;
-    let config_client1 = get_basic_client_config(port).await;
-    let config_client2 = get_basic_client_config(port).await;
-    let qos_network = format!(
-        r#"[
-            {{
-                zids: ["{}"],
-                messages: ["put"],
-                key_exprs: ["**"],
-                overwrite: {{
-                    priority: "real_time",
-                }},
-                flows: ["egress"]
-            }}
-        ]"#,
-        config_client2.id()
-    );
-    config_router
-        .insert_json5("qos/network", &qos_network)
-        .unwrap();
+    let client1 = open_client();
+    let client2 = open_client();
+    let qos_network_config = json!([
+        {
+            "zids": [client2.id()],
+            "messages": ["put"],
+            "key_exprs": ["**"],
+            "overwrite": {
+                "priority": "real_time",
+            },
+            "flows": ["egress"]
+        }
+    ]);
 
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    let router = ztimeout!(open_router().with("qos/network", qos_network_config));
     tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(zenoh::open(config_client1)).unwrap();
-    let session2 = ztimeout!(zenoh::open(config_client2)).unwrap();
+    let session1 = ztimeout!(client1.connect_to(&router));
+    let session2 = ztimeout!(client2.connect_to(&router));
     tokio::time::sleep(SLEEP).await;
 
     let subscriber = session2.declare_subscriber("a/**").await.unwrap();

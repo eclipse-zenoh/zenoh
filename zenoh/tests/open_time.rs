@@ -11,17 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![allow(dead_code)]
 
-#![cfg(feature = "internal_config")]
-#![allow(unused)]
+mod common;
+
 use std::{
     future::IntoFuture,
     time::{Duration, Instant},
 };
 
-use zenoh_config::Config;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
+
+use crate::common::{open_mode, open_router};
 
 const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -32,70 +34,35 @@ macro_rules! ztimeout_expected {
     };
 }
 
-async fn time_open(
-    listen_endpoint: &EndPoint,
-    connect_endpoint: &EndPoint,
-    connect_mode: WhatAmI,
-    lowlatency: bool,
-) {
+async fn time_open(endpoint: &EndPoint, connect_mode: WhatAmI, lowlatency: bool) {
     /* [ROUTER] */
-    let mut router_config = zenoh::Config::default();
-    router_config.set_mode(Some(WhatAmI::Router)).unwrap();
-    router_config
-        .listen
-        .endpoints
-        .set(vec![listen_endpoint.clone()])
-        .unwrap();
-    router_config
-        .transport
-        .unicast
-        .set_lowlatency(lowlatency)
-        .unwrap();
-    router_config
-        .transport
-        .unicast
-        .qos
-        .set_enabled(!lowlatency)
-        .unwrap();
-
+    let router_cfg = open_router()
+        .with("listen/endpoints", [endpoint])
+        .with("transport/unicast/lowlatency", lowlatency)
+        .with("transport/unicast/qos", !lowlatency);
     let start = Instant::now();
-    let router = ztimeout_expected!(zenoh::open(router_config).into_future()).unwrap();
+    let router = ztimeout_expected!(router_cfg);
     println!(
         "open(mode:{}, listen_endpoint:{}, lowlatency:{}): {:#?}",
         WhatAmI::Router,
-        listen_endpoint.as_str().split('#').next().unwrap(),
+        endpoint.as_str().split('#').next().unwrap(),
         lowlatency,
         start.elapsed()
     );
 
     /* [APP] */
-    let mut app_config = zenoh::Config::default();
-    app_config.set_mode(Some(connect_mode)).unwrap();
-    app_config
-        .connect
-        .endpoints
-        .set(vec![connect_endpoint.clone()])
-        .unwrap();
-    app_config
-        .transport
-        .unicast
-        .set_lowlatency(lowlatency)
-        .unwrap();
-    app_config
-        .transport
-        .unicast
-        .qos
-        .set_enabled(!lowlatency)
-        .unwrap();
-
     /* [1] */
     // Open a transport from the app to the router
+    let app_cfg = open_mode(connect_mode)
+        .connect_to(&router)
+        .with("transport/unicast/lowlatency", lowlatency)
+        .with("transport/unicast/qos", !lowlatency);
     let start = Instant::now();
-    let app = ztimeout_expected!(zenoh::open(app_config).into_future()).unwrap();
+    let app = ztimeout_expected!(app_cfg);
     println!(
         "open(mode:{}, connect_endpoint:{}, lowlatency:{}): {:#?}",
         connect_mode,
-        connect_endpoint.as_str().split('#').next().unwrap(),
+        endpoint.as_str().split('#').next().unwrap(),
         lowlatency,
         start.elapsed()
     );
@@ -107,7 +74,7 @@ async fn time_open(
     println!(
         "close(mode:{}, connect_endpoint:{}, lowlatency:{}): {:#?}",
         connect_mode,
-        connect_endpoint.as_str().split('#').next().unwrap(),
+        endpoint.as_str().split('#').next().unwrap(),
         lowlatency,
         start.elapsed()
     );
@@ -119,7 +86,7 @@ async fn time_open(
     println!(
         "close(mode:{}, listen_endpoint:{}, lowlatency:{}): {:#?}",
         WhatAmI::Router,
-        listen_endpoint.as_str().split('#').next().unwrap(),
+        endpoint.as_str().split('#').next().unwrap(),
         lowlatency,
         start.elapsed()
     );
@@ -129,11 +96,11 @@ async fn time_open(
 }
 
 async fn time_universal_open(endpoint: &EndPoint, mode: WhatAmI) {
-    time_open(endpoint, endpoint, mode, false).await
+    time_open(endpoint, mode, false).await
 }
 
 async fn time_lowlatency_open(endpoint: &EndPoint, mode: WhatAmI) {
-    time_open(endpoint, endpoint, mode, true).await
+    time_open(endpoint, mode, true).await
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -141,7 +108,7 @@ async fn time_lowlatency_open(endpoint: &EndPoint, mode: WhatAmI) {
 #[ignore]
 async fn time_tcp_only_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+    let endpoint: EndPoint = "tcp/127.0.0.1:0".parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -150,7 +117,7 @@ async fn time_tcp_only_open() {
 #[ignore]
 async fn time_tcp_only_with_lowlatency_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14100).parse().unwrap();
+    let endpoint: EndPoint = "tcp/127.0.0.1:0".parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -159,7 +126,7 @@ async fn time_tcp_only_with_lowlatency_open() {
 #[ignore]
 async fn time_udp_only_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 14010).parse().unwrap();
+    let endpoint: EndPoint = "udp/127.0.0.1:0".parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -168,7 +135,7 @@ async fn time_udp_only_open() {
 #[ignore]
 async fn time_udp_only_with_lowlatency_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 14110).parse().unwrap();
+    let endpoint: EndPoint = "udp/127.0.0.1:0".parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -177,7 +144,7 @@ async fn time_udp_only_with_lowlatency_open() {
 // #[ignore]
 // async fn time_ws_only_open() {
 //     zenoh::init_log_from_env_or("error");
-//     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14020).parse().unwrap();
+//     let endpoint: EndPoint = "ws/127.0.0.1:0".parse().unwrap();
 //     time_universal_open(&endpoint, WhatAmI::Client).await;
 // }
 
@@ -186,7 +153,7 @@ async fn time_udp_only_with_lowlatency_open() {
 // #[ignore]
 // async fn time_ws_only_with_lowlatency_open() {
 //     zenoh::init_log_from_env_or("error");
-//     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14120).parse().unwrap();
+//     let endpoint: EndPoint = "ws/127.0.0.1:0".parse().unwrap();
 //     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 // }
 

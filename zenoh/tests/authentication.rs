@@ -11,101 +11,31 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
 
-#![cfg(feature = "internal_config")]
+use std::{
+    fs,
+    sync::{Arc, Mutex, OnceLock},
+    time::Duration,
+};
 
-mod test {
-    use std::{
-        fs,
-        path::PathBuf,
-        sync::{atomic::AtomicBool, Arc, Mutex},
-        time::Duration,
-    };
+use itertools::Itertools;
+use serde_json::json;
+use tokio::runtime::Handle;
+use zenoh::Session;
+use zenoh_core::{zlock, ztimeout};
 
-    use once_cell::sync::Lazy;
-    use tokio::runtime::Handle;
-    use zenoh::{config::WhatAmI, Config, Session};
-    use zenoh_config::{EndPoint, ModeDependentValue, ZenohId};
-    use zenoh_core::{zlock, ztimeout};
+use crate::common::TestOpenBuilder;
 
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const KEY_EXPR: &str = "test/demo";
-    const VALUE: &str = "zenoh";
-    static TESTFILES_PATH: Lazy<PathBuf> = Lazy::new(std::env::temp_dir);
-    static TESTFILES_CREATED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_secs(1);
+const KEY_EXPR: &str = "test/demo";
+const VALUE: &str = "zenoh";
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication_usrpwd() {
-        zenoh_util::init_log_from_env_or("error");
-        create_new_files(TESTFILES_PATH.to_path_buf())
-            .await
-            .unwrap();
-        test_pub_sub_deny_then_allow_usrpswd(29447).await;
-        test_pub_sub_allow_then_deny_usrpswd(29447).await;
-        test_get_qbl_allow_then_deny_usrpswd(29447).await;
-        test_get_qbl_deny_then_allow_usrpswd(29447).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication_tls() {
-        zenoh_util::init_log_from_env_or("error");
-        create_new_files(TESTFILES_PATH.to_path_buf())
-            .await
-            .unwrap();
-        test_pub_sub_deny_then_allow_tls(29448, false).await;
-        test_pub_sub_allow_then_deny_tls(29449).await;
-        test_get_qbl_allow_then_deny_tls(29450).await;
-        test_get_qbl_deny_then_allow_tls(29451).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication_quic() {
-        zenoh_util::init_log_from_env_or("error");
-        create_new_files(TESTFILES_PATH.to_path_buf())
-            .await
-            .unwrap();
-        test_pub_sub_deny_then_allow_quic(29452).await;
-        test_pub_sub_allow_then_deny_quic(29453).await;
-        test_get_qbl_deny_then_allow_quic(29454).await;
-        test_get_qbl_allow_then_deny_quic(29455).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication_lowlatency() {
-        // Test link AuthIds accessibility for lowlatency transport
-        zenoh_util::init_log_from_env_or("error");
-        create_new_files(TESTFILES_PATH.to_path_buf())
-            .await
-            .unwrap();
-        test_pub_sub_deny_then_allow_tls(29456, true).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication_subject_combinations() {
-        zenoh_util::init_log_from_env_or("error");
-        create_new_files(TESTFILES_PATH.to_path_buf())
-            .await
-            .unwrap();
-        test_deny_allow_combination(29457).await;
-        test_allow_deny_combination(29458).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_authentication_link_protocols() {
-        test_pub_sub_auth_link_protocol(1234).await
-    }
-
-    #[allow(clippy::all)]
-    async fn create_new_files(certs_dir: std::path::PathBuf) -> std::io::Result<()> {
-        let created = TESTFILES_CREATED.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
-        if created {
-            // only create files once per tests
-            println!("Skipping testfile creation: files already created by another test instance");
-            return Ok(());
-        }
-        use std::io::prelude::*;
-        let ca_pem = b"-----BEGIN CERTIFICATE-----
+#[allow(clippy::all)]
+fn create_certs_dir() -> String {
+    use std::io::prelude::*;
+    let ca_pem = b"-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIB42n1ZIkOakwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMwN1oYDzIxMjMw
 MzA2MTYwMzA3WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAwNzhkYTcwggEi
@@ -126,7 +56,7 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-        let client_side_pem = b"-----BEGIN CERTIFICATE-----
+    let client_side_pem = b"-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
 MzA2MTYwMzE4WjAUMRIwEAYDVQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
@@ -147,7 +77,7 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-        let client_side_key = b"-----BEGIN RSA PRIVATE KEY-----
+    let client_side_key = b"-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
 aDbV5M06s3UDX8ETPgY41Y8fCKTSVdi9iHkwcVrXMxUu4IBBx0C1r2GSo3gkIBnU
@@ -175,7 +105,7 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-        let server_side_pem = b"-----BEGIN CERTIFICATE-----
+    let server_side_pem = b"-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIeUtmIdFQznMwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMDc4ZGE3MCAXDTIzMDMwNjE2MDMxOFoYDzIxMjMw
 MzA2MTYwMzE4WjAUMRIwEAYDVQQDEwlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEB
@@ -196,7 +126,7 @@ p5e60QweRuJsb60aUaCG8HoICevXYK2fFqCQdlb5sIqQqXyN2K6HuKAFywsjsGyJ
 abY=
 -----END CERTIFICATE-----";
 
-        let server_side_key = b"-----BEGIN RSA PRIVATE KEY-----
+    let server_side_key = b"-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAsfqAuhElN4HnyeqLovSd4Qe+nNv5AwCjSO+HFiF30x3vQ1Hi
 qRA0UmyFlSqBnFH3TUHm4Jcad40QfrX8f11NKGZdpvKHsMYqYjZnYkRFGS2s4fQy
 aDbV5M06s3UDX8ETPgY41Y8fCKTSVdi9iHkwcVrXMxUu4IBBx0C1r2GSo3gkIBnU
@@ -224,1863 +154,1295 @@ tYsqC2FtWzY51VOEKNpnfH7zH5n+bjoI9nAEAW63TK9ZKkr2hRGsDhJdGzmLfQ7v
 F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
-        let credentials_txt = b"client1name:client1passwd
+    let credentials_txt = b"client1name:client1passwd
 client2name:client2passwd";
 
-        struct Testfile<'a> {
-            name: &'a str,
-            value: &'a [u8],
-        }
+    struct Testfile<'a> {
+        name: &'a str,
+        value: &'a [u8],
+    }
 
-        let test_files = vec![
-            Testfile {
-                name: "ca.pem",
-                value: ca_pem,
+    let test_files = vec![
+        Testfile {
+            name: "ca.pem",
+            value: ca_pem,
+        },
+        Testfile {
+            name: "clientsidekey.pem",
+            value: client_side_key,
+        },
+        Testfile {
+            name: "clientside.pem",
+            value: client_side_pem,
+        },
+        Testfile {
+            name: "serversidekey.pem",
+            value: server_side_key,
+        },
+        Testfile {
+            name: "serverside.pem",
+            value: server_side_pem,
+        },
+        Testfile {
+            name: "credentials.txt",
+            value: credentials_txt,
+        },
+    ];
+    let certs_dir = std::env::temp_dir();
+    for test_file in test_files {
+        let file_path = certs_dir.join(test_file.name);
+        let mut file = fs::File::create(&file_path).unwrap();
+        file.write_all(test_file.value).unwrap();
+    }
+
+    println!("testfiles created successfully.");
+    certs_dir.to_string_lossy().to_string()
+}
+
+fn test_file(name: &str) -> String {
+    static TESTFILES_PATH: OnceLock<String> = OnceLock::new();
+    format!("{}/{name}", TESTFILES_PATH.get_or_init(create_certs_dir))
+}
+
+fn usrpwd_cfg(role: &str) -> serde_json::Value {
+    json!({
+         "user": format!("{role}name"),
+         "password": format!("{role}passwd"),
+         "dictionary_file": (role == "router").then(||test_file("credentials.txt"))
+    })
+}
+
+enum TlsSide {
+    Client,
+    Server,
+}
+
+fn tls_cfg(side: TlsSide) -> serde_json::Value {
+    let (role, side) = match side {
+        TlsSide::Client => ("connect", "client"),
+        TlsSide::Server => ("listen", "server"),
+    };
+    json!({
+        "enable_mtls": true,
+        "verify_name_on_connect": false,
+        format!("{role}_private_key"): test_file(&format!("{side}sidekey.pem")),
+        format!("{role}_certificate"): test_file(&format!("{side}side.pem")),
+        "root_ca_certificate": test_file("ca.pem"),
+    })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_authentication_usrpwd() {
+    zenoh_util::init_log_from_env_or("error");
+    test_pub_sub_deny_then_allow_usrpswd().await;
+    test_pub_sub_allow_then_deny_usrpswd().await;
+    test_get_qbl_allow_then_deny_usrpswd().await;
+    test_get_qbl_deny_then_allow_usrpswd().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_authentication_tls() {
+    zenoh_util::init_log_from_env_or("error");
+    test_pub_sub_deny_then_allow_tls(false).await;
+    test_pub_sub_allow_then_deny_tls().await;
+    test_get_qbl_allow_then_deny_tls().await;
+    test_get_qbl_deny_then_allow_tls().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_authentication_quic() {
+    zenoh_util::init_log_from_env_or("error");
+    test_pub_sub_deny_then_allow_quic().await;
+    test_pub_sub_allow_then_deny_quic().await;
+    test_get_qbl_deny_then_allow_quic().await;
+    test_get_qbl_allow_then_deny_quic().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_authentication_lowlatency() {
+    // Test link AuthIds accessibility for lowlatency transport
+    zenoh_util::init_log_from_env_or("error");
+    test_pub_sub_deny_then_allow_tls(true).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_authentication_subject_combinations() {
+    zenoh_util::init_log_from_env_or("error");
+    test_deny_allow_combination().await;
+    test_allow_deny_combination().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_authentication_link_protocols() {
+    test_pub_sub_auth_link_protocol().await
+}
+
+fn open_router<const N: usize>(protocols: [&str; N], acl_cfg: &str) -> TestOpenBuilder {
+    println!("Opening router session");
+    let endpoints = protocols
+        .iter()
+        .map(|p| format!("{p}/127.0.0.1:0"))
+        .collect_vec();
+    let mut router = common::open_router()
+        .with_json5("access_control", acl_cfg)
+        .with("listen/endpoints", endpoints)
+        .with("transport/link/protocols", protocols.as_slice());
+    if protocols.contains(&"tcp") {
+        router = router.with("transport/auth/usrpwd", usrpwd_cfg("router"));
+    }
+    if protocols.contains(&"quic") || protocols.contains(&"tls") {
+        router = router.with("transport/link/tls", tls_cfg(TlsSide::Server));
+    }
+    router
+}
+
+fn open_router_usrpswd(acl_cfg: &str) -> TestOpenBuilder {
+    open_router(["tcp"], acl_cfg)
+}
+
+fn open_router_tls(acl_cfg: &str, lowlatency: bool) -> TestOpenBuilder {
+    open_router(["tls"], acl_cfg)
+        .with("transport/unicast/lowlatency", lowlatency)
+        .with("transport/unicast/qos/enabled", !lowlatency)
+}
+
+fn open_router_quic(acl_cfg: &str) -> TestOpenBuilder {
+    open_router(["quic"], acl_cfg)
+}
+
+fn open_router_quic_usrpswd(acl_cfg: &str) -> TestOpenBuilder {
+    open_router(["quic", "tcp"], acl_cfg)
+}
+
+async fn close_router_session(s: Session) {
+    println!("Closing router session");
+    ztimeout!(s.close()).unwrap();
+}
+
+async fn open_clients(
+    router: &Session,
+    protocol: &str,
+    with: impl Fn(&str, TestOpenBuilder) -> TestOpenBuilder,
+) -> (Session, Session) {
+    println!("Opening client sessions");
+    let open = |name: &str| {
+        let mut client = common::open_client()
+            .connect_to_protocol(router, protocol)
+            .with("transport/link/protocols", [protocol]);
+        client = match protocol {
+            "tcp" => client.with("transport/auth/usrpwd", usrpwd_cfg(name)),
+            "quic" | "tls" => client.with("transport/link/tls", tls_cfg(TlsSide::Client)),
+            _ => unreachable!(),
+        };
+        with(name, client)
+    };
+    tokio::join!(open("client1"), open("client2"))
+}
+
+async fn open_client_sessions_tls(router: &Session, lowlatency: bool) -> (Session, Session) {
+    open_clients(router, "tls", |_, client| {
+        client
+            .with("transport/unicast/lowlatency", lowlatency)
+            .with("transport/unicast/qos/enabled", !lowlatency)
+    })
+    .await
+}
+
+async fn open_client_sessions_quic(router: &Session) -> (Session, Session) {
+    open_clients(router, "quic", |_, client| client).await
+}
+
+async fn open_client_sessions_usrpswd(router: &Session) -> (Session, Session) {
+    open_clients(router, "tcp", |_, client| client).await
+}
+
+async fn open_client_sessions_quic_usrpswd(router: &Session) -> (Session, Session) {
+    open_clients(router, "quic", |name, client| {
+        client.with("transport/auth/usrpwd", usrpwd_cfg(name))
+    })
+    .await
+}
+
+async fn close_client_sessions(s01: Session, s02: Session) {
+    println!("Closing client sessions");
+    ztimeout!(s01.close()).unwrap();
+    ztimeout!(s02.close()).unwrap();
+}
+
+async fn test_pub_sub_deny_then_allow_tls(lowlatency: bool) {
+    println!("test_pub_sub_deny_then_allow_tls");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["ingress","egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
             },
-            Testfile {
-                name: "clientsidekey.pem",
-                value: client_side_key,
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_tls(acl_cfg, lowlatency));
+
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_tls(&router, lowlatency));
+    {
+        let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber = sub_session
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                let mut temp_value = zlock!(temp_recv_value);
+                *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+            })
+            .await
+            .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        publisher.put(VALUE).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_client_sessions(sub_session, pub_session).await;
+    close_router_session(router).await;
+}
+
+async fn test_pub_sub_allow_then_deny_tls() {
+    println!("test_pub_sub_allow_then_deny_tls");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
             },
-            Testfile {
-                name: "clientside.pem",
-                value: client_side_pem,
-            },
-            Testfile {
-                name: "serversidekey.pem",
-                value: server_side_key,
-            },
-            Testfile {
-                name: "serverside.pem",
-                value: server_side_pem,
-            },
-            Testfile {
-                name: "credentials.txt",
-                value: credentials_txt,
-            },
-        ];
-        for test_file in test_files {
-            let file_path = certs_dir.join(test_file.name);
-            let mut file = fs::File::create(&file_path)?;
-            file.write_all(test_file.value)?;
-        }
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_tls(acl_cfg, false));
 
-        println!("testfiles created successfully.");
-        Ok(())
-    }
-
-    async fn get_basic_router_config_tls(port: u16, lowlatency: bool) -> Config {
-        let cert_path = TESTFILES_PATH.to_string_lossy();
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![format!("tls/127.0.0.1:{}", port).parse().unwrap()])
-            .unwrap();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "link": {
-                        "protocols": [
-                            "tls"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        },
-                    },
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
-        config
-            .transport
-            .unicast
-            .qos
-            .set_enabled(!lowlatency)
-            .unwrap();
-        config
-    }
-    async fn get_basic_router_config_quic(port: u16) -> Config {
-        let cert_path = TESTFILES_PATH.to_string_lossy();
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()])
-            .unwrap();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "link": {
-                    "protocols": [
-                        "quic"
-                    ],
-                    "tls": {
-                        "enable_mtls": true,
-                        "verify_name_on_connect": false
-                    },
-                    },  
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config
-    }
-
-    async fn get_basic_router_config_usrpswd(port: u16) -> Config {
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-            .unwrap();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "auth": {
-                        usrpwd: {
-                            user: "routername",
-                            password: "routerpasswd",
-                        },
-                    },
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .auth
-            .usrpwd
-            .set_dictionary_file(Some(format!(
-                "{}/credentials.txt",
-                TESTFILES_PATH.to_string_lossy()
-            )))
-            .unwrap();
-        config
-    }
-    async fn close_router_session(s: Session) {
-        println!("Closing router session");
-        ztimeout!(s.close()).unwrap();
-    }
-
-    async fn get_basic_router_config_quic_usrpswd(port: u16) -> Config {
-        let cert_path = TESTFILES_PATH.to_string_lossy();
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Router)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![
-                format!("quic/127.0.0.1:{port}").parse().unwrap(),
-                format!("tcp/127.0.0.1:{port}").parse().unwrap(),
-            ])
-            .unwrap();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "link": {
-                        "protocols": [
-                            "quic", "tcp"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        },
-                    },
-                    "auth": {
-                        usrpwd: {
-                            user: "routername",
-                            password: "routerpasswd",
-                        },
-                    },
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .auth
-            .usrpwd
-            .set_dictionary_file(Some(format!(
-                "{}/credentials.txt",
-                TESTFILES_PATH.to_string_lossy()
-            )))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config
-    }
-
-    async fn get_client_sessions_tls(port: u16, lowlatency: bool) -> (Session, Session) {
-        let cert_path = TESTFILES_PATH.to_string_lossy();
-        println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tls/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                        "link": {
-                        "protocols": [
-                            "tls"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        }
-                    }
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
-        config
-            .transport
-            .unicast
-            .qos
-            .set_enabled(!lowlatency)
-            .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
-
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tls/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                        "link": {
-                        "protocols": [
-                            "tls"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        }
-                    }
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        config.transport.unicast.set_lowlatency(lowlatency).unwrap();
-        config
-            .transport
-            .unicast
-            .qos
-            .set_enabled(!lowlatency)
-            .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
-        (s01, s02)
-    }
-
-    async fn get_client_sessions_quic(port: u16) -> (Session, Session) {
-        let cert_path = TESTFILES_PATH.to_string_lossy();
-        println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                        "link": {
-                        "protocols": [
-                            "quic"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        }
-                    }
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                        "link": {
-                        "protocols": [
-                            "quic"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        }
-                    }
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
-        (s01, s02)
-    }
-
-    async fn get_client_sessions_usrpswd(port: u16) -> (Session, Session) {
-        println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tcp/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "auth": {
-                        usrpwd: {
-                            user: "client1name",
-                            password: "client1passwd",
-                        },
-                    }
-                }"#,
-            )
-            .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tcp/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "auth": {
-                        usrpwd: {
-                            user: "client2name",
-                            password: "client2passwd",
-                        },
-                    }
-                }"#,
-            )
-            .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
-        (s01, s02)
-    }
-
-    async fn get_client_sessions_quic_usrpswd(port: u16) -> (Session, Session) {
-        let cert_path = TESTFILES_PATH.to_string_lossy();
-        println!("Opening client sessions");
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                    "link": {
-                        "protocols": [
-                            "quic"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        }
-                    },
-                    "auth": {
-                        usrpwd: {
-                            user: "client1name",
-                            password: "client1passwd",
-                        },
-                    }
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
-
-        let mut config = zenoh::Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
-        config
-            .insert_json5(
-                "transport",
-                r#"{
-                        "link": {
-                        "protocols": [
-                            "quic"
-                        ],
-                        "tls": {
-                            "enable_mtls": true,
-                            "verify_name_on_connect": false
-                        }
-                    },
-                    "auth": {
-                        usrpwd: {
-                            user: "client2name",
-                            password: "client2passwd",
-                        },
-                    }
-                }"#,
-            )
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
-            .unwrap();
-        config
-            .transport
-            .link
-            .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
-            .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
-        (s01, s02)
-    }
-
-    async fn close_sessions(s01: Session, s02: Session) {
-        println!("Closing client sessions");
-        ztimeout!(s01.close()).unwrap();
-        ztimeout!(s02.close()).unwrap();
-    }
-
-    async fn test_pub_sub_deny_then_allow_tls(port: u16, lowlatency: bool) {
-        println!("test_pub_sub_deny_then_allow_tls");
-
-        let mut config_router = get_basic_router_config_tls(port, lowlatency).await;
-
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["ingress","egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (sub_session, pub_session) = get_client_sessions_tls(port, lowlatency).await;
-        {
-            let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber = sub_session
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_tls(&router, false));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
                     *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                })
-                .await
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-            publisher.put(VALUE).await.unwrap();
-            tokio::time::sleep(SLEEP).await;
-            assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
-    }
-
-    async fn test_pub_sub_allow_then_deny_tls(port: u16) {
-        println!("test_pub_sub_allow_then_deny_tls");
-        let mut config_router = get_basic_router_config_tls(port, false).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_tls(port, false).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
-    }
-
-    async fn test_get_qbl_deny_then_allow_tls(port: u16) {
-        println!("test_get_qbl_deny_then_allow_tls");
-
-        let mut config_router = get_basic_router_config_tls(port, false).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply",
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_tls(port, false).await;
-        {
-            let mut received_value = String::new();
-
-            let qbl = ztimeout!(qbl_session
-                .declare_queryable(KEY_EXPR)
-                .callback(move |sample| {
-                    tokio::task::block_in_place(move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
-                        });
-                    });
                 }))
             .unwrap();
 
-            tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
-            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.result() {
-                    Ok(sample) => {
-                        received_value = sample.payload().try_to_string().unwrap().into_owned();
-                        break;
-                    }
-                    Err(e) => println!(
-                        "Error : {}",
-                        e.payload()
-                            .try_to_string()
-                            .unwrap_or_else(|e| e.to_string().into())
-                    ),
-                }
-            }
-            tokio::time::sleep(SLEEP).await;
-            assert_eq!(received_value, VALUE);
-            ztimeout!(qbl.undeclare()).unwrap();
-        }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        tokio::time::sleep(SLEEP).await;
+
+        ztimeout!(publisher.put(VALUE)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        assert_ne!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
     }
+    close_client_sessions(sub_session, pub_session).await;
+    close_router_session(router).await;
+}
 
-    async fn test_get_qbl_allow_then_deny_tls(port: u16) {
-        println!("test_get_qbl_allow_then_deny_tls");
+async fn test_get_qbl_deny_then_allow_tls() {
+    println!("test_get_qbl_deny_then_allow_tls");
 
-        let mut config_router = get_basic_router_config_tls(port, false).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_tls(port, false).await;
-        {
-            let mut received_value = String::new();
-
-            let qbl = ztimeout!(qbl_session
-                .declare_queryable(KEY_EXPR)
-                .callback(move |sample| {
-                    tokio::task::block_in_place(move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
-                        });
-                    });
-                }))
-            .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
-            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.result() {
-                    Ok(sample) => {
-                        received_value = sample.payload().try_to_string().unwrap().into_owned();
-                        break;
-                    }
-                    Err(e) => println!(
-                        "Error : {}",
-                        e.payload()
-                            .try_to_string()
-                            .unwrap_or_else(|e| e.to_string().into())
-                    ),
-                }
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply",
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
             }
-            tokio::time::sleep(SLEEP).await;
-            assert_ne!(received_value, VALUE);
-            ztimeout!(qbl.undeclare()).unwrap();
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_tls(acl_cfg, false));
+
+    let (get_session, qbl_session) = ztimeout!(open_client_sessions_tls(&router, false));
+    {
+        let mut received_value = String::new();
+
+        let qbl = ztimeout!(qbl_session
+            .declare_queryable(KEY_EXPR)
+            .callback(move |sample| {
+                tokio::task::block_in_place(move || {
+                    Handle::current()
+                        .block_on(async move { ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap() });
+                });
+            }))
+        .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+        while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+            match reply.result() {
+                Ok(sample) => {
+                    received_value = sample.payload().try_to_string().unwrap().into_owned();
+                    break;
+                }
+                Err(e) => println!(
+                    "Error : {}",
+                    e.payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into())
+                ),
+            }
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(received_value, VALUE);
+        ztimeout!(qbl.undeclare()).unwrap();
     }
+    close_client_sessions(get_session, qbl_session).await;
+    close_router_session(router).await;
+}
 
-    async fn test_pub_sub_deny_then_allow_quic(port: u16) {
-        println!("test_pub_sub_deny_then_allow_quic");
+async fn test_get_qbl_allow_then_deny_tls() {
+    println!("test_get_qbl_allow_then_deny_tls");
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_tls(acl_cfg, false));
 
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
+    let (get_session, qbl_session) = ztimeout!(open_client_sessions_tls(&router, false));
+    {
+        let mut received_value = String::new();
+
+        let qbl = ztimeout!(qbl_session
+            .declare_queryable(KEY_EXPR)
+            .callback(move |sample| {
+                tokio::task::block_in_place(move || {
+                    Handle::current()
+                        .block_on(async move { ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap() });
+                });
+            }))
+        .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+        while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+            match reply.result() {
+                Ok(sample) => {
+                    received_value = sample.payload().try_to_string().unwrap().into_owned();
+                    break;
+                }
+                Err(e) => println!(
+                    "Error : {}",
+                    e.payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into())
+                ),
+            }
+        }
+        tokio::time::sleep(SLEEP).await;
+        assert_ne!(received_value, VALUE);
+        ztimeout!(qbl.undeclare()).unwrap();
+    }
+    close_client_sessions(get_session, qbl_session).await;
+    close_router_session(router).await;
+}
+
+async fn test_pub_sub_deny_then_allow_quic() {
+    println!("test_pub_sub_deny_then_allow_quic");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_quic(acl_cfg));
+
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_quic(&router));
+    {
+        let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber = sub_session
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                let mut temp_value = zlock!(temp_recv_value);
+                *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+            })
+            .await
             .unwrap();
-        println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        publisher.put(VALUE).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_client_sessions(sub_session, pub_session).await;
+    close_router_session(router).await;
+}
 
-        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
-        {
-            let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber = sub_session
+#[allow(unused)]
+async fn test_pub_sub_allow_then_deny_quic() {
+    println!("test_pub_sub_allow_then_deny_quic");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_quic(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_quic(&router));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
                     *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                })
-                .await
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-            publisher.put(VALUE).await.unwrap();
-            tokio::time::sleep(SLEEP).await;
-            assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
-    }
-
-    #[allow(unused)]
-    async fn test_pub_sub_allow_then_deny_quic(port: u16) {
-        println!("test_pub_sub_allow_then_deny_quic");
-
-        let mut config_router = get_basic_router_config_quic(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
-    }
-
-    #[allow(unused)]
-    async fn test_get_qbl_deny_then_allow_quic(port: u16) {
-        println!("test_get_qbl_deny_then_allow_quic");
-
-        let mut config_router = get_basic_router_config_quic(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["egress", "ingress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
-        {
-            let mut received_value = String::new();
-
-            let qbl = ztimeout!(qbl_session
-                .declare_queryable(KEY_EXPR)
-                .callback(move |sample| {
-                    tokio::task::block_in_place(move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
-                        });
-                    });
                 }))
             .unwrap();
 
-            tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
-            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.result() {
-                    Ok(sample) => {
-                        received_value = sample.payload().try_to_string().unwrap().into_owned();
-                        break;
-                    }
-                    Err(e) => println!(
-                        "Error : {}",
-                        e.payload()
-                            .try_to_string()
-                            .unwrap_or_else(|e| e.to_string().into())
-                    ),
-                }
-            }
-            tokio::time::sleep(SLEEP).await;
-            assert_eq!(received_value, VALUE);
-            ztimeout!(qbl.undeclare()).unwrap();
-        }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        tokio::time::sleep(SLEEP).await;
+
+        ztimeout!(publisher.put(VALUE)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        assert_ne!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
     }
+    close_client_sessions(sub_session, pub_session).await;
+    close_router_session(router).await;
+}
 
-    #[allow(unused)]
-    async fn test_get_qbl_allow_then_deny_quic(port: u16) {
-        println!("test_get_qbl_allow_then_deny_quic");
+#[allow(unused)]
+async fn test_get_qbl_deny_then_allow_quic() {
+    println!("test_get_qbl_deny_then_allow_quic");
 
-        let mut config_router = get_basic_router_config_quic(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
-        {
-            let mut received_value = String::new();
-
-            let qbl = ztimeout!(qbl_session
-                .declare_queryable(KEY_EXPR)
-                .callback(move |sample| {
-                    tokio::task::block_in_place(move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
-                        });
-                    });
-                }))
-            .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
-            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.result() {
-                    Ok(sample) => {
-                        received_value = sample.payload().try_to_string().unwrap().into_owned();
-                        break;
-                    }
-                    Err(e) => println!(
-                        "Error : {}",
-                        e.payload()
-                            .try_to_string()
-                            .unwrap_or_else(|e| e.to_string().into())
-                    ),
-                }
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["egress", "ingress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
             }
-            tokio::time::sleep(SLEEP).await;
-            assert_ne!(received_value, VALUE);
-            ztimeout!(qbl.undeclare()).unwrap();
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_quic(acl_cfg));
+
+    let (get_session, qbl_session) = ztimeout!(open_client_sessions_quic(&router));
+    {
+        let mut received_value = String::new();
+
+        let qbl = ztimeout!(qbl_session
+            .declare_queryable(KEY_EXPR)
+            .callback(move |sample| {
+                tokio::task::block_in_place(move || {
+                    Handle::current()
+                        .block_on(async move { ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap() });
+                });
+            }))
+        .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+        while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+            match reply.result() {
+                Ok(sample) => {
+                    received_value = sample.payload().try_to_string().unwrap().into_owned();
+                    break;
+                }
+                Err(e) => println!(
+                    "Error : {}",
+                    e.payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into())
+                ),
+            }
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(received_value, VALUE);
+        ztimeout!(qbl.undeclare()).unwrap();
     }
+    close_client_sessions(get_session, qbl_session).await;
+    close_router_session(router).await;
+}
 
-    async fn test_pub_sub_deny_then_allow_usrpswd(port: u16) {
-        println!("test_pub_sub_deny_then_allow_usrpswd");
+#[allow(unused)]
+async fn test_get_qbl_allow_then_deny_quic() {
+    println!("test_get_qbl_allow_then_deny_quic");
 
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_quic(acl_cfg));
 
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["ingress", "egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "usernames": [
-                                "client1name",
-                                "client2name"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
+    let (get_session, qbl_session) = ztimeout!(open_client_sessions_quic(&router));
+    {
+        let mut received_value = String::new();
+
+        let qbl = ztimeout!(qbl_session
+            .declare_queryable(KEY_EXPR)
+            .callback(move |sample| {
+                tokio::task::block_in_place(move || {
+                    Handle::current()
+                        .block_on(async move { ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap() });
+                });
+            }))
+        .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+        while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+            match reply.result() {
+                Ok(sample) => {
+                    received_value = sample.payload().try_to_string().unwrap().into_owned();
+                    break;
+                }
+                Err(e) => println!(
+                    "Error : {}",
+                    e.payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into())
+                ),
+            }
+        }
+        tokio::time::sleep(SLEEP).await;
+        assert_ne!(received_value, VALUE);
+        ztimeout!(qbl.undeclare()).unwrap();
+    }
+    close_client_sessions(get_session, qbl_session).await;
+    close_router_session(router).await;
+}
+
+async fn test_pub_sub_deny_then_allow_usrpswd() {
+    println!("test_pub_sub_deny_then_allow_usrpswd");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["ingress", "egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "usernames": [
+                    "client1name",
+                    "client2name"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_usrpswd(acl_cfg));
+
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_usrpswd(&router));
+    {
+        let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber = sub_session
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                let mut temp_value = zlock!(temp_recv_value);
+                *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+            })
+            .await
             .unwrap();
-        println!("Opening router session");
 
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        publisher.put(VALUE).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_client_sessions(sub_session, pub_session).await;
+    close_router_session(router).await;
+}
 
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
-        {
-            let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber = sub_session
+async fn test_pub_sub_allow_then_deny_usrpswd() {
+    println!("test_pub_sub_allow_then_deny_usrpswd");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "usernames": [
+                    "client1name",
+                    "client2name"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_usrpswd(acl_cfg));
+
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_usrpswd(&router));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
                 .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
                     let mut temp_value = zlock!(temp_recv_value);
                     *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                })
-                .await
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-            publisher.put(VALUE).await.unwrap();
-            tokio::time::sleep(SLEEP).await;
-            assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
-    }
-
-    async fn test_pub_sub_allow_then_deny_usrpswd(port: u16) {
-        println!("test_pub_sub_allow_then_deny_usrpswd");
-
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "usernames": [
-                                "client1name",
-                                "client2name"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
-    }
-
-    async fn test_get_qbl_deny_then_allow_usrpswd(port: u16) {
-        println!("test_get_qbl_deny_then_allow_usrpswd");
-
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["ingress", "egress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "usernames": [
-                                "client1name",
-                                "client2name"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-
-        println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_usrpswd(port).await;
-        {
-            let mut received_value = String::new();
-
-            let qbl = ztimeout!(qbl_session
-                .declare_queryable(KEY_EXPR)
-                .callback(move |sample| {
-                    tokio::task::block_in_place(move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
-                        });
-                    });
                 }))
             .unwrap();
 
-            tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
-            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.result() {
-                    Ok(sample) => {
-                        received_value = sample.payload().try_to_string().unwrap().into_owned();
-                        break;
-                    }
-                    Err(e) => println!(
-                        "Error : {}",
-                        e.payload()
-                            .try_to_string()
-                            .unwrap_or_else(|e| e.to_string().into())
-                    ),
-                }
-            }
-            tokio::time::sleep(SLEEP).await;
-            assert_eq!(received_value, VALUE);
-            ztimeout!(qbl.undeclare()).unwrap();
-        }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        tokio::time::sleep(SLEEP).await;
+
+        ztimeout!(publisher.put(VALUE)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        assert_ne!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
     }
+    close_client_sessions(sub_session, pub_session).await;
+    close_router_session(router).await;
+}
 
-    async fn test_get_qbl_allow_then_deny_usrpswd(port: u16) {
-        println!("test_get_qbl_allow_then_deny_usrpswd");
+async fn test_get_qbl_deny_then_allow_usrpswd() {
+    println!("test_get_qbl_deny_then_allow_usrpswd");
 
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "query",
-                                "declare_queryable",
-                                "reply"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "usernames": [
-                                "client1name",
-                                "client2name"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-        println!("Opening router session");
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["ingress", "egress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "usernames": [
+                    "client1name",
+                    "client2name"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_usrpswd(acl_cfg));
 
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
+    let (get_session, qbl_session) = ztimeout!(open_client_sessions_usrpswd(&router));
+    {
+        let mut received_value = String::new();
 
-        let (get_session, qbl_session) = get_client_sessions_usrpswd(port).await;
-        {
-            let mut received_value = String::new();
+        let qbl = ztimeout!(qbl_session
+            .declare_queryable(KEY_EXPR)
+            .callback(move |sample| {
+                tokio::task::block_in_place(move || {
+                    Handle::current()
+                        .block_on(async move { ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap() });
+                });
+            }))
+        .unwrap();
 
-            let qbl = ztimeout!(qbl_session
-                .declare_queryable(KEY_EXPR)
+        tokio::time::sleep(SLEEP).await;
+        let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+        while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+            match reply.result() {
+                Ok(sample) => {
+                    received_value = sample.payload().try_to_string().unwrap().into_owned();
+                    break;
+                }
+                Err(e) => println!(
+                    "Error : {}",
+                    e.payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into())
+                ),
+            }
+        }
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(received_value, VALUE);
+        ztimeout!(qbl.undeclare()).unwrap();
+    }
+    close_client_sessions(get_session, qbl_session).await;
+    close_router_session(router).await;
+}
+
+async fn test_get_qbl_allow_then_deny_usrpswd() {
+    println!("test_get_qbl_allow_then_deny_usrpswd");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "query",
+                    "declare_queryable",
+                    "reply"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "usernames": [
+                    "client1name",
+                    "client2name"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_usrpswd(acl_cfg));
+
+    let (get_session, qbl_session) = ztimeout!(open_client_sessions_usrpswd(&router));
+    {
+        let mut received_value = String::new();
+
+        let qbl = ztimeout!(qbl_session
+            .declare_queryable(KEY_EXPR)
+            .callback(move |sample| {
+                tokio::task::block_in_place(move || {
+                    Handle::current()
+                        .block_on(async move { ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap() });
+                });
+            }))
+        .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
+        while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
+            match reply.result() {
+                Ok(sample) => {
+                    received_value = sample.payload().try_to_string().unwrap().into_owned();
+                    break;
+                }
+                Err(e) => println!(
+                    "Error : {}",
+                    e.payload()
+                        .try_to_string()
+                        .unwrap_or_else(|e| e.to_string().into())
+                ),
+            }
+        }
+        tokio::time::sleep(SLEEP).await;
+        assert_ne!(received_value, VALUE);
+        ztimeout!(qbl.undeclare()).unwrap();
+    }
+    close_client_sessions(get_session, qbl_session).await;
+    close_router_session(router).await;
+}
+
+async fn test_deny_allow_combination() {
+    println!("test_deny_allow_combination");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "deny",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "allow",
+                "flows": ["ingress", "egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ],
+                "usernames": [
+                    "client1name",
+                    "client2name"
+                ]
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_quic_usrpswd(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_usrpswd(&router));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
+                .declare_subscriber(KEY_EXPR)
                 .callback(move |sample| {
-                    tokio::task::block_in_place(move || {
-                        Handle::current().block_on(async move {
-                            ztimeout!(sample.reply(KEY_EXPR, VALUE)).unwrap()
-                        });
-                    });
+                    let mut temp_value = zlock!(temp_recv_value);
+                    *temp_value = sample.payload().try_to_string().unwrap().into_owned();
                 }))
             .unwrap();
 
-            tokio::time::sleep(SLEEP).await;
-            let recv_reply = ztimeout!(get_session.get(KEY_EXPR)).unwrap();
-            while let Ok(reply) = ztimeout!(recv_reply.recv_async()) {
-                match reply.result() {
-                    Ok(sample) => {
-                        received_value = sample.payload().try_to_string().unwrap().into_owned();
-                        break;
-                    }
-                    Err(e) => println!(
-                        "Error : {}",
-                        e.payload()
-                            .try_to_string()
-                            .unwrap_or_else(|e| e.to_string().into())
-                    ),
-                }
+        tokio::time::sleep(SLEEP).await;
+
+        ztimeout!(publisher.put(VALUE)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        assert_ne!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_client_sessions(sub_session, pub_session).await;
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_quic_usrpswd(&router));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
+                .declare_subscriber(KEY_EXPR)
+                .callback(move |sample| {
+                    let mut temp_value = zlock!(temp_recv_value);
+                    *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+                }))
+            .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+
+        ztimeout!(publisher.put(VALUE)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        assert_eq!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_router_session(router).await;
+}
+
+async fn test_allow_deny_combination() {
+    println!("test_allow_deny_combination");
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["egress"],
+                "messages": [
+                    "put",
+                    "declare_subscriber"
+                ],
+                "key_exprs": [
+                    "test/demo"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "cert_common_names": [
+                    "localhost"
+                ],
+                "usernames": [
+                    "client1name",
+                    "client2name"
+                ]
             }
-            tokio::time::sleep(SLEEP).await;
-            assert_ne!(received_value, VALUE);
-            ztimeout!(qbl.undeclare()).unwrap();
-        }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
-    }
-
-    async fn test_deny_allow_combination(port: u16) {
-        println!("test_deny_allow_combination");
-
-        let mut config_router = get_basic_router_config_quic_usrpswd(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "deny",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "allow",
-                            "flows": ["ingress", "egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ],
-                            "usernames": [
-                                "client1name",
-                                "client2name"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let router = ztimeout!(open_router_quic_usrpswd(acl_cfg));
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_usrpswd(&router));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
+                .declare_subscriber(KEY_EXPR)
+                .callback(move |sample| {
+                    let mut temp_value = zlock!(temp_recv_value);
+                    *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+                }))
             .unwrap();
 
-        println!("Opening router session");
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(port).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_router_session(session).await;
-    }
-
-    async fn test_allow_deny_combination(port: u16) {
-        println!("test_allow_deny_combination");
-
-        let mut config_router = get_basic_router_config_quic_usrpswd(port).await;
-        config_router
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["egress"],
-                            "messages": [
-                                "put",
-                                "declare_subscriber"
-                            ],
-                            "key_exprs": [
-                                "test/demo"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "cert_common_names": [
-                                "localhost"
-                            ],
-                            "usernames": [
-                                "client1name",
-                                "client2name"
-                            ]
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-
-        println!("Opening router session");
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_eq!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_sessions(sub_session, pub_session).await;
-        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(port).await;
-        {
-            let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
-            let received_value = Arc::new(Mutex::new(String::new()));
-            let temp_recv_value = received_value.clone();
-            let subscriber =
-                ztimeout!(sub_session
-                    .declare_subscriber(KEY_EXPR)
-                    .callback(move |sample| {
-                        let mut temp_value = zlock!(temp_recv_value);
-                        *temp_value = sample.payload().try_to_string().unwrap().into_owned();
-                    }))
-                .unwrap();
-
-            tokio::time::sleep(SLEEP).await;
-
-            ztimeout!(publisher.put(VALUE)).unwrap();
-            tokio::time::sleep(SLEEP).await;
-
-            assert_ne!(*zlock!(received_value), VALUE);
-            ztimeout!(subscriber.undeclare()).unwrap();
-        }
-        close_router_session(session).await;
-    }
-
-    async fn test_pub_sub_auth_link_protocol(port: u16) {
-        let key_expr = "acl_auth_test/pubsub/by_protocols";
-
-        let mut config_listener = zenoh::Config::default();
-        config_listener
-            .listen
-            .set_endpoints(ModeDependentValue::Unique(vec![
-                format!("tcp/127.0.0.1:{port}").parse().unwrap(),
-                format!("udp/127.0.0.1:{port}").parse().unwrap(),
-            ]))
-            .unwrap();
-        config_listener
-            .scouting
-            .gossip
-            .set_enabled(Some(false))
-            .unwrap();
-        config_listener
-            .scouting
-            .multicast
-            .set_enabled(Some(false))
-            .unwrap();
-
-        config_listener
-            .insert_json5(
-                "access_control",
-                r#"{
-                    "enabled": true,
-                    "default_permission": "allow",
-                    "rules": [
-                        {
-                            "id": "r1",
-                            "permission": "deny",
-                            "flows": ["ingress"],
-                            "messages": [
-                                "put",
-                            ],
-                            "key_exprs": [
-                                "**"
-                            ],
-                        },
-                    ],
-                    "subjects": [
-                        {
-                            "id": "s1",
-                            "link_protocols": [ "tcp" ],
-                        }
-                    ],
-                    "policies": [
-                        {
-                            "rules": ["r1"],
-                            "subjects": ["s1"],
-                        }
-                    ]
-                }"#,
-            )
-            .unwrap();
-
-        let listener_session = zenoh::open(config_listener).await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let mut config_connect = zenoh::Config::default();
-        config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
-        config_connect
-            .scouting
-            .multicast
-            .set_enabled(Some(false))
-            .unwrap();
-        config_connect
-            .scouting
-            .gossip
-            .set_enabled(Some(false))
-            .unwrap();
-        config_connect
-            .connect
-            .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-            .unwrap();
-        let session_denied = zenoh::open(config_connect.clone()).await.unwrap();
-
-        config_connect
-            .connect
-            .endpoints
-            .set(vec![format!("udp/127.0.0.1:{port}").parse().unwrap()])
-            .unwrap();
-        config_connect.set_id(ZenohId::default()).unwrap();
-        let session_allowed = zenoh::open(config_connect).await.unwrap();
-
-        let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
-
-        session_denied.put(key_expr, "DENIED").await.unwrap();
+        ztimeout!(publisher.put(VALUE)).unwrap();
         tokio::time::sleep(SLEEP).await;
-        assert!(sub.try_recv().unwrap().is_none());
 
-        session_allowed.put(key_expr, "ALLOWED").await.unwrap();
-        tokio::time::sleep(SLEEP).await;
-        let value = sub.recv_async().await;
-        assert!(value.is_ok());
-        let sample = value.unwrap();
-        let payload = sample.payload().try_to_string().unwrap();
-        assert!(payload.eq("ALLOWED"));
-
-        sub.undeclare().await.unwrap();
-        session_allowed.close().await.unwrap();
-        session_denied.close().await.unwrap();
-        listener_session.close().await.unwrap();
+        assert_eq!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
     }
+    close_client_sessions(sub_session, pub_session).await;
+    let (sub_session, pub_session) = ztimeout!(open_client_sessions_quic_usrpswd(&router));
+    {
+        let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let temp_recv_value = received_value.clone();
+        let subscriber =
+            ztimeout!(sub_session
+                .declare_subscriber(KEY_EXPR)
+                .callback(move |sample| {
+                    let mut temp_value = zlock!(temp_recv_value);
+                    *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+                }))
+            .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+
+        ztimeout!(publisher.put(VALUE)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        assert_ne!(*zlock!(received_value), VALUE);
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_router_session(router).await;
+}
+
+async fn test_pub_sub_auth_link_protocol() {
+    let key_expr = "acl_auth_test/pubsub/by_protocols";
+
+    let acl_cfg = r#"{
+        "enabled": true,
+        "default_permission": "allow",
+        "rules": [
+            {
+                "id": "r1",
+                "permission": "deny",
+                "flows": ["ingress"],
+                "messages": [
+                    "put",
+                ],
+                "key_exprs": [
+                    "**"
+                ],
+            },
+        ],
+        "subjects": [
+            {
+                "id": "s1",
+                "link_protocols": [ "tcp" ],
+            }
+        ],
+        "policies": [
+            {
+                "rules": ["r1"],
+                "subjects": ["s1"],
+            }
+        ]
+    }"#;
+    let listener_session = common::open_peer()
+        .with("listen/endpoints", ["tcp/127.0.0.1:0", "udp/127.0.0.1:0"])
+        .with("scouting/gossip/enabled", false)
+        .with_json5("access_control", acl_cfg)
+        .await;
+    tokio::time::sleep(SLEEP).await;
+
+    let session_denied = common::open_client()
+        .with("scouting/gossip/enabled", false)
+        .connect_to_protocol(&listener_session, "tcp")
+        .await;
+
+    let session_allowed = common::open_client()
+        .with("scouting/gossip/enabled", false)
+        .connect_to_protocol(&listener_session, "udp")
+        .await;
+
+    let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
+
+    session_denied.put(key_expr, "DENIED").await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    assert!(sub.try_recv().unwrap().is_none());
+
+    session_allowed.put(key_expr, "ALLOWED").await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+    let value = sub.recv_async().await;
+    assert!(value.is_ok());
+    let sample = value.unwrap();
+    let payload = sample.payload().try_to_string().unwrap();
+    assert!(payload.eq("ALLOWED"));
+
+    sub.undeclare().await.unwrap();
+    session_allowed.close().await.unwrap();
+    session_denied.close().await.unwrap();
+    listener_session.close().await.unwrap();
 }

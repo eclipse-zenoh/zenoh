@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-#![cfg(feature = "internal_config")]
+
+mod common;
 
 use std::time::Duration;
 
@@ -22,32 +23,20 @@ use zenoh::{
     sample::Locality,
     Result as ZResult, Session,
 };
-use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
+
+use crate::common::{open_client, open_peer};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
-async fn create_session_pair(locator: &str) -> (Session, Session) {
-    let config1 = {
-        let mut config = zenoh::Config::default();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
-        config
+async fn create_session_pair(same_session: bool) -> (Session, Session) {
+    let session1 = ztimeout!(open_peer());
+    let session2 = if same_session {
+        session1.clone()
+    } else {
+        ztimeout!(open_client().connect_to(&session1))
     };
-    let mut config2 = zenoh::Config::default();
-    config2.set_mode(Some(WhatAmI::Client)).unwrap();
-    config2
-        .connect
-        .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-        .unwrap();
-
-    let session1 = ztimeout!(zenoh::open(config1)).unwrap();
-    let session2 = ztimeout!(zenoh::open(config2)).unwrap();
     (session1, session2)
 }
 
@@ -78,14 +67,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, same_se
         Locality::Any => "zenoh_querier_matching_status_any_test",
     };
 
-    let (session1, session2) = match same_session {
-        false => create_session_pair("tcp/127.0.0.1:18002").await,
-        true => {
-            let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
-            let s2 = s1.clone();
-            (s1, s2)
-        }
-    };
+    let (session1, session2) = create_session_pair(same_session).await;
     let locality_compatible = is_locality_compatible(querier_locality, same_session);
 
     let querier1 = ztimeout!(session1
@@ -186,14 +168,7 @@ async fn zenoh_publisher_matching_status_inner(publisher_locality: Locality, sam
         Locality::Any => "zenoh_publisher_matching_status_any_test",
     };
 
-    let (session1, session2) = match same_session {
-        false => create_session_pair("tcp/127.0.0.1:18001").await,
-        true => {
-            let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
-            let s2 = s1.clone();
-            (s1, s2)
-        }
-    };
+    let (session1, session2) = create_session_pair(same_session).await;
     let locality_compatible = is_locality_compatible(publisher_locality, same_session);
 
     let publisher = ztimeout!(session1

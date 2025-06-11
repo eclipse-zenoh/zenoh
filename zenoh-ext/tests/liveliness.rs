@@ -12,55 +12,31 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-use zenoh::{
-    config::{EndPoint, WhatAmI},
-    sample::SampleKind,
-    Wait,
-};
+
+mod common;
+
+use std::time::Duration;
+
+use zenoh::{internal::ztimeout, sample::SampleKind, Wait};
+#[allow(deprecated)]
+use zenoh_ext::SubscriberBuilderExt;
+
+use crate::common::{open_client, open_peer, open_router};
+
+const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_secs(1);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
 async fn test_liveliness_querying_subscriber_clique() {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-    use zenoh_ext::SubscriberBuilderExt;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "udp/localhost:47447";
-
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
     zenoh_util::init_log_from_env_or("error");
 
-    let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (1) ZID: {}", s.zid());
-        s
-    };
-
-    let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (2) ZID: {}", s.zid());
-        s
-    };
+    let peer1 = ztimeout!(open_peer().with("listen/endpoints", ["udp/127.0.0.1:0"]));
+    let peer2 = ztimeout!(open_peer().connect_to(&peer1));
 
     let token1 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_1)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -100,72 +76,16 @@ async fn test_liveliness_querying_subscriber_clique() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
 async fn test_liveliness_querying_subscriber_brokered() {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-    use zenoh_ext::SubscriberBuilderExt;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:27449";
-
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
-
-    let client3 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (3) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let client1 = ztimeout!(open_client().connect_to(&router));
+    let client2 = ztimeout!(open_client().connect_to(&router));
+    let client3 = ztimeout!(open_client().connect_to(&router));
 
     let token1 = ztimeout!(client2.liveliness().declare_token(LIVELINESS_KEYEXPR_1)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -207,46 +127,14 @@ async fn test_liveliness_querying_subscriber_brokered() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
 async fn test_liveliness_fetching_subscriber_clique() {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-    use zenoh_ext::SubscriberBuilderExt;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "udp/localhost:47449";
-
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
     zenoh_util::init_log_from_env_or("error");
 
-    let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (1) ZID: {}", s.zid());
-        s
-    };
-
-    let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (2) ZID: {}", s.zid());
-        s
-    };
+    let peer1 = ztimeout!(open_peer().with("listen/endpoints", ["udp/127.0.0.1:0"]));
+    let peer2 = ztimeout!(open_peer().connect_to(&peer1));
 
     let token1 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_1)).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -290,72 +178,16 @@ async fn test_liveliness_fetching_subscriber_clique() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
 async fn test_liveliness_fetching_subscriber_brokered() {
-    use std::time::Duration;
-
-    use zenoh::internal::ztimeout;
-    use zenoh_ext::SubscriberBuilderExt;
-
-    const TIMEOUT: Duration = Duration::from_secs(60);
-    const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47450";
-
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
     const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/querying-subscriber/brokered/*";
 
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Router ZID: {}", s.zid());
-        s
-    };
-
-    let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (1) ZID: {}", s.zid());
-        s
-    };
-
-    let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (2) ZID: {}", s.zid());
-        s
-    };
-
-    let client3 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Client (3) ZID: {}", s.zid());
-        s
-    };
+    let router = ztimeout!(open_router());
+    let client1 = ztimeout!(open_client().connect_to(&router));
+    let client2 = ztimeout!(open_client().connect_to(&router));
+    let client3 = ztimeout!(open_client().connect_to(&router));
 
     let token1 = ztimeout!(client2.liveliness().declare_token(LIVELINESS_KEYEXPR_1)).unwrap();
     tokio::time::sleep(SLEEP).await;
