@@ -174,10 +174,7 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
             .wait()
             .unwrap();
         // ...and SHM provider
-        let shm01 = ShmProviderBuilder::builder()
-            .protocol_id::<POSIX_PROTOCOL_ID>()
-            .backend(backend)
-            .wait();
+        let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         // remember segment size that was allocated
         let shm_segment_size = shm01.available();

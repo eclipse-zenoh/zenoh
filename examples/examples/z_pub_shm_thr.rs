@@ -12,12 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{
-    bytes::ZBytes,
-    qos::CongestionControl,
-    shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
-    Config, Wait,
-};
+use zenoh::{bytes::ZBytes, qos::CongestionControl, shm::ShmProviderBuilder, Config, Wait};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -28,18 +23,9 @@ async fn main() {
 
     let z = zenoh::open(config).await.unwrap();
 
-    // create an SHM backend...
+    // Create SHM provider with default backend
     // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(sm_size)
-        .unwrap()
-        .wait()
-        .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::default_backend(sm_size).wait().unwrap();
 
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
