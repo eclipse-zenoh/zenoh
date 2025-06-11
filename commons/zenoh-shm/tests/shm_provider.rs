@@ -13,37 +13,16 @@
 //
 
 use zenoh_core::Wait;
-use zenoh_shm::api::{
-    protocol_implementations::posix::{
-        posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
-    },
-    provider::shm_provider::ShmProviderBuilder,
-};
+use zenoh_shm::api::provider::shm_provider::ShmProviderBuilder;
 
 #[test]
 fn shm_provider_create() {
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(65536)
-        .unwrap()
-        .wait()
-        .unwrap();
-    let _provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let _provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
 }
 
 #[test]
 fn shm_provider_alloc_and_drop_provider() {
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(65536)
-        .unwrap()
-        .wait()
-        .unwrap();
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
 
     let mut shm_buffer = provider.alloc(1024).wait().unwrap();
 

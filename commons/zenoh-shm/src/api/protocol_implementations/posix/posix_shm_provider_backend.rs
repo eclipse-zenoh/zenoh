@@ -28,7 +28,11 @@ use zenoh_result::ZResult;
 
 use super::posix_shm_segment::PosixShmSegment;
 use crate::api::{
-    common::types::{ChunkID, PtrInSegment},
+    common::{
+        types::{ChunkID, ProtocolID, PtrInSegment},
+        with_id::WithProtocolID,
+    },
+    protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
         shm_provider_backend::ShmProviderBackend,
@@ -159,6 +163,12 @@ impl PosixShmProviderBackend {
             free_list: Mutex::new(free_list),
             alignment: layout.alignment(),
         })
+    }
+}
+
+impl WithProtocolID for PosixShmProviderBackend {
+    fn id(&self) -> ProtocolID {
+        POSIX_PROTOCOL_ID
     }
 }
 

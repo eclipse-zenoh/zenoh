@@ -14,7 +14,7 @@
 use zenoh::{
     shm::{
         AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect, PosixShmProviderBackend,
-        ShmProviderBuilder, POSIX_PROTOCOL_ID,
+        ShmProviderBuilder,
     },
     Config, Wait,
 };
@@ -23,76 +23,69 @@ use zenoh::{
 async fn main() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
-    run().await.unwrap()
+    run().await.unwrap();
 }
 
 async fn run() -> zenoh::Result<()> {
-    // create an SHM backend...
-    // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(65536)
-        .unwrap()
-        .wait()
-        .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    // Create an SHM provider
+    let provider = {
+        // Option 1: simple way to create default ShmProvider initialized with default-configured
+        {
+            // SHM backend (PosixShmProviderBackend)
+            let _simple = ShmProviderBuilder::default_backend(65536).wait()?;
+        }
 
-    // There are two API-defined ways of making shm buffer allocations: direct and through the layout...
+        // Option 2: comprehensive ShmProvider creation
+        {
+            // Create specific backed
+            // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
+            let comprehensive = PosixShmProviderBackend::builder()
+                .with_size(65536)?
+                // this is also possible:
+                // .with_layout_args(65536, AllocAlignment::default())
+                .wait()?;
 
-    // Direct allocation
+            // ...and an SHM provider with specified backend
+            ShmProviderBuilder::backend(comprehensive).wait()
+        }
+    };
+
+    // Allocate SHM buffer
+
+    // There are two ways of making shm buffer allocations: direct and through the layout...
+
+    // Option 1: direct allocation
     // The direct allocation calculates all layouting checks on each allocation. It is good for making
-    // uniquely-layouted allocations. For making series of similar allocations, please refer to  layout
-    // allocation API which is shown later in this example...
-    let _direct_allocation = {
-        // OPTION: Simple allocation
-        let simple = provider.alloc(512).wait().unwrap();
+    // uniquely-layouted allocations.
+    {
+        // Option 1: Simple allocation
+        let _shm_buf = provider.alloc(512).wait()?;
 
-        // OPTION: Allocation with custom alignment and alloc policy customization
-        let _comprehensive = provider
+        // Option 2: Allocation with custom alignment
+        let _shm_buf = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2).unwrap())
-            // for more examples on policies, please see allocation policy usage below (for layout allocation API)
-            .with_policy::<GarbageCollect>()
-            .wait()
-            .unwrap();
-
-        // OPTION: Allocation with custom alignment and async alloc policy
-        let _async = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2).unwrap())
-            // for more examples on policies, please see allocation policy usage below (for layout allocation API)
-            .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
-            .await
-            .unwrap();
-
-        simple
+            .with_alignment(AllocAlignment::new(2)?)
+            .wait()?;
     };
 
-    // Create a layout for particular allocation arguments and particular SHM provider
-    // The layout is validated for argument correctness and also is checked
-    // against particular SHM provider's layouting capabilities.
-    // This layout is reusable and can handle series of similar allocations
-    let buffer_layout = {
-        // OPTION: Simple configuration:
-        let simple_layout = provider.alloc(512).into_layout().unwrap();
+    // Option 2: allocation layout
+    // Layout is reusable and is designed to handle series of similar allocations
+    {
+        // Option 1: Simple configuration:
+        let simple_layout = provider.alloc(512).into_layout()?;
+        let _shm_buf = simple_layout.alloc().wait()?;
 
-        // OPTION: Comprehensive configuration:
-        let _comprehensive_layout = provider
+        // Option 2: Comprehensive configuration:
+        let comprehensive_layout = provider
             .alloc(512)
-            .with_alignment(AllocAlignment::new(2).unwrap())
-            .into_layout()
-            .unwrap();
-
-        simple_layout
+            .with_alignment(AllocAlignment::new(2)?)
+            .into_layout()?;
+        let _shm_buf = comprehensive_layout.alloc().wait()?;
     };
 
-    // Allocate ShmBufInner
-    // Policy is a generics-based API to describe necessary allocation behaviour
-    // that will be highly optimized at compile-time.
-    // Policy resolvable can be sync and async.
+    // Allocation policies
+    // Policy is a generics-based API to describe necessary allocation behaviour to be optimized at compile-time.
+    // Policy can be sync and async.
     // The basic policies are:
     // -JustAlloc (sync)
     // -GarbageCollect (sync)
@@ -102,36 +95,38 @@ async fn run() -> zenoh::Result<()> {
     // ---DeallocateEldest
     // ---DeallocateOptimal
     // -BlockOn (sync and async)
-    let mut sbuf = async {
-        // Some examples on how to use layout's interface:
+    let mut sbuf = {
+        // Option: The default allocation with default JustAlloc policy
+        let default_alloc = provider.alloc(512).wait()?;
 
-        // OPTION: The default allocation with default JustAlloc policy
-        let default_alloc = buffer_layout.alloc().wait().unwrap();
+        // Option: Defragment and garbage collect if there is not enough shared memory for allocation
+        let _gc_defragment_alloc = provider
+            .alloc(512)
+            .with_policy::<Defragment<GarbageCollect>>()
+            .wait()?;
 
-        // OPTION: The async allocation
-        let _async_alloc = buffer_layout
-            .alloc()
-            .with_policy::<BlockOn>()
-            .await
-            .unwrap();
+        // Option: Sync block if there is not enough shared memory for allocation
+        let _sync_alloc = provider.alloc(512).with_policy::<BlockOn>().wait()?;
 
-        // OPTION: The comprehensive allocation policy that blocks if provider is not able to allocate
-        let _comprehensive_alloc = buffer_layout
-            .alloc()
+        // Option: Async block if there is not enough shared memory for allocation
+        let _async_alloc = provider.alloc(512).with_policy::<BlockOn>().await?;
+
+        // Option: The comprehensive allocation policy that tries to GC, defragment and then blocks
+        // if provider is not able to allocate
+        let _comprehensive_alloc = provider
+            .alloc(512)
             .with_policy::<BlockOn<Defragment<GarbageCollect>>>()
-            .wait()
-            .unwrap();
+            .await?;
 
-        // OPTION: The comprehensive allocation policy that deallocates up to 1000 buffers if provider is not able to allocate
-        let _comprehensive_alloc = buffer_layout
-            .alloc()
-            .with_policy::<Deallocate<1000, Defragment<GarbageCollect>>>()
-            .wait()
-            .unwrap();
+        // Option: The comprehensive allocation policy that tries to GC, defragment and then deallocates up to
+        // 10 buffers if provider is not able to allocate
+        let _comprehensive_alloc = provider
+            .alloc(512)
+            .with_policy::<Deallocate<10, Defragment<GarbageCollect>>>()
+            .wait()?;
 
         default_alloc
-    }
-    .await;
+    };
 
     // Fill recently-allocated buffer with data
     sbuf[0..8].fill(0);

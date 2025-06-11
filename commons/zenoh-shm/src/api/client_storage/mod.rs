@@ -23,10 +23,8 @@ use zenoh_result::{bail, ZResult};
 use crate::{
     api::{
         client::{shm_client::ShmClient, shm_segment::ShmSegment},
-        common::types::ProtocolID,
-        protocol_implementations::posix::{
-            posix_shm_client::PosixShmClient, protocol_id::POSIX_PROTOCOL_ID,
-        },
+        common::{types::ProtocolID, with_id::WithProtocolID},
+        protocol_implementations::posix::posix_shm_client::PosixShmClient,
     },
     reader::{ClientStorage, GlobalDataSegmentId},
 };
@@ -70,10 +68,8 @@ impl ShmClientSetBuilder {
     /// Include default clients
     #[zenoh_macros::unstable_doc]
     pub fn with_default_client_set(self) -> ShmClientStorageBuilder {
-        let clients = BTreeMap::from([(
-            POSIX_PROTOCOL_ID,
-            Arc::new(PosixShmClient {}) as Arc<dyn ShmClient>,
-        )]);
+        let client = PosixShmClient {};
+        let clients = BTreeMap::from([(client.id(), Arc::new(client) as Arc<dyn ShmClient>)]);
         ShmClientStorageBuilder::new(clients)
     }
 }

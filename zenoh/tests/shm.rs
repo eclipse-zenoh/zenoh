@@ -26,9 +26,7 @@ use std::{
 
 use zenoh::{
     qos::{CongestionControl, Reliability},
-    shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
-    },
+    shm::{BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder},
     Session, Wait,
 };
 use zenoh_core::ztimeout;
@@ -140,10 +138,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
             .wait()
             .unwrap();
         // ...and SHM provider
-        let shm01 = ShmProviderBuilder::builder()
-            .protocol_id::<POSIX_PROTOCOL_ID>()
-            .backend(backend)
-            .wait();
+        let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         // remember segment size that was allocated
         let shm_segment_size = shm01.available();
