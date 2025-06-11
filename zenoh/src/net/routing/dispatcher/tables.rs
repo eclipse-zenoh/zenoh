@@ -80,7 +80,6 @@ pub struct Tables {
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
-    // pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
     pub(crate) routes_version: RoutesVersion,
     pub(crate) next_interceptor_version: AtomicUsize,
 }
