@@ -28,7 +28,7 @@ use zenoh::{
     qos::{CongestionControl, Reliability},
     shm::{
         AllocAlignment, BlockOn, GarbageCollect, MemoryLayout, PosixShmProviderBackend,
-        ShmProviderBuilder, POSIX_PROTOCOL_ID,
+        ShmProviderBuilder,
     },
     Session, Wait,
 };
