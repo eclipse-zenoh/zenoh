@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 #[cfg(unix)]
 use lazy_static::lazy_static;
@@ -370,7 +370,7 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
 }
 
 pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
-    get_local_addresses(interface)
+    let addrs: Vec<_> = get_local_addresses(interface)
         .unwrap_or_else(|_| vec![])
         .drain(..)
         .filter_map(|x| match x {
@@ -379,7 +379,13 @@ pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         })
         .filter(|x| (!x.is_loopback() || interface.is_some()) && !x.is_multicast())
         .map(IpAddr::V4)
-        .collect()
+        .collect();
+
+    if addrs.is_empty() && interface.is_none() {
+        vec![Ipv4Addr::LOCALHOST.into()]
+    } else {
+        addrs
+    }
 }
 
 pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
@@ -437,11 +443,17 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         .map(|x| IpAddr::V4(*x));
 
     // Extend
-    nll_ipv6_addrs
+    let addrs: Vec<_> = nll_ipv6_addrs
         .chain(pub_ipv4_addrs)
         .chain(yll_ipv6_addrs)
         .chain(priv_ipv4_addrs)
-        .collect()
+        .collect();
+
+    if addrs.is_empty() && interface.is_none() {
+        vec![Ipv6Addr::LOCALHOST.into()]
+    } else {
+        addrs
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
