@@ -25,15 +25,11 @@ use std::{
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
+    core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
-        push::{
-            ext::{NodeIdType, QoSType},
-            Push,
-        },
+        push::{ext::QoSType, Push},
         NetworkBodyMut, NetworkMessage, NetworkMessageMut,
     },
-    zenoh::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -284,24 +280,11 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
             router_handler.set_priority(*p);
 
             // Create the message to send
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(*p, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
-                    payload: vec![0u8; *ms].into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                ..Push::from(vec![0u8; *ms])
+            });
 
             println!("Sending {MSG_COUNT} messages... {p:?} {ms}");
             for _ in 0..MSG_COUNT {
