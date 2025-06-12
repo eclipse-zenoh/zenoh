@@ -13,6 +13,7 @@
 //
 
 use std::time::Duration;
+
 use zenoh::Session;
 use zenoh_core::ztimeout;
 
@@ -90,18 +91,29 @@ async fn test_ok<'a, QClosure, RClosure>(
     )
         -> zenoh::session::SessionGetBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
 {
-    let (reply, handle) = test_impl(test_name, session1, session2, queryable_closure, querier_closure).await;
-    
+    let (reply, handle) = test_impl(
+        test_name,
+        session1,
+        session2,
+        queryable_closure,
+        querier_closure,
+    )
+    .await;
+
     // Clean up resources first to avoid panic during abort
     handle.abort();
-    
+
     // Verify that reply was received
-    let reply = reply.unwrap_or_else(|| panic!("{test_name}: Failed to receive reply from queryable"));
-    assert!(reply.result().is_ok(), "{test_name}: Reply result is not OK");
+    let reply =
+        reply.unwrap_or_else(|| panic!("{test_name}: Failed to receive reply from queryable"));
+    assert!(
+        reply.result().is_ok(),
+        "{test_name}: Reply result is not OK"
+    );
     let sample = reply
         .result()
         .unwrap_or_else(|_| panic!("{test_name}: Failed to get sample from reply"));
-    
+
     // Verify the sample content
     assert_eq!(
         sample
@@ -130,13 +142,23 @@ async fn test_miss<'a, QClosure, RClosure>(
     )
         -> zenoh::session::SessionGetBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
 {
-    let (reply, handle) = test_impl(test_name, session1, session2, queryable_closure, querier_closure).await;
-    
+    let (reply, handle) = test_impl(
+        test_name,
+        session1,
+        session2,
+        queryable_closure,
+        querier_closure,
+    )
+    .await;
+
     // Clean up resources
     handle.abort();
-    
+
     // Verify that no reply was received
-    assert!(reply.is_none(), "{test_name}: Unexpectedly received a reply when none was expected");
+    assert!(
+        reply.is_none(),
+        "{test_name}: Unexpectedly received a reply when none was expected"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
