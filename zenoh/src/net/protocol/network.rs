@@ -987,6 +987,21 @@ impl Network {
         }
     }
 
+    pub(crate) fn update_locators(&mut self) {
+        self.graph[self.idx].sn += 1;
+        self.send_on_links(
+            vec![(
+                self.idx,
+                Details {
+                    zid: false,
+                    locators: true,
+                    links: self.full_linkstate || self.router_peers_failover_brokering,
+                },
+            )],
+            |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
+        );
+    }
+
     fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, Node)> {
         let mut dfs_stack = vec![self.idx];
         let mut visit_map = self.graph.visit_map();
