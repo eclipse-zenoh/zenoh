@@ -65,11 +65,7 @@ where
         }
     };
 
-    // Try to receive a reply with a timeout
-    let reply = match ztimeout!(replies.recv_async()) {
-        Ok(r) => Some(r),
-        Err(_) => None,
-    };
+    let reply = ztimeout!(replies.recv_async()).ok();
 
     (reply, handle)
 }
