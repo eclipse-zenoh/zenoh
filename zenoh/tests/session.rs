@@ -463,3 +463,38 @@ async fn test_undeclare_subscribers_same_keyexpr() {
     ztimeout!(sub1.undeclare()).unwrap();
     ztimeout!(sub2.undeclare()).unwrap();
 }
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_session_from_cloned_config() {
+    use zenoh::Config;
+
+    let (pub_config, sub_config) = {
+        let mut common_config = Config::default();
+        let locator = "tcp/127.0.0.1:38446";
+        common_config
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+
+        let mut pub_config = common_config.clone();
+        let mut sub_config = common_config;
+
+        sub_config
+            .listen
+            .endpoints
+            .set(vec![locator.parse().unwrap()])
+            .unwrap();
+        pub_config
+            .connect
+            .endpoints
+            .set(vec![locator.parse().unwrap()])
+            .unwrap();
+
+        (pub_config, sub_config)
+    };
+
+    let _pub_session = zenoh::open(pub_config).await.unwrap();
+    let _sub_session = zenoh::open(sub_config).await.unwrap();
+}
