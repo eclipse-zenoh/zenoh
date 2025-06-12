@@ -105,6 +105,8 @@ pub(crate) trait HatBaseTrait {
         send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
+    fn update_self_locators(&self, _tables: &mut Tables) {}
+
     fn handle_oam(
         &self,
         tables: &mut Tables,

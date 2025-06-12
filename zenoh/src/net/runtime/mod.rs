@@ -449,7 +449,13 @@ impl Runtime {
 
             update_iface_cache();
             self.update_locators();
-            // TODO Transmit new locators to peers?
+
+            {
+                let tables_lock = &self.state.router.tables;
+                let _ctrl_lock = zlock!(tables_lock.ctrl_lock);
+                let mut tables = zwrite!(tables_lock.tables);
+                tables_lock.hat_code.update_self_locators(&mut tables);
+            }
 
             let scouting = self.state.scouting.lock().await;
             if let Some(scouting) = scouting.as_ref() {
