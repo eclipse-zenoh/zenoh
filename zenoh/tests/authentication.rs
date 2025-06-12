@@ -2061,7 +2061,7 @@ client2name:client2passwd";
             .endpoints
             .set(vec![format!("udp/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
-        config_connect.set_id(ZenohId::default()).unwrap();
+        config_connect.set_id(ZenohId::default().into()).unwrap();
         let session_allowed = zenoh::open(config_connect).await.unwrap();
 
         let sub = listener_session.declare_subscriber(key_expr).await.unwrap();

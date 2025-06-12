@@ -25,6 +25,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
     collections::HashSet,
+    ops::Deref,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
@@ -140,7 +141,7 @@ impl RuntimeBuilder {
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = (*config.id()).into();
+        let zid = (*config.id().deref()).into();
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
