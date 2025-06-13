@@ -17,7 +17,7 @@ use std::{time::Duration, vec};
 use futures::StreamExt;
 use zenoh::{
     handlers::DefaultHandler,
-    query::{ConsolidationMode, Query, QueryableBuilder, Reply},
+    query::{ConsolidationMode, Query, QueryTarget, QueryableBuilder, Reply},
     sample::SampleKind,
     session::SessionGetBuilder,
     Session,
@@ -161,7 +161,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         vec![RKind::ReplyErr, RKind::Reply],
     )
     .await;
-     test(
+    test(
         msg!(test_mode, "Basic - reply_del first"),
         key_expr,
         s1,
@@ -173,7 +173,8 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         // while it should override the previous one
         vec![RKind::ReplyErr, RKind::ReplyDel],
     )
-    .await;   test(
+    .await;
+    test(
         msg!(
             test_mode,
             "Completeness: Complete queryable with All target"
@@ -182,7 +183,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         s1,
         s2,
         |b| b.complete(true),
-        |b| b.target(zenoh::query::QueryTarget::All),
+        |b| b.target(QueryTarget::All),
         vec![RKind::Reply],
         vec![RKind::Reply],
     )
@@ -196,7 +197,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         s1,
         s2,
         |b| b.complete(true),
-        |b| b.target(zenoh::query::QueryTarget::AllComplete),
+        |b| b.target(QueryTarget::AllComplete),
         vec![RKind::Reply],
         vec![RKind::Reply],
     )
@@ -210,7 +211,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         s1,
         s2,
         |b| b.complete(false),
-        |b| b.target(zenoh::query::QueryTarget::All),
+        |b| b.target(QueryTarget::All),
         vec![RKind::Reply],
         vec![RKind::Reply],
     )
@@ -224,7 +225,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         s1,
         s2,
         |b| b.complete(false),
-        |b| b.target(zenoh::query::QueryTarget::AllComplete),
+        |b| b.target(QueryTarget::AllComplete),
         vec![RKind::Reply],
         if test_mode == "same session" {
             // TODO: this is a bug, we should not receive a reply here, vec should be empty
