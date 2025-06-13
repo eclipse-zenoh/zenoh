@@ -54,11 +54,12 @@ impl PktInfoUdpSocket {
     ) -> io::Result<(usize, SocketAddr, SocketAddr)> {
         let res = recv_with_dst(&self.socket, &self.pktinfo_retrieval_data, buffer).await?;
 
-        let src_addr = if self.local_address.ip().is_unspecified() && res.2.is_some() {
-            unsafe { res.2.unwrap_unchecked() } // verified just above that it is not None
-        } else {
-            self.local_address
-        };
+        let mut src_addr = self.local_address;
+        if src_addr.ip().is_unspecified() {
+            if let Some(addr) = res.2 {
+                src_addr = addr;
+            }
+        }
         Ok((res.0, res.1, src_addr))
     }
 }
