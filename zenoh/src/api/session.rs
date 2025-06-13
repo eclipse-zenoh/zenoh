@@ -2463,7 +2463,7 @@ impl SessionInner {
         key_expr: &WireExpr,
         parameters: &str,
         qid: RequestId,
-        _target: QueryTarget,
+        target: QueryTarget,
         _consolidation: ConsolidationMode,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
@@ -2485,6 +2485,8 @@ impl SessionInner {
                             |(_, queryable)|
                                 (queryable.origin == Locality::Any
                                     || (local == (queryable.origin == Locality::SessionLocal)))
+                                &&
+                                (queryable.complete || target != QueryTarget::AllComplete)
                                 &&
                                 match state.local_wireexpr_to_expr(&queryable.key_expr) {
                                     Ok(qablname) => {
