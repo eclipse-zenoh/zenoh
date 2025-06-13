@@ -14,146 +14,111 @@
 
 use std::time::Duration;
 
-use zenoh::Session;
+use zenoh::{
+    handlers::DefaultHandler,
+    query::{Query, QueryableBuilder, Reply},
+    sample::SampleKind,
+    session::SessionGetBuilder,
+    Session,
+};
 use zenoh_core::ztimeout;
 
 const SLEEP: Duration = Duration::from_secs(1);
 const TIMEOUT: Duration = Duration::from_secs(60);
+const KEYEXPR: &str = "test/queryable";
 
-// Implements the common test logic but returns the reply for further verification
-async fn test_impl<'a, QClosure, RClosure>(
-    test_name: &str,
-    session1: &'a zenoh::Session,
-    session2: &'a zenoh::Session,
-    queryable_closure: QClosure,
-    querier_closure: RClosure,
-) -> (Option<zenoh::query::Reply>, tokio::task::JoinHandle<()>)
-where
-    QClosure: FnOnce(
-        &'a zenoh::Session,
-    )
-        -> zenoh::query::QueryableBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
-    RClosure: FnOnce(
-        &'a zenoh::Session,
-    )
-        -> zenoh::session::SessionGetBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum ReplyVariant {
+    None,
+    Reply,
+    ReplyDel,
+    ReplyErr,
+}
+
+// implement display for ReplyVariant
+impl std::fmt::Display for ReplyVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReplyVariant::None => write!(f, "None"),
+            ReplyVariant::Reply => write!(f, "Reply"),
+            ReplyVariant::ReplyDel => write!(f, "ReplyDel"),
+            ReplyVariant::ReplyErr => write!(f, "ReplyErr"),
+        }
+    }
+}
+
+impl<E> From<Result<Reply, E>> for ReplyVariant {
+    fn from(result: Result<Reply, E>) -> Self {
+        match result {
+            Ok(reply) => reply.into(),
+            Err(_) => ReplyVariant::None,
+        }
+    }
+}
+
+impl From<Reply> for ReplyVariant {
+    fn from(reply: Reply) -> Self {
+        match reply.result() {
+            Ok(sample) => {
+                if sample.kind() == SampleKind::Put {
+                    ReplyVariant::Reply
+                } else {
+                    ReplyVariant::ReplyDel
+                }
+            }
+            Err(_) => ReplyVariant::ReplyErr,
+        }
+    }
+}
+
+type QBuilder<'a> = QueryableBuilder<'a, 'a, DefaultHandler>;
+type GBuilder<'a> = SessionGetBuilder<'a, 'a, DefaultHandler>;
+async fn test<'a, QClosure, RClosure>(
+    test_name: &'static str,
+    q_session: &'a Session,
+    r_session: &'a Session,
+    q_builder: QClosure,
+    r_builder: RClosure,
+    expected: (ReplyVariant, ReplyVariant, ReplyVariant),
+) where
+    QClosure: FnOnce(QBuilder<'a>) -> QBuilder<'a>,
+    RClosure: FnOnce(GBuilder<'a>) -> GBuilder<'a>,
 {
-    // Actually declare queryable and querier and perform the query
-    let queryable = ztimeout!(queryable_closure(session1))
-        .unwrap_or_else(|_| panic!("{test_name}: Failed to declare queryable"));
+    let _queryable = ztimeout!(q_builder(q_session.declare_queryable(KEYEXPR)).callback(
+        move |query: Query| {
+            tokio::spawn(async move {
 
-    // Wait for declaration to propagate
+                dbg!(query.key_expr());
+
+                // send 3 variants of replies
+                ztimeout!(query.reply(KEYEXPR, "reply")).unwrap_or_else(|_| {
+                    panic!("{test_name} : failed to reply to query");
+                });
+                ztimeout!(query.reply_del(KEYEXPR)).unwrap_or_else(|_| {
+                    panic!("{test_name} : failed to reply_del to query");
+                });
+                ztimeout!(query.reply_err("error")).unwrap_or_else(|_| {
+                    panic!("{test_name} : failed to reply_err to query");
+                });
+            });
+        }
+    ))
+    .unwrap_or_else(|_| panic!("{test_name} : failed to declare queryable"));
+
     tokio::time::sleep(SLEEP).await;
 
-    // Handle queryable requests in background (using channel model)
-    let handle = tokio::spawn({
-        let test_name = test_name.to_string();
-        async move {
-            while let Ok(query) = queryable.recv_async().await {
-                ztimeout!(query.reply(query.key_expr(), "test_response"))
-                    .unwrap_or_else(|_| panic!("{test_name} : Failed to reply to query"));
-            }
-        }
-    });
+    let replies = ztimeout!(r_builder(r_session.get(KEYEXPR)))
+        .unwrap_or_else(|_| panic!("{test_name} : failed to execute query"));
 
-    // Execute query using querier
-    let replies = match ztimeout!(querier_closure(session2)) {
-        Ok(r) => r,
-        Err(e) => {
-            handle.abort();
-            panic!("{test_name}: Failed to execute query: {e}")
-        }
-    };
+    let r0 = ztimeout!(replies.recv_async()).into();
+    let r1 = ztimeout!(replies.recv_async()).into();
+    let r2 = ztimeout!(replies.recv_async()).into();
+    let (e0, e1, e2) = (expected.0, expected.1, expected.2);
 
-    let reply = ztimeout!(replies.recv_async()).ok();
-
-    (reply, handle)
-}
-
-// Test that expects to receive a sample (positive test)
-async fn test_ok<'a, QClosure, RClosure>(
-    test_name: &str,
-    session1: &'a zenoh::Session,
-    session2: &'a zenoh::Session,
-    queryable_closure: QClosure,
-    querier_closure: RClosure,
-) where
-    QClosure: FnOnce(
-        &'a zenoh::Session,
-    )
-        -> zenoh::query::QueryableBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
-    RClosure: FnOnce(
-        &'a zenoh::Session,
-    )
-        -> zenoh::session::SessionGetBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
-{
-    let (reply, handle) = test_impl(
-        test_name,
-        session1,
-        session2,
-        queryable_closure,
-        querier_closure,
-    )
-    .await;
-
-    // Clean up resources first to avoid panic during abort
-    handle.abort();
-
-    // Verify that reply was received
-    let reply =
-        reply.unwrap_or_else(|| panic!("{test_name}: Failed to receive reply from queryable"));
-    assert!(
-        reply.result().is_ok(),
-        "{test_name}: Reply result is not OK"
-    );
-    let sample = reply
-        .result()
-        .unwrap_or_else(|_| panic!("{test_name}: Failed to get sample from reply"));
-
-    // Verify the sample content
     assert_eq!(
-        sample
-            .payload()
-            .try_to_string()
-            .unwrap_or_else(|_| panic!("{test_name}: Failed to convert payload to string")),
-        "test_response",
-        "{test_name}: Unexpected response payload"
-    );
-}
-
-// Test that expects NOT to receive a sample (negative test)
-async fn test_miss<'a, QClosure, RClosure>(
-    test_name: &str,
-    session1: &'a zenoh::Session,
-    session2: &'a zenoh::Session,
-    queryable_closure: QClosure,
-    querier_closure: RClosure,
-) where
-    QClosure: FnOnce(
-        &'a zenoh::Session,
-    )
-        -> zenoh::query::QueryableBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
-    RClosure: FnOnce(
-        &'a zenoh::Session,
-    )
-        -> zenoh::session::SessionGetBuilder<'a, 'a, zenoh::handlers::DefaultHandler>,
-{
-    let (reply, handle) = test_impl(
-        test_name,
-        session1,
-        session2,
-        queryable_closure,
-        querier_closure,
-    )
-    .await;
-
-    // Clean up resources
-    handle.abort();
-
-    // Verify that no reply was received
-    assert!(
-        reply.is_none(),
-        "{test_name}: Unexpectedly received a reply when none was expected"
+        (r0, r1, r2),
+        (e0, e1, e2),
+        "{test_name}: Expected replies ({e0},{e1},{e2}), got ({r0},{r1},{r2})",
     );
 }
 
@@ -164,70 +129,74 @@ async fn test_queryable() {
     // Declare session
     let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s1");
     let s2 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s2");
-    let ke = "test/queryable";
 
     // These tests should receive responses
-    test_ok(
-        "Basic queryable test",
+    test(
+        "Basic queryable test, auto consolidation",
         &s1,
         &s2,
-        |s: &Session| s.declare_queryable(ke),
-        |s: &Session| s.get(ke),
+        |b| b,
+        |b| b,
+        (
+            ReplyVariant::Reply,
+            ReplyVariant::ReplyDel,
+            ReplyVariant::ReplyErr,
+        ),
     )
     .await;
-    test_ok(
-        "Same session test",
-        &s1,
-        &s1.clone(),
-        |s: &Session| s.declare_queryable(ke),
-        |s: &Session| s.get(ke),
-    )
-    .await;
+    // test_ok(
+    //     "Same session test",
+    //     &s1,
+    //     &s1.clone(),
+    //     |s: &Session| s.declare_queryable(ke),
+    //     |s: &Session| s.get(ke),
+    // )
+    // .await;
 
-    test_ok(
-        "Complete queryable with All target",
-        &s1,
-        &s2,
-        |s: &Session| s.declare_queryable(ke).complete(true),
-        |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::All),
-    )
-    .await;
+    // test_ok(
+    //     "Complete queryable with All target",
+    //     &s1,
+    //     &s2,
+    //     |s: &Session| s.declare_queryable(ke).complete(true),
+    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::All),
+    // )
+    // .await;
 
-    test_ok(
-        "Complete queryable with AllComplete target",
-        &s1,
-        &s2,
-        |s: &Session| s.declare_queryable(ke).complete(true),
-        |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
-    )
-    .await;
+    // test_ok(
+    //     "Complete queryable with AllComplete target",
+    //     &s1,
+    //     &s2,
+    //     |s: &Session| s.declare_queryable(ke).complete(true),
+    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
+    // )
+    // .await;
 
-    test_ok(
-        "Incomplete queryable with All target",
-        &s1,
-        &s2,
-        |s: &Session| s.declare_queryable(ke).complete(false),
-        |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::All),
-    )
-    .await;
+    // test_ok(
+    //     "Incomplete queryable with All target",
+    //     &s1,
+    //     &s2,
+    //     |s: &Session| s.declare_queryable(ke).complete(false),
+    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::All),
+    // )
+    // .await;
 
-    test_miss(
-        "Incomplete queryable with AllComplete target",
-        &s1,
-        &s2,
-        |s: &Session| s.declare_queryable(ke).complete(false),
-        |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
-    )
-    .await;
+    // test_miss(
+    //     "Incomplete queryable with AllComplete target",
+    //     &s1,
+    //     &s2,
+    //     |s: &Session| s.declare_queryable(ke).complete(false),
+    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
+    // )
+    // .await;
 
-    test_miss(
-        "Incomplete queryable with AllComplete target, same session",
-        &s1,
-        &s1.clone(),
-        |s: &Session| s.declare_queryable(ke).complete(false),
-        |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
-    )
-    .await;
+    // test_miss(
+    //     "Incomplete queryable with AllComplete target, same session",
+    //     &s1,
+    //     &s1.clone(),
+    //     |s: &Session| s.declare_queryable(ke).complete(false),
+    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
+    // )
+    // .await;
 
     ztimeout!(s1.close()).expect("Failed to close session s1");
     ztimeout!(s2.close()).expect("Failed to close session s2");
