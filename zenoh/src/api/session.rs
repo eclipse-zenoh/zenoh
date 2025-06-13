@@ -3026,7 +3026,7 @@ impl Primitives for WeakSession {
                                     ) {
                                         Some(reply) => {
                                             if new_reply.result.as_ref().unwrap().timestamp
-                                                > reply.result.as_ref().unwrap().timestamp
+                                                >= reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
