@@ -155,10 +155,8 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b,
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // TODO: it's strange that we receive a ReplyErr first, but it is the expected behavior at this moment
-        // TODO: also it's questionable why ReplyDel doesn't override Reply
-        vec![RKind::ReplyErr, RKind::Reply],
+        // ReplyErr is always first, this is not against the spec
+        vec![RKind::ReplyErr, RKind::ReplyDel],
     )
     .await;
     test(
@@ -169,9 +167,8 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b,
         vec![RKind::ReplyDel, RKind::Reply, RKind::ReplyErr],
-        // TODO: same problem as above: second reply is igniored
-        // while it should override the previous one
-        vec![RKind::ReplyErr, RKind::ReplyDel],
+        // ReplyErr is always first, this is not against the spec
+        vec![RKind::ReplyErr, RKind::Reply],
     )
     .await;
     test(
@@ -249,9 +246,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b.consolidation(ConsolidationMode::Latest),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // TODO: this is a bug, we should receive ReplyDel and ReplyErr, but we receive Reply instead of ReplyDel
-        // vec![RKind::ReplyDel, RKind::ReplyErr],
-        vec![RKind::ReplyErr, RKind::Reply],
+        vec![RKind::ReplyErr, RKind::ReplyDel],
     )
     .await;
     test(
@@ -262,9 +257,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b.consolidation(ConsolidationMode::Latest),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // TODO: this is a bug. Monotonic is supposedly allowed to drop Reply in favor to ReplyDel which comes immediately after, but it keeps Reply instead
-        // Also the question about ReplyErr priority over others remains
-        vec![RKind::ReplyErr, RKind::Reply],
+        vec![RKind::ReplyErr, RKind::ReplyDel],
     )
     .await;
 }
