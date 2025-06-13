@@ -103,8 +103,8 @@ async fn test<'a, QClosure, RClosure>(
             let test_name = test_name_clone.clone();
             let keyexpr = keyexpr_clone.clone();
             tokio::spawn(async move {
-                for vairant in replies_to_send {
-                    match vairant {
+                for variant in replies_to_send {
+                    match variant {
                         RKind::None => {}
                         RKind::Reply => {
                             tokio::time::sleep(SLEEP).await;
