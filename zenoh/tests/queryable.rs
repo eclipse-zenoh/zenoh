@@ -227,13 +227,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b.complete(false),
         |b| b.target(QueryTarget::AllComplete),
         vec![RKind::Reply],
-        if test_mode == "same session" {
-            // TODO: this is a bug, we should not receive a reply here, vec should be empty
-            // vec![],
-            vec![RKind::Reply]
-        } else {
-            vec![]
-        },
+        vec![],
     )
     .await;
     test(
