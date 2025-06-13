@@ -255,7 +255,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b.consolidation(ConsolidationMode::Latest),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // TODO: this is a bug, we should receive RelpyDel and ReplyErr, but we receive Reply instead of ReplyDel
+        // TODO: this is a bug, we should receive ReplyDel and ReplyErr, but we receive Reply instead of ReplyDel
         // vec![RKind::ReplyDel, RKind::ReplyErr],
         vec![RKind::ReplyErr, RKind::Reply],
     )
