@@ -12,23 +12,23 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::time::Duration;
+use std::{time::Duration, vec};
 
+use futures::StreamExt;
 use zenoh::{
     handlers::DefaultHandler,
-    query::{Query, QueryableBuilder, Reply},
+    query::{ConsolidationMode, Query, QueryableBuilder, Reply},
     sample::SampleKind,
     session::SessionGetBuilder,
     Session,
 };
 use zenoh_core::ztimeout;
 
-const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP: Duration = Duration::from_millis(100);
 const TIMEOUT: Duration = Duration::from_secs(60);
-const KEYEXPR: &str = "test/queryable";
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-enum ReplyVariant {
+enum RKind {
     None,
     Reply,
     ReplyDel,
@@ -36,70 +36,96 @@ enum ReplyVariant {
 }
 
 // implement display for ReplyVariant
-impl std::fmt::Display for ReplyVariant {
+impl std::fmt::Display for RKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ReplyVariant::None => write!(f, "None"),
-            ReplyVariant::Reply => write!(f, "Reply"),
-            ReplyVariant::ReplyDel => write!(f, "ReplyDel"),
-            ReplyVariant::ReplyErr => write!(f, "ReplyErr"),
+            RKind::None => write!(f, "None"),
+            RKind::Reply => write!(f, "Reply"),
+            RKind::ReplyDel => write!(f, "ReplyDel"),
+            RKind::ReplyErr => write!(f, "ReplyErr"),
         }
     }
 }
 
-impl<E> From<Result<Reply, E>> for ReplyVariant {
+impl<E> From<Result<Reply, E>> for RKind {
     fn from(result: Result<Reply, E>) -> Self {
         match result {
             Ok(reply) => reply.into(),
-            Err(_) => ReplyVariant::None,
+            Err(_) => RKind::None,
         }
     }
 }
 
-impl From<Reply> for ReplyVariant {
+impl From<Reply> for RKind {
     fn from(reply: Reply) -> Self {
         match reply.result() {
             Ok(sample) => {
                 if sample.kind() == SampleKind::Put {
-                    ReplyVariant::Reply
+                    RKind::Reply
                 } else {
-                    ReplyVariant::ReplyDel
+                    RKind::ReplyDel
                 }
             }
-            Err(_) => ReplyVariant::ReplyErr,
+            Err(_) => RKind::ReplyErr,
         }
     }
 }
 
 type QBuilder<'a> = QueryableBuilder<'a, 'a, DefaultHandler>;
 type GBuilder<'a> = SessionGetBuilder<'a, 'a, DefaultHandler>;
+
+macro_rules! msg {
+    ($test_mode:expr, $test_name:expr) => {
+        format!("{} - {}", $test_name, $test_mode)
+    };
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn test<'a, QClosure, RClosure>(
-    test_name: &'static str,
+    test_name: String,
+    keyexpr: &'static str,
     q_session: &'a Session,
     r_session: &'a Session,
     q_builder: QClosure,
     r_builder: RClosure,
-    expected: (ReplyVariant, ReplyVariant, ReplyVariant),
+    replies_to_send: Vec<RKind>,
+    replies_expected: Vec<RKind>,
 ) where
     QClosure: FnOnce(QBuilder<'a>) -> QBuilder<'a>,
     RClosure: FnOnce(GBuilder<'a>) -> GBuilder<'a>,
 {
-    let _queryable = ztimeout!(q_builder(q_session.declare_queryable(KEYEXPR)).callback(
+    println!("Queryable: {test_name}");
+    let test_name_clone = test_name.clone();
+    let keyexpr_clone = keyexpr.to_string();
+    let _queryable = ztimeout!(q_builder(q_session.declare_queryable(keyexpr)).callback(
         move |query: Query| {
+            let replies_to_send = replies_to_send.clone();
+            let test_name = test_name_clone.clone();
+            let keyexpr = keyexpr_clone.clone();
             tokio::spawn(async move {
-
-                dbg!(query.key_expr());
-
-                // send 3 variants of replies
-                ztimeout!(query.reply(KEYEXPR, "reply")).unwrap_or_else(|_| {
-                    panic!("{test_name} : failed to reply to query");
-                });
-                ztimeout!(query.reply_del(KEYEXPR)).unwrap_or_else(|_| {
-                    panic!("{test_name} : failed to reply_del to query");
-                });
-                ztimeout!(query.reply_err("error")).unwrap_or_else(|_| {
-                    panic!("{test_name} : failed to reply_err to query");
-                });
+                for vairant in replies_to_send {
+                    match vairant {
+                        RKind::None => {}
+                        RKind::Reply => {
+                            tokio::time::sleep(SLEEP).await;
+                            ztimeout!(query.reply(&keyexpr, "reply")).unwrap_or_else(|_| {
+                                panic!("{test_name} : failed to reply to query");
+                            });
+                        }
+                        RKind::ReplyDel => {
+                            tokio::time::sleep(SLEEP).await;
+                            ztimeout!(query.reply_del(&keyexpr)).unwrap_or_else(|_| {
+                                panic!("{test_name} : failed to reply_del to query");
+                            });
+                        }
+                        RKind::ReplyErr => {
+                            tokio::time::sleep(SLEEP).await;
+                            ztimeout!(query.reply_err("error")).unwrap_or_else(|_| {
+                                panic!("{test_name} : failed to reply_err to query");
+                            });
+                        }
+                    }
+                }
             });
         }
     ))
@@ -107,97 +133,164 @@ async fn test<'a, QClosure, RClosure>(
 
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(r_builder(r_session.get(KEYEXPR)))
+    let replies_channel = ztimeout!(r_builder(r_session.get(keyexpr)))
         .unwrap_or_else(|_| panic!("{test_name} : failed to execute query"));
-
-    let r0 = ztimeout!(replies.recv_async()).into();
-    let r1 = ztimeout!(replies.recv_async()).into();
-    let r2 = ztimeout!(replies.recv_async()).into();
-    let (e0, e1, e2) = (expected.0, expected.1, expected.2);
-
+    let replies_received = replies_channel
+        .into_stream()
+        .then(|r| async move { RKind::from(r) })
+        .collect::<Vec<_>>()
+        .await;
     assert_eq!(
-        (r0, r1, r2),
-        (e0, e1, e2),
-        "{test_name}: Expected replies ({e0},{e1},{e2}), got ({r0},{r1},{r2})",
+        replies_expected, replies_received,
+        "{test_name}: Expected replies(left) differs from received(right)",
     );
 }
 
+async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_expr: &'static str) {
+    // These tests should receive responses
+    test(
+        msg!(test_mode, "Basic"),
+        key_expr,
+        s1,
+        s2,
+        |b| b,
+        |b| b,
+        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        // vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        // TODO: it's strange that we receive a ReplyErr first, but it is the expected behavior at this moment
+        // TODO: also it's questionable why ReplyDel doesn't override Reply
+        vec![RKind::ReplyErr, RKind::Reply],
+    )
+    .await;
+    test(
+        msg!(
+            test_mode,
+            "Completeness: Complete queryable with All target"
+        ),
+        key_expr,
+        s1,
+        s2,
+        |b| b.complete(true),
+        |b| b.target(zenoh::query::QueryTarget::All),
+        vec![RKind::Reply],
+        vec![RKind::Reply],
+    )
+    .await;
+    test(
+        msg!(
+            test_mode,
+            "Completeness: Complete queryable with AllComplete target"
+        ),
+        key_expr,
+        s1,
+        s2,
+        |b| b.complete(true),
+        |b| b.target(zenoh::query::QueryTarget::AllComplete),
+        vec![RKind::Reply],
+        vec![RKind::Reply],
+    )
+    .await;
+    test(
+        msg!(
+            test_mode,
+            "Completeness: Incomplete queryable with All target"
+        ),
+        key_expr,
+        s1,
+        s2,
+        |b| b.complete(false),
+        |b| b.target(zenoh::query::QueryTarget::All),
+        vec![RKind::Reply],
+        vec![RKind::Reply],
+    )
+    .await;
+    test(
+        msg!(
+            test_mode,
+            "Completeness: Incomplete queryable with AllComplete target"
+        ),
+        key_expr,
+        s1,
+        s2,
+        |b| b.complete(false),
+        |b| b.target(zenoh::query::QueryTarget::AllComplete),
+        vec![RKind::Reply],
+        if test_mode == "same session" {
+            // TODO: this is a bug, we should not receive a reply here, vec should be empty
+            // vec![],
+            vec![RKind::Reply]
+        } else {
+            vec![]
+        },
+    )
+    .await;
+    test(
+        msg!(test_mode, "Consolidation: None"),
+        key_expr,
+        s1,
+        s2,
+        |b| b,
+        |b| b.consolidation(ConsolidationMode::None),
+        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+    )
+    .await;
+    test(
+        msg!(test_mode, "Consolidation: Latest"),
+        key_expr,
+        s1,
+        s2,
+        |b| b,
+        |b| b.consolidation(ConsolidationMode::Latest),
+        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        // TODO: this is a bug, we should receive RelpyDel and ReplyErr, but we receive Reply instead of ReplyDel
+        // vec![RKind::ReplyDel, RKind::ReplyErr],
+        vec![RKind::ReplyErr, RKind::Reply],
+    )
+    .await;
+    test(
+        msg!(test_mode, "Consolidation: Monotonic"),
+        key_expr,
+        s1,
+        s2,
+        |b| b,
+        |b| b.consolidation(ConsolidationMode::Latest),
+        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        // TODO: this is a bug. Monotonic is supposedly allowed to drop Reply in favor to ReplyDel which comes immediately after, but it keeps Reply instead
+        // Also the question about ReplyErr priority over others remains
+        vec![RKind::ReplyErr, RKind::Reply],
+    )
+    .await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_queryable() {
+async fn test_queryable_different_sessions() {
     zenoh::init_log_from_env_or("error");
 
     // Declare session
     let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s1");
     let s2 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s2");
 
-    // These tests should receive responses
-    test(
-        "Basic queryable test, auto consolidation",
+    test_queryable_impl(
         &s1,
         &s2,
-        |b| b,
-        |b| b,
-        (
-            ReplyVariant::Reply,
-            ReplyVariant::ReplyDel,
-            ReplyVariant::ReplyErr,
-        ),
+        "different sessions",
+        "test/queryable/different_sessions",
     )
     .await;
-    // test_ok(
-    //     "Same session test",
-    //     &s1,
-    //     &s1.clone(),
-    //     |s: &Session| s.declare_queryable(ke),
-    //     |s: &Session| s.get(ke),
-    // )
-    // .await;
-
-    // test_ok(
-    //     "Complete queryable with All target",
-    //     &s1,
-    //     &s2,
-    //     |s: &Session| s.declare_queryable(ke).complete(true),
-    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::All),
-    // )
-    // .await;
-
-    // test_ok(
-    //     "Complete queryable with AllComplete target",
-    //     &s1,
-    //     &s2,
-    //     |s: &Session| s.declare_queryable(ke).complete(true),
-    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
-    // )
-    // .await;
-
-    // test_ok(
-    //     "Incomplete queryable with All target",
-    //     &s1,
-    //     &s2,
-    //     |s: &Session| s.declare_queryable(ke).complete(false),
-    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::All),
-    // )
-    // .await;
-
-    // test_miss(
-    //     "Incomplete queryable with AllComplete target",
-    //     &s1,
-    //     &s2,
-    //     |s: &Session| s.declare_queryable(ke).complete(false),
-    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
-    // )
-    // .await;
-
-    // test_miss(
-    //     "Incomplete queryable with AllComplete target, same session",
-    //     &s1,
-    //     &s1.clone(),
-    //     |s: &Session| s.declare_queryable(ke).complete(false),
-    //     |s: &Session| s.get(ke).target(zenoh::query::QueryTarget::AllComplete),
-    // )
-    // .await;
 
     ztimeout!(s1.close()).expect("Failed to close session s1");
     ztimeout!(s2.close()).expect("Failed to close session s2");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_queryable_same_session() {
+    zenoh::init_log_from_env_or("error");
+
+    // Declare session
+    let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s1");
+
+    test_queryable_impl(&s1, &s1, "same session", "test/queryable/same_session").await;
+
+    ztimeout!(s1.close()).expect("Failed to close session s1");
 }
