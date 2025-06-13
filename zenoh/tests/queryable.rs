@@ -147,22 +147,33 @@ async fn test<'a, QClosure, RClosure>(
 }
 
 async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_expr: &'static str) {
-    // These tests should receive responses
     test(
-        msg!(test_mode, "Basic"),
+        msg!(test_mode, "Basic - reply first"),
         key_expr,
         s1,
         s2,
         |b| b,
         |b| b,
-        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        vec![RKind::ReplyDel, RKind::Reply, RKind::ReplyErr],
         // vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
         // TODO: it's strange that we receive a ReplyErr first, but it is the expected behavior at this moment
         // TODO: also it's questionable why ReplyDel doesn't override Reply
         vec![RKind::ReplyErr, RKind::Reply],
     )
     .await;
-    test(
+     test(
+        msg!(test_mode, "Basic - reply_del first"),
+        key_expr,
+        s1,
+        s2,
+        |b| b,
+        |b| b,
+        vec![RKind::ReplyDel, RKind::Reply, RKind::ReplyErr],
+        // TODO: same problem as above: second reply is igniored
+        // while it should override the previous one
+        vec![RKind::ReplyErr, RKind::ReplyDel],
+    )
+    .await;   test(
         msg!(
             test_mode,
             "Completeness: Complete queryable with All target"
