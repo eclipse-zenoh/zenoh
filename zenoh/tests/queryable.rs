@@ -155,7 +155,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b,
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // ReplyErr is always first, this is not against the spec
+        // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
         vec![RKind::ReplyErr, RKind::ReplyDel],
     )
     .await;
@@ -167,7 +167,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b,
         vec![RKind::ReplyDel, RKind::Reply, RKind::ReplyErr],
-        // ReplyErr is always first, this is not against the spec
+        // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
         vec![RKind::ReplyErr, RKind::Reply],
     )
     .await;
@@ -246,6 +246,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b.consolidation(ConsolidationMode::Latest),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
         vec![RKind::ReplyErr, RKind::ReplyDel],
     )
     .await;
@@ -257,6 +258,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b.consolidation(ConsolidationMode::Latest),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
         vec![RKind::ReplyErr, RKind::ReplyDel],
     )
     .await;
