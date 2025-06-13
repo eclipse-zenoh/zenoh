@@ -154,7 +154,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         s2,
         |b| b,
         |b| b,
-        vec![RKind::ReplyDel, RKind::Reply, RKind::ReplyErr],
+        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
         // vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
         // TODO: it's strange that we receive a ReplyErr first, but it is the expected behavior at this moment
         // TODO: also it's questionable why ReplyDel doesn't override Reply
