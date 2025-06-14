@@ -107,19 +107,16 @@ async fn test<'a, QClosure, RClosure>(
                     match variant {
                         RKind::None => {}
                         RKind::Reply => {
-                            // tokio::time::sleep(SLEEP).await;
                             ztimeout!(query.reply(&keyexpr, "reply")).unwrap_or_else(|_| {
                                 panic!("{test_name} : failed to reply to query");
                             });
                         }
                         RKind::ReplyDel => {
-                            // tokio::time::sleep(SLEEP).await;
                             ztimeout!(query.reply_del(&keyexpr)).unwrap_or_else(|_| {
                                 panic!("{test_name} : failed to reply_del to query");
                             });
                         }
                         RKind::ReplyErr => {
-                            // tokio::time::sleep(SLEEP).await;
                             ztimeout!(query.reply_err("error")).unwrap_or_else(|_| {
                                 panic!("{test_name} : failed to reply_err to query");
                             });
