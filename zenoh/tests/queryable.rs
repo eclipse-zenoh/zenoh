@@ -140,10 +140,12 @@ async fn test<'a, QClosure, RClosure>(
         .then(|r| async move { RKind::from(r) })
         .collect::<Vec<_>>()
         .await;
-    
+
     // Check if replies_received matches any of the expected variants
-    let matches_any_expected = replies_expected.iter().any(|expected| expected == &replies_received);
-    
+    let matches_any_expected = replies_expected
+        .iter()
+        .any(|expected| expected == &replies_received);
+
     assert!(
         matches_any_expected,
         "{test_name}: Received replies {:?} do not match any expected variants {:?}",
