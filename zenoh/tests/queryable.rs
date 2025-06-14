@@ -89,7 +89,7 @@ async fn test<'a, QClosure, RClosure>(
     q_builder: QClosure,
     r_builder: RClosure,
     replies_to_send: Vec<RKind>,
-    replies_expected: Vec<RKind>,
+    replies_expected: Vec<Vec<RKind>>,
 ) where
     QClosure: FnOnce(QBuilder<'a>) -> QBuilder<'a>,
     RClosure: FnOnce(GBuilder<'a>) -> GBuilder<'a>,
@@ -107,19 +107,16 @@ async fn test<'a, QClosure, RClosure>(
                     match variant {
                         RKind::None => {}
                         RKind::Reply => {
-                            tokio::time::sleep(SLEEP).await;
                             ztimeout!(query.reply(&keyexpr, "reply")).unwrap_or_else(|_| {
                                 panic!("{test_name} : failed to reply to query");
                             });
                         }
                         RKind::ReplyDel => {
-                            tokio::time::sleep(SLEEP).await;
                             ztimeout!(query.reply_del(&keyexpr)).unwrap_or_else(|_| {
                                 panic!("{test_name} : failed to reply_del to query");
                             });
                         }
                         RKind::ReplyErr => {
-                            tokio::time::sleep(SLEEP).await;
                             ztimeout!(query.reply_err("error")).unwrap_or_else(|_| {
                                 panic!("{test_name} : failed to reply_err to query");
                             });
@@ -140,9 +137,16 @@ async fn test<'a, QClosure, RClosure>(
         .then(|r| async move { RKind::from(r) })
         .collect::<Vec<_>>()
         .await;
-    assert_eq!(
-        replies_expected, replies_received,
-        "{test_name}: Expected replies(left) differs from received(right)",
+
+    // Check if replies_received matches any of the expected variants
+    let matches_any_expected = replies_expected
+        .iter()
+        .any(|expected| expected == &replies_received);
+
+    assert!(
+        matches_any_expected,
+        "{test_name}: Received replies {:?} do not match any expected variants {:?}",
+        replies_received, replies_expected
     );
 }
 
@@ -156,7 +160,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
         // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
-        vec![RKind::ReplyErr, RKind::ReplyDel],
+        vec![vec![RKind::ReplyErr, RKind::ReplyDel]],
     )
     .await;
     test(
@@ -168,7 +172,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         vec![RKind::ReplyDel, RKind::Reply, RKind::ReplyErr],
         // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
-        vec![RKind::ReplyErr, RKind::Reply],
+        vec![vec![RKind::ReplyErr, RKind::Reply]],
     )
     .await;
     test(
@@ -182,7 +186,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b.complete(true),
         |b| b.target(QueryTarget::All),
         vec![RKind::Reply],
-        vec![RKind::Reply],
+        vec![vec![RKind::Reply]],
     )
     .await;
     test(
@@ -196,7 +200,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b.complete(true),
         |b| b.target(QueryTarget::AllComplete),
         vec![RKind::Reply],
-        vec![RKind::Reply],
+        vec![vec![RKind::Reply]],
     )
     .await;
     test(
@@ -210,7 +214,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b.complete(false),
         |b| b.target(QueryTarget::All),
         vec![RKind::Reply],
-        vec![RKind::Reply],
+        vec![vec![RKind::Reply]],
     )
     .await;
     test(
@@ -224,7 +228,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b.complete(false),
         |b| b.target(QueryTarget::AllComplete),
         vec![RKind::Reply],
-        vec![],
+        vec![vec![]],
     )
     .await;
     test(
@@ -235,7 +239,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b,
         |b| b.consolidation(ConsolidationMode::None),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
+        vec![vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr]],
     )
     .await;
     test(
@@ -247,7 +251,7 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         |b| b.consolidation(ConsolidationMode::Latest),
         vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
         // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
-        vec![RKind::ReplyErr, RKind::ReplyDel],
+        vec![vec![RKind::ReplyErr, RKind::ReplyDel]],
     )
     .await;
     test(
@@ -256,10 +260,23 @@ async fn test_queryable_impl(s1: &Session, s2: &Session, test_mode: &str, key_ex
         s1,
         s2,
         |b| b,
-        |b| b.consolidation(ConsolidationMode::Latest),
-        vec![RKind::Reply, RKind::ReplyDel, RKind::ReplyErr],
-        // There is currently no guarantee on reply ordering. ReplyErr being non consolidated, it arrives first.
-        vec![RKind::ReplyErr, RKind::ReplyDel],
+        |b| b.consolidation(ConsolidationMode::Monotonic),
+        vec![RKind::Reply, RKind::ReplyDel],
+        // Due to timing, we might receive either just ReplyDel or both Reply and ReplyDel,
+        // but thy should not be reordered.
+        vec![vec![RKind::ReplyDel], vec![RKind::Reply, RKind::ReplyDel]],
+    )
+    .await;
+    test(
+        msg!(test_mode, "Consolidation: Monotonic 1"),
+        key_expr,
+        s1,
+        s2,
+        |b| b,
+        |b| b.consolidation(ConsolidationMode::Monotonic),
+        vec![RKind::ReplyDel, RKind::Reply],
+        // Repeat to ensure that the order is preserved independently of the types of replies.
+        vec![vec![RKind::Reply], vec![RKind::ReplyDel, RKind::Reply]],
     )
     .await;
 }
