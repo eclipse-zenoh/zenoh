@@ -71,7 +71,7 @@ tested_crate_module!(shm);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShmBufInfo {
     /// Actual data length
-    /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
+    /// NOTE: data descriptor's len is >= of this len and describes the actual memory length
     /// dedicated in shared memory segment for this particular buffer.
     pub data_len: NonZeroUsize,
 

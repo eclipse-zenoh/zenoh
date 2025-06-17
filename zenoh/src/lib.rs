@@ -543,7 +543,7 @@ pub mod shm {
         client::{shm_client::ShmClient, shm_segment::ShmSegment},
         client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
         common::{
-            types::{ChunkID, ProtocolID, SegmentID},
+            types::{ChunkID, ProtocolID, PtrInSegment, SegmentID},
             with_id::WithProtocolID,
         },
         protocol_implementations::posix::{
