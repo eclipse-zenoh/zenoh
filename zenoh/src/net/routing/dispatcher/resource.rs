@@ -40,7 +40,7 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::{face::Face, tables::HatsCode},
     hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
@@ -204,15 +204,20 @@ pub(crate) fn get_or_set_route<T: Clone>(
 pub(crate) type DataRoutes = Routes<Arc<Route>>;
 pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
+pub(crate) struct ResourceContextHats {
+    pub(crate) ew: Box<dyn Any + Send + Sync>,
+    pub(crate) south: Box<dyn Any + Send + Sync>,
+}
+
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) hat: ResourceContextHats,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
 }
 
 impl ResourceContext {
-    fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
+    fn new(hat: ResourceContextHats) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             hat,
@@ -433,7 +438,7 @@ impl Resource {
     }
 
     pub fn make_resource(
-        hat_code: &(dyn HatTrait + Send + Sync),
+        hat_code: &HatsCode,
         _tables: &mut Tables,
         from: &mut Arc<Resource>,
         mut suffix: &str,
@@ -465,7 +470,11 @@ impl Resource {
             };
             suffix = rest;
         }
-        Resource::upgrade_resource(&mut from, hat_code.new_resource());
+        let hat = ResourceContextHats {
+            ew: hat_code.ew.new_resource(),
+            south: hat_code.south.new_resource(),
+        };
+        Resource::upgrade_resource(&mut from, hat);
         from
     }
 
@@ -762,7 +771,7 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
+    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: ResourceContextHats) {
         if res.context.is_none() {
             get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
         }
@@ -828,7 +837,7 @@ pub(crate) fn register_expr(
                         drop(rtables);
                         let mut wtables = zwrite!(tables.tables);
                         let mut res = Resource::make_resource(
-                            tables.hat_code.as_ref(),
+                            &tables.hat_code,
                             &mut wtables,
                             &mut prefix,
                             expr.suffix.as_ref(),
@@ -897,7 +906,7 @@ pub(crate) fn register_expr_interest(
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
                     let mut res = Resource::make_resource(
-                        tables.hat_code.as_ref(),
+                        &tables.hat_code,
                         &mut wtables,
                         &mut prefix,
                         expr.suffix.as_ref(),

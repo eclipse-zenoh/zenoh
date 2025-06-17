@@ -41,7 +41,6 @@ pub(crate) struct SubscriberInfo;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_subscription(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
@@ -78,7 +77,7 @@ pub(crate) fn declare_subscription(
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
                     let mut res = Resource::make_resource(
-                        hat_code,
+                        &tables.hat_code,
                         &mut wtables,
                         &mut prefix,
                         expr.suffix.as_ref(),
@@ -88,7 +87,7 @@ pub(crate) fn declare_subscription(
                     (res, wtables)
                 };
 
-            hat_code.declare_subscription(
+            tables.hat_code.ew.as_ref().declare_subscription(
                 &mut wtables,
                 face,
                 id,
@@ -111,7 +110,6 @@ pub(crate) fn declare_subscription(
 }
 
 pub(crate) fn undeclare_subscription(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: SubscriberId,
@@ -147,9 +145,14 @@ pub(crate) fn undeclare_subscription(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) =
-        hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id, send_declare)
-    {
+    if let Some(mut res) = tables.hat_code.ew.as_ref().undeclare_subscription(
+        &mut wtables,
+        face,
+        id,
+        res,
+        node_id,
+        send_declare,
+    ) {
         tracing::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
         disable_matches_data_routes(&mut wtables, &mut res);
         Resource::clean(&mut res);
@@ -314,11 +317,11 @@ pub fn route_data(
                 inc_stats!(face, rx, admin, msg.payload);
             }
 
-            if tables_ref.hat_code.ingress_filter(&tables, face, &mut expr) {
+            if tables_ref.hat_code.ew.ingress_filter(&tables, face, &mut expr) {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
                 let route = get_data_route(
-                    tables_ref.hat_code.as_ref(),
+                    tables_ref.hat_code.ew.as_ref(),
                     &tables,
                     face,
                     &res,
@@ -333,6 +336,7 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables_ref
                             .hat_code
+                            .ew
                             .egress_filter(&tables, face, outface, &mut expr)
                         {
                             drop(tables);
@@ -352,6 +356,7 @@ pub fn route_data(
                             .filter(|(outface, _key_expr, _context)| {
                                 tables_ref
                                     .hat_code
+                                    .ew
                                     .egress_filter(&tables, face, outface, &mut expr)
                             })
                             .cloned()

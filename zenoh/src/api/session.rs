@@ -1979,14 +1979,14 @@ impl SessionInner {
         let matches = match matching_type {
             MatchingStatusType::Subscribers => {
                 crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
+                    router.tables.hat_code.ew.as_ref(),
                     &tables,
                     key_expr,
                 )
             }
             MatchingStatusType::Queryables(complete) => {
                 crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
+                    router.tables.hat_code.ew.as_ref(),
                     &tables,
                     key_expr,
                     complete,

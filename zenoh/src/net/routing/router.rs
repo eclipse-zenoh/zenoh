@@ -35,10 +35,10 @@ use super::{
     interceptor::InterceptorsChain,
     runtime::Runtime,
 };
-use crate::net::primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux};
+use crate::net::{primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux}, routing::dispatcher::tables::HatsCode};
 
 pub struct Router {
-    // whatami: WhatAmI,
+    whatami: WhatAmI,
     pub tables: Arc<TablesLock>,
 }
 
@@ -49,11 +49,20 @@ impl Router {
         hlc: Option<Arc<HLC>>,
         config: &Config,
     ) -> ZResult<Self> {
-        let hat_code = hat::new_hat(whatami, config);
+        let hat_code = HatsCode {
+            ew: hat::new_hat(whatami, config),
+            south: hat::new_hat(whatami, config), // TODO
+        };
         Ok(Router {
-            // whatami,
+            whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config, hat_code.as_ref())?),
+                tables: RwLock::new(Tables::new(
+                    zid,
+                    whatami,
+                    hlc,
+                    config,
+                    &hat_code,
+                )?),
                 hat_code,
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
@@ -65,7 +74,10 @@ impl Router {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         tables.runtime = Some(Runtime::downgrade(&runtime));
-        self.tables.hat_code.init(&mut tables, runtime)
+        if let Err(e) = self.tables.hat_code.ew.init(&mut tables, runtime.clone()) {
+            return Err(e);
+        }
+        self.tables.hat_code.south.init(&mut tables, runtime)
     }
 
     pub(crate) fn new_primitives(
@@ -86,12 +98,13 @@ impl Router {
                     fid,
                     zid,
                     WhatAmI::Client,
+                    true,
                     #[cfg(feature = "stats")]
                     None,
                     primitives.clone(),
                     None,
                     None,
-                    self.tables.hat_code.new_face(),
+                    self.tables.hat_code.ew.new_face(),
                     true,
                 )
             })
@@ -104,7 +117,7 @@ impl Router {
         };
         let mut declares = vec![];
         self.tables
-            .hat_code
+            .hat_code.south
             .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
                 declares.push((p.clone(), m))
             })
@@ -127,6 +140,7 @@ impl Router {
         let zid = transport.get_zid()?;
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
+        let is_south = self.is_south(&transport);
 
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
@@ -138,12 +152,13 @@ impl Router {
                     fid,
                     zid,
                     whatami,
+                    is_south,
                     #[cfg(feature = "stats")]
                     Some(stats),
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
-                    self.tables.hat_code.new_face(),
+                    self.tables.hat_code.ew.new_face(),
                     false,
                 )
             })
@@ -162,7 +177,12 @@ impl Router {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        self.tables.hat_code.new_transport_unicast_face(
+        let hat_code = if self.is_south(&transport) {
+            self.tables.hat_code.south.as_ref()
+        } else {
+            self.tables.hat_code.ew.as_ref()
+        };
+        hat_code.new_transport_unicast_face(
             &mut tables,
             &self.tables,
             &mut face,
@@ -188,12 +208,13 @@ impl Router {
             fid,
             ZenohIdProto::from_str("1").unwrap(),
             WhatAmI::Peer,
+            true,
             #[cfg(feature = "stats")]
             None,
             mux.clone(),
             Some(transport),
             None,
-            self.tables.hat_code.new_face(),
+            self.tables.hat_code.ew.new_face(),
             false,
         );
         face.set_interceptors_from_factories(
@@ -224,12 +245,13 @@ impl Router {
             fid,
             peer.zid,
             WhatAmI::Client, // Quick hack
+            true,
             #[cfg(feature = "stats")]
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),
-            self.tables.hat_code.new_face(),
+            self.tables.hat_code.ew.new_face(),
             false,
         );
         face_state.set_interceptors_from_factories(
@@ -247,5 +269,19 @@ impl Router {
             None,
             interceptor,
         )))
+    }
+
+    fn is_south(&self, transport: &TransportUnicast) -> bool {
+        match self.whatami {
+            WhatAmI::Router => match transport.get_whatami() {
+                Ok(WhatAmI::Router) => false,
+                _ => true,
+            },
+            WhatAmI::Peer => match transport.get_whatami() {
+                Ok(WhatAmI::Client) => true,
+                _ => false,
+            },
+            WhatAmI::Client => false,
+        }
     }
 }

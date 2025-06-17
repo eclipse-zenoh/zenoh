@@ -80,6 +80,7 @@ pub struct Tables {
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) south_hat: Box<dyn Any + Send + Sync>,
     pub(crate) routes_version: RoutesVersion,
     pub(crate) next_interceptor_version: AtomicUsize,
 }
@@ -90,7 +91,7 @@ impl Tables {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
-        hat_code: &(dyn HatTrait + Send + Sync),
+        hat_code: &HatsCode,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -114,7 +115,8 @@ impl Tables {
             mcast_groups: vec![],
             mcast_faces: vec![],
             interceptors: interceptor_factories(config)?,
-            hat: hat_code.new_tables(router_peers_failover_brokering),
+            hat: hat_code.ew.new_tables(router_peers_failover_brokering),
+            south_hat: hat_code.south.new_tables(router_peers_failover_brokering),
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
         })
@@ -166,9 +168,14 @@ impl Tables {
     }
 }
 
+pub(crate)  struct HatsCode {
+    pub(crate) ew: Box<dyn HatTrait + Send + Sync>,
+    pub(crate) south: Box<dyn HatTrait + Send + Sync>,
+}
+
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub(crate) hat_code: Box<dyn HatTrait + Send + Sync>,
+    pub(crate) hat_code: HatsCode,
     pub(crate) ctrl_lock: Mutex<()>,
     pub queries_lock: RwLock<()>,
 }

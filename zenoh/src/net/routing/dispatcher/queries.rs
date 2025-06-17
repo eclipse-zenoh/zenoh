@@ -64,7 +64,6 @@ pub(crate) fn get_matching_queryables(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_queryable(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: QueryableId,
@@ -101,7 +100,7 @@ pub(crate) fn declare_queryable(
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
                     let mut res = Resource::make_resource(
-                        hat_code,
+                        &tables.hat_code,
                         &mut wtables,
                         &mut prefix,
                         expr.suffix.as_ref(),
@@ -111,7 +110,7 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            hat_code.declare_queryable(
+            tables.hat_code.ew.as_ref().declare_queryable(
                 &mut wtables,
                 face,
                 id,
@@ -134,7 +133,6 @@ pub(crate) fn declare_queryable(
 }
 
 pub(crate) fn undeclare_queryable(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: QueryableId,
@@ -172,9 +170,14 @@ pub(crate) fn undeclare_queryable(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) =
-        hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id, send_declare)
-    {
+    if let Some(mut res) = tables.hat_code.ew.as_ref().undeclare_queryable(
+        &mut wtables,
+        face,
+        id,
+        res,
+        node_id,
+        send_declare,
+    ) {
         tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
         disable_matches_query_routes(&mut wtables, &mut res);
         Resource::clean(&mut res);
@@ -481,12 +484,13 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
 
             if tables_ref
                 .hat_code
+                .ew
                 .ingress_filter(&rtables, face, &mut expr)
             {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
                 let route = get_query_route(
-                    tables_ref.hat_code.as_ref(),
+                    tables_ref.hat_code.ew.as_ref(),
                     &rtables,
                     face,
                     &res,
@@ -501,7 +505,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
                 let route = compute_final_route(
-                    tables_ref.hat_code.as_ref(),
+                    tables_ref.hat_code.ew.as_ref(),
                     &rtables,
                     &route,
                     face,

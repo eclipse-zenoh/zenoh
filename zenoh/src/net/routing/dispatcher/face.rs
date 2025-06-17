@@ -47,6 +47,7 @@ use crate::net::{
     primitives::{McastMux, Mux, Primitives},
     routing::{
         dispatcher::interests::finalize_pending_interests,
+        hat::HatTrait,
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -64,6 +65,7 @@ pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) south: bool,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -87,6 +89,7 @@ impl FaceState {
         id: usize,
         zid: ZenohIdProto,
         whatami: WhatAmI,
+        south: bool,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
@@ -98,6 +101,7 @@ impl FaceState {
             id,
             zid,
             whatami,
+            south,
             #[cfg(feature = "stats")]
             stats,
             primitives,
@@ -291,6 +295,14 @@ impl Face {
             interest.rejection_token.cancel();
         }
     }
+
+    pub(crate) fn hat_code(&self) -> &(dyn HatTrait + Send + Sync) {
+        if self.state.south {
+            self.tables.hat_code.south.as_ref()
+        } else {
+            self.tables.hat_code.ew.as_ref()
+        }
+    }
 }
 
 impl Primitives for Face {
@@ -299,7 +311,6 @@ impl Primitives for Face {
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
             declare_interest(
-                self.tables.hat_code.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
                 msg.id,
@@ -313,12 +324,7 @@ impl Primitives for Face {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            undeclare_interest(
-                self.tables.hat_code.as_ref(),
-                &self.tables,
-                &mut self.state.clone(),
-                msg.id,
-            );
+            undeclare_interest(&self.tables, &mut self.state.clone(), msg.id);
         }
     }
 
@@ -334,7 +340,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 let mut declares = vec![];
                 declare_subscription(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -351,7 +356,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 let mut declares = vec![];
                 undeclare_subscription(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -367,7 +371,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 let mut declares = vec![];
                 declare_queryable(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -384,7 +387,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 let mut declares = vec![];
                 undeclare_queryable(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -400,7 +402,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut declares = vec![];
                 declare_token(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -417,7 +418,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 let mut declares = vec![];
                 undeclare_token(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -440,7 +440,7 @@ impl Primitives for Face {
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
                     declare_final(
-                        self.tables.hat_code.as_ref(),
+                        &self.tables,
                         &mut wtables,
                         &mut self.state.clone(),
                         id,
@@ -490,7 +490,7 @@ impl Primitives for Face {
         finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
             declares.push((p.clone(), m))
         });
-        self.tables.hat_code.close_face(
+        self.hat_code().close_face(
             &self.tables,
             &self.tables.clone(),
             &mut state,

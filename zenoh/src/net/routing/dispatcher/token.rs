@@ -34,7 +34,6 @@ use crate::net::routing::{
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_token(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -71,7 +70,7 @@ pub(crate) fn declare_token(
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
                     let mut res = Resource::make_resource(
-                        hat_code,
+                        &tables.hat_code,
                         &mut wtables,
                         &mut prefix,
                         expr.suffix.as_ref(),
@@ -81,7 +80,7 @@ pub(crate) fn declare_token(
                     (res, wtables)
                 };
 
-            hat_code.declare_token(
+            tables.hat_code.ew.as_ref().declare_token(
                 &mut wtables,
                 face,
                 id,
@@ -102,7 +101,6 @@ pub(crate) fn declare_token(
 }
 
 pub(crate) fn undeclare_token(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -135,7 +133,7 @@ pub(crate) fn undeclare_token(
                         drop(rtables);
                         let mut wtables = zwrite!(tables.tables);
                         let mut res = Resource::make_resource(
-                            hat_code,
+                            &tables.hat_code,
                             &mut wtables,
                             &mut prefix,
                             expr.wire_expr.suffix.as_ref(),
@@ -157,7 +155,12 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
+    if let Some(res) =
+        tables
+            .hat_code
+            .ew
+            .as_ref()
+            .undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
     {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
     } else {

@@ -37,7 +37,7 @@ use super::{
     tables::{register_expr_interest, Tables, TablesLock},
 };
 use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
+    hat::SendDeclare,
     router::{unregister_expr_interest, Resource},
     RoutingContext,
 };
@@ -77,7 +77,7 @@ impl RemoteInterest {
 }
 
 pub(crate) fn declare_final(
-    hat_code: &(dyn HatTrait + Send + Sync),
+    tables: &TablesLock,
     wtables: &mut Tables,
     face: &mut Arc<FaceState>,
     id: InterestId,
@@ -90,7 +90,7 @@ pub(crate) fn declare_final(
         finalize_pending_interest(interest, send_declare);
     }
 
-    hat_code.declare_final(wtables, face, id);
+    tables.hat_code.ew.as_ref().declare_final(wtables, face, id);
 }
 
 pub(crate) fn finalize_pending_interests(
@@ -196,8 +196,7 @@ impl Timed for CurrentInterestCleanup {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables_ref: &Arc<TablesLock>,
+    tables: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     id: InterestId,
     expr: Option<&WireExpr>,
@@ -206,11 +205,11 @@ pub(crate) fn declare_interest(
     send_declare: &mut SendDeclare,
 ) {
     if options.keyexprs() && mode != InterestMode::Current {
-        register_expr_interest(tables_ref, face, id, expr);
+        register_expr_interest(tables, face, id, expr);
     }
 
     if let Some(expr) = expr {
-        let rtables = zread!(tables_ref.tables);
+        let rtables = zread!(tables.tables);
         match rtables
             .get_mapping(face, &expr.scope, expr.mapping)
             .cloned()
@@ -227,7 +226,7 @@ pub(crate) fn declare_interest(
                 let (mut res, mut wtables) =
                     if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
                         drop(rtables);
-                        let wtables = zwrite!(tables_ref.tables);
+                        let wtables = zwrite!(tables.tables);
                         (res.unwrap(), wtables)
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
@@ -236,9 +235,9 @@ pub(crate) fn declare_interest(
                             .map(|ke| Resource::get_matches(&rtables, ke))
                             .unwrap_or_default();
                         drop(rtables);
-                        let mut wtables = zwrite!(tables_ref.tables);
+                        let mut wtables = zwrite!(tables.tables);
                         let mut res = Resource::make_resource(
-                            hat_code,
+                            &tables.hat_code,
                             &mut wtables,
                             &mut prefix,
                             expr.suffix.as_ref(),
@@ -248,9 +247,9 @@ pub(crate) fn declare_interest(
                         (res, wtables)
                     };
 
-                hat_code.declare_interest(
+                tables.hat_code.ew.as_ref().declare_interest(
                     &mut wtables,
-                    tables_ref,
+                    tables,
                     face,
                     id,
                     Some(&mut res),
@@ -267,10 +266,10 @@ pub(crate) fn declare_interest(
             ),
         }
     } else {
-        let mut wtables = zwrite!(tables_ref.tables);
-        hat_code.declare_interest(
+        let mut wtables = zwrite!(tables.tables);
+        tables.hat_code.ew.as_ref().declare_interest(
             &mut wtables,
-            tables_ref,
+            tables,
             face,
             id,
             None,
@@ -281,14 +280,13 @@ pub(crate) fn declare_interest(
     }
 }
 
-pub(crate) fn undeclare_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
+pub(crate) fn undeclare_interest(tables: &TablesLock, face: &mut Arc<FaceState>, id: InterestId) {
     tracing::debug!("{} Undeclare interest {}", face, id,);
     unregister_expr_interest(tables, face, id);
     let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_interest(&mut wtables, face, id);
+    tables
+        .hat_code
+        .ew
+        .as_ref()
+        .undeclare_interest(&mut wtables, face, id);
 }

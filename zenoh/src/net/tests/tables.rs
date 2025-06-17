@@ -75,7 +75,6 @@ fn base_test() {
     let sub_info = SubscriberInfo;
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face.upgrade().unwrap(),
         0,
@@ -197,7 +196,6 @@ fn multisub_test() {
     // --------------
     let sub_info = SubscriberInfo;
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -213,7 +211,6 @@ fn multisub_test() {
     assert!(res.upgrade().is_some());
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -225,7 +222,6 @@ fn multisub_test() {
     assert!(res.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -236,7 +232,6 @@ fn multisub_test() {
     assert!(res.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -317,7 +312,6 @@ async fn clean_test() {
     let sub_info = SubscriberInfo;
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -333,7 +327,6 @@ async fn clean_test() {
     assert!(res2.upgrade().is_some());
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -350,7 +343,6 @@ async fn clean_test() {
     assert!(res3.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -366,7 +358,6 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -386,7 +377,6 @@ async fn clean_test() {
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 2, &"todrop3".into());
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         2,
@@ -402,7 +392,6 @@ async fn clean_test() {
     assert!(res1.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         2,
@@ -419,7 +408,6 @@ async fn clean_test() {
     register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         3,
@@ -429,7 +417,6 @@ async fn clean_test() {
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         4,
@@ -617,7 +604,6 @@ fn client_test() {
         },
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
         0,
@@ -668,7 +654,6 @@ fn client_test() {
         },
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face1.upgrade().unwrap(),
         0,
@@ -719,7 +704,6 @@ fn client_test() {
         },
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face2.upgrade().unwrap(),
         0,

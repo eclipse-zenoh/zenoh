@@ -87,7 +87,7 @@ use hat_mut;
 
 macro_rules! res_hat {
     ($r:expr) => {
-        $r.context().hat.downcast_ref::<HatContext>().unwrap()
+        $r.context().hat.ew.downcast_ref::<HatContext>().unwrap()
     };
 }
 use res_hat;
@@ -97,6 +97,7 @@ macro_rules! res_hat_mut {
         get_mut_unchecked($r)
             .context_mut()
             .hat
+            .ew
             .downcast_mut::<HatContext>()
             .unwrap()
     };
