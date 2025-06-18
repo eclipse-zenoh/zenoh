@@ -46,22 +46,19 @@ pub struct ShmClientSetBuilder;
 impl ShmClientSetBuilder {
     /// Add client to the storage (without including the default client set)
     #[zenoh_macros::unstable_doc]
-    pub fn with_client(
-        self,
-        id: ProtocolID,
-        client: Arc<dyn ShmClient>,
-    ) -> ShmClientStorageBuilder {
-        let clients = BTreeMap::from([(id, client)]);
+    pub fn with_client(self, client: Arc<dyn ShmClient>) -> ShmClientStorageBuilder {
+        let clients = BTreeMap::from([(client.id(), client)]);
         ShmClientStorageBuilder::new(clients)
     }
 
     /// Add list of clients to the storage (without including the default client set)
     #[zenoh_macros::unstable_doc]
-    pub fn with_clients(
-        self,
-        clients: &[(ProtocolID, Arc<dyn ShmClient>)],
-    ) -> ShmClientStorageBuilder {
-        let clients = clients.iter().cloned().collect();
+    pub fn with_clients(self, clients: &[Arc<dyn ShmClient>]) -> ShmClientStorageBuilder {
+        let clients = clients
+            .iter()
+            .cloned()
+            .map(|client| (client.id(), client))
+            .collect();
         ShmClientStorageBuilder::new(clients)
     }
 
@@ -86,7 +83,8 @@ impl ShmClientStorageBuilder {
 
     /// Add client to the storage
     #[zenoh_macros::unstable_doc]
-    pub fn with_client(mut self, id: ProtocolID, client: Arc<dyn ShmClient>) -> ZResult<Self> {
+    pub fn with_client(mut self, client: Arc<dyn ShmClient>) -> ZResult<Self> {
+        let id = client.id();
         match self.clients.entry(id) {
             std::collections::btree_map::Entry::Occupied(occupied) => {
                 bail!("Client already exists for id {id}: {:?}!", occupied)
@@ -100,8 +98,9 @@ impl ShmClientStorageBuilder {
 
     /// Add list of clients to the storage
     #[zenoh_macros::unstable_doc]
-    pub fn with_clients(mut self, clients: &[(ProtocolID, Arc<dyn ShmClient>)]) -> Self {
-        self.clients.extend(clients.iter().cloned());
+    pub fn with_clients(mut self, clients: &[Arc<dyn ShmClient>]) -> Self {
+        self.clients
+            .extend(clients.iter().cloned().map(|client| (client.id(), client)));
         self
     }
 
