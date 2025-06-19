@@ -2185,6 +2185,7 @@ impl SessionInner {
         let primitives = zread!(self.state).primitives()?;
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
+        let mut payload = Some(payload);
         if destination != Locality::SessionLocal {
             let body = match kind {
                 SampleKind::Put => PushBody::Put(Put {
@@ -2198,7 +2199,11 @@ impl SessionInner {
                     ext_shm: None,
                     ext_attachment: attachment.clone().map(|a| a.into()),
                     ext_unknown: vec![],
-                    payload: payload.clone().into(),
+                    payload: if destination == Locality::Any {
+                        payload.clone().unwrap().into()
+                    } else {
+                        payload.take().unwrap().into()
+                    },
                 }),
                 SampleKind::Delete => PushBody::Del(Del {
                     timestamp,
@@ -2264,7 +2269,7 @@ impl SessionInner {
                 true,
                 &wire_expr,
                 Some(data_info),
-                payload.into(),
+                payload.take().unwrap().into(),
                 SubscriberKind::Subscriber,
                 #[cfg(feature = "unstable")]
                 reliability,
