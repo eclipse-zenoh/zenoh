@@ -45,7 +45,10 @@ impl PtrInSegment {
         self.ptr
     }
 
-    pub fn ptr_mut(&mut self) -> *mut u8 {
+    /// # SAFETY
+    ///
+    /// This function is safe if there is guarantee that there is no concurrent access
+    pub unsafe fn ptr_mut(&mut self) -> *mut u8 {
         self.ptr
     }
 }
