@@ -32,7 +32,7 @@ impl AutoConnect {
             matcher: *unwrap_or_default!(config.scouting().gossip().autoconnect().get(what)),
             strategy: *unwrap_or_default!(config
                 .scouting()
-                .multicast()
+                .gossip()
                 .autoconnect_strategy()
                 .get(what)),
         }
