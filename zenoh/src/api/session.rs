@@ -84,6 +84,8 @@ use crate::api::{
     query::ReplyKeyExpr,
     sample::SourceInfo,
 };
+#[zenoh_macros::unstable]
+use crate::net::runtime::IConfig;
 use crate::{
     api::{
         admin,
@@ -116,7 +118,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        runtime::{DynamicRuntime, IConfig, Runtime, RuntimeBuilder},
+        runtime::{DynamicRuntime, Runtime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,

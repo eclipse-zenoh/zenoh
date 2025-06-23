@@ -23,8 +23,9 @@ use zenoh_result::ZResult;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::ShmClientStorage;
 
+use crate::api::session::Session;
 #[cfg(feature = "internal")]
-use crate::{api::session::Session, net::runtime::DynamicRuntime};
+use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`crate::open`] used to open a zenoh [`Session`].
 ///
