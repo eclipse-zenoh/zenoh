@@ -23,7 +23,7 @@ use zenoh::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
     sample::{Locality, Sample, SampleKind, SourceSn},
-    session::{EntityGlobalId, EntityId},
+    session::{ClosingCallbackId, EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
     KE_SUB,
 };
@@ -409,6 +409,15 @@ struct State {
     callback: Callback<Sample>,
     miss_handlers: HashMap<usize, Callback<Miss>>,
     token: Option<LivelinessToken>,
+    closing_callback_id: Option<ClosingCallbackId>,
+}
+
+impl Drop for State {
+    fn drop(&mut self) {
+        if let Some(id) = self.closing_callback_id.take() {
+            self.session.unregister_closing_callback(id);
+        }
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -683,7 +692,20 @@ impl<Handler> AdvancedSubscriber<Handler> {
             callback: callback.clone(),
             miss_handlers: HashMap::new(),
             token: None,
+            closing_callback_id: None,
         }));
+
+        let closing_callback_id = conf
+            .session
+            .register_closing_callback({
+                let statesref = statesref.clone();
+                move || {
+                    let mut state = zlock!(statesref);
+                    state.callback = Callback::new(Arc::new(|_| ()));
+                }
+            })
+            .map_err(|_| "session closed")?;
+        zlock!(statesref).closing_callback_id = Some(closing_callback_id);
 
         let sub_callback = {
             let statesref = statesref.clone();
