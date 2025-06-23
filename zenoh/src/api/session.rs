@@ -156,7 +156,6 @@ pub(crate) struct SessionState {
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
-    #[cfg(feature = "unstable")]
     pub(crate) closing_callbacks: ClosingCallbackList,
 }
 
@@ -192,7 +191,6 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
-            #[cfg(feature = "unstable")]
             closing_callbacks: Default::default(),
         }
     }
@@ -1260,6 +1258,8 @@ impl Session {
     /// the callback with [`unregister_closing_callback`](Self::unregister_closing_callback). If
     /// the session is already closed, the callback is returned in an error.
     ///
+    /// Execution order of callbacks is unspecified.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -1272,7 +1272,7 @@ impl Session {
     /// }
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
+    #[zenoh_macros::internal]
     pub fn register_closing_callback<F: FnOnce() + Send + Sync + 'static>(
         &self,
         callback: F,
@@ -1303,7 +1303,7 @@ impl Session {
     /// session.unregister_closing_callback(id);
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
+    #[zenoh_macros::internal]
     pub fn unregister_closing_callback(&self, callback_id: ClosingCallbackId) {
         let mut state = zwrite!(self.0.state);
         state.closing_callbacks.remove_callback(callback_id);
@@ -3286,14 +3286,12 @@ impl Closeable for Session {
     }
 }
 
-#[cfg(feature = "unstable")]
 #[derive(Default)]
 pub(crate) struct ClosingCallbackList {
     callbacks: slab::Slab<ClosingCallback>,
     generation: usize,
 }
 
-#[cfg(feature = "unstable")]
 impl ClosingCallbackList {
     fn insert_callback(&mut self, callback: Box<dyn FnOnce() + Send + Sync>) -> ClosingCallbackId {
         let generation = self.generation;
@@ -3312,7 +3310,6 @@ impl ClosingCallbackList {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl Drop for ClosingCallbackList {
     fn drop(&mut self) {
         for cb in self.callbacks.drain() {
@@ -3321,7 +3318,6 @@ impl Drop for ClosingCallbackList {
     }
 }
 
-#[cfg(feature = "unstable")]
 struct ClosingCallback {
     callback: Box<dyn FnOnce() + Send + Sync>,
     generation: usize,
@@ -3330,7 +3326,6 @@ struct ClosingCallback {
 /// The id of a registered session closing callback.
 ///
 /// See [`Session::register_closing_callback`].
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClosingCallbackId {
     index: usize,
