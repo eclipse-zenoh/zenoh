@@ -3312,6 +3312,7 @@ impl ClosingCallbackList {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl Drop for ClosingCallbackList {
     fn drop(&mut self) {
         for cb in self.callbacks.drain() {
