@@ -3272,7 +3272,7 @@ impl Closee for Arc<SessionInner> {
             // will be stabilized.
             let mut state = zwrite!(self.state);
             let _matching_listeners = std::mem::take(&mut state.matching_listeners);
-            state.closing_callbacks.close();
+            let _closing_callbacks = std::mem::take(&mut state.closing_callbacks);
             drop(state);
         }
     }
@@ -3310,8 +3310,10 @@ impl ClosingCallbackList {
             self.callbacks.remove(id.index);
         }
     }
+}
 
-    fn close(&mut self) {
+impl Drop for ClosingCallbackList {
+    fn drop(&mut self) {
         for cb in self.callbacks.drain() {
             (cb.callback)();
         }
