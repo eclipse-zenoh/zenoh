@@ -1304,7 +1304,7 @@ impl Session {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn unregister_closing_callback<F: FnOnce()>(&self, callback_id: ClosingCallbackId) {
+    pub fn unregister_closing_callback(&self, callback_id: ClosingCallbackId) {
         let mut state = zwrite!(self.0.state);
         state.closing_callbacks.remove_callback(callback_id);
     }
