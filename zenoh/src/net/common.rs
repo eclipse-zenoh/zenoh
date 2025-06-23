@@ -29,7 +29,7 @@ impl AutoConnect {
     pub(crate) fn gossip(config: &Config, what: WhatAmI, zid: ZenohIdProto) -> Self {
         Self {
             zid,
-            matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
+            matcher: *unwrap_or_default!(config.scouting().gossip().autoconnect().get(what)),
             strategy: *unwrap_or_default!(config
                 .scouting()
                 .multicast()
