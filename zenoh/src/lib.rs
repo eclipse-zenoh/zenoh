@@ -517,7 +517,7 @@ pub mod internal {
     pub mod runtime {
         pub use zenoh_runtime::ZRuntime;
 
-        pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
+        pub use crate::net::runtime::{AdminSpace, DynamicRuntime, Runtime, RuntimeBuilder};
     }
     /// Plugins support
     #[cfg(feature = "plugins")]

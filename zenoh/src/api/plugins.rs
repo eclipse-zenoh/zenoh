@@ -21,7 +21,7 @@ use zenoh_plugin_trait::{
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
 
-use crate::{api::key_expr::KeyExpr, net::runtime::Runtime};
+use crate::{api::key_expr::KeyExpr, net::runtime::DynamicRuntime};
 
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
@@ -30,11 +30,11 @@ zconfigurable! {
 pub type RunningPlugin = Box<dyn RunningPluginTrait + Send + Sync + 'static>;
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
-pub trait ZenohPlugin: Plugin<StartArgs = Runtime, Instance = RunningPlugin> {}
+pub trait ZenohPlugin: Plugin<StartArgs = DynamicRuntime, Instance = RunningPlugin> {}
 
 impl StructVersion for RunningPlugin {
     fn struct_version() -> u64 {
-        1
+        2
     }
     fn struct_features() -> &'static str {
         crate::FEATURES
@@ -120,4 +120,4 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
 }
 
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
-pub type PluginsManager = zenoh_plugin_trait::PluginsManager<Runtime, RunningPlugin>;
+pub type PluginsManager = zenoh_plugin_trait::PluginsManager<DynamicRuntime, RunningPlugin>;

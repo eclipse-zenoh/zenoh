@@ -27,13 +27,14 @@ use std::{
 };
 
 use memory_backend::MemoryBackend;
+use serde_json::Value;
 use storages_mgt::StorageMessage;
 use tokio::sync::broadcast::Sender;
 use zenoh::{
     internal::{
         bail,
         plugins::{Response, RunningPlugin, RunningPluginTrait, ZenohPlugin},
-        runtime::Runtime,
+        runtime::DynamicRuntime,
         zlock, LibLoader,
     },
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
@@ -75,14 +76,15 @@ impl Plugin for StoragesPlugin {
     const PLUGIN_VERSION: &'static str = plugin_version!();
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
-    type StartArgs = Runtime;
+    type StartArgs = DynamicRuntime;
     type Instance = RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         zenoh::init_log_from_env_or("error");
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
-        let config =
-            { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
+        let conf_json = runtime.get_config().get(&format!("plugins/{}", name))?;
+        let conf: Value = serde_json::from_str(&conf_json)?;
+        let config = PluginConfig::try_from((name, &conf))?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
             runtime.clone(),
             config,
@@ -95,7 +97,7 @@ type PluginsManager = zenoh_plugin_trait::PluginsManager<VolumeConfig, VolumeIns
 struct StorageRuntime(Arc<Mutex<StorageRuntimeInner>>);
 struct StorageRuntimeInner {
     name: String,
-    runtime: Runtime,
+    runtime: DynamicRuntime,
     session: Arc<Session>,
     storages: HashMap<String, HashMap<String, Sender<StorageMessage>>>,
     plugins_manager: PluginsManager,
@@ -109,7 +111,7 @@ impl StorageRuntimeInner {
             &self.name
         )
     }
-    fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
+    fn new(runtime: DynamicRuntime, config: PluginConfig) -> ZResult<Self> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.

@@ -46,6 +46,8 @@ use zenoh_transport::unicast::TransportUnicast;
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
+use crate::internal::runtime::DynamicRuntime;
 use crate::{
     api::{
         bytes::ZBytes,
@@ -104,7 +106,7 @@ impl AdminSpace {
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
-        start_args: &Runtime,
+        start_args: &DynamicRuntime,
         required: bool,
     ) -> ZResult<()> {
         let id = &config.id;
@@ -302,10 +304,11 @@ impl AdminSpace {
                                     }
                                 }
                                 PluginDiff::Start(plugin) => {
+                                    let dynamic_runtime = admin.context.runtime.clone().into();
                                     if let Err(e) = Self::start_plugin(
                                         &mut plugins_mgr,
                                         &plugin,
-                                        &admin.context.runtime,
+                                        &dynamic_runtime,
                                         plugin.required,
                                     ) {
                                         if plugin.required {

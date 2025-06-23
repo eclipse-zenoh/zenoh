@@ -74,6 +74,7 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
 
 pub(crate) fn start_plugins(runtime: &Runtime) {
     let mut manager = runtime.plugins_manager();
+    let dynamic_runtime = runtime.clone().into();
     for plugin in manager.loaded_plugins_iter_mut() {
         let required = plugin.required();
         tracing::info!(
@@ -81,7 +82,7 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
             req = if required { "required" } else { "" },
             name = plugin.id()
         );
-        match plugin.start(runtime) {
+        match plugin.start(&dynamic_runtime) {
             Ok(_) => {
                 tracing::info!(
                     "Successfully started plugin {} from {:?}",
