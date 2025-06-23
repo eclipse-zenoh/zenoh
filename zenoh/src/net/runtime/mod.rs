@@ -143,8 +143,9 @@ impl IConfig for Notifier<Config> {
     }
 
     fn queries_default_timeout_ms(&self) -> u64 {
-        let conf = self.lock();
-        unwrap_or_default!(conf.queries_default_timeout())
+        let conf_guard = self.lock();
+        let config = &conf_guard.0;
+        unwrap_or_default!(config.queries_default_timeout())
     }
 
     fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
