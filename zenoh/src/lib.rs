@@ -208,6 +208,8 @@ pub mod session {
 
     #[zenoh_macros::internal]
     pub use crate::api::builders::session::{init, InitBuilder};
+    #[zenoh_macros::unstable]
+    pub use crate::api::session::ClosingCallbackId;
     pub use crate::api::{
         builders::{
             close::CloseBuilder,
@@ -217,7 +219,7 @@ pub mod session {
             session::OpenBuilder,
         },
         info::SessionInfo,
-        session::{open, ClosingCallbackId, Session, SessionClosedError, Undeclarable},
+        session::{open, Session, SessionClosedError, Undeclarable},
     };
 }
 
