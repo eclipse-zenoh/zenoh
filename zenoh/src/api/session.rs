@@ -156,6 +156,8 @@ pub(crate) struct SessionState {
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
+    #[cfg(feature = "unstable")]
+    pub(crate) closing_callbacks: ClosingCallbackList,
 }
 
 impl SessionState {
@@ -190,6 +192,8 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
+            #[cfg(feature = "unstable")]
+            closing_callbacks: Default::default(),
         }
     }
 }
@@ -1248,6 +1252,61 @@ impl Session {
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
         }
+    }
+
+    /// Registers a closing callback to the session.
+    ///
+    /// The callback will be called when the session will be closed. It returns an id to unregister
+    /// the callback with [`unregister_closing_callback`](Self::unregister_closing_callback). If
+    /// the session is already closed, the callback is returned in an error.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// if let Err(_) = session.register_closing_callback(|| println!("session closed")) {
+    ///     println!("session already closed");
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn register_closing_callback<F: FnOnce() + Send + Sync + 'static>(
+        &self,
+        callback: F,
+    ) -> Result<ClosingCallbackId, F> {
+        let mut state = zwrite!(self.0.state);
+        if state.primitives().is_err() {
+            return Err(callback);
+        }
+        Ok(state.closing_callbacks.insert_callback(Box::new(callback)))
+    }
+
+    /// Unregisters a closing callback.
+    ///
+    /// The callback must have been registered with
+    /// [`register_closing_callback`](Self::register_closing_callback).
+    /// It will no longer be called on session closing.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let Ok(id) = session.register_closing_callback(|| println!("session closed")) else {
+    ///     panic!("session already closed");
+    /// };
+    /// session.unregister_closing_callback(id);
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn unregister_closing_callback<F: FnOnce()>(&self, callback_id: ClosingCallbackId) {
+        let mut state = zwrite!(self.0.state);
+        state.closing_callbacks.remove_callback(callback_id);
     }
 }
 
@@ -3213,6 +3272,7 @@ impl Closee for Arc<SessionInner> {
             // will be stabilized.
             let mut state = zwrite!(self.state);
             let _matching_listeners = std::mem::take(&mut state.matching_listeners);
+            state.closing_callbacks.close();
             drop(state);
         }
     }
@@ -3224,4 +3284,52 @@ impl Closeable for Session {
     fn get_closee(&self) -> Self::TClosee {
         self.0.clone()
     }
+}
+
+#[cfg(feature = "unstable")]
+#[derive(Default)]
+pub(crate) struct ClosingCallbackList {
+    callbacks: slab::Slab<ClosingCallback>,
+    generation: usize,
+}
+
+#[cfg(feature = "unstable")]
+impl ClosingCallbackList {
+    fn insert_callback(&mut self, callback: Box<dyn FnOnce() + Send + Sync>) -> ClosingCallbackId {
+        let generation = self.generation;
+        let index = self.callbacks.insert(ClosingCallback {
+            callback,
+            generation,
+        });
+        self.generation = self.generation.wrapping_add(1);
+        ClosingCallbackId { index, generation }
+    }
+
+    fn remove_callback(&mut self, id: ClosingCallbackId) {
+        if matches!( self.callbacks.get(id.index), Some(cb) if cb.generation == id.generation) {
+            self.callbacks.remove(id.index);
+        }
+    }
+
+    fn close(&mut self) {
+        for cb in self.callbacks.drain() {
+            (cb.callback)();
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+struct ClosingCallback {
+    callback: Box<dyn FnOnce() + Send + Sync>,
+    generation: usize,
+}
+
+/// The id of a registered session closing callback.
+///
+/// See [`Session::register_closing_callback`].
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosingCallbackId {
+    index: usize,
+    generation: usize,
 }

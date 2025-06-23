@@ -217,7 +217,7 @@ pub mod session {
             session::OpenBuilder,
         },
         info::SessionInfo,
-        session::{open, Session, SessionClosedError, Undeclarable},
+        session::{open, ClosingCallbackId, Session, SessionClosedError, Undeclarable},
     };
 }
 
