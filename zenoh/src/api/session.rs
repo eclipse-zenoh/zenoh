@@ -2198,6 +2198,7 @@ impl SessionInner {
     }
 
     #[cfg(test)]
+    #[cfg(feature = "internal")]
     pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
         self.static_runtime.as_ref()
     }

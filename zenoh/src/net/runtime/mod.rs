@@ -134,6 +134,7 @@ pub trait IRuntime: Send + Sync {
 pub trait IConfig {
     fn get(&self, key: &str) -> ZResult<String>;
     fn queries_default_timeout_ms(&self) -> u64;
+    #[allow(dead_code)]
     fn insert_json5(&self, key: &str, value: &str) -> ZResult<()>;
 }
 
@@ -562,6 +563,7 @@ impl Runtime {
         self.state.is_closed()
     }
 
+    #[allow(dead_code)]
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.state.new_timestamp()
     }
@@ -595,9 +597,10 @@ impl Runtime {
     }
 
     pub fn config(&self) -> &Notifier<Config> {
-        &self.state.config()
+        self.state.config()
     }
 
+    #[allow(dead_code)]
     pub fn hlc(&self) -> Option<&HLC> {
         self.state.hlc()
     }
@@ -621,7 +624,7 @@ impl Runtime {
     }
 
     pub(crate) fn start_conditions(&self) -> &Arc<StartConditions> {
-        &self.state.start_conditions()
+        self.state.start_conditions()
     }
 
     pub(crate) async fn insert_pending_connection(&self, zid: ZenohIdProto) -> bool {
@@ -633,9 +636,9 @@ impl Runtime {
     }
 }
 
-impl Into<DynamicRuntime> for Runtime {
-    fn into(self) -> DynamicRuntime {
-        DynamicRuntime(self.state)
+impl From<Runtime> for DynamicRuntime {
+    fn from(value: Runtime) -> Self {
+        DynamicRuntime(value.state)
     }
 }
 
