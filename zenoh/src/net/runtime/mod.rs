@@ -243,7 +243,7 @@ impl IRuntime for RuntimeState {
                     router.tables.hat_code.as_ref(),
                     &tables,
                     match &ns_key_expr {
-                        Some(ns_ke) => &ns_ke,
+                        Some(ns_ke) => ns_ke,
                         None => key_expr,
                     },
                 )
@@ -253,7 +253,7 @@ impl IRuntime for RuntimeState {
                     router.tables.hat_code.as_ref(),
                     &tables,
                     match &ns_key_expr {
-                        Some(ns_ke) => &ns_ke,
+                        Some(ns_ke) => ns_ke,
                         None => key_expr,
                     },
                     complete,
