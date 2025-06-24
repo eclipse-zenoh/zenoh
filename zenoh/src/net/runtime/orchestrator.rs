@@ -1199,19 +1199,11 @@ impl Runtime {
         match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
-                let cancellation_token = runtime.get_cancellation_token();
-
-                session.runtime.spawn(async move {
+                session.runtime.spawn_abortable(async move {
                     let retry_config = runtime.get_global_connect_retry_config();
                     let mut period = retry_config.period();
-                    let reconnect_loop = async {
-                        while runtime.start_client().await.is_err() {
-                            tokio::time::sleep(period.next_duration()).await;
-                        }
-                    };
-                    tokio::select! {
-                        _ = reconnect_loop => {}
-                        _ = cancellation_token.cancelled() => {}
+                    while runtime.start_client().await.is_err() {
+                        tokio::time::sleep(period.next_duration()).await;
                     }
                 });
             }
