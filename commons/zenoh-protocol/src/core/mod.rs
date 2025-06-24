@@ -570,6 +570,10 @@ pub enum CongestionControl {
     /// When transmitting a message in a node with a full queue, the node will wait for queue to
     /// progress.
     Block = 1,
+    /// When transmitting a message in a node with a full queue, the node will wait for queue to
+    /// progress, but only for the first message sent with this strategy; other messages will be
+    /// dropped.
+    BlockFirst = 2,
 }
 
 impl CongestionControl {

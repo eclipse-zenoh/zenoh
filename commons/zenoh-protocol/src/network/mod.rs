@@ -123,6 +123,7 @@ pub struct NetworkMessageMut<'a> {
 pub trait NetworkMessageExt {
     #[doc(hidden)]
     fn body(&self) -> NetworkBodyRef;
+
     #[doc(hidden)]
     fn reliability(&self) -> Reliability;
 
@@ -145,12 +146,8 @@ pub trait NetworkMessageExt {
     }
 
     #[inline]
-    fn is_droppable(&self) -> bool {
-        if !self.is_reliable() {
-            return true;
-        }
-
-        let cc = match self.body() {
+    fn congestion_control(&self) -> CongestionControl {
+        match self.body() {
             NetworkBodyRef::Push(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::Request(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::Response(msg) => msg.ext_qos.get_congestion_control(),
@@ -158,9 +155,12 @@ pub trait NetworkMessageExt {
             NetworkBodyRef::Interest(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::OAM(msg) => msg.ext_qos.get_congestion_control(),
-        };
+        }
+    }
 
-        cc == CongestionControl::Drop
+    #[inline]
+    fn is_droppable(&self) -> bool {
+        !self.is_reliable() || self.congestion_control() == CongestionControl::Drop
     }
 
     #[inline]
@@ -203,6 +203,22 @@ pub trait NetworkMessageExt {
     fn as_ref(&self) -> NetworkMessageRef {
         NetworkMessageRef {
             body: self.body(),
+            reliability: self.reliability(),
+        }
+    }
+
+    #[inline]
+    fn to_owned(&self) -> NetworkMessage {
+        NetworkMessage {
+            body: match self.body() {
+                NetworkBodyRef::Push(msg) => NetworkBody::Push(msg.clone()),
+                NetworkBodyRef::Request(msg) => NetworkBody::Request(msg.clone()),
+                NetworkBodyRef::Response(msg) => NetworkBody::Response(msg.clone()),
+                NetworkBodyRef::ResponseFinal(msg) => NetworkBody::ResponseFinal(msg.clone()),
+                NetworkBodyRef::Interest(msg) => NetworkBody::Interest(msg.clone()),
+                NetworkBodyRef::Declare(msg) => NetworkBody::Declare(msg.clone()),
+                NetworkBodyRef::OAM(msg) => NetworkBody::OAM(msg.clone()),
+            },
             reliability: self.reliability(),
         }
     }
@@ -391,13 +407,14 @@ pub mod ext {
     /// +-+-+-+-+-+-+-+-+
     /// |Z|0_1|    ID   |
     /// +-+-+-+---------+
-    /// %0|rsv|E|D|prio %
+    /// %0|r|F|E|D|prio %
     /// +---------------+
     ///
     /// - prio: Priority class
     /// - D:    Don't drop. Don't drop the message for congestion control.
     /// - E:    Express. Don't batch this message.
-    /// - rsv:  Reserved
+    /// - F:    Block only on the first message for congestion control.
+    /// - r:  Reserved
     /// ```
     #[repr(transparent)]
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -409,6 +426,7 @@ pub mod ext {
         const P_MASK: u8 = 0b00000111;
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
+        const F_FLAG: u8 = 0b00100000;
 
         pub const DEFAULT: Self = Self::new(Priority::DEFAULT, CongestionControl::DEFAULT, false);
 
@@ -435,8 +453,10 @@ pub mod ext {
             is_express: bool,
         ) -> Self {
             let mut inner = priority as u8;
-            if let CongestionControl::Block = congestion_control {
-                inner |= Self::D_FLAG;
+            match congestion_control {
+                CongestionControl::Block => inner |= Self::D_FLAG,
+                CongestionControl::BlockFirst => inner |= Self::D_FLAG | Self::F_FLAG,
+                _ => {}
             }
             if is_express {
                 inner |= Self::E_FLAG;
@@ -456,13 +476,21 @@ pub mod ext {
             match cctrl {
                 CongestionControl::Block => self.inner = imsg::set_flag(self.inner, Self::D_FLAG),
                 CongestionControl::Drop => self.inner = imsg::unset_flag(self.inner, Self::D_FLAG),
+                CongestionControl::BlockFirst => {
+                    self.inner = imsg::set_flag(self.inner, Self::D_FLAG);
+                    self.inner = imsg::set_flag(self.inner, Self::F_FLAG);
+                }
             }
         }
 
         pub const fn get_congestion_control(&self) -> CongestionControl {
-            match imsg::has_flag(self.inner, Self::D_FLAG) {
-                true => CongestionControl::Block,
-                false => CongestionControl::Drop,
+            match (
+                imsg::has_flag(self.inner, Self::D_FLAG),
+                imsg::has_flag(self.inner, Self::F_FLAG),
+            ) {
+                (true, true) => CongestionControl::BlockFirst,
+                (true, false) => CongestionControl::Block,
+                (false, _) => CongestionControl::Drop,
             }
         }
 
