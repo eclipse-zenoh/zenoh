@@ -1204,11 +1204,14 @@ impl Runtime {
                 session.runtime.spawn(async move {
                     let retry_config = runtime.get_global_connect_retry_config();
                     let mut period = retry_config.period();
-                    while runtime.start_client().await.is_err() {
-                        tokio::select! {
-                            _ = tokio::time::sleep(period.next_duration()) => {}
-                            _ = cancellation_token.cancelled() => { break; }
+                    let reconnect_loop = async {
+                        while runtime.start_client().await.is_err() {
+                            tokio::time::sleep(period.next_duration()).await;
                         }
+                    };
+                    tokio::select! {
+                        _ = reconnect_loop => {}
+                        _ = cancellation_token.cancelled() => {}
                     }
                 });
             }
