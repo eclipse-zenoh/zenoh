@@ -100,7 +100,7 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+pub const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 #[doc(hidden)]
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",

@@ -527,11 +527,11 @@ impl Deref for DynamicRuntime {
 }
 
 impl StructVersion for DynamicRuntime {
-    fn struct_version() -> u64 {
-        2
+    fn struct_version() -> &'static str {
+        &crate::GIT_VERSION
     }
     fn struct_features() -> &'static str {
-        crate::FEATURES
+        &crate::FEATURES
     }
 }
 

@@ -15,9 +15,7 @@
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
 use zenoh_core::zconfigurable;
-use zenoh_plugin_trait::{
-    Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, StructVersion,
-};
+use zenoh_plugin_trait::{Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec};
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
 
@@ -31,15 +29,6 @@ pub type RunningPlugin = Box<dyn RunningPluginTrait + Send + Sync + 'static>;
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
 pub trait ZenohPlugin: Plugin<StartArgs = DynamicRuntime, Instance = RunningPlugin> {}
-
-impl StructVersion for RunningPlugin {
-    fn struct_version() -> u64 {
-        2
-    }
-    fn struct_features() -> &'static str {
-        crate::FEATURES
-    }
-}
 
 impl PluginControl for RunningPlugin {
     fn report(&self) -> PluginReport {

@@ -69,18 +69,18 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
             );
         }
         let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
-        let mut plugin_compatibility_record = get_compatibility();
-        let mut host_compatibility_record =
-            Compatibility::with_empty_plugin_version::<StartArgs, Instance>();
+        let plugin_compatibility_record = get_compatibility();
+        let host_compatibility_record =
+            Compatibility::new(StartArgs::struct_version(), StartArgs::struct_features());
         tracing::debug!(
             "Plugin compatibility record: {:?}",
             &plugin_compatibility_record
         );
-        if !plugin_compatibility_record.compare(&mut host_compatibility_record) {
+        if plugin_compatibility_record != host_compatibility_record {
             bail!(
                 "Plugin compatibility mismatch:\nHost:\n{}Plugin:\n{}",
-                host_compatibility_record,
-                plugin_compatibility_record
+                &host_compatibility_record,
+                &plugin_compatibility_record
             );
         }
         let load_plugin =

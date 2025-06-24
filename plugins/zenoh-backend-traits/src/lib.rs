@@ -121,14 +121,13 @@
 //! ```
 
 use async_trait::async_trait;
-use const_format::concatcp;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
     Result as ZResult,
 };
-use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
+use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec};
 use zenoh_util::concat_enabled_features;
 
 pub mod config;
@@ -196,15 +195,6 @@ pub trait Volume: Send + Sync {
 }
 
 pub type VolumeInstance = Box<dyn Volume + 'static>;
-
-impl StructVersion for VolumeInstance {
-    fn struct_version() -> u64 {
-        1
-    }
-    fn struct_features() -> &'static str {
-        concatcp!(zenoh::FEATURES, crate::FEATURES)
-    }
-}
 
 impl PluginControl for VolumeInstance {
     fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {

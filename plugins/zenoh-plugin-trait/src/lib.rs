@@ -40,7 +40,7 @@ mod manager;
 mod plugin;
 mod vtable;
 
-pub use compatibility::{Compatibility, PluginStructVersion, StructVersion};
+pub use compatibility::{Compatibility, StructVersion};
 pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
 pub use plugin::{
     Plugin, PluginConditionSetter, PluginControl, PluginDiff, PluginInstance, PluginReport,

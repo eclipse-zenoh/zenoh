@@ -242,7 +242,7 @@ impl StorageRuntimeInner {
         };
         let loaded = declared
             .load()?
-            .expect("Volumes should not loaded if if the storage-manager plugin is not loaded");
+            .expect("Volumes should not be loaded if the storage-manager plugin is not loaded");
         loaded.start(config)?;
 
         Ok(())
