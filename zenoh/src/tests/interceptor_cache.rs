@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "internal_config")]
+#![cfg(feature = "internal")]
+
 use std::str::FromStr;
 
 use zenoh_buffers::ZBuf;

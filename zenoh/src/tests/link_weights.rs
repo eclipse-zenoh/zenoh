@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "internal_config")]
+#![cfg(feature = "internal")]
 
 use std::{
     any::Any,
