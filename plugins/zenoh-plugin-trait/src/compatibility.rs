@@ -24,7 +24,7 @@ pub trait StructVersion {
 }
 
 #[repr(C)]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 pub struct Compatibility {
     rust_version: RustVersion,
     zenoh_version: stabby::str::Str<'static>,
@@ -39,6 +39,29 @@ impl Compatibility {
             zenoh_version: zenoh_version.into(),
             zenoh_features: zenoh_features.into(),
         }
+    }
+}
+
+impl PartialEq for Compatibility {
+    fn eq(&self, other: &Self) -> bool {
+        fn get_commit(version: &str) -> &str {
+            let s = match version.strip_suffix("-modified") {
+                Some(v) => v,
+                None => version,
+            };
+            if s.len() >= 40 {
+                // we expect full 40 digits git commit hash
+                &s[s.len() - 40..]
+            } else {
+                s
+            }
+        }
+        if self.rust_version != other.rust_version {
+            return false;
+        }
+        self.rust_version == other.rust_version
+            && get_commit(&self.zenoh_version) == get_commit(&other.zenoh_version)
+            && self.zenoh_features == other.zenoh_features
     }
 }
 
