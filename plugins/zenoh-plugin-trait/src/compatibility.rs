@@ -14,6 +14,8 @@
 
 use std::fmt::Display;
 
+use zenoh_result::{bail, ZResult};
+
 pub trait StructVersion {
     /// The version of the structure which implements this trait.
     fn struct_version() -> &'static str;
@@ -40,10 +42,8 @@ impl Compatibility {
             zenoh_features: zenoh_features.into(),
         }
     }
-}
 
-impl PartialEq for Compatibility {
-    fn eq(&self, other: &Self) -> bool {
+    pub fn check(&self, other: &Self) -> ZResult<()> {
         fn get_commit(version: &str) -> &str {
             let s = match version.strip_suffix("-modified") {
                 Some(v) => v,
@@ -56,12 +56,28 @@ impl PartialEq for Compatibility {
                 s
             }
         }
+
         if self.rust_version != other.rust_version {
-            return false;
+            bail!(
+                "Incompatible rustc versions:\n host: {}\n plugin: {}",
+                self.rust_version,
+                other.rust_version
+            )
+        } else if get_commit(&self.zenoh_version) != get_commit(&other.zenoh_version) {
+            bail!(
+                "Incompatible Zenoh versions:\n host: {}\n plugin: {}",
+                self.zenoh_version,
+                other.zenoh_version
+            )
+        } else if self.zenoh_features != other.zenoh_features {
+            bail!(
+                "Incompatible Zenoh feature sets:\n host: {}\n plugin: {}",
+                self.zenoh_features,
+                other.zenoh_features
+            )
+        } else {
+            Ok(())
         }
-        self.rust_version == other.rust_version
-            && get_commit(&self.zenoh_version) == get_commit(&other.zenoh_version)
-            && self.zenoh_features == other.zenoh_features
     }
 }
 

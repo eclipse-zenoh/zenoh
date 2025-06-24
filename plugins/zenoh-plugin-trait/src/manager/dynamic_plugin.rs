@@ -76,12 +76,8 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
             "Plugin compatibility record: {:?}",
             &plugin_compatibility_record
         );
-        if plugin_compatibility_record != host_compatibility_record {
-            bail!(
-                "Plugin compatibility mismatch:\nHost:\n{}Plugin:\n{}",
-                &host_compatibility_record,
-                &plugin_compatibility_record
-            );
+        if let Err(e) = host_compatibility_record.check(&plugin_compatibility_record) {
+            bail!("Plugin compatibility mismatch:\n {}", e);
         }
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
