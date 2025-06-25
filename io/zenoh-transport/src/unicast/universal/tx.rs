@@ -150,7 +150,9 @@ impl TransportUnicastUniversal {
         {
             if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
                 tracing::trace!("Failed SHM conversion: {}", e);
-                return Ok(false);
+                #[cfg(feature = "stats")]
+                self.stats.inc_tx_n_dropped(1);
+                return Ok(());
             }
         }
 
