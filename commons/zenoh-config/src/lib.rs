@@ -174,6 +174,7 @@ pub struct AclConfigSubjects {
     pub cert_common_names: Option<NEVec<CertCommonName>>,
     pub usernames: Option<NEVec<Username>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
+    pub zids: Option<NEVec<ZenohId>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

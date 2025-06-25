@@ -23,6 +23,7 @@ use std::{any::Any, collections::HashSet, iter, sync::Arc};
 use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
+    ZenohId,
 };
 use zenoh_keyexpr::keyexpr;
 use zenoh_link::LinkAuthId;
@@ -204,6 +205,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
         let mut cert_common_names = Vec::new();
         let mut link_protocols = Vec::new();
         let username = auth_ids.username().cloned().map(Username);
+        let zid: ZenohId = (*auth_ids.zid()).into();
 
         for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
@@ -244,16 +246,19 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         let mut auth_subjects = HashSet::new();
 
-        for (((username, interface), cert_common_name), link_protocol) in iter::once(username)
-            .cartesian_product(interfaces.into_iter())
-            .cartesian_product(cert_common_names.into_iter())
-            .cartesian_product(link_protocols.into_iter())
+        for ((((username, interface), cert_common_name), link_protocol), zid) in
+            iter::once(username)
+                .cartesian_product(interfaces.into_iter())
+                .cartesian_product(cert_common_names.into_iter())
+                .cartesian_product(link_protocols.into_iter())
+                .cartesian_product(iter::once(Some(zid)))
         {
             let query = SubjectQuery {
                 interface,
                 cert_common_name,
                 username,
                 link_protocol,
+                zid,
             };
 
             if let Some(entry) = self.enforcer.subject_store.query(&query) {
