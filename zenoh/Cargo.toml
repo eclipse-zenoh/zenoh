@@ -123,9 +123,6 @@ zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
 once_cell = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-rtnetlink = { workspace = true }
-
 [dev-dependencies]
 tokio = { workspace = true }
 libc = { workspace = true }

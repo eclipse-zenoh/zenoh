@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     future::Future,
     io::ErrorKind,
     net::{IpAddr, SocketAddr},
@@ -7,6 +8,7 @@ use std::{
 };
 
 use futures::{lock::Mutex, FutureExt};
+use itertools::Itertools;
 use tokio::{net::UdpSocket, sync::RwLock, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
@@ -87,67 +89,76 @@ impl Scouting {
         Ok(Scouting { state })
     }
 
-    pub async fn update_addresses(
-        &self,
-        addrs_to_add: &[IpAddr],
-        addrs_to_remove: &[IpAddr],
-    ) -> ZResult<()> {
-        let ifaces = Runtime::get_interfaces(&self.state.ifaces);
-
-        let addrs_to_add = addrs_to_add
+    pub async fn update_addrs_if_needed(&self) {
+        let available_mcast_addrs = Runtime::get_interfaces(&self.state.ifaces)
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let used_mcast_addrs = zasyncread!(self.state.sockets)
+            .ucast_sockets
             .iter()
-            .filter(|i| ifaces.contains(*i))
+            .filter_map(|s| s.local_addr().ok())
+            .map(|s| s.ip())
+            .collect::<HashSet<_>>();
+        let new_addrs = available_mcast_addrs
+            .difference(&used_mcast_addrs)
             .collect::<Vec<_>>();
-        for addr_to_add in &addrs_to_add {
+        let obsolete_addrs = used_mcast_addrs
+            .difference(&available_mcast_addrs)
+            .collect::<Vec<_>>();
+
+        if !new_addrs.is_empty() || !obsolete_addrs.is_empty() {
+            if let Err(e) = self
+                .update_scouting_addresses(&new_addrs, &obsolete_addrs)
+                .await
+            {
+                tracing::error!(
+                    "Could not update scouting addresses with +{:?}, -{:?}: {}",
+                    new_addrs,
+                    obsolete_addrs,
+                    e
+                );
+            };
+        }
+    }
+
+    async fn update_scouting_addresses(
+        &self,
+        addrs_to_add: &[&IpAddr],
+        addrs_to_remove: &[&IpAddr],
+    ) -> ZResult<()> {
+        tracing::debug!("Join multicast scouting on {addrs_to_add:?}");
+        for addr_to_add in addrs_to_add {
             self.join_multicast_group(addr_to_add).await;
         }
 
-        let should_restart = {
-            let sockets = zasyncread!(self.state.sockets);
-            addrs_to_add.iter().any(|&to_add| {
-                !sockets
-                    .ucast_sockets
+        tracing::debug!("Restarting scout routine");
+        // TODO: This may interrupt something important, as a connection establishment... fix that.
+        zasynclock!(self.state.cancellation_token).cancel();
+
+        {
+            let mut sockets = zasyncwrite!(self.state.sockets);
+            sockets.ucast_sockets.retain(|s| {
+                s.local_addr().map_or(true, |a| {
+                    let ip = a.ip();
+                    if addrs_to_remove.iter().copied().contains(&ip) {
+                        tracing::debug!("Removing socket udp/{}", ip);
+                        false
+                    } else {
+                        true
+                    }
+                })
+            });
+            sockets.ucast_sockets.extend(
+                addrs_to_add
                     .iter()
-                    .filter_map(|s| s.local_addr().ok())
-                    .any(|a| &a.ip() == to_add)
-            }) || addrs_to_remove.iter().any(|to_remove| {
-                sockets
-                    .ucast_sockets
-                    .iter()
-                    .filter_map(|s| s.local_addr().ok())
-                    .any(|a| &a.ip() == to_remove)
-            })
-        };
-
-        if should_restart {
-            tracing::debug!("Restarting scout routine");
-            // TODO: This may interrupt something important, as a connection establishment... fix that.
-            zasynclock!(self.state.cancellation_token).cancel();
-
-            {
-                let mut sockets = zasyncwrite!(self.state.sockets);
-                addrs_to_remove.iter().for_each(|to_remove| {
-                    sockets.ucast_sockets.retain(|s| {
-                        s.local_addr().map_or(true, |a| {
-                            if &a.ip() == to_remove {
-                                tracing::debug!("Removing socket udp/{}", a.ip());
-                            }
-                            &a.ip() != to_remove
-                        })
-                    });
-                });
-                sockets.ucast_sockets.extend(
-                    addrs_to_add.iter().filter_map(|&i| {
-                        Runtime::bind_ucast_port(*i, self.state.multicast_ttl).ok()
-                    }),
-                );
-            }
-
-            *zasynclock!(self.state.cancellation_token) = CancellationToken::new();
-
-            self.start().await?;
-            tracing::debug!("Scout routine restarted");
+                    .filter_map(|&i| Runtime::bind_ucast_port(*i, self.state.multicast_ttl).ok()),
+            );
         }
+
+        *zasynclock!(self.state.cancellation_token) = CancellationToken::new();
+
+        self.start().await?;
+        tracing::debug!("Scout routine restarted");
 
         Ok(())
     }

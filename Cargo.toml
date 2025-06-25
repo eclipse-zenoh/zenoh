@@ -145,7 +145,6 @@ regex = "1.10.6"
 ron = "0.8.1"
 ringbuffer-spsc = "0.1.9"
 rsa = "0.9"
-rtnetlink = "0.15"
 rustc_version = "0.4.1"
 rustls = { version = "0.23.13", default-features = false, features = [
   "logging",

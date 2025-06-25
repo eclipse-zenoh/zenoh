@@ -18,33 +18,24 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
-#[cfg(target_os = "linux")]
-mod netlink;
 pub mod orchestrator;
 mod scouting;
 
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
-#[cfg(target_os = "linux")]
-use std::time::Duration;
 use std::{
     any::Any,
     collections::HashSet,
-    net::IpAddr,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
+    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::{stream::StreamExt, Future};
-#[cfg(target_os = "linux")]
-use rtnetlink::packet_route::{
-    address::{AddressAttribute, AddressMessage},
-    RouteNetlinkMessage,
-};
 pub use scouting::Scouting;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -67,7 +58,7 @@ use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use zenoh_util::net::update_iface_cache;
 
 use self::orchestrator::StartConditions;
@@ -85,9 +76,6 @@ use crate::{
     },
     GIT_VERSION, LONG_VERSION,
 };
-
-#[cfg(target_os = "linux")]
-const NETLINK_TIMEOUT: Duration = Duration::from_millis(500);
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
@@ -259,11 +247,9 @@ impl RuntimeBuilder {
             zenoh_config::ShmInitMode::Lazy => {}
         };
 
-        #[cfg(target_os = "linux")]
         runtime.spawn({
-            let netlink_monitor = netlink::NetlinkMonitor::new()?;
             let runtime2 = runtime.clone();
-            async move { runtime2.monitor_netlink_socket(netlink_monitor).await }
+            async move { runtime2.monitor_available_addrs().await }
         });
 
         Ok(runtime)
@@ -393,91 +379,31 @@ impl Runtime {
         self.state.pending_connections.lock().await.remove(zid)
     }
 
-    #[cfg(target_os = "linux")]
-    async fn monitor_netlink_socket(&self, mut netlink: netlink::NetlinkMonitor) {
-        fn add_addr_to_set(
-            message: &AddressMessage,
-            new: bool,
-            new_addresses: &mut HashSet<IpAddr>,
-            del_addresses: &mut HashSet<IpAddr>,
-        ) {
-            if let Some(addr) = get_relevant_address(message) {
-                if new {
-                    new_addresses.insert(*addr);
-                    del_addresses.remove(addr);
-                } else {
-                    del_addresses.insert(*addr);
-                    new_addresses.remove(addr);
-                }
+    async fn monitor_available_addrs(&self) {
+        let token = self.get_cancellation_token();
+        let update_interval = Duration::from_secs(10);
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(update_interval) => self.update_available_addrs().await,
+                _ = token.cancelled() => return,
             }
         }
+    }
 
-        let token = self.get_cancellation_token();
-        loop {
-            let mut new_addresses = HashSet::<IpAddr>::new();
-            let mut old_addresses = HashSet::<IpAddr>::new();
-            tokio::select! {
-                message = netlink.next() => {
-                    tracing::trace!("NETLINK message: {:?}", message);
-                    match &message {
-                        Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(msg, true, &mut new_addresses, &mut old_addresses),
-                        Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(msg, false, &mut new_addresses, &mut old_addresses),
-                        Some(_) => (),
-                        None => { break; }
-                    }
-                },
-                _ = token.cancelled() => { return }
-            }
+    async fn update_available_addrs(&self) {
+        #[cfg(unix)]
+        update_iface_cache();
 
-            // Same, but with a timeout so we collect multiple netlink messages
-            // and restart the scouting routine only one time.
-            loop {
-                tokio::select! {
-                    message = netlink.next() => {
-                        tracing::trace!("NETLINK message: {:?}", message);
-                        match &message {
-                            Some(RouteNetlinkMessage::NewAddress(msg)) => add_addr_to_set(msg, true, &mut new_addresses, &mut old_addresses),
-                            Some(RouteNetlinkMessage::DelAddress(msg)) => add_addr_to_set(msg, false, &mut new_addresses, &mut old_addresses),
-                            Some(_) => (),
-                            None => { break; }
-                        }
-                    },
-                    _ = tokio::time::sleep(NETLINK_TIMEOUT) => { break; }
-                    _ = token.cancelled() => { return }
-                }
-            }
+        if self.update_locators() {
+            let tables_lock = &self.state.router.tables;
+            let _ctrl_lock = zlock!(tables_lock.ctrl_lock);
+            let mut tables = zwrite!(tables_lock.tables);
+            tables_lock.hat_code.update_self_locators(&mut tables);
+        }
 
-            update_iface_cache();
-            self.update_locators();
-
-            {
-                let tables_lock = &self.state.router.tables;
-                let _ctrl_lock = zlock!(tables_lock.ctrl_lock);
-                let mut tables = zwrite!(tables_lock.tables);
-                tables_lock.hat_code.update_self_locators(&mut tables);
-            }
-
-            let scouting = self.state.scouting.lock().await;
-            if let Some(scouting) = scouting.as_ref() {
-                let new_addresses = new_addresses.drain().collect::<Vec<_>>();
-                let old_addresses = old_addresses.drain().collect::<Vec<_>>();
-                tracing::debug!(
-                    "Update scouting addresses with +{:?}, -{:?}",
-                    new_addresses,
-                    old_addresses
-                );
-                let res = scouting
-                    .update_addresses(&new_addresses, &old_addresses)
-                    .await;
-                if let Err(e) = res {
-                    tracing::error!(
-                        "Could not update scouting addresses with +{:?}, -{:?}: {}",
-                        new_addresses,
-                        old_addresses,
-                        e
-                    );
-                }
-            }
+        let scouting = self.state.scouting.lock().await;
+        if let Some(scouting) = scouting.as_ref() {
+            scouting.update_addrs_if_needed().await;
         }
     }
 }
@@ -678,19 +604,4 @@ impl Closeable for Runtime {
     fn get_closee(&self) -> Self::TClosee {
         self.state.clone()
     }
-}
-
-/// Find the relevant IpAddr in the attributes.
-/// Prefer the IFA_LOCAL address, or else use the IFA_ADDRESS address
-/// TODO: Prove why this choice
-fn get_relevant_address(address_message: &AddressMessage) -> Option<&IpAddr> {
-    let mut res = None;
-    for attribute in &address_message.attributes {
-        match attribute {
-            AddressAttribute::Address(addr) => res = Some(addr),
-            AddressAttribute::Local(addr) => return Some(addr),
-            _ => (),
-        }
-    }
-    res
 }

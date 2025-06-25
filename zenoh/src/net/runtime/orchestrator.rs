@@ -544,9 +544,17 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn update_locators(&self) {
+    pub fn update_locators(&self) -> bool {
         let mut locators = self.state.locators.write().unwrap();
         let new_locators = self.manager().get_locators();
+        if new_locators == *locators {
+            return false;
+        }
+
+        tracing::info!(
+            "New locators: {new_locators:?}, previously: {:?}",
+            *locators
+        );
         if tracing::enabled!(tracing::Level::INFO) {
             for locator in &new_locators {
                 if !locators.contains(locator) {
@@ -560,6 +568,7 @@ impl Runtime {
             }
         }
         *locators = new_locators;
+        true
     }
 
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
