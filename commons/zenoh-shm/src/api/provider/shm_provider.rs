@@ -682,10 +682,8 @@ impl Resolvable for ShmProviderBuilderWithDefaultBackend {
 impl Wait for ShmProviderBuilderWithDefaultBackend {
     /// build ShmProvider
     fn wait(self) -> <Self as Resolvable>::To {
-        // todo: make growing PosixProvider and get rid of magic number here
         let backend = PosixShmProviderBackend::builder()
             .with_size(self.size)
-            .unwrap()
             .wait()?;
 
         Ok(ShmProvider::new(backend))
