@@ -60,8 +60,8 @@ impl Default for ExampleStorage {
 
 #[async_trait]
 impl Volume for ExampleBackend {
-    fn get_admin_status(&self) -> serde_json::Value {
-        serde_json::Value::Null
+    fn get_admin_status(&self) -> String {
+        String::default()
     }
     fn get_capability(&self) -> Capability {
         Capability {
@@ -76,8 +76,8 @@ impl Volume for ExampleBackend {
 
 #[async_trait]
 impl Storage for ExampleStorage {
-    fn get_admin_status(&self) -> serde_json::Value {
-        serde_json::Value::Null
+    fn get_admin_status(&self) -> String {
+        String::default()
     }
     async fn put(
         &mut self,

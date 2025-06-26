@@ -130,12 +130,9 @@ struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
 impl PluginControl for RunningPlugin {}
 
 impl RunningPluginTrait for RunningPlugin {
-    fn config_checker(
-        &self,
-        path: &str,
-        old: &serde_json::Map<String, serde_json::Value>,
-        new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+    fn config_checker(&self, path: &str, old: &str, new: &str) -> ZResult<Option<String>> {
+        let old = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(old)?;
+        let new = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(new)?;
         let mut guard = zlock!(&self.0);
         const STORAGE_SELECTOR: &str = "storage-selector";
         if path == STORAGE_SELECTOR || path.is_empty() {

@@ -198,8 +198,12 @@ impl StorageService {
                             },
                             StorageMessage::GetStatus(tx) => {
                                 let storage = self.storage.lock().await;
-                                std::mem::drop(tx.send(storage.get_admin_status()).await);
+                                let status = serde_json::from_str::<serde_json::Value>(&storage.get_admin_status());
                                 drop(storage);
+                                match status {
+                                    Ok(s) => std::mem::drop(tx.send(s).await),
+                                    Err(e) => tracing::error!("Failed to convert admin_status to json for storage '{}': {}", self.name, e),
+                                }
                             }
                         };
                     },

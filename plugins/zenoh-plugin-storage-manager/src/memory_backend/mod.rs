@@ -50,8 +50,8 @@ impl Plugin for MemoryBackend {
 
 #[async_trait]
 impl Volume for MemoryBackend {
-    fn get_admin_status(&self) -> serde_json::Value {
-        self.config.to_json_value()
+    fn get_admin_status(&self) -> String {
+        self.config.to_json_value().to_string()
     }
 
     fn get_capability(&self) -> Capability {
@@ -90,8 +90,8 @@ impl MemoryStorage {
 
 #[async_trait]
 impl Storage for MemoryStorage {
-    fn get_admin_status(&self) -> serde_json::Value {
-        self.config.to_json_value()
+    fn get_admin_status(&self) -> String {
+        self.config.to_json_value().to_string()
     }
 
     async fn put(

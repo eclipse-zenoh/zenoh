@@ -43,16 +43,16 @@ impl PluginControl for RunningPlugin {
 impl PluginInstance for RunningPlugin {}
 
 #[non_exhaustive]
-#[derive(serde::Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 /// A Response for the administration space.
 pub struct Response {
     pub key: String,
-    pub value: serde_json::Value,
+    pub json_value: String,
 }
 
 impl Response {
-    pub fn new(key: String, value: serde_json::Value) -> Self {
-        Self { key, value }
+    pub fn new(key: String, json_value: String) -> Self {
+        Self { key, json_value }
     }
 }
 
@@ -69,12 +69,7 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     ///   Useful when the changes affect settings that aren't hot-configurable for your plugin.
     /// * `Ok(None)` indicates that the plugin has accepted the configuration change.
     /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
-    fn config_checker(
-        &self,
-        _path: &str,
-        _current: &serde_json::Map<String, serde_json::Value>,
-        _new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+    fn config_checker(&self, _path: &str, _current: &str, _new: &str) -> ZResult<Option<String>> {
         bail!("Runtime configuration change not supported");
     }
     /// Used to request plugin's status for the administration space.

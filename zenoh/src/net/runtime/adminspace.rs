@@ -91,7 +91,14 @@ impl ConfigValidator for AdminSpace {
                 // on config comparison (see `PluginDiff`)
                 return Ok(None);
             };
-            plugin.instance().config_checker(path, current, new)
+            let current = serde_json::to_string(current)?;
+            let new = serde_json::to_string(new)?;
+            match plugin.instance().config_checker(path, &current, &new)? {
+                Some(s) => Ok(Some(serde_json::from_str::<
+                    serde_json::Map<String, serde_json::Value>,
+                >(&s)?)),
+                None => Ok(None),
+            }
         }
         #[cfg(not(feature = "plugins"))]
         {
@@ -958,14 +965,8 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match serde_json::to_vec(&response.value) {
-                                Ok(bytes) => {
-                                    if let Err(e) = query.reply(key_expr, bytes).encoding(Encoding::APPLICATION_JSON).wait() {
-                                        tracing::error!("Error sending AdminSpace reply: {:?}", e);
-                                    }
-                                }
-                                Err(e) => tracing::debug!("Admin query error: {}", e),
-
+                            if let Err(e) = query.reply(key_expr, response.json_value).encoding(Encoding::APPLICATION_JSON).wait() {
+                                tracing::error!("Error sending AdminSpace reply: {:?}", e);
                             }
                         } else {
                             tracing::error!("Error: plugin {} replied with an invalid key", plugin_key);

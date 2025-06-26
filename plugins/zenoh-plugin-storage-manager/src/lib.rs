@@ -316,15 +316,12 @@ impl PluginControl for StorageRuntime {
 }
 
 impl RunningPluginTrait for StorageRuntime {
-    fn config_checker(
-        &self,
-        _: &str,
-        old: &serde_json::Map<String, serde_json::Value>,
-        new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+    fn config_checker(&self, _: &str, old: &str, new: &str) -> ZResult<Option<String>> {
+        let old = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(old)?;
+        let new = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(new)?;
         let name = { zlock!(self.0).name.clone() };
-        let old = PluginConfig::try_from((&name, old))?;
-        let new = PluginConfig::try_from((&name, new))?;
+        let old = PluginConfig::try_from((&name, &old))?;
+        let new = PluginConfig::try_from((&name, &new))?;
         tracing::debug!("config change requested for plugin '{}'", name);
         tracing::debug!("old config: {:?}", &old);
         tracing::debug!("new config: {:?}", &new);
@@ -381,7 +378,7 @@ impl RunningPluginTrait for StorageRuntime {
                                     rx.recv().await
                                 })
                             }) {
-                                responses.push(Response::new(key.clone(), value))
+                                responses.push(Response::new(key.clone(), value.to_string()))
                             }
                         }
                     })
