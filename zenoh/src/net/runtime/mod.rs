@@ -380,12 +380,21 @@ impl Runtime {
     }
 
     async fn monitor_available_addrs(&self) {
-        let token = self.get_cancellation_token();
-        let update_interval = Duration::from_secs(10);
-        loop {
-            tokio::select! {
-                _ = tokio::time::sleep(update_interval) => self.update_available_addrs().await,
-                _ = token.cancelled() => return,
+        let update_interval_ms = self
+            .config()
+            .lock()
+            .0
+            .listen
+            .endpoint_poll_interval_ms()
+            .unwrap_or(10_000);
+        if update_interval_ms > 0 {
+            let update_interval = Duration::from_millis(update_interval_ms as u64);
+            let token = self.get_cancellation_token();
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep(update_interval) => self.update_available_addrs().await,
+                    _ = token.cancelled() => return,
+                }
             }
         }
     }
