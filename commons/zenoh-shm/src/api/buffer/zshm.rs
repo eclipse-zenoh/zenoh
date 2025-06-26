@@ -15,13 +15,16 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
-    ops::DerefMut,
+    num::NonZeroUsize,
 };
 
 use zenoh_buffers::{ZBuf, ZSlice};
 
-use super::{traits::ShmBuf, zshmmut::zshmmut};
-use crate::ShmBufInner;
+use super::{
+    traits::{BufferRelayoutError, OwnedShmBuf, ShmBuf},
+    zshmmut::{zshmmut, ZShmMut},
+};
+use crate::{api::provider::types::MemoryLayout, ShmBufInner};
 
 /// An immutable SHM buffer
 #[zenoh_macros::unstable_doc]
@@ -35,9 +38,23 @@ impl ShmBuf for ZShm {
     }
 }
 
+impl OwnedShmBuf for ZShm {
+    fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
+        // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment)
+        unsafe { self.0.try_resize(new_size) }
+    }
+
+    fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError> {
+        // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_relayout comment)
+        unsafe { self.0.try_relayout(new_layout) }
+    }
+}
+
 impl PartialEq<&zshm> for ZShm {
     fn eq(&self, other: &&zshm) -> bool {
-        self.0 == other.0 .0
+        self.0 == other.0
     }
 }
 
@@ -71,12 +88,6 @@ impl AsRef<[u8]> for ZShm {
     }
 }
 
-impl From<ShmBufInner> for ZShm {
-    fn from(value: ShmBufInner) -> Self {
-        Self(value)
-    }
-}
-
 impl From<ZShm> for ZSlice {
     fn from(value: ZShm) -> Self {
         value.0.into()
@@ -86,6 +97,17 @@ impl From<ZShm> for ZSlice {
 impl From<ZShm> for ZBuf {
     fn from(value: ZShm) -> Self {
         value.0.into()
+    }
+}
+
+impl TryFrom<ZShm> for ZShmMut {
+    type Error = ZShm;
+
+    fn try_from(value: ZShm) -> Result<Self, Self::Error> {
+        match value.0.is_unique() && value.0.is_valid() {
+            true => Ok(Self(value.0)),
+            false => Err(value),
+        }
     }
 }
 
@@ -109,49 +131,39 @@ impl TryFrom<&mut ZShm> for &mut zshmmut {
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
-pub struct zshm(ZShm);
+pub struct zshm(ShmBufInner);
+
+impl ShmBuf for zshm {
+    fn is_valid(&self) -> bool {
+        self.0.is_valid()
+    }
+}
+
+impl Deref for zshm {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for zshm {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
 
 impl ToOwned for zshm {
     type Owned = ZShm;
 
     fn to_owned(&self) -> Self::Owned {
-        self.0.clone()
+        self.0.clone().into()
     }
 }
 
 impl PartialEq<ZShm> for &zshm {
     fn eq(&self, other: &ZShm) -> bool {
-        self.0 .0 == other.0
-    }
-}
-
-impl Deref for zshm {
-    type Target = ZShm;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for zshm {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl From<&ShmBufInner> for &zshm {
-    fn from(value: &ShmBufInner) -> Self {
-        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
-        unsafe { core::mem::transmute(value) }
-    }
-}
-
-impl From<&mut ShmBufInner> for &mut zshm {
-    fn from(value: &mut ShmBufInner) -> Self {
-        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
-        unsafe { core::mem::transmute(value) }
+        self.0 == other.0
     }
 }
 
@@ -159,7 +171,7 @@ impl TryFrom<&mut zshm> for &mut zshmmut {
     type Error = ();
 
     fn try_from(value: &mut zshm) -> Result<Self, Self::Error> {
-        match value.0 .0.is_unique() && value.0 .0.is_valid() {
+        match value.0.is_unique() && value.0.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
                 // to ShmBufInner type, so it is safe to transmute them in any direction

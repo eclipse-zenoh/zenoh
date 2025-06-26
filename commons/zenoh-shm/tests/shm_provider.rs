@@ -12,10 +12,21 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod descriptor;
+use zenoh_core::Wait;
+use zenoh_shm::api::provider::shm_provider::ShmProviderBuilder;
 
-tested_crate_module!(storage);
-tested_crate_module!(subscription);
+#[test]
+fn shm_provider_create() {
+    let _provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
+}
 
-pub(crate) mod allocated_descriptor;
-pub(crate) mod segment;
+#[test]
+fn shm_provider_alloc_and_drop_provider() {
+    let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
+
+    let mut shm_buffer = provider.alloc(1024).wait().unwrap();
+
+    drop(provider);
+
+    shm_buffer[0..1024].fill(0);
+}

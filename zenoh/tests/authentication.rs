@@ -25,7 +25,7 @@ mod test {
     use once_cell::sync::Lazy;
     use tokio::runtime::Handle;
     use zenoh::{config::WhatAmI, Config, Session};
-    use zenoh_config::{EndPoint, ModeDependentValue, ZenohId};
+    use zenoh_config::{EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -2061,7 +2061,6 @@ client2name:client2passwd";
             .endpoints
             .set(vec![format!("udp/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
-        config_connect.set_id(ZenohId::default()).unwrap();
         let session_allowed = zenoh::open(config_connect).await.unwrap();
 
         let sub = listener_session.declare_subscriber(key_expr).await.unwrap();

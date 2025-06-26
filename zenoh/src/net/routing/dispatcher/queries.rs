@@ -54,13 +54,12 @@ pub(crate) struct Query {
 #[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_matching_queryables(
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
     complete: bool,
 ) -> HashMap<usize, Arc<FaceState>> {
-    tables
-        .hat_code
-        .get_matching_queryables(tables, key_expr, complete)
+    hat_code.get_matching_queryables(tables, key_expr, complete)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -101,8 +100,12 @@ pub(crate) fn declare_queryable(
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    let mut res = Resource::make_resource(
+                        hat_code,
+                        &mut wtables,
+                        &mut prefix,
+                        expr.suffix.as_ref(),
+                    );
                     matches.push(Arc::downgrade(&res));
                     Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
@@ -200,6 +203,7 @@ fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> Requ
 
 #[inline]
 fn compute_final_route(
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
@@ -211,10 +215,7 @@ fn compute_final_route(
         QueryTarget::All => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
-                if tables
-                    .hat_code
-                    .egress_filter(tables, src_face, &qabl.direction.0, expr)
-                {
+                if hat_code.egress_filter(tables, src_face, &qabl.direction.0, expr) {
                     route.entry(qabl.direction.0.id).or_insert_with(|| {
                         let mut direction = qabl.direction.clone();
                         let qid = insert_pending_query(&mut direction.0, query.clone());
@@ -228,9 +229,7 @@ fn compute_final_route(
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
-                    && tables
-                        .hat_code
-                        .egress_filter(tables, src_face, &qabl.direction.0, expr)
+                    && hat_code.egress_filter(tables, src_face, &qabl.direction.0, expr)
                 {
                     route.entry(qabl.direction.0.id).or_insert_with(|| {
                         let mut direction = qabl.direction.clone();
@@ -253,7 +252,15 @@ fn compute_final_route(
 
                 route
             } else {
-                compute_final_route(tables, qabls, src_face, expr, &QueryTarget::All, query)
+                compute_final_route(
+                    hat_code,
+                    tables,
+                    qabls,
+                    src_face,
+                    expr,
+                    &QueryTarget::All,
+                    query,
+                )
             }
         }
     }
@@ -356,15 +363,16 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 
 #[inline]
 fn get_query_route(
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     face: &FaceState,
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<QueryTargetQablSet> {
-    let hat = &tables.hat_code;
-    let local_context = hat.map_routing_context(tables, face, routing_context);
-    let mut compute_route = || hat.compute_query_route(tables, expr, local_context, face.whatami);
+    let local_context = hat_code.map_routing_context(tables, face, routing_context);
+    let mut compute_route =
+        || hat_code.compute_query_route(tables, expr, local_context, face.whatami);
     if let Some(query_routes) = res
         .as_ref()
         .and_then(|res| res.context.as_ref())
@@ -471,11 +479,20 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 inc_req_stats!(face, rx, admin, msg.payload)
             }
 
-            if rtables.hat_code.ingress_filter(&rtables, face, &mut expr) {
+            if tables_ref
+                .hat_code
+                .ingress_filter(&rtables, face, &mut expr)
+            {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route =
-                    get_query_route(&rtables, face, &res, &mut expr, msg.ext_nodeid.node_id);
+                let route = get_query_route(
+                    tables_ref.hat_code.as_ref(),
+                    &rtables,
+                    face,
+                    &res,
+                    &mut expr,
+                    msg.ext_nodeid.node_id,
+                );
 
                 let query = Arc::new(Query {
                     src_face: face.clone(),
@@ -483,8 +500,15 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 });
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
-                let route =
-                    compute_final_route(&rtables, &route, face, &mut expr, &msg.ext_target, query);
+                let route = compute_final_route(
+                    tables_ref.hat_code.as_ref(),
+                    &rtables,
+                    &route,
+                    face,
+                    &mut expr,
+                    &msg.ext_target,
+                    query,
+                );
                 let timeout = msg.ext_timeout.unwrap_or(rtables.queries_default_timeout);
                 drop(queries_lock);
                 drop(rtables);

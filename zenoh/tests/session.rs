@@ -84,7 +84,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .endpoints
         .set(vec![endpoint01.parse().unwrap()])
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(true)).unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -94,7 +94,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .endpoints
         .set(vec![endpoint02.parse().unwrap()])
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(true)).unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -250,6 +250,7 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("ok_put").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
+                #[cfg(feature = "unstable")]
                 assert_eq!(s.replier_id(), Some(qbl.id().zid()));
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
@@ -268,6 +269,7 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("ok_del").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
+                #[cfg(feature = "unstable")]
                 assert_eq!(s.replier_id(), Some(qbl.id().zid()));
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
@@ -286,6 +288,7 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("err").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
+                #[cfg(feature = "unstable")]
                 assert_eq!(s.replier_id(), Some(qbl.id().zid()));
                 let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
@@ -459,4 +462,39 @@ async fn test_undeclare_subscribers_same_keyexpr() {
     tokio::time::sleep(SLEEP).await;
     ztimeout!(sub1.undeclare()).unwrap();
     ztimeout!(sub2.undeclare()).unwrap();
+}
+
+#[cfg(feature = "unstable")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_session_from_cloned_config() {
+    use zenoh::Config;
+
+    let (pub_config, sub_config) = {
+        let mut common_config = Config::default();
+        let locator = "tcp/127.0.0.1:38446";
+        common_config
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+
+        let mut pub_config = common_config.clone();
+        let mut sub_config = common_config;
+
+        sub_config
+            .listen
+            .endpoints
+            .set(vec![locator.parse().unwrap()])
+            .unwrap();
+        pub_config
+            .connect
+            .endpoints
+            .set(vec![locator.parse().unwrap()])
+            .unwrap();
+
+        (pub_config, sub_config)
+    };
+
+    let _pub_session = zenoh::open(pub_config).await.unwrap();
+    let _sub_session = zenoh::open(sub_config).await.unwrap();
 }

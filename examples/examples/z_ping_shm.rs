@@ -15,11 +15,7 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use zenoh::{
-    bytes::ZBytes,
-    key_expr::keyexpr,
-    qos::CongestionControl,
-    shm::{PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID},
-    Config, Wait,
+    bytes::ZBytes, key_expr::keyexpr, qos::CongestionControl, shm::ShmProviderBuilder, Config, Wait,
 };
 use zenoh_examples::CommonArgs;
 
@@ -46,18 +42,9 @@ fn main() {
 
     let mut samples = Vec::with_capacity(n);
 
-    // create an SHM backend...
+    // Create SHM provider with default backend
     // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(size)
-        .unwrap()
-        .wait()
-        .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::default_backend(size).wait().unwrap();
 
     // Allocate an SHM buffer
     // NOTE: For allocation API please check z_alloc_shm.rs example
