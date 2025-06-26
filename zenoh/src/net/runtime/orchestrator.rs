@@ -1037,7 +1037,7 @@ impl Runtime {
 }
 
 fn are_locators_equal(a: &[Locator], b: &[Locator]) -> bool {
+    use std::collections::hash_map::RandomState;
     a.len() == b.len()
-        && HashSet::<&Locator, std::hash::RandomState>::from_iter(a.iter())
-            == HashSet::from_iter(b.iter())
+        && HashSet::<&Locator, RandomState>::from_iter(a.iter()) == HashSet::from_iter(b.iter())
 }
