@@ -5224,7 +5224,6 @@ version = "1.4.0"
 dependencies = [
  "async-trait",
  "git-version",
- "serde_json",
  "tokio",
  "zenoh",
  "zenoh-plugin-trait",
