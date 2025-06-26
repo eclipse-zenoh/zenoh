@@ -547,14 +547,9 @@ impl Runtime {
     pub fn update_locators(&self) -> bool {
         let mut locators = self.state.locators.write().unwrap();
         let new_locators = self.manager().get_locators();
-        if new_locators == *locators {
+        if are_locators_equal(&locators, &new_locators) {
             return false;
         }
-
-        tracing::info!(
-            "New locators: {new_locators:?}, previously: {:?}",
-            *locators
-        );
         if tracing::enabled!(tracing::Level::INFO) {
             for locator in &new_locators {
                 if !locators.contains(locator) {
@@ -1039,4 +1034,10 @@ impl Runtime {
         let tables = zread!(router.tables.tables);
         router.tables.hat_code.links_info(&tables)
     }
+}
+
+fn are_locators_equal(a: &[Locator], b: &[Locator]) -> bool {
+    a.len() == b.len()
+        && HashSet::<&Locator, std::hash::RandomState>::from_iter(a.iter())
+            == HashSet::from_iter(b.iter())
 }
