@@ -181,6 +181,7 @@ impl RuntimeBuilder {
         // SHM lazy init flag
         #[cfg(feature = "shared-memory")]
         let shm_init_mode = *config.transport.shared_memory.mode();
+        let endpoint_poll_interval = config.listen.endpoint_poll_interval_ms().unwrap_or(10_000);
 
         let config = Notifier::new(crate::config::Config(config));
         let runtime = Runtime {
@@ -247,10 +248,13 @@ impl RuntimeBuilder {
             zenoh_config::ShmInitMode::Lazy => {}
         };
 
-        runtime.spawn({
-            let runtime2 = runtime.clone();
-            async move { runtime2.monitor_available_addrs().await }
-        });
+        if endpoint_poll_interval > 0 {
+            let poll_interval = Duration::from_millis(endpoint_poll_interval as u64);
+            runtime.spawn({
+                let runtime2 = runtime.clone();
+                async move { runtime2.monitor_available_addrs(poll_interval).await }
+            });
+        }
 
         Ok(runtime)
     }
@@ -379,22 +383,12 @@ impl Runtime {
         self.state.pending_connections.lock().await.remove(zid)
     }
 
-    async fn monitor_available_addrs(&self) {
-        let update_interval_ms = self
-            .config()
-            .lock()
-            .0
-            .listen
-            .endpoint_poll_interval_ms()
-            .unwrap_or(10_000);
-        if update_interval_ms > 0 {
-            let update_interval = Duration::from_millis(update_interval_ms as u64);
-            let token = self.get_cancellation_token();
-            loop {
-                tokio::select! {
-                    _ = tokio::time::sleep(update_interval) => self.update_available_addrs().await,
-                    _ = token.cancelled() => return,
-                }
+    async fn monitor_available_addrs(&self, poll_interval: Duration) {
+        let token = self.get_cancellation_token();
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(poll_interval) => self.update_available_addrs().await,
+                _ = token.cancelled() => return,
             }
         }
     }
