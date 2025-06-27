@@ -590,6 +590,7 @@ impl Closee for Arc<RuntimeState> {
         self.manager.close().await;
         // clean up to break cyclic reference of self.state to itself
         self.transport_handlers.write().unwrap().clear();
+        zasynclock!(self.scouting).take();
         // TODO: the call below is needed to prevent intermittent leak
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
