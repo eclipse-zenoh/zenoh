@@ -704,7 +704,7 @@ pub(crate) async fn open_link(
         reliability: state.transport.ext_qos.reliability(),
     };
     let o_link = link.reconfigure(o_config);
-    let s_link = format!("{:?}", o_link);
+    let s_link = format!("{o_link:?}");
     let o_link = LinkUnicastWithOpenAck::new(o_link, None);
     let transport = manager
         .init_transport_unicast(

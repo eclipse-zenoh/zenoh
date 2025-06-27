@@ -28,7 +28,7 @@ pub struct WaitError;
 
 impl fmt::Display for WaitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -48,7 +48,7 @@ pub enum WaitDeadlineError {
 
 impl fmt::Display for WaitDeadlineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -71,7 +71,7 @@ pub enum WaitTimeoutError {
 
 impl fmt::Display for WaitTimeoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -91,7 +91,7 @@ pub struct NotifyError;
 
 impl fmt::Display for NotifyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
