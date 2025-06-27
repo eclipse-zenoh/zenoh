@@ -117,8 +117,16 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 
         tracing::debug!(
             "New{}{} downsampler on transport unicast {:?}",
-            if self.flows.ingress { " ingress" } else { Default::default() },
-            if self.flows.egress { " egress" } else { Default::default() },
+            if self.flows.ingress {
+                " ingress"
+            } else {
+                Default::default()
+            },
+            if self.flows.egress {
+                " egress"
+            } else {
+                Default::default()
+            },
             transport
         );
         (
