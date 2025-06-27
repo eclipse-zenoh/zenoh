@@ -31,6 +31,17 @@ pub enum BufferRelayoutError {
 pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
     #[zenoh_macros::unstable_doc]
     fn is_valid(&self) -> bool;
+
+    #[zenoh_macros::unstable_doc]
+    /// Get unchecked mutable access to buffer's memory. This is unsafe yet very powerful API for
+    /// building concurrent access logic around SHM buffer contents. For safe version please
+    /// see `ShmBufMut` trait
+    ///
+    /// SAFETY: safe if multiple conditions are met:
+    /// - user code guarantees no data race across all applications that share the buffer
+    /// - the buffer is not being concurrently sent to the outside of SHM domain
+    /// - the buffer is valid
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8];
 }
 
 #[zenoh_macros::unstable_doc]
