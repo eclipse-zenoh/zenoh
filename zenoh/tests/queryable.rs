@@ -145,8 +145,7 @@ async fn test<'a, QClosure, RClosure>(
 
     assert!(
         matches_any_expected,
-        "{test_name}: Received replies {:?} do not match any expected variants {:?}",
-        replies_received, replies_expected
+        "{test_name}: Received replies {replies_received:?} do not match any expected variants {replies_expected:?}"
     );
 }
 

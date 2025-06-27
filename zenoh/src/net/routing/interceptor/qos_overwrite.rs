@@ -127,8 +127,8 @@ impl InterceptorFactoryTrait for QosOverwriteFactory {
 
         tracing::debug!(
             "New{}{} qos overwriter on transport unicast {:?}",
-            self.flows.ingress.then_some(" ingress").unwrap_or_default(),
-            self.flows.egress.then_some(" egress").unwrap_or_default(),
+            if self.flows.ingress { " ingress" } else { Default::default() },
+            if self.flows.egress { " egress" } else { Default::default() },
             transport
         );
         (
