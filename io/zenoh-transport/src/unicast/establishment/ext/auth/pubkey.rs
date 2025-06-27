@@ -141,10 +141,10 @@ impl Deref for ZPublicKey {
 impl fmt::Debug for ZPublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for b in self.0.n().to_bytes_le() {
-            write!(f, "{:02x}", b)?;
+            write!(f, "{b:02x}")?;
         }
         for b in self.0.e().to_bytes_le() {
-            write!(f, "{:02x}", b)?;
+            write!(f, "{b:02x}")?;
         }
         Ok(())
     }

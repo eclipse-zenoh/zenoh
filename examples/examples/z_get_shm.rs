@@ -76,7 +76,7 @@ async fn main() {
                     .payload()
                     .try_to_string()
                     .unwrap_or_else(|e| e.to_string().into());
-                println!(">> Received (ERROR: '{}')", payload);
+                println!(">> Received (ERROR: '{payload}')");
             }
         }
     }

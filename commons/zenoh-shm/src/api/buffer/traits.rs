@@ -37,7 +37,9 @@ pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
     /// building concurrent access logic around SHM buffer contents. For safe version please
     /// see `ShmBufMut` trait
     ///
-    /// SAFETY: safe if multiple conditions are met:
+    /// # Safety
+    ///
+    /// Safe if multiple conditions are met:
     /// - user code guarantees no data race across all applications that share the buffer
     /// - the buffer is not being concurrently sent to the outside of SHM domain
     /// - the buffer is valid

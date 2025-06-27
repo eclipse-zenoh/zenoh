@@ -368,7 +368,7 @@ mod tests {
             // 1 - Wait one notification
             match waiter.wait_timeout(tslot) {
                 Ok(()) => {}
-                Err(WaitTimeoutError::Timeout) => panic!("Timeout {:#?}", tslot),
+                Err(WaitTimeoutError::Timeout) => panic!("Timeout {tslot:#?}"),
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
 
@@ -379,7 +379,7 @@ mod tests {
 
             match waiter.wait_timeout(tslot) {
                 Ok(()) => {}
-                Err(WaitTimeoutError::Timeout) => panic!("Timeout {:#?}", tslot),
+                Err(WaitTimeoutError::Timeout) => panic!("Timeout {tslot:#?}"),
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
 
@@ -442,7 +442,7 @@ mod tests {
             // 1 - Wait one notification
             match waiter.wait_deadline(Instant::now() + tslot) {
                 Ok(()) => {}
-                Err(WaitDeadlineError::Deadline) => panic!("Timeout {:#?}", tslot),
+                Err(WaitDeadlineError::Deadline) => panic!("Timeout {tslot:#?}"),
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
 
@@ -453,7 +453,7 @@ mod tests {
 
             match waiter.wait_deadline(Instant::now() + tslot) {
                 Ok(()) => {}
-                Err(WaitDeadlineError::Deadline) => panic!("Timeout {:#?}", tslot),
+                Err(WaitDeadlineError::Deadline) => panic!("Timeout {tslot:#?}"),
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
 
@@ -537,7 +537,7 @@ mod tests {
                 break;
             }
             if start.elapsed() > tout {
-                panic!("Timeout {:#?}. Counter: {n}/{N}", tout);
+                panic!("Timeout {tout:#?}. Counter: {n}/{N}");
             }
 
             std::thread::sleep(Duration::from_millis(100));
@@ -566,7 +566,7 @@ mod tests {
                 w1.wait().unwrap();
                 n += 1;
             }
-            println!("S1: {}", n);
+            println!("S1: {n}");
         });
         let s2 = std::thread::spawn(move || {
             let mut n = 0;
@@ -574,7 +574,7 @@ mod tests {
                 waiter.wait().unwrap();
                 n += 1;
             }
-            println!("S2: {}", n);
+            println!("S2: {n}");
         });
 
         let n1 = notifier.clone();
@@ -585,7 +585,7 @@ mod tests {
                 n += 1;
                 std::thread::sleep(Duration::from_millis(1));
             }
-            println!("P1: {}", n);
+            println!("P1: {n}");
         });
         let p2 = std::thread::spawn(move || {
             let mut n = 0;
@@ -594,7 +594,7 @@ mod tests {
                 n += 1;
                 std::thread::sleep(Duration::from_millis(1));
             }
-            println!("P2: {}", n);
+            println!("P2: {n}");
         });
 
         std::thread::spawn(move || {
@@ -606,7 +606,7 @@ mod tests {
                     break;
                 }
                 if start.elapsed() > tout {
-                    panic!("Timeout {:#?}. Counter: {n}/{N}", tout);
+                    panic!("Timeout {tout:#?}. Counter: {n}/{N}");
                 }
 
                 std::thread::sleep(Duration::from_millis(100));

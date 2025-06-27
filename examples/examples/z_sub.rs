@@ -44,7 +44,7 @@ async fn main() {
         );
         if let Some(att) = sample.attachment() {
             let att = att.try_to_string().unwrap_or_else(|e| e.to_string().into());
-            print!(" ({})", att);
+            print!(" ({att})");
         }
         println!();
     }

@@ -92,7 +92,7 @@ impl PeriodicTask {
                         if let Ok(p) = priority.try_into() {
                             if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok()
                             {
-                                err.push_str(&format!("priority {}. ", priority));
+                                err.push_str(&format!("priority {priority}. "));
                                 break;
                             }
                         }
