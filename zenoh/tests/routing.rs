@@ -433,7 +433,7 @@ impl Recipe {
         loop {
             tokio::select! {
                 _ = tokio::time::sleep(TIMEOUT) => {
-                    println!("Recipe {} Timeout.", self);
+                    println!("Recipe {self} Timeout.");
 
                     // Termination
                     remaining_checkpoints.swap(0, Ordering::Relaxed);
@@ -453,7 +453,7 @@ impl Recipe {
             }
         }
 
-        println!("Recipe {} OK.", self);
+        println!("Recipe {self} OK.");
         Ok(())
     }
 }
@@ -510,7 +510,7 @@ async fn gossip() -> Result<()> {
     // - node1: Peer, node2: Peer, node3: Router
     for mode in [WhatAmI::Peer, WhatAmI::Router] {
         let node3 = Node {
-            name: format!("Router {}", mode),
+            name: format!("Router {mode}"),
             mode: WhatAmI::Peer,
             listen: vec![locator.clone()],
             con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(

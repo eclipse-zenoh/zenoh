@@ -57,7 +57,7 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
+    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = zenoh::Config::default();
@@ -77,7 +77,7 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
         .shared_memory
         .set_enabled(!NO_SHM_FOR_SECOND_PEER)
         .unwrap();
-    println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
+    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
     (peer01, peer02)
@@ -92,7 +92,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .set(vec![endpoint01.parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {}", endpoint01);
+    println!("[  ][01a] Opening peer01 session: {endpoint01}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = zenoh::Config::default();
@@ -102,7 +102,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .set(vec![endpoint02.parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {}", endpoint02);
+    println!("[  ][02a] Opening peer02 session: {endpoint02}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
     (peer01, peer02)
@@ -170,7 +170,6 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
         // create SHM backend...
         let backend = PosixShmProviderBackend::builder()
             .with_size(size * MSG_COUNT / 10)
-            .unwrap()
             .wait()
             .unwrap();
         // ...and SHM provider

@@ -40,7 +40,7 @@ async fn run() -> zenoh::Result<()> {
             // Create specific backed
             // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
             let comprehensive = PosixShmProviderBackend::builder()
-                .with_size(65536)?
+                .with_size(65536)
                 // this is also possible:
                 // .with_layout_args(65536, AllocAlignment::default())
                 .wait()?;

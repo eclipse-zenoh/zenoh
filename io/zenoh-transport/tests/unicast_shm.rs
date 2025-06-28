@@ -114,9 +114,9 @@ mod tests {
                     PushBody::Put(Put { payload, .. }) => {
                         for zs in payload.zslices() {
                             if self.is_shm && zs.downcast_ref::<ShmBufInner>().is_none() {
-                                panic!("Expected ShmBufInner: {:?}", zs);
+                                panic!("Expected ShmBufInner: {zs:?}");
                             } else if !self.is_shm && zs.downcast_ref::<ShmBufInner>().is_some() {
-                                panic!("Not Expected ShmBufInner: {:?}", zs);
+                                panic!("Not Expected ShmBufInner: {zs:?}");
                             }
                         }
                         payload.contiguous().into_owned()
@@ -157,7 +157,6 @@ mod tests {
         // create SHM provider
         let backend = PosixShmProviderBackend::builder()
             .with_size(2 * MSG_SIZE)
-            .unwrap()
             .wait()
             .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();

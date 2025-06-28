@@ -673,6 +673,16 @@ pub struct ShmProviderBuilderWithDefaultBackend {
     size: usize,
 }
 
+impl ShmProviderBuilderWithDefaultBackend {
+    pub fn with_alignment(
+        self,
+        alignment: AllocAlignment,
+    ) -> Result<ShmProviderBuilderWithDefaultBackendWithAlignment, ZLayoutError> {
+        let layout = MemoryLayout::new(self.size, alignment)?;
+        Ok(ShmProviderBuilderWithDefaultBackendWithAlignment { layout })
+    }
+}
+
 #[zenoh_macros::unstable_doc]
 impl Resolvable for ShmProviderBuilderWithDefaultBackend {
     type To = ZResult<ShmProvider<PosixShmProviderBackend>>;
@@ -682,10 +692,30 @@ impl Resolvable for ShmProviderBuilderWithDefaultBackend {
 impl Wait for ShmProviderBuilderWithDefaultBackend {
     /// build ShmProvider
     fn wait(self) -> <Self as Resolvable>::To {
-        // todo: make growing PosixProvider and get rid of magic number here
         let backend = PosixShmProviderBackend::builder()
             .with_size(self.size)
-            .unwrap()
+            .wait()?;
+
+        Ok(ShmProvider::new(backend))
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+pub struct ShmProviderBuilderWithDefaultBackendWithAlignment {
+    layout: MemoryLayout,
+}
+
+#[zenoh_macros::unstable_doc]
+impl Resolvable for ShmProviderBuilderWithDefaultBackendWithAlignment {
+    type To = ZResult<ShmProvider<PosixShmProviderBackend>>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for ShmProviderBuilderWithDefaultBackendWithAlignment {
+    /// build ShmProvider
+    fn wait(self) -> <Self as Resolvable>::To {
+        let backend = PosixShmProviderBackend::builder()
+            .with_layout(self.layout)
             .wait()?;
 
         Ok(ShmProvider::new(backend))

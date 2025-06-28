@@ -26,7 +26,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring AdvancedSubscriber on {}", key_expr);
+    println!("Declaring AdvancedSubscriber on {key_expr}");
     let subscriber = session
         .declare_subscriber(key_expr)
         .history(HistoryConfig::default().detect_late_publishers())

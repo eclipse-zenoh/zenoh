@@ -69,7 +69,7 @@ async fn main() {
         // Print attachment information
         if let Some(att) = query.attachment() {
             let (attachment_type, attachment) = handle_bytes(att);
-            print!(" ({}: {})", attachment_type, attachment);
+            print!(" ({attachment_type}: {attachment})");
         }
 
         println!();

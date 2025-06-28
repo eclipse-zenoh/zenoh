@@ -90,6 +90,20 @@ impl AllocAlignment {
         }
     }
 
+    /// Create a new AllocAlignment for value type
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_val<T: Sized>(_: &T) -> Self {
+        Self::for_type::<T>()
+    }
+
+    /// Create a new AllocAlignment for type
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_type<T: Sized>() -> Self {
+        let align = std::mem::align_of::<T>();
+        let pow = align.trailing_zeros() as u8;
+        Self { pow }
+    }
+
     /// Get alignment in normal units (bytes)
     #[zenoh_macros::unstable_doc]
     pub fn get_alignment_value(&self) -> NonZeroUsize {

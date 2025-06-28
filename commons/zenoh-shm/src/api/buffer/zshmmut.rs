@@ -36,6 +36,10 @@ impl ShmBuf for ZShmMut {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
     }
+
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice_inner()
+    }
 }
 
 impl ShmBufMut for ZShmMut {}
@@ -152,6 +156,10 @@ impl PartialEq<ZShmMut> for &zshmmut {
 impl ShmBuf for zshmmut {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
+    }
+
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice_inner()
     }
 }
 

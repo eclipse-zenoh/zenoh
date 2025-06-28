@@ -32,7 +32,6 @@ fn posix_shm_provider_create() {
     let size = 1024;
     let backend = PosixShmProviderBackend::builder()
         .with_size(size)
-        .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
     assert!(backend.available() >= size);
@@ -42,7 +41,6 @@ fn posix_shm_provider_create() {
 fn posix_shm_provider_alloc() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
-        .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
@@ -57,7 +55,6 @@ fn posix_shm_provider_alloc() {
 fn posix_shm_provider_open() {
     let backend = PosixShmProviderBackend::builder()
         .with_size(1024)
-        .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
@@ -81,7 +78,6 @@ fn posix_shm_provider_allocator() {
 
     let backend = PosixShmProviderBackend::builder()
         .with_size(size_to_alloc)
-        .expect("Error creating Layout!")
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
