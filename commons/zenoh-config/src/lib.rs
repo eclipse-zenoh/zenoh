@@ -1001,6 +1001,9 @@ impl Config {
                 if let Err(e) = f.read_to_string(&mut content) {
                     bail!(e)
                 }
+                if content.is_empty() {
+                    bail!("Empty config file");
+                }
                 match path
                     .extension()
                     .map(|s| s.to_str().unwrap())
