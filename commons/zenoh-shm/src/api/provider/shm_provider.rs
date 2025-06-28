@@ -677,9 +677,11 @@ impl ShmProviderBuilderWithDefaultBackend {
     pub fn with_alignment(
         self,
         alignment: AllocAlignment,
-    ) -> Result<ShmProviderBuilderWithDefaultBackendWithAlignment, ZLayoutError> {
-        let layout = MemoryLayout::new(self.size, alignment)?;
-        Ok(ShmProviderBuilderWithDefaultBackendWithAlignment { layout })
+    ) -> ShmProviderBuilderWithDefaultBackendWithAlignment {
+        ShmProviderBuilderWithDefaultBackendWithAlignment {
+            size: self.size,
+            alignment,
+        }
     }
 }
 
@@ -702,7 +704,8 @@ impl Wait for ShmProviderBuilderWithDefaultBackend {
 
 #[zenoh_macros::unstable_doc]
 pub struct ShmProviderBuilderWithDefaultBackendWithAlignment {
-    layout: MemoryLayout,
+    size: usize,
+    alignment: AllocAlignment,
 }
 
 #[zenoh_macros::unstable_doc]
@@ -714,10 +717,10 @@ impl Resolvable for ShmProviderBuilderWithDefaultBackendWithAlignment {
 impl Wait for ShmProviderBuilderWithDefaultBackendWithAlignment {
     /// build ShmProvider
     fn wait(self) -> <Self as Resolvable>::To {
+        let layout = MemoryLayout::new(self.size, self.alignment)?;
         let backend = PosixShmProviderBackend::builder()
-            .with_layout(self.layout)
+            .with_layout(layout)
             .wait()?;
-
         Ok(ShmProvider::new(backend))
     }
 }
