@@ -101,6 +101,7 @@ rand = { workspace = true, features = ["default"] }
 ref-cast = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
+slab = { workspace = true }
 socket2 = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
