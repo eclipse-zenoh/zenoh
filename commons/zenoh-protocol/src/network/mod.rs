@@ -455,7 +455,7 @@ pub mod ext {
             let mut inner = priority as u8;
             match congestion_control {
                 CongestionControl::Block => inner |= Self::D_FLAG,
-                CongestionControl::BlockFirst => inner |= Self::D_FLAG | Self::F_FLAG,
+                CongestionControl::BlockFirst => inner |= Self::F_FLAG,
                 _ => {}
             }
             if is_express {
@@ -474,10 +474,16 @@ pub mod ext {
 
         pub fn set_congestion_control(&mut self, cctrl: CongestionControl) {
             match cctrl {
-                CongestionControl::Block => self.inner = imsg::set_flag(self.inner, Self::D_FLAG),
-                CongestionControl::Drop => self.inner = imsg::unset_flag(self.inner, Self::D_FLAG),
-                CongestionControl::BlockFirst => {
+                CongestionControl::Block => {
                     self.inner = imsg::set_flag(self.inner, Self::D_FLAG);
+                    self.inner = imsg::unset_flag(self.inner, Self::F_FLAG);
+                }
+                CongestionControl::Drop => {
+                    self.inner = imsg::unset_flag(self.inner, Self::D_FLAG);
+                    self.inner = imsg::unset_flag(self.inner, Self::F_FLAG);
+                }
+                CongestionControl::BlockFirst => {
+                    self.inner = imsg::unset_flag(self.inner, Self::D_FLAG);
                     self.inner = imsg::set_flag(self.inner, Self::F_FLAG);
                 }
             }
@@ -488,9 +494,9 @@ pub mod ext {
                 imsg::has_flag(self.inner, Self::D_FLAG),
                 imsg::has_flag(self.inner, Self::F_FLAG),
             ) {
-                (true, true) => CongestionControl::BlockFirst,
-                (true, false) => CongestionControl::Block,
-                (false, _) => CongestionControl::Drop,
+                (false, false) => CongestionControl::Drop,
+                (false, true) => CongestionControl::BlockFirst,
+                (true, _) => CongestionControl::Block,
             }
         }
 
