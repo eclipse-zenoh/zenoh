@@ -11,8 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::{
-    core::{CongestionControl, Priority, PriorityRange, Reliability},
+    core::{Priority, PriorityRange, Reliability},
     network::{NetworkMessageExt, NetworkMessageMut, NetworkMessageRef},
     transport::close,
 };
@@ -156,6 +159,7 @@ impl TransportUnicastUniversal {
             }
         }
 
+        #[cfg(feature = "unstable")]
         if msg.congestion_control() == CongestionControl::BlockFirst {
             if self
                 .block_first_waiter
@@ -176,6 +180,9 @@ impl TransportUnicastUniversal {
         } else {
             self.schedule_on_link(msg.as_ref())
         }
+
+        #[cfg(not(feature = "unstable"))]
+        self.schedule_on_link(msg.as_ref())
     }
 }
 

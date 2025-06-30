@@ -455,6 +455,7 @@ pub mod ext {
             let mut inner = priority as u8;
             match congestion_control {
                 CongestionControl::Block => inner |= Self::D_FLAG,
+                #[cfg(feature = "unstable")]
                 CongestionControl::BlockFirst => inner |= Self::F_FLAG,
                 _ => {}
             }
@@ -482,6 +483,7 @@ pub mod ext {
                     self.inner = imsg::unset_flag(self.inner, Self::D_FLAG);
                     self.inner = imsg::unset_flag(self.inner, Self::F_FLAG);
                 }
+                #[cfg(feature = "unstable")]
                 CongestionControl::BlockFirst => {
                     self.inner = imsg::unset_flag(self.inner, Self::D_FLAG);
                     self.inner = imsg::set_flag(self.inner, Self::F_FLAG);
@@ -495,7 +497,10 @@ pub mod ext {
                 imsg::has_flag(self.inner, Self::F_FLAG),
             ) {
                 (false, false) => CongestionControl::Drop,
+                #[cfg(feature = "unstable")]
                 (false, true) => CongestionControl::BlockFirst,
+                #[cfg(not(feature = "unstable"))]
+                (false, true) => CongestionControl::Drop,
                 (true, _) => CongestionControl::Block,
             }
         }
