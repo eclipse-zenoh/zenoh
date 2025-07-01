@@ -413,7 +413,7 @@ pub mod ext {
     /// - prio: Priority class
     /// - D:    Don't drop. Don't drop the message for congestion control.
     /// - E:    Express. Don't batch this message.
-    /// - F:    Block only on the first message for congestion control.
+    /// - F:    Don't drop the first message for congestion control.
     /// - r:  Reserved
     /// ```
     #[repr(transparent)]
