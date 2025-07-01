@@ -36,6 +36,10 @@ impl ShmBuf for ZShm {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
     }
+
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice_inner()
+    }
 }
 
 impl OwnedShmBuf for ZShm {
@@ -136,6 +140,10 @@ pub struct zshm(ShmBufInner);
 impl ShmBuf for zshm {
     fn is_valid(&self) -> bool {
         self.0.is_valid()
+    }
+
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice_inner()
     }
 }
 

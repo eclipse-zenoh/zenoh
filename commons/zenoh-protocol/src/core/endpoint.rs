@@ -78,7 +78,7 @@ impl fmt::Display for Protocol<'_> {
 
 impl fmt::Debug for Protocol<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -113,7 +113,7 @@ impl fmt::Display for ProtocolMut<'_> {
 
 impl fmt::Debug for ProtocolMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -142,7 +142,7 @@ impl fmt::Display for Address<'_> {
 
 impl fmt::Debug for Address<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -183,7 +183,7 @@ impl fmt::Display for AddressMut<'_> {
 
 impl fmt::Debug for AddressMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -231,7 +231,7 @@ impl fmt::Display for Metadata<'_> {
 
 impl fmt::Debug for Metadata<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -316,7 +316,7 @@ impl fmt::Display for MetadataMut<'_> {
 
 impl fmt::Debug for MetadataMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -361,7 +361,7 @@ impl fmt::Display for Config<'_> {
 
 impl fmt::Debug for Config<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -446,7 +446,7 @@ impl fmt::Display for ConfigMut<'_> {
 
 impl fmt::Debug for ConfigMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -577,7 +577,7 @@ impl fmt::Display for EndPoint {
 
 impl fmt::Debug for EndPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

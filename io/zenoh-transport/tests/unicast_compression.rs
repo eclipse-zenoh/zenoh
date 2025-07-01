@@ -189,7 +189,7 @@ mod tests {
 
         // Create the listener on the router
         for e in server_endpoints.iter() {
-            println!("Add endpoint: {}", e);
+            println!("Add endpoint: {e}");
             let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
         }
 
@@ -212,7 +212,7 @@ mod tests {
         // Create an empty transport with the client
         // Open transport -> This should be accepted
         for e in client_endpoints.iter() {
-            println!("Opening transport with {}", e);
+            println!("Opening transport with {e}");
             let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
         }
 
@@ -238,7 +238,7 @@ mod tests {
         for e in endpoints.iter() {
             let _ = write!(ee, "{e} ");
         }
-        println!("Closing transport with {}", ee);
+        println!("Closing transport with {ee}");
         ztimeout!(client_transport.close()).unwrap();
 
         ztimeout!(async {
@@ -249,7 +249,7 @@ mod tests {
 
         // Stop the locators on the manager
         for e in endpoints.iter() {
-            println!("Del locator: {}", e);
+            println!("Del locator: {e}");
             ztimeout!(router_manager.del_listener(e)).unwrap();
         }
 
@@ -275,10 +275,7 @@ mod tests {
         channel: Channel,
         msg_size: usize,
     ) {
-        println!(
-            "Sending {} messages... {:?} {}",
-            MSG_COUNT, channel, msg_size
-        );
+        println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
         let cctrl = match channel.reliability {
             Reliability::Reliable => CongestionControl::Block,
             Reliability::BestEffort => CongestionControl::Drop,
@@ -335,8 +332,7 @@ mod tests {
         lowlatency_transport: bool,
     ) {
         println!(
-            "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
-            client_endpoints, server_endpoints, channel, msg_size
+            "\n>>> Running test for:  {client_endpoints:?}, {server_endpoints:?}, {channel:?}, {msg_size}"
         );
 
         #[allow(unused_variables)] // Used when stats feature is enabled
@@ -354,14 +350,14 @@ mod tests {
         #[cfg(feature = "stats")]
         {
             let c_stats = client_transport.get_stats().unwrap().report();
-            println!("\tClient: {:?}", c_stats);
+            println!("\tClient: {c_stats:?}");
             let r_stats =
                 ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
                     .unwrap()
                     .get_stats()
                     .map(|s| s.report())
                     .unwrap();
-            println!("\tRouter: {:?}", r_stats);
+            println!("\tRouter: {r_stats:?}");
         }
 
         close_transport(

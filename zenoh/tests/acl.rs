@@ -701,7 +701,7 @@ async fn test_get_qbl_deny(port: u16) {
                     received_value = sample.payload().try_to_string().unwrap().into_owned();
                     break;
                 }
-                Err(e) => println!("Error : {:?}", e),
+                Err(e) => println!("Error : {e:?}"),
             }
         }
         tokio::time::sleep(SLEEP).await;
@@ -754,7 +754,7 @@ async fn test_get_qbl_allow(port: u16) {
                     received_value = sample.payload().try_to_string().unwrap().into_owned();
                     break;
                 }
-                Err(e) => println!("Error : {:?}", e),
+                Err(e) => println!("Error : {e:?}"),
             }
         }
         tokio::time::sleep(SLEEP).await;
@@ -834,7 +834,7 @@ async fn test_get_qbl_deny_then_allow(port: u16) {
                     received_value = sample.payload().try_to_string().unwrap().into_owned();
                     break;
                 }
-                Err(e) => println!("Error : {:?}", e),
+                Err(e) => println!("Error : {e:?}"),
             }
         }
         tokio::time::sleep(SLEEP).await;
@@ -912,7 +912,7 @@ async fn test_get_qbl_allow_then_deny(port: u16) {
                     received_value = sample.payload().try_to_string().unwrap().into_owned();
                     break;
                 }
-                Err(e) => println!("Error : {:?}", e),
+                Err(e) => println!("Error : {e:?}"),
             }
         }
         tokio::time::sleep(SLEEP).await;
@@ -979,7 +979,7 @@ async fn test_reply_deny(port: u16) {
                     received_value = sample.payload().try_to_string().unwrap().into_owned();
                     break;
                 }
-                Err(e) => println!("Error : {:?}", e),
+                Err(e) => println!("Error : {e:?}"),
             }
         }
         tokio::time::sleep(SLEEP).await;
@@ -1052,7 +1052,7 @@ async fn test_reply_allow_then_deny(port: u16) {
                     received_value = sample.payload().try_to_string().unwrap().into_owned();
                     break;
                 }
-                Err(e) => println!("Error : {:?}", e),
+                Err(e) => println!("Error : {e:?}"),
             }
         }
         tokio::time::sleep(SLEEP).await;
@@ -1124,7 +1124,7 @@ async fn test_liveliness_deny(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1202,7 +1202,7 @@ async fn test_liveliness_allow(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1295,7 +1295,7 @@ async fn test_liveliness_allow_deny_token(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1388,7 +1388,7 @@ async fn test_liveliness_deny_allow_token(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1481,7 +1481,7 @@ async fn test_liveliness_allow_deny_sub(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1574,7 +1574,7 @@ async fn test_liveliness_deny_allow_sub(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1667,7 +1667,7 @@ async fn test_liveliness_allow_deny_query(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();
@@ -1760,7 +1760,7 @@ async fn test_liveliness_deny_allow_query(port: u16) {
             Ok(_) => {
                 cloned_received_token_reply.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            Err(e) => println!("Error : {:?}", e),
+            Err(e) => println!("Error : {e:?}"),
         })
         .await
         .unwrap();

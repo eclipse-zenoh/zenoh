@@ -42,10 +42,10 @@ const CONTROL_PKTINFOV6_BUFFER_SIZE: usize = CMSG_HEADER_SIZE + PKTINFOV6_DATA_S
 
 type WSARecvMsgExtension = unsafe extern "system" fn(
     s: SOCKET,
-    lpMsg: *mut WSAMSG,
-    lpdwNumberOfBytesRecvd: *mut u32,
-    lpOverlapped: *mut OVERLAPPED,
-    lpCompletionRoutine: LPWSAOVERLAPPED_COMPLETION_ROUTINE,
+    lp_msg: *mut WSAMSG,
+    lpdw_number_of_bytes_recvd: *mut u32,
+    lp_overlapped: *mut OVERLAPPED,
+    lp_completion_routine: LPWSAOVERLAPPED_COMPLETION_ROUTINE,
 ) -> i32;
 
 fn locate_wsarecvmsg(socket: RawSocket) -> io::Result<WSARecvMsgExtension> {
