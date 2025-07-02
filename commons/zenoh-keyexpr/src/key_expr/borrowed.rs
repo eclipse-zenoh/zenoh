@@ -1083,7 +1083,6 @@ mod tests {
     #[test_case("demo/$/test", false; "Contain unbounded dollar")]
     fn test_str_to_keyexpr(key_str: &str, valid: bool) {
         let key = keyexpr::new(key_str);
-        println!("{:?}", key);
         assert!(key.is_ok() == valid);
     }
 }
