@@ -1658,13 +1658,12 @@ impl SessionInner {
         origin: Locality,
         callback: Callback<Query>,
     ) -> ZResult<Arc<QueryableState>> {
-        let wire_expr = key_expr.to_wire(self);
         let mut state = zwrite!(self.state);
         tracing::trace!("declare_queryable({:?})", key_expr);
         let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
-            key_expr: wire_expr.to_owned(),
+            key_expr: key_expr.clone().into_owned(),
             complete,
             origin,
             callback,
@@ -1725,7 +1724,7 @@ impl SessionInner {
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: qable_state.id,
                         ext_wire_expr: WireExprType {
-                            wire_expr: qable_state.key_expr.clone(),
+                            wire_expr: WireExpr::empty(),
                         },
                     }),
                 });
@@ -1737,7 +1736,7 @@ impl SessionInner {
                 let state = zread!(self.state);
                 self.update_matching_status(
                     &state,
-                    &state.local_wireexpr_to_expr(&qable_state.key_expr)?,
+                    &qable_state.key_expr,
                     MatchingStatusType::Queryables(qable_state.complete),
                     false,
                 )
@@ -1933,17 +1932,14 @@ impl SessionInner {
                 .subscribers(SubscriberKind::Subscriber)
                 .values()
                 .any(|s| s.key_expr.intersects(key_expr)),
-            MatchingStatusType::Queryables(false) => state.queryables.values().any(|q| {
-                state
-                    .local_wireexpr_to_expr(&q.key_expr)
-                    .is_ok_and(|ke| ke.intersects(key_expr))
-            }),
-            MatchingStatusType::Queryables(true) => state.queryables.values().any(|q| {
-                q.complete
-                    && state
-                        .local_wireexpr_to_expr(&q.key_expr)
-                        .is_ok_and(|ke| ke.includes(key_expr))
-            }),
+            MatchingStatusType::Queryables(false) => state
+                .queryables
+                .values()
+                .any(|q| q.key_expr.includes(key_expr)),
+            MatchingStatusType::Queryables(true) => state
+                .queryables
+                .values()
+                .any(|q| q.complete && q.key_expr.includes(key_expr)),
         };
         MatchingStatus { matching }
     }
@@ -2486,26 +2482,12 @@ impl SessionInner {
                     let queryables = state
                         .queryables
                         .iter()
-                        .filter(
-                            |(_, queryable)|
-                                (queryable.origin == Locality::Any
-                                    || (local == (queryable.origin == Locality::SessionLocal)))
-                                &&
-                                (queryable.complete || target != QueryTarget::AllComplete)
-                                &&
-                                match state.local_wireexpr_to_expr(&queryable.key_expr) {
-                                    Ok(qablname) => {
-                                        qablname.intersects(&key_expr)
-                                    }
-                                    Err(err) => {
-                                        error!(
-                                            "{}. Internal error (queryable key_expr to key_expr failed).",
-                                            err
-                                        );
-                                        false
-                                    }
-                                }
-                        )
+                        .filter(|(_, queryable)| {
+                            (queryable.origin == Locality::Any
+                                || (local == (queryable.origin == Locality::SessionLocal)))
+                                && (queryable.complete || target != QueryTarget::AllComplete)
+                                && queryable.key_expr.intersects(&key_expr)
+                        })
                         .map(|(id, qable)| (*id, qable.callback.clone()))
                         .collect::<Vec<(u32, Callback<Query>)>>();
                     (primitives, key_expr.into_owned(), queryables)
