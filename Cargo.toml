@@ -168,7 +168,7 @@ shellexpand = "3.1.0"
 socket2 = { version = "0.5.7", features = ["all"] }
 stop-token = "0.7.0"
 syn = "2.0"
-test-case = { version = "3.3.1" }
+test-case = "3.3.1"
 tide = "0.16.0"
 time = "0.3.36"
 token-cell = { version = "1.5.0", default-features = false }

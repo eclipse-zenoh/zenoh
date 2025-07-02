@@ -35,7 +35,6 @@ keyed-set = { workspace = true }
 rand = { workspace = true, features = ["alloc", "getrandom"] }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
-test-case = { workspace = true }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }
 # NOTE: getrandom needs to be explicitly added here in order to enable the `js` feature when compiling the rand crate to WASM
@@ -51,6 +50,7 @@ ahash = { workspace = true, default-features = true }
 criterion = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true, features = ["default"] }
+test-case = { workspace = true }
 
 [[bench]]
 name = "keyexpr_tree"
