@@ -18,7 +18,7 @@ use std::{
     ops::Deref,
     sync::{
         atomic::{AtomicU16, Ordering},
-        Arc, Mutex, RwLock,
+        Arc, Mutex, RwLock, RwLockReadGuard,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -2338,7 +2338,6 @@ impl SessionInner {
             });
 
         tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
-        let wexpr = key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
             QueryState {
@@ -2355,6 +2354,7 @@ impl SessionInner {
         drop(state);
 
         if destination != Locality::SessionLocal {
+            let wexpr = key_expr.to_wire(self).to_owned();
             let ext_attachment = attachment.clone().map(Into::into);
             primitives.send_request(&mut Request {
                 id: qid,
@@ -2385,8 +2385,9 @@ impl SessionInner {
         }
         if destination != Locality::Remote {
             self.handle_query(
+                zread!(self.state),
                 true,
-                &wexpr,
+                key_expr,
                 parameters.as_str(),
                 qid,
                 target,
@@ -2460,8 +2461,9 @@ impl SessionInner {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         self: &Arc<Self>,
+        state: RwLockReadGuard<'_, SessionState>,
         local: bool,
-        key_expr: &WireExpr,
+        key_expr: &KeyExpr<'_>,
         parameters: &str,
         qid: RequestId,
         target: QueryTarget,
@@ -2469,58 +2471,47 @@ impl SessionInner {
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
     ) {
-        let (primitives, key_expr, queryables) = {
-            let state = zread!(self.state);
-            if state.primitives.is_none() {
-                return; // Session closing or closed
-            }
-            let Ok(primitives) = state.primitives() else {
-                return;
+        let Ok(primitives) = state.primitives() else {
+            return;
+        };
+        let queryables = state
+            .queryables
+            .iter()
+            .filter(|(_, queryable)| {
+                (queryable.origin == Locality::Any
+                    || (local == (queryable.origin == Locality::SessionLocal)))
+                    && (queryable.complete || target != QueryTarget::AllComplete)
+                    && queryable.key_expr.intersects(key_expr)
+            })
+            .map(|(id, qable)| (*id, qable.callback.clone()))
+            .collect::<Vec<(u32, Callback<Query>)>>();
+
+        drop(state);
+
+        if !queryables.is_empty() {
+            let zid = self.zid();
+
+            let query_inner = Arc::new(QueryInner {
+                key_expr: key_expr.clone().into_owned(),
+                parameters: parameters.to_owned().into(),
+                qid,
+                zid: zid.into(),
+                primitives: if local {
+                    Arc::new(WeakSession::new(self))
+                } else {
+                    primitives
+                },
+            });
+            let mut query = Query {
+                inner: query_inner,
+                eid: 0,
+                value: body.map(|b| (b.payload.into(), b.encoding.into())),
+                attachment,
             };
-            match state.wireexpr_to_keyexpr(key_expr, local) {
-                Ok(key_expr) => {
-                    let queryables = state
-                        .queryables
-                        .iter()
-                        .filter(|(_, queryable)| {
-                            (queryable.origin == Locality::Any
-                                || (local == (queryable.origin == Locality::SessionLocal)))
-                                && (queryable.complete || target != QueryTarget::AllComplete)
-                                && queryable.key_expr.intersects(&key_expr)
-                        })
-                        .map(|(id, qable)| (*id, qable.callback.clone()))
-                        .collect::<Vec<(u32, Callback<Query>)>>();
-                    (primitives, key_expr.into_owned(), queryables)
-                }
-                Err(err) => {
-                    error!("Received Query for unknown key_expr: {}", err);
-                    return;
-                }
+            for (eid, cb) in queryables {
+                query.eid = eid;
+                cb.call(query.clone());
             }
-        };
-
-        let zid = self.zid();
-
-        let query_inner = Arc::new(QueryInner {
-            key_expr,
-            parameters: parameters.to_owned().into(),
-            qid,
-            zid: zid.into(),
-            primitives: if local {
-                Arc::new(WeakSession::new(self))
-            } else {
-                primitives
-            },
-        });
-        let mut query = Query {
-            inner: query_inner,
-            eid: 0,
-            value: body.map(|b| (b.payload.into(), b.encoding.into())),
-            attachment,
-        };
-        for (eid, cb) in queryables {
-            query.eid = eid;
-            cb.call(query.clone());
         }
     }
 }
@@ -2839,16 +2830,30 @@ impl Primitives for WeakSession {
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
         match &mut msg.payload {
-            RequestBody::Query(m) => self.handle_query(
-                false,
-                &msg.wire_expr,
-                &m.parameters,
-                msg.id,
-                msg.ext_target,
-                m.consolidation,
-                mem::take(&mut m.ext_body),
-                mem::take(&mut m.ext_attachment).map(Into::into),
-            ),
+            RequestBody::Query(m) => {
+                let state = zread!(self.state);
+                match state
+                    .wireexpr_to_keyexpr(&msg.wire_expr, false)
+                    .map(|k| k.into_owned())
+                {
+                    Ok(key_expr) => {
+                        self.handle_query(
+                            state,
+                            false,
+                            &key_expr,
+                            &m.parameters,
+                            msg.id,
+                            msg.ext_target,
+                            m.consolidation,
+                            mem::take(&mut m.ext_body),
+                            mem::take(&mut m.ext_attachment).map(Into::into),
+                        );
+                    }
+                    Err(err) => {
+                        error!("Received Query for unknown key_expr: {}", err);
+                    }
+                }
+            }
         }
     }
 
