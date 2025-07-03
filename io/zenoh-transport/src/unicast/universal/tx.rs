@@ -172,7 +172,7 @@ impl TransportUnicastUniversal {
             };
             let transport = self.clone();
             let msg = msg.to_owned();
-            zenoh_runtime::ZRuntime::Net.spawn(async move {
+            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
                 let _ = transport.schedule_on_link(msg.as_ref());
                 let _ = transport.block_first_notifier.notify();
             });
