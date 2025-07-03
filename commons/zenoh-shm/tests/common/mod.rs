@@ -50,7 +50,7 @@ pub fn execute_concurrent<TaskFun, Terror>(
         let task_handle = std::thread::spawn(move || {
             for iteration in 0..iterations {
                 if let Err(e) = c_task_fun(task_index, iteration) {
-                    panic!("task {task_index}: iteration {iteration}: {:?}", e)
+                    panic!("task {task_index}: iteration {iteration}: {e:?}")
                 }
             }
         });

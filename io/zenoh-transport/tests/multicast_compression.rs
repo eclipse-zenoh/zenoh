@@ -106,7 +106,7 @@ mod tests {
 
     impl TransportMulticastEventHandler for SCPeer {
         fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-            println!("\tNew peer: {:?}", peer);
+            println!("\tNew peer: {peer:?}");
             Ok(Arc::new(SCPeer {
                 count: self.count.clone(),
             }))
@@ -312,9 +312,9 @@ mod tests {
         #[cfg(feature = "stats")]
         {
             let stats = peer01.transport.get_stats().unwrap().report();
-            println!("\tPeer 01: {:?}", stats);
+            println!("\tPeer 01: {stats:?}");
             let stats = peer02.transport.get_stats().unwrap().report();
-            println!("\tPeer 02: {:?}", stats);
+            println!("\tPeer 02: {stats:?}");
         }
 
         close_transport(peer01, peer02, endpoint).await;

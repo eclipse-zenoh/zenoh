@@ -215,7 +215,7 @@ impl StorageRuntimeInner {
         }
         self.plugins_manager
             .started_plugin_mut(name)
-            .ok_or(format!("Cannot find volume '{}' to stop it", name))?
+            .ok_or(format!("Cannot find volume '{name}' to stop it"))?
             .stop();
         Ok(())
     }

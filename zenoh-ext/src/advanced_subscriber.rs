@@ -568,9 +568,9 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
 #[zenoh_macros::unstable]
 fn seq_num_range(start: Option<u32>, end: Option<u32>) -> String {
     match (start, end) {
-        (Some(start), Some(end)) => format!("_sn={}..{}", start, end),
-        (Some(start), None) => format!("_sn={}..", start),
-        (None, Some(end)) => format!("_sn=..{}", end),
+        (Some(start), Some(end)) => format!("_sn={start}..{end}"),
+        (Some(start), None) => format!("_sn={start}.."),
+        (None, Some(end)) => format!("_sn=..{end}"),
         (None, None) => "_sn=..".to_string(),
     }
 }

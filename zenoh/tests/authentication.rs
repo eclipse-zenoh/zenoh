@@ -275,7 +275,7 @@ client2name:client2passwd";
         config
             .listen
             .endpoints
-            .set(vec![format!("tls/127.0.0.1:{}", port).parse().unwrap()])
+            .set(vec![format!("tls/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -298,19 +298,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{cert_path}/serversidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{cert_path}/serverside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -328,7 +328,7 @@ client2name:client2passwd";
         config
             .listen
             .endpoints
-            .set(vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()])
+            .set(vec![format!("quic/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -351,19 +351,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{cert_path}/serversidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{cert_path}/serverside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config
     }
@@ -454,19 +454,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{cert_path}/serversidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{cert_path}/serverside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config
     }
@@ -504,19 +504,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -557,19 +557,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -615,19 +615,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
         let mut config = zenoh::Config::default();
@@ -660,19 +660,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
@@ -770,19 +770,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -822,19 +822,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)

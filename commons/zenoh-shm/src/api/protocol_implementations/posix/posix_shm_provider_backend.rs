@@ -91,12 +91,10 @@ impl PosixShmProviderBackendBuilder {
 
     /// Construct layout in-place from size (default alignment will be used)
     #[zenoh_macros::unstable_doc]
-    pub fn with_size(
-        self,
-        size: usize,
-    ) -> Result<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(size, AllocAlignment::default())?;
-        Ok(LayoutedPosixShmProviderBackendBuilder { layout })
+    pub fn with_size(self, size: usize) -> LayoutedPosixShmProviderBackendBuilder<MemoryLayout> {
+        // `unwrap` here should never fail. If it fails - check that the default alignment is 1
+        let layout = MemoryLayout::new(size, AllocAlignment::default()).unwrap();
+        LayoutedPosixShmProviderBackendBuilder { layout }
     }
 }
 

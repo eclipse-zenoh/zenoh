@@ -32,6 +32,6 @@ fn main() {
     let config: serde_json::Value = serde_json::from_str(&config).unwrap();
     if let Err(es) = validator.validate(&config) {
         let es = es.map(|e| e.to_string()).collect::<Vec<_>>().join("\n");
-        panic!("config.json5 schema validation error: {}", es);
+        panic!("config.json5 schema validation error: {es}");
     };
 }

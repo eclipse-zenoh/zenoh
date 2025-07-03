@@ -23,7 +23,6 @@ fn shm_bytes_single_buf() {
     // create an SHM backend...
     let backend = PosixShmProviderBackend::builder()
         .with_size(4096)
-        .unwrap()
         .wait()
         .unwrap();
     // ...and an SHM provider
