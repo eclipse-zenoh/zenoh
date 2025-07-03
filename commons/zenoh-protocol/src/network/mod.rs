@@ -150,17 +150,7 @@ pub trait NetworkMessageExt {
             return true;
         }
 
-        let cc = match self.body() {
-            NetworkBodyRef::Push(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBodyRef::Request(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBodyRef::Response(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBodyRef::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBodyRef::Interest(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBodyRef::Declare(msg) => msg.ext_qos.get_congestion_control(),
-            NetworkBodyRef::OAM(msg) => msg.ext_qos.get_congestion_control(),
-        };
-
-        cc == CongestionControl::Drop
+        self.congestion_control() == CongestionControl::Drop
     }
 
     #[inline]
@@ -173,6 +163,19 @@ pub trait NetworkMessageExt {
             NetworkBodyRef::Interest(msg) => msg.ext_qos.get_priority(),
             NetworkBodyRef::Declare(msg) => msg.ext_qos.get_priority(),
             NetworkBodyRef::OAM(msg) => msg.ext_qos.get_priority(),
+        }
+    }
+
+    #[inline]
+    fn congestion_control(&self) -> CongestionControl {
+        match self.body() {
+            NetworkBodyRef::Push(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Request(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Response(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::ResponseFinal(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Interest(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::Declare(msg) => msg.ext_qos.get_congestion_control(),
+            NetworkBodyRef::OAM(msg) => msg.ext_qos.get_congestion_control(),
         }
     }
 

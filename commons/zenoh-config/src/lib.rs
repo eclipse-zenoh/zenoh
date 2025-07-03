@@ -28,13 +28,20 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZeroU16, ops,
-    path::Path, sync::Weak,
+    any::Any,
+    collections::HashSet,
+    fmt,
+    io::Read,
+    net::SocketAddr,
+    num::NonZeroU16,
+    ops::{self, Range},
+    path::Path,
+    sync::Weak,
 };
 
 use include::recursive_include;
 use nonempty_collections::NEVec;
-use qos::{PublisherQoSConfList, QosOverwriteMessage, QosOverwrites};
+use qos::{PublisherQoSConfList, QosFilter, QosOverwriteMessage, QosOverwrites};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -197,6 +204,10 @@ pub struct QosOverwriteItemConf {
     pub overwrite: QosOverwrites,
     /// QosOverwrite flow directions: egress and/or ingress.
     pub flows: Option<NEVec<InterceptorFlow>>,
+    /// QoS filter to apply to the messages matching this item.
+    pub qos: Option<QosFilter>,
+    /// Size limit for the messages matching this item.
+    pub size: Option<Range<u64>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
