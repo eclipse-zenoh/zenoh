@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-#![cfg(feature = "internal_config")]
 
 use std::time::Duration;
 
