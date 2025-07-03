@@ -82,7 +82,7 @@ impl Plugin for StoragesPlugin {
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         zenoh::init_log_from_env_or("error");
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
-        let conf_json = runtime.get_config().get(&format!("plugins/{}", name))?;
+        let conf_json = runtime.get_config().get(&format!("plugins/{name}"))?;
         let conf: Value = serde_json::from_str(&conf_json)?;
         let config = PluginConfig::try_from((name, &conf))?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(

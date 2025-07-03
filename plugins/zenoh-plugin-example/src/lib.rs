@@ -88,7 +88,7 @@ impl Plugin for ExamplePlugin {
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        let config_string = runtime.get_config().get(&format!("plugins/{}", name))?;
+        let config_string = runtime.get_config().get(&format!("plugins/{name}"))?;
         let config: Value = serde_json::from_str(&config_string)?;
         let self_cfg = config.as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)

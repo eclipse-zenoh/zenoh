@@ -284,7 +284,7 @@ impl Plugin for RestPlugin {
 
         let plugin_conf = runtime
             .get_config()
-            .get(&format!("plugins/{}", name))
+            .get(&format!("plugins/{name}"))
             .map_err(|_| zerror!("Plugin `{}`: missing config", name))?;
 
         let conf = serde_json::from_str::<Config>(&plugin_conf)
