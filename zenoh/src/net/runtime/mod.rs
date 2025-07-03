@@ -387,7 +387,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
-                Ok(Arc::new(RuntimeSession {
+                Ok(Arc::new(RuntimeTransportPeerEventHandler {
                     runtime: runtime.clone(),
                     endpoint: std::sync::RwLock::new(None),
                     main_handler: runtime
@@ -428,14 +428,14 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     }
 }
 
-pub(super) struct RuntimeSession {
+pub(super) struct RuntimeTransportPeerEventHandler {
     pub(super) runtime: Runtime,
     pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
     pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
 
-impl TransportPeerEventHandler for RuntimeSession {
+impl TransportPeerEventHandler for RuntimeTransportPeerEventHandler {
     fn handle_message(&self, msg: NetworkMessageMut) -> ZResult<()> {
         self.main_handler.handle_message(msg)
     }

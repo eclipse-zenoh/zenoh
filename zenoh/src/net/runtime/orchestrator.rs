@@ -39,7 +39,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
-use super::{Runtime, RuntimeSession};
+use super::{Runtime, RuntimeTransportPeerEventHandler};
 use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo};
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
@@ -429,8 +429,8 @@ impl Runtime {
                 let should_close = if let Ok(Some(orch_transport)) = transport.get_callback() {
                     if let Some(orch_transport) = orch_transport
                         .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
+                        .downcast_ref::<super::RuntimeTransportPeerEventHandler>(
+                    ) {
                         if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
                             !peers.contains(endpoint)
                         } else {
@@ -452,8 +452,8 @@ impl Runtime {
                     if let Ok(Some(orch_transport)) = transport.get_callback() {
                         if let Some(orch_transport) = orch_transport
                             .as_any()
-                            .downcast_ref::<super::RuntimeSession>()
-                        {
+                            .downcast_ref::<super::RuntimeTransportPeerEventHandler>(
+                        ) {
                             if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
                                 return *endpoint == peer;
                             }
@@ -798,7 +798,7 @@ impl Runtime {
                             if let Ok(Some(orch_transport)) = transport.get_callback() {
                                 if let Some(orch_transport) = orch_transport
                                     .as_any()
-                                    .downcast_ref::<super::RuntimeSession>()
+                                    .downcast_ref::<super::RuntimeTransportPeerEventHandler>()
                                 {
                                     *zwrite!(orch_transport.endpoint) = Some(peer);
                                 }
@@ -1191,7 +1191,7 @@ impl Runtime {
         }
     }
 
-    pub(super) fn closed_session(session: &RuntimeSession) {
+    pub(super) fn closed_session(session: &RuntimeTransportPeerEventHandler) {
         if session.runtime.is_closed() {
             return;
         }
