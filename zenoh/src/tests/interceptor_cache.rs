@@ -156,8 +156,8 @@ async fn test_interceptors_cache_update_ingress() {
         .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27701);
-    config_router.set_id(router_id).unwrap();
+    let mut config_router = get_basic_router_config(27701).await;
+    config_router.set_id(Some(router_id)).unwrap();
 
     let config_client1 = get_basic_client_config(27701);
     let config_client2 = get_basic_client_config(27701);
@@ -246,8 +246,8 @@ async fn test_interceptors_cache_update_egress() {
         .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27702);
-    config_router.set_id(router_id).unwrap();
+    let mut config_router = get_basic_router_config(27702).await;
+    config_router.set_id(Some(router_id)).unwrap();
 
     let config_client1 = get_basic_client_config(27702);
     let config_client2 = get_basic_client_config(27702);
@@ -336,8 +336,8 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
         .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27703);
-    config_router.set_id(router_id).unwrap();
+    let mut config_router = get_basic_router_config(27703).await;
+    config_router.set_id(Some(router_id)).unwrap();
 
     let config_client1 = get_basic_client_config(27703);
     let config_client2 = get_basic_client_config(27703);

@@ -1979,12 +1979,17 @@ impl SessionInner {
         let matches = match matching_type {
             MatchingStatusType::Subscribers => {
                 crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    &tables, key_expr,
+                    router.tables.hat_code.as_ref(),
+                    &tables,
+                    key_expr,
                 )
             }
             MatchingStatusType::Queryables(complete) => {
                 crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    &tables, key_expr, complete,
+                    router.tables.hat_code.as_ref(),
+                    &tables,
+                    key_expr,
+                    complete,
                 )
             }
         };
@@ -2458,7 +2463,7 @@ impl SessionInner {
         key_expr: &WireExpr,
         parameters: &str,
         qid: RequestId,
-        _target: QueryTarget,
+        target: QueryTarget,
         _consolidation: ConsolidationMode,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
@@ -2480,6 +2485,8 @@ impl SessionInner {
                             |(_, queryable)|
                                 (queryable.origin == Locality::Any
                                     || (local == (queryable.origin == Locality::SessionLocal)))
+                                &&
+                                (queryable.complete || target != QueryTarget::AllComplete)
                                 &&
                                 match state.local_wireexpr_to_expr(&queryable.key_expr) {
                                     Ok(qablname) => {
@@ -2981,7 +2988,7 @@ impl Primitives for WeakSession {
                                     ) {
                                         Some(reply) => {
                                             if new_reply.result.as_ref().unwrap().timestamp
-                                                > reply.result.as_ref().unwrap().timestamp
+                                                >= reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
@@ -3019,7 +3026,7 @@ impl Primitives for WeakSession {
                                     ) {
                                         Some(reply) => {
                                             if new_reply.result.as_ref().unwrap().timestamp
-                                                > reply.result.as_ref().unwrap().timestamp
+                                                >= reply.result.as_ref().unwrap().timestamp
                                             {
                                                 query.replies.as_mut().unwrap().insert(
                                                     new_reply
@@ -3155,7 +3162,7 @@ impl crate::net::primitives::EPrimitives for WeakSession {
 /// use zenoh::session::ZenohId;
 ///
 /// let mut config = zenoh::Config::default();
-/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
+/// config.set_id(Some(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap()));
 /// config.connect.endpoints.set(
 ///     ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"].iter().map(|s|s.parse().unwrap()).collect());
 ///

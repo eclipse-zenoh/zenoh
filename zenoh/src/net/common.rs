@@ -13,9 +13,9 @@ pub(crate) struct AutoConnect {
 
 impl AutoConnect {
     /// Builds an `AutoConnect` from multicast config.
-    pub(crate) fn multicast(config: &Config, what: WhatAmI) -> Self {
+    pub(crate) fn multicast(config: &Config, what: WhatAmI, zid: ZenohIdProto) -> Self {
         Self {
-            zid: (*config.id()).into(),
+            zid,
             matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
             strategy: *unwrap_or_default!(config
                 .scouting()
@@ -26,13 +26,13 @@ impl AutoConnect {
     }
 
     /// Builds an `AutoConnect` from gossip config.
-    pub(crate) fn gossip(config: &Config, what: WhatAmI) -> Self {
+    pub(crate) fn gossip(config: &Config, what: WhatAmI, zid: ZenohIdProto) -> Self {
         Self {
-            zid: (*config.id()).into(),
-            matcher: *unwrap_or_default!(config.scouting().multicast().autoconnect().get(what)),
+            zid,
+            matcher: *unwrap_or_default!(config.scouting().gossip().autoconnect().get(what)),
             strategy: *unwrap_or_default!(config
                 .scouting()
-                .multicast()
+                .gossip()
                 .autoconnect_strategy()
                 .get(what)),
         }

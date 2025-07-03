@@ -205,7 +205,7 @@ async fn open_transport_unicast(
 
     // Create the listener on the router
     for e in server_endpoints.iter() {
-        println!("Add endpoint: {}", e);
+        println!("Add endpoint: {e}");
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
@@ -227,7 +227,7 @@ async fn open_transport_unicast(
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
-        println!("Opening transport with {}", e);
+        println!("Opening transport with {e}");
         let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
@@ -253,7 +253,7 @@ async fn close_transport(
     for e in endpoints.iter() {
         let _ = write!(ee, "{e} ");
     }
-    println!("Closing transport with {}", ee);
+    println!("Closing transport with {ee}");
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
@@ -264,7 +264,7 @@ async fn close_transport(
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        println!("Del locator: {}", e);
+        println!("Del locator: {e}");
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -285,7 +285,7 @@ async fn close_transport(
 }
 
 async fn test_transport(router_handler: Arc<SHRouter>, client_transport: TransportUnicast) {
-    println!("Sending {} messages...", MSG_COUNT);
+    println!("Sending {MSG_COUNT} messages...");
 
     ztimeout!(async {
         let mut sent = 0;
@@ -305,10 +305,7 @@ async fn test_transport(router_handler: Arc<SHRouter>, client_transport: Transpo
 }
 
 async fn run_single(client_endpoints: &[EndPoint], server_endpoints: &[EndPoint]) {
-    println!(
-        "\n>>> Running test for:  {:?}, {:?}",
-        client_endpoints, server_endpoints,
-    );
+    println!("\n>>> Running test for:  {client_endpoints:?}, {server_endpoints:?}",);
 
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
@@ -319,13 +316,13 @@ async fn run_single(client_endpoints: &[EndPoint], server_endpoints: &[EndPoint]
     #[cfg(feature = "stats")]
     {
         let c_stats = client_transport.get_stats().unwrap().report();
-        println!("\tClient: {:?}", c_stats);
+        println!("\tClient: {c_stats:?}");
         let r_stats = ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
             .unwrap()
             .get_stats()
             .map(|s| s.report())
             .unwrap();
-        println!("\tRouter: {:?}", r_stats);
+        println!("\tRouter: {r_stats:?}");
     }
 
     close_transport(

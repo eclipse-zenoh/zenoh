@@ -70,8 +70,12 @@ pub(crate) fn declare_token(
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    let mut res = Resource::make_resource(
+                        hat_code,
+                        &mut wtables,
+                        &mut prefix,
+                        expr.suffix.as_ref(),
+                    );
                     matches.push(Arc::downgrade(&res));
                     Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
@@ -131,6 +135,7 @@ pub(crate) fn undeclare_token(
                         drop(rtables);
                         let mut wtables = zwrite!(tables.tables);
                         let mut res = Resource::make_resource(
+                            hat_code,
                             &mut wtables,
                             &mut prefix,
                             expr.wire_expr.suffix.as_ref(),

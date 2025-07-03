@@ -14,7 +14,7 @@
 #![cfg(all(feature = "shared-memory", feature = "unstable"))]
 use zenoh::{
     bytes::ZBytes,
-    shm::{zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut, POSIX_PROTOCOL_ID},
+    shm::{zshmmut, PosixShmProviderBackend, ShmProviderBuilder, ZShm, ZShmMut},
     Wait,
 };
 
@@ -23,14 +23,10 @@ fn shm_bytes_single_buf() {
     // create an SHM backend...
     let backend = PosixShmProviderBackend::builder()
         .with_size(4096)
-        .unwrap()
         .wait()
         .unwrap();
     // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
+    let provider = ShmProviderBuilder::backend(backend).wait();
 
     // Prepare a layout for allocations
     let layout = provider.alloc(1024).into_layout().unwrap();

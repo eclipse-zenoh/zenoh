@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{atomic::AtomicU64, Arc};
+use std::{
+    hash::Hash,
+    ops::Deref,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use super::segment::MetadataSegment;
 use crate::header::chunk_header::ChunkHeaderType;
@@ -36,52 +40,13 @@ impl From<&OwnedMetadataDescriptor> for MetadataDescriptor {
 }
 
 #[derive(Clone)]
-pub struct OwnedMetadataDescriptor {
-    pub(crate) segment: Arc<MetadataSegment>,
-    header: &'static ChunkHeaderType,
+pub struct OwnedWatchdog {
     watchdog_atomic: &'static AtomicU64,
     watchdog_mask: u64,
 }
 
-impl OwnedMetadataDescriptor {
-    pub(crate) fn new(
-        segment: Arc<MetadataSegment>,
-        header: &'static ChunkHeaderType,
-        watchdog_atomic: &'static AtomicU64,
-        watchdog_mask: u64,
-    ) -> Self {
-        Self {
-            segment,
-            header,
-            watchdog_atomic,
-            watchdog_mask,
-        }
-    }
-
-    #[inline(always)]
-    pub fn header(&self) -> &ChunkHeaderType {
-        self.header
-    }
-
-    pub fn confirm(&self) {
-        self.watchdog_atomic
-            .fetch_or(self.watchdog_mask, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    pub(crate) fn validate(&self) -> u64 {
-        self.watchdog_atomic
-            .fetch_and(!self.watchdog_mask, std::sync::atomic::Ordering::SeqCst)
-            & self.watchdog_mask
-    }
-
-    #[cfg(feature = "test")]
-    pub fn test_validate(&self) -> u64 {
-        self.validate()
-    }
-}
-
 // The ordering strategy is important. See storage implementation for details
-impl Ord for OwnedMetadataDescriptor {
+impl Ord for OwnedWatchdog {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match self
             .watchdog_atomic
@@ -94,6 +59,92 @@ impl Ord for OwnedMetadataDescriptor {
     }
 }
 
+impl PartialOrd for OwnedWatchdog {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for OwnedWatchdog {
+    fn eq(&self, other: &Self) -> bool {
+        self.watchdog_atomic.as_ptr() == other.watchdog_atomic.as_ptr()
+            && self.watchdog_mask == other.watchdog_mask
+    }
+}
+impl Eq for OwnedWatchdog {}
+
+impl OwnedWatchdog {
+    pub fn new(watchdog_atomic: &'static AtomicU64, watchdog_mask: u64) -> Self {
+        Self {
+            watchdog_atomic,
+            watchdog_mask,
+        }
+    }
+
+    pub fn confirm(&self) {
+        self.watchdog_atomic
+            .fetch_or(self.watchdog_mask, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub(crate) fn validate(&self) -> u64 {
+        self.watchdog_atomic
+            .fetch_and(!self.watchdog_mask, std::sync::atomic::Ordering::SeqCst)
+            & self.watchdog_mask
+    }
+}
+
+#[derive(Clone)]
+pub struct OwnedMetadataDescriptor {
+    pub(crate) segment: Arc<MetadataSegment>,
+    header: &'static ChunkHeaderType,
+    watchdog: OwnedWatchdog,
+}
+
+impl Hash for OwnedMetadataDescriptor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (self.header as *const ChunkHeaderType).hash(state);
+    }
+}
+
+impl Deref for OwnedMetadataDescriptor {
+    type Target = OwnedWatchdog;
+
+    fn deref(&self) -> &Self::Target {
+        &self.watchdog
+    }
+}
+
+impl OwnedMetadataDescriptor {
+    pub(crate) fn new(
+        segment: Arc<MetadataSegment>,
+        header: &'static ChunkHeaderType,
+        watchdog: OwnedWatchdog,
+    ) -> Self {
+        Self {
+            segment,
+            header,
+            watchdog,
+        }
+    }
+
+    #[inline(always)]
+    pub fn header(&self) -> &ChunkHeaderType {
+        self.header
+    }
+
+    #[cfg(feature = "test")]
+    pub fn test_validate(&self) -> u64 {
+        self.validate()
+    }
+}
+
+// The ordering strategy is important. See storage implementation for details
+impl Ord for OwnedMetadataDescriptor {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.header as *const ChunkHeaderType).cmp(&(other.header as *const _))
+    }
+}
+
 impl PartialOrd for OwnedMetadataDescriptor {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
@@ -102,8 +153,7 @@ impl PartialOrd for OwnedMetadataDescriptor {
 
 impl PartialEq for OwnedMetadataDescriptor {
     fn eq(&self, other: &Self) -> bool {
-        self.watchdog_atomic.as_ptr() == other.watchdog_atomic.as_ptr()
-            && self.watchdog_mask == other.watchdog_mask
+        self.watchdog.eq(&other.watchdog)
     }
 }
 impl Eq for OwnedMetadataDescriptor {}

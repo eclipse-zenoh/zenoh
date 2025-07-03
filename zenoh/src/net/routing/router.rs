@@ -49,21 +49,23 @@ impl Router {
         hlc: Option<Arc<HLC>>,
         config: &Config,
     ) -> ZResult<Self> {
+        let hat_code = hat::new_hat(whatami, config);
         Ok(Router {
             // whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config)?),
-                ctrl_lock: Mutex::new(hat::new_hat(whatami, config)),
+                tables: RwLock::new(Tables::new(zid, whatami, hlc, config, hat_code.as_ref())?),
+                hat_code,
+                ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
             }),
         })
     }
 
     pub fn init_link_state(&mut self, runtime: Runtime) -> ZResult<()> {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         tables.runtime = Some(Runtime::downgrade(&runtime));
-        ctrl_lock.init(&mut tables, runtime)
+        self.tables.hat_code.init(&mut tables, runtime)
     }
 
     pub(crate) fn new_primitives(
@@ -89,7 +91,7 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
-                    ctrl_lock.new_face(),
+                    self.tables.hat_code.new_face(),
                     true,
                 )
             })
@@ -101,7 +103,8 @@ impl Router {
             state: newface,
         };
         let mut declares = vec![];
-        ctrl_lock
+        self.tables
+            .hat_code
             .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
                 declares.push((p.clone(), m))
             })
@@ -140,7 +143,7 @@ impl Router {
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
-                    ctrl_lock.new_face(),
+                    self.tables.hat_code.new_face(),
                     false,
                 )
             })
@@ -159,7 +162,7 @@ impl Router {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        ctrl_lock.new_transport_unicast_face(
+        self.tables.hat_code.new_transport_unicast_face(
             &mut tables,
             &self.tables,
             &mut face,
@@ -176,7 +179,7 @@ impl Router {
     }
 
     pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
@@ -190,7 +193,7 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
-            ctrl_lock.new_face(),
+            self.tables.hat_code.new_face(),
             false,
         );
         face.set_interceptors_from_factories(
@@ -212,7 +215,7 @@ impl Router {
         transport: TransportMulticast,
         peer: TransportPeer,
     ) -> ZResult<Arc<DeMux>> {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
@@ -226,7 +229,7 @@ impl Router {
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),
-            ctrl_lock.new_face(),
+            self.tables.hat_code.new_face(),
             false,
         );
         face_state.set_interceptors_from_factories(

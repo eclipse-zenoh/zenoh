@@ -14,6 +14,8 @@
 
 use std::{fmt::Display, num::NonZeroUsize};
 
+use zenoh_core::zerror;
+
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::zshmmut::ZShmMut;
 
@@ -35,6 +37,20 @@ impl From<zenoh_result::Error> for ZAllocError {
     }
 }
 
+impl From<ZAllocError> for zenoh_result::Error {
+    fn from(value: ZAllocError) -> Self {
+        zerror!(
+            "Allocation error: {}",
+            match value {
+                ZAllocError::NeedDefragment => "need defragmentation",
+                ZAllocError::OutOfMemory => "out of memory",
+                ZAllocError::Other => "other",
+            }
+        )
+        .into()
+    }
+}
+
 /// alignment in powers of 2: 0 == 1-byte alignment, 1 == 2byte, 2 == 4byte, 3 == 8byte etc
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -50,13 +66,16 @@ impl Display for AllocAlignment {
 
 impl Default for AllocAlignment {
     fn default() -> Self {
-        Self {
-            pow: std::mem::align_of::<u32>().ilog2() as _,
-        }
+        Self::ALIGN_1_BYTE
     }
 }
 
 impl AllocAlignment {
+    pub const ALIGN_1_BYTE: AllocAlignment = AllocAlignment { pow: 0 };
+    pub const ALIGN_2_BYTES: AllocAlignment = AllocAlignment { pow: 1 };
+    pub const ALIGN_4_BYTES: AllocAlignment = AllocAlignment { pow: 2 };
+    pub const ALIGN_8_BYTES: AllocAlignment = AllocAlignment { pow: 3 };
+
     /// Try to create a new AllocAlignment from alignment representation in powers of 2.
     ///
     /// # Errors
@@ -69,6 +88,20 @@ impl AllocAlignment {
         } else {
             Err(ZLayoutError::IncorrectLayoutArgs)
         }
+    }
+
+    /// Create a new AllocAlignment for value type
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_val<T: Sized>(_: &T) -> Self {
+        Self::for_type::<T>()
+    }
+
+    /// Create a new AllocAlignment for type
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_type<T: Sized>() -> Self {
+        let align = std::mem::align_of::<T>();
+        let pow = align.trailing_zeros() as u8;
+        Self { pow }
     }
 
     /// Get alignment in normal units (bytes)
@@ -221,6 +254,19 @@ pub enum ZLayoutError {
     ProviderIncompatibleLayout,
 }
 
+impl From<ZLayoutError> for zenoh_result::Error {
+    fn from(value: ZLayoutError) -> Self {
+        zerror!(
+            "Layouting error: {}",
+            match value {
+                ZLayoutError::IncorrectLayoutArgs => "Incorrect layout arguments",
+                ZLayoutError::ProviderIncompatibleLayout => "Layout is incompatible with provider",
+            }
+        )
+        .into()
+    }
+}
+
 /// SHM chunk allocation result
 #[zenoh_macros::unstable_doc]
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
@@ -237,6 +283,15 @@ pub enum ZLayoutAllocError {
     Alloc(ZAllocError),
     /// Layout error.
     Layout(ZLayoutError),
+}
+
+impl From<ZLayoutAllocError> for zenoh_result::Error {
+    fn from(value: ZLayoutAllocError) -> Self {
+        match value {
+            ZLayoutAllocError::Alloc(alloc) => alloc.into(),
+            ZLayoutAllocError::Layout(layout) => layout.into(),
+        }
+    }
 }
 
 /// SHM buffer layouting and allocation result
