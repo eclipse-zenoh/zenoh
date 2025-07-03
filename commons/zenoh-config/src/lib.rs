@@ -904,6 +904,97 @@ fn config_deser() {
             .unwrap(),
     )
         .unwrap_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: "foo",
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    );
+    assert!(config.is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: +8,
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    );
+    assert!(config.is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: "data_high",
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().overwrite.priority,
+        Some(qos::PriorityUpdateConf::Priority(
+            qos::PriorityConf::DataHigh
+        ))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: +1,
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().overwrite.priority,
+        Some(qos::PriorityUpdateConf::Increment(1))
+    );
+
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 

@@ -75,7 +75,7 @@ impl From<CongestionControl> for CongestionControlConf {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PriorityConf {
     RealTime = 1,
@@ -101,7 +101,7 @@ impl From<PriorityConf> for Priority {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PriorityUpdateConf {
     Priority(PriorityConf),
     Increment(i8),
@@ -141,11 +141,21 @@ impl<'a> serde::Deserialize<'a> for PriorityUpdateConf {
                     .map(PriorityUpdateConf::Priority)
             }
 
-            fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
-                Ok(PriorityUpdateConf::Increment(v))
+                if v > 7 {
+                    Err(serde::de::Error::custom(
+                        "invalid priority increment (> +7)",
+                    ))
+                } else if v < -7 {
+                    Err(serde::de::Error::custom(
+                        "invalid priority increment (< -7)",
+                    ))
+                } else {
+                    Ok(PriorityUpdateConf::Increment(v as i8))
+                }
             }
         }
         deserializer.deserialize_any(PriorityOrIncrement(std::marker::PhantomData))
