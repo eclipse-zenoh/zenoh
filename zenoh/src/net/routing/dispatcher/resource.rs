@@ -41,7 +41,6 @@ use super::{
 };
 use crate::net::routing::{
     dispatcher::{face::Face, tables::HatsCode},
-    hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,

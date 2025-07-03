@@ -317,7 +317,11 @@ pub fn route_data(
                 inc_stats!(face, rx, admin, msg.payload);
             }
 
-            if tables_ref.hat_code.ew.ingress_filter(&tables, face, &mut expr) {
+            if tables_ref
+                .hat_code
+                .ew
+                .ingress_filter(&tables, face, &mut expr)
+            {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
                 let route = get_data_route(

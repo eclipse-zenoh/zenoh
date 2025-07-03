@@ -168,7 +168,7 @@ impl Tables {
     }
 }
 
-pub(crate)  struct HatsCode {
+pub(crate) struct HatsCode {
     pub(crate) ew: Box<dyn HatTrait + Send + Sync>,
     pub(crate) south: Box<dyn HatTrait + Send + Sync>,
 }

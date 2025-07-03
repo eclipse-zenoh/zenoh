@@ -27,10 +27,7 @@ use super::{
     face::FaceState,
     tables::{NodeId, TablesLock},
 };
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::Resource,
-};
+use crate::net::routing::{hat::SendDeclare, router::Resource};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_token(
@@ -155,13 +152,14 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    if let Some(res) =
-        tables
-            .hat_code
-            .ew
-            .as_ref()
-            .undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
-    {
+    if let Some(res) = tables.hat_code.ew.as_ref().undeclare_token(
+        &mut wtables,
+        face,
+        id,
+        res,
+        node_id,
+        send_declare,
+    ) {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
     } else {
         // NOTE: This is expected behavior if liveliness tokens are denied with ingress ACL interceptor.

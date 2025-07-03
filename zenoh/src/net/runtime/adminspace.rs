@@ -716,7 +716,10 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     let rtables = zread!(tables.tables);
 
     if let Err(e) = query
-        .reply(reply_key, tables.hat_code.ew.info(&rtables, WhatAmI::Router))
+        .reply(
+            reply_key,
+            tables.hat_code.ew.info(&rtables, WhatAmI::Router),
+        )
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
@@ -862,7 +865,11 @@ fn route_successor(context: &AdminContext, query: Query) {
     let suffix = query.key_expr().as_str().strip_prefix(&prefix);
     if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
         if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
-            if let Some(successor) = tables.hat_code.ew.route_successor(&rtables, src_zid, dst_zid) {
+            if let Some(successor) = tables
+                .hat_code
+                .ew
+                .route_successor(&rtables, src_zid, dst_zid)
+            {
                 reply(query.key_expr(), successor);
                 return;
             }
