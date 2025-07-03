@@ -4512,8 +4512,8 @@ async fn test_liveliness_issue_1470() {
     zenoh_util::init_log_from_env_or("error");
 
     let router0 = {
-        let mut c = zenoh::Config::default();
-        c.set_id(Some(ZenohId::from_str("a0").unwrap())).unwrap();
+        let mut c = zenoh_config::Config::default();
+        c.set_id(ZenohId::from_str("a0").unwrap()).unwrap();
         c.listen
             .endpoints
             .set(vec![ROUTER0_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4530,8 +4530,8 @@ async fn test_liveliness_issue_1470() {
     tokio::time::sleep(SLEEP).await;
 
     let router1 = {
-        let mut c = zenoh::Config::default();
-        c.set_id(Some(ZenohId::from_str("a1").unwrap())).unwrap();
+        let mut c = zenoh_config::Config::default();
+        c.set_id(ZenohId::from_str("a1").unwrap()).unwrap();
         c.listen
             .endpoints
             .set(vec![ROUTER1_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4552,8 +4552,8 @@ async fn test_liveliness_issue_1470() {
     tokio::time::sleep(SLEEP).await;
 
     let peer = {
-        let mut c = zenoh::Config::default();
-        c.set_id(Some(ZenohId::from_str("b").unwrap())).unwrap();
+        let mut c = zenoh_config::Config::default();
+        c.set_id(ZenohId::from_str("b").unwrap()).unwrap();
         c.listen
             .endpoints
             .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4574,8 +4574,8 @@ async fn test_liveliness_issue_1470() {
     tokio::time::sleep(SLEEP).await;
 
     let client0 = {
-        let mut c = zenoh::Config::default();
-        c.set_id(Some(ZenohId::from_str("c0").unwrap())).unwrap();
+        let mut c = zenoh_config::Config::default();
+        c.set_id(ZenohId::from_str("c0").unwrap()).unwrap();
         c.connect
             .endpoints
             .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4620,8 +4620,8 @@ async fn test_liveliness_issue_1470() {
     client0.close().await.unwrap();
 
     let client1 = {
-        let mut c = zenoh::Config::default();
-        c.set_id(Some(ZenohId::from_str("c1").unwrap())).unwrap();
+        let mut c = zenoh_config::Config::default();
+        c.set_id(ZenohId::from_str("c1").unwrap()).unwrap();
         c.connect
             .endpoints
             .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
