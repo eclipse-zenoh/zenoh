@@ -18,6 +18,12 @@ use zenoh_protocol::core::{key_expr::OwnedKeyExpr, CongestionControl, Priority, 
 #[derive(Debug, Deserialize, Default, Serialize, Clone)]
 pub struct PublisherQoSConfList(pub(crate) Vec<PublisherQoSConf>);
 
+impl From<Vec<PublisherQoSConf>> for PublisherQoSConfList {
+    fn from(value: Vec<PublisherQoSConf>) -> Self {
+        PublisherQoSConfList(value)
+    }
+}
+
 impl From<PublisherQoSConfList> for KeBoxTree<PublisherQoSConfig> {
     fn from(value: PublisherQoSConfList) -> KeBoxTree<PublisherQoSConfig> {
         let mut tree = KeBoxTree::new();
@@ -32,7 +38,7 @@ impl From<PublisherQoSConfList> for KeBoxTree<PublisherQoSConfig> {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub(crate) struct PublisherQoSConf {
+pub struct PublisherQoSConf {
     pub key_exprs: Vec<OwnedKeyExpr>,
     pub config: PublisherQoSConfig,
 }

@@ -460,6 +460,25 @@ pub mod time {
 /// in the zenoh repository.
 ///
 pub mod config {
+    // TODO: make sure everything is re-exported and create a module tree
+    #[zenoh_macros::unstable]
+    pub use zenoh_config::{
+        qos::{
+            CongestionControlConf, PriorityConf, PublisherLocalityConf, PublisherQoSConf,
+            PublisherQoSConfList, PublisherQoSConfig, ReliabilityConf,
+        },
+        AdminSpaceConf, AggregationConf, AuthConf, AutoConnectStrategy, BatchingConf,
+        CompressionMulticastConf, CompressionUnicastConf, CongestionControlBlockConf,
+        CongestionControlDropConf, ConnectConfig, ConnectionRetryConf,
+        ConnectionRetryModeDependentConf, DownsamplingItemConf, GossipConf, InterestsConf,
+        LinkRxConf, LinkTxConf, LinkstateConf, ListenConfig, ModeDependentValue, OpenConf,
+        PeerRoutingConf, PermissionsConf, PubKeyConf, QoSConfig, QoSMulticastConf, QoSUnicastConf,
+        QosOverwriteItemConf, QueueAllocConf, QueueAllocMode, QueueConf, QueueSizeConf,
+        ReturnConditionsConf, RouterRoutingConf, RoutingConf, ScoutingConf, ScoutingMulticastConf,
+        SecretValue, ShmConf, ShmInitMode, TLSConf, TargetDependentValue, TcpConf,
+        TimestampingConf, TransportConf, TransportLinkConf, TransportMulticastConf,
+        TransportUnicastConf, TransportWeight, UnixPipeConf, UsrPwdConf,
+    };
     pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
     pub use crate::api::config::Config;
