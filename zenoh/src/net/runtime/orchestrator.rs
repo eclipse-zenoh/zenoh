@@ -197,7 +197,7 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
-                AutoConnect::multicast(guard, WhatAmI::Peer),
+                AutoConnect::multicast(guard, WhatAmI::Peer, self.zid().into()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
@@ -245,7 +245,7 @@ impl Runtime {
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().router()),
-                AutoConnect::multicast(guard, WhatAmI::Router),
+                AutoConnect::multicast(guard, WhatAmI::Router, self.zid().into()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
@@ -1242,15 +1242,17 @@ impl Runtime {
     #[allow(dead_code)]
     pub(crate) fn update_network(&self) -> ZResult<()> {
         let router = self.router();
+        let _ctrl_lock = zlock!(router.tables.ctrl_lock);
         let mut tables = zwrite!(router.tables.tables);
-        let hat_code = tables.hat_code.clone();
-        hat_code.update_from_config(&mut tables, &router.tables, self)
+        router
+            .tables
+            .hat_code
+            .update_from_config(&mut tables, &router.tables, self)
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        let hat_code = tables.hat_code.clone();
-        hat_code.links_info(&tables)
+        router.tables.hat_code.links_info(&tables)
     }
 }

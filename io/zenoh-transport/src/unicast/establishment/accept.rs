@@ -827,7 +827,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         reliability: state.transport.ext_qos.reliability(),
     };
     let a_link = link.reconfigure(a_config);
-    let s_link = format!("{:?}", a_link);
+    let s_link = format!("{a_link:?}");
     let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack));
     let _transport = manager
         .init_transport_unicast(

@@ -17,7 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use zenoh_shm::watchdog::periodic_task::PeriodicTask;
+use zenoh_shm::watchdog::periodic_task::{PeriodicTask, TaskWakeReason};
 
 pub mod common;
 use common::CpuLoad;
@@ -26,8 +26,8 @@ const TASK_PERIOD: Duration = Duration::from_millis(50);
 const TASK_DELTA: Duration = Duration::from_millis(5);
 const TEST_TASK: Duration = Duration::from_millis(10);
 
-fn intensive_payload(duration: Duration) -> impl Fn() + Send + 'static {
-    move || {
+fn intensive_payload(duration: Duration) -> impl Fn(TaskWakeReason) + Send + 'static {
+    move |_| {
         let start = Instant::now();
         while start.elapsed() < duration {
             for _i in 0..100 {}
@@ -35,8 +35,8 @@ fn intensive_payload(duration: Duration) -> impl Fn() + Send + 'static {
     }
 }
 
-fn blocking_payload(duration: Duration) -> impl Fn() + Send + 'static {
-    move || {
+fn blocking_payload(duration: Duration) -> impl Fn(TaskWakeReason) + Send + 'static {
+    move |_| {
         std::thread::sleep(duration);
     }
 }
@@ -50,19 +50,19 @@ fn check_duration(duration: &Duration) {
 
 fn make_task<F>(task_payload: F) -> (PeriodicTask, Arc<Mutex<Vec<Duration>>>)
 where
-    F: Fn() + Send + 'static,
+    F: Fn(TaskWakeReason) + Send + 'static,
 {
     let intervals = Arc::new(Mutex::new(vec![]));
 
     let c_intervals = intervals.clone();
     let mut start: Option<Instant> = None;
-    let task = PeriodicTask::new("test".to_owned(), TASK_PERIOD, move || {
+    let task = PeriodicTask::new("test".to_owned(), TASK_PERIOD, move |reason| {
         if let Some(val) = &start {
             let elapsed = val.elapsed();
             c_intervals.lock().unwrap().push(elapsed);
         }
         start = Some(Instant::now());
-        task_payload();
+        task_payload(reason);
     });
 
     (task, intervals)
@@ -71,12 +71,12 @@ where
 #[test]
 #[ignore]
 fn periodic_task_create() {
-    let (_task, _intervals) = make_task(|| {});
+    let (_task, _intervals) = make_task(|_| {});
 }
 
 fn check_task<F>(task_payload: F)
 where
-    F: Fn() + Send + 'static,
+    F: Fn(TaskWakeReason) + Send + 'static,
 {
     let n = 100;
     let (task, intervals) = make_task(task_payload);
@@ -93,7 +93,7 @@ where
 #[test]
 #[ignore]
 fn periodic_task_lightweight() {
-    check_task(|| {});
+    check_task(|_| {});
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn periodic_task_intensive() {
 #[ignore]
 fn periodic_task_low_load_lightweight() {
     let _load = CpuLoad::low();
-    check_task(|| {});
+    check_task(|_| {});
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn periodic_task_low_load_intensive() {
 #[ignore]
 fn periodic_task_optimal_high_load_lightweight() {
     let _load = CpuLoad::optimal_high();
-    check_task(|| {});
+    check_task(|_| {});
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn periodic_task_optimal_high_load_intensive() {
 #[ignore]
 fn periodic_task_excessive_load_lightweight() {
     let _load = CpuLoad::excessive();
-    check_task(|| {});
+    check_task(|_| {});
 }
 
 #[test]

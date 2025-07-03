@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Debug, sync::atomic::AtomicPtr};
+use std::fmt::Debug;
 
 use zenoh_result::ZResult;
 
@@ -23,5 +23,5 @@ use crate::api::common::types::ChunkID;
 pub trait ShmSegment: Debug + Send + Sync {
     /// Obtain the actual region of memory identified by it's id
     #[zenoh_macros::unstable_doc]
-    fn map(&self, chunk: ChunkID) -> ZResult<AtomicPtr<u8>>;
+    fn map(&self, chunk: ChunkID) -> ZResult<*mut u8>;
 }

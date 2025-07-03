@@ -94,6 +94,8 @@ const_format = "0.2.33"
 criterion = "0.5"
 crossbeam-utils = "0.8.20"
 crossbeam-queue = "0.3.12"
+crossbeam-channel = "0.5"
+static_assertions = "1.1.0"
 derive_more = { version = "1.0.0", features = ["as_ref"] }
 derive-new = "0.7.0"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
@@ -107,7 +109,7 @@ getrandom = { version = "0.2" }
 hashbrown = "0.14"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
-home = "=0.5.9"
+home = "0.5.9"
 http-types = "2.12.0"
 humantime = "2.1.0"
 itertools = "0.13.0"
@@ -195,6 +197,7 @@ z-serial = "0.3.1"
 either = "1.13.0"
 prost = "0.13.2"
 tls-listener = { version = "0.11.0", features = ["rustls-ring"] }
+windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_IO"] }
 zenoh-ext = { version = "=1.4.0", path = "zenoh-ext", default-features = false }
 zenoh-shm = { version = "=1.4.0", path = "commons/zenoh-shm" }
 zenoh-result = { version = "=1.4.0", path = "commons/zenoh-result", default-features = false }

@@ -1526,7 +1526,6 @@ impl HatQueriesTrait for HatCode {
             key_expr,
             complete
         );
-        crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(tables, key_expr);
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()

@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod descriptor;
+use crate::api::common::types::ProtocolID;
 
-tested_crate_module!(storage);
-tested_crate_module!(subscription);
-
-pub(crate) mod allocated_descriptor;
-pub(crate) mod segment;
+/// Trait for pinning types to specific ProtocolID
+#[zenoh_macros::unstable_doc]
+pub trait WithProtocolID {
+    fn id(&self) -> ProtocolID;
+}

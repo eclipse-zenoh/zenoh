@@ -16,9 +16,10 @@ use std::sync::atomic::AtomicU64;
 
 use zenoh_result::ZResult;
 
-use super::descriptor::{MetadataIndex, MetadataSegmentID};
+use super::descriptor::{MetadataIndex, MetadataSegmentID, OwnedWatchdog};
 use crate::{header::chunk_header::ChunkHeaderType, posix_shm::struct_in_shm::StructInSHM};
 
+#[derive(Debug)]
 #[stabby::stabby]
 pub struct Metadata<const S: usize> {
     headers: [ChunkHeaderType; S],
@@ -35,13 +36,15 @@ impl<const S: usize> Metadata<S> {
     pub unsafe fn fast_elem_compute(
         &self,
         index: MetadataIndex,
-    ) -> (&'static ChunkHeaderType, &'static AtomicU64, u64) {
+    ) -> (&'static ChunkHeaderType, OwnedWatchdog) {
         let watchdog_index = index / 64;
         let watchdog_mask_index = index % 64;
         (
             &*(self.headers.as_ptr().offset(index as isize)),
-            &*(self.watchdogs.as_ptr().offset(watchdog_index as isize)),
-            1u64 << watchdog_mask_index,
+            OwnedWatchdog::new(
+                &*(self.watchdogs.as_ptr().offset(watchdog_index as isize)),
+                1u64 << watchdog_mask_index,
+            ),
         )
     }
 
@@ -51,6 +54,7 @@ impl<const S: usize> Metadata<S> {
     }
 }
 
+#[derive(Debug)]
 pub struct MetadataSegment<const S: usize = 32768> {
     pub data: StructInSHM<MetadataSegmentID, Metadata<S>>,
 }

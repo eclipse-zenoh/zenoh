@@ -195,7 +195,7 @@ impl HatBaseTrait for HatCode {
             bail!("\"client\" is not allowed as gossip target")
         }
         let autoconnect = if gossip {
-            AutoConnect::gossip(config, whatami)
+            AutoConnect::gossip(config, whatami, runtime.zid().into())
         } else {
             AutoConnect::disabled()
         };
