@@ -169,7 +169,7 @@ impl ZenohParameters for Parameters<'_> {
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         let mut time_range: Option<TimeRange> = time_range.into();
         match time_range.take() {
-            Some(tr) => self.insert(Self::TIME_RANGE_KEY, format!("{}", tr)),
+            Some(tr) => self.insert(Self::TIME_RANGE_KEY, format!("{tr}")),
             None => self.remove(Self::TIME_RANGE_KEY),
         };
     }
@@ -332,9 +332,9 @@ fn selector_accessors() {
         assert_eq!(key_expr.as_str(), "hello/there");
         let mut parameters = parameters.into_owned();
 
-        println!("Parameters start: {}", parameters);
+        println!("Parameters start: {parameters}");
         for i in parameters.iter() {
-            println!("\t{:?}", i);
+            println!("\t{i:?}");
         }
 
         assert_eq!(parameters.get("_timetrick").unwrap(), "");
@@ -370,9 +370,9 @@ fn selector_accessors() {
 
         parameters.insert(ANYKE, "");
 
-        println!("Parameters end: {}", parameters);
+        println!("Parameters end: {parameters}");
         for i in parameters.iter() {
-            println!("\t{:?}", i);
+            println!("\t{i:?}");
         }
 
         assert_eq!(

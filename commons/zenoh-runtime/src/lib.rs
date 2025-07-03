@@ -76,7 +76,7 @@ impl RuntimeParam {
                     .get(&zrt)
                     .unwrap()
                     .fetch_add(1, Ordering::SeqCst);
-                format!("{}-{}", zrt, id)
+                format!("{zrt}-{id}")
             })
             .build()?;
         Ok(rt)

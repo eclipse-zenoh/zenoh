@@ -19,13 +19,23 @@ use zenoh_result::ZResult;
 use super::posix_shm_segment::PosixShmSegment;
 use crate::api::{
     client::{shm_client::ShmClient, shm_segment::ShmSegment},
-    common::types::SegmentID,
+    common::{
+        types::{ProtocolID, SegmentID},
+        with_id::WithProtocolID,
+    },
+    protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
 };
 
 /// Client factory implementation for particular shared memory protocol
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct PosixShmClient;
+
+impl WithProtocolID for PosixShmClient {
+    fn id(&self) -> ProtocolID {
+        POSIX_PROTOCOL_ID
+    }
+}
 
 impl ShmClient for PosixShmClient {
     /// Attach to particular shared memory segment

@@ -98,7 +98,7 @@ fn parse_args() -> Config {
         Some(Ok(mode)) => {
             config.set_mode(Some(mode)).unwrap();
         }
-        Some(Err(e)) => panic!("Invalid mode: {}", e),
+        Some(Err(e)) => panic!("Invalid mode: {e}"),
         None => {}
     };
     if let Some(values) = args.get_many::<&String>("connect") {

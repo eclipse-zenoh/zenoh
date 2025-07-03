@@ -121,7 +121,7 @@ impl TransportPeerEventHandler for DeMux {
                     let mut declares = vec![];
                     let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
                     let mut tables = zwrite!(self.face.tables.tables);
-                    ctrl_lock.handle_oam(
+                    self.face.tables.hat_code.handle_oam(
                         &mut tables,
                         &self.face.tables,
                         m,

@@ -77,8 +77,12 @@ pub(crate) fn declare_subscription(
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    let mut res = Resource::make_resource(
+                        hat_code,
+                        &mut wtables,
+                        &mut prefix,
+                        expr.suffix.as_ref(),
+                    );
                     matches.push(Arc::downgrade(&res));
                     Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
@@ -208,15 +212,16 @@ macro_rules! treat_timestamp {
 
 #[inline]
 fn get_data_route(
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     face: &FaceState,
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<Route> {
-    let hat = &tables.hat_code;
-    let local_context = hat.map_routing_context(tables, face, routing_context);
-    let mut compute_route = || hat.compute_data_route(tables, expr, local_context, face.whatami);
+    let local_context = hat_code.map_routing_context(tables, face, routing_context);
+    let mut compute_route =
+        || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
     if let Some(data_routes) = res
         .as_ref()
         .and_then(|res| res.context.as_ref())
@@ -236,10 +241,11 @@ fn get_data_route(
 #[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_matching_subscriptions(
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
 ) -> HashMap<usize, Arc<FaceState>> {
-    tables.hat_code.get_matching_subscriptions(tables, key_expr)
+    hat_code.get_matching_subscriptions(tables, key_expr)
 }
 
 #[cfg(feature = "stats")]
@@ -308,17 +314,24 @@ pub fn route_data(
                 inc_stats!(face, rx, admin, msg.payload);
             }
 
-            if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
+            if tables_ref.hat_code.ingress_filter(&tables, face, &mut expr) {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route = get_data_route(&tables, face, &res, &mut expr, msg.ext_nodeid.node_id);
+                let route = get_data_route(
+                    tables_ref.hat_code.as_ref(),
+                    &tables,
+                    face,
+                    &res,
+                    &mut expr,
+                    msg.ext_nodeid.node_id,
+                );
 
                 if !route.is_empty() {
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
                         let (outface, key_expr, context) = route.values().next().unwrap();
-                        if tables
+                        if tables_ref
                             .hat_code
                             .egress_filter(&tables, face, outface, &mut expr)
                         {
@@ -337,7 +350,7 @@ pub fn route_data(
                         let route = route
                             .values()
                             .filter(|(outface, _key_expr, _context)| {
-                                tables
+                                tables_ref
                                     .hat_code
                                     .egress_filter(&tables, face, outface, &mut expr)
                             })

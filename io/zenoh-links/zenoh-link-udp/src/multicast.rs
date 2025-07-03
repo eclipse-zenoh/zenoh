@@ -203,14 +203,12 @@ impl LinkManagerMulticastUdp {
             match (bind_addr, mcast_addr) {
                 (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
                     return Err(Box::from(format!(
-                        "Protocols must match: Cannot bind to IPv6 {} and join IPv4 {}",
-                        local, dest
+                        "Protocols must match: Cannot bind to IPv6 {local} and join IPv4 {dest}"
                     )));
                 }
                 (SocketAddr::V4(local), SocketAddr::V6(dest)) => {
                     return Err(Box::from(format!(
-                        "Protocols must match: Cannot bind to IPv4 {} and join IPv6 {}",
-                        local, dest
+                        "Protocols must match: Cannot bind to IPv4 {local} and join IPv6 {dest}"
                     )));
                 }
                 _ => bind_addr, // No issue here

@@ -73,14 +73,12 @@ impl<'a> TcpSocketConfig<'a> {
             match (bind_addr, dst_addr) {
                 (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
                     return Err(Box::from(format!(
-                        "Protocols must match: Cannot bind to IPv6 {} and connect to IPv4 {}",
-                        local, dest
+                        "Protocols must match: Cannot bind to IPv6 {local} and connect to IPv4 {dest}",
                     )));
                 }
                 (SocketAddr::V4(local), SocketAddr::V6(dest)) => {
                     return Err(Box::from(format!(
-                        "Protocols must match: Cannot bind to IPv4 {} and connect to IPv6 {}",
-                        local, dest
+                        "Protocols must match: Cannot bind to IPv4 {local} and connect to IPv6 {dest}",
                     )));
                 }
                 _ => (), // No issue here

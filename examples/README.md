@@ -317,3 +317,11 @@
 ### z_bytes
 
    Show how to serialize different message types into ZBytes, and then deserialize from ZBytes to the original message types.
+
+### z_bytes_shm
+
+   Show how to work with SHM buffers: mut and const access, buffer ownership concepts
+
+### z_alloc_shm
+
+   Show how to allocate SHM buffers

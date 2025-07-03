@@ -15,11 +15,12 @@ use super::{
     chunk::ChunkDescriptor,
     types::{ChunkAllocResult, MemoryLayout, ZLayoutError},
 };
+use crate::api::common::with_id::WithProtocolID;
 
 /// The provider backend trait
 /// Implement this interface to create a Zenoh-compatible shared memory provider
 #[zenoh_macros::unstable_doc]
-pub trait ShmProviderBackend {
+pub trait ShmProviderBackend: WithProtocolID {
     /// Allocate the chunk of desired size.
     /// If successful, the result's chunk size will be >= len
     #[zenoh_macros::unstable_doc]

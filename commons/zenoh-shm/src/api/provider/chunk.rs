@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{num::NonZeroUsize, sync::atomic::AtomicPtr};
+use std::num::NonZeroUsize;
 
-use crate::api::common::types::{ChunkID, SegmentID};
+use crate::api::common::types::{ChunkID, PtrInSegment, SegmentID};
 
 /// Uniquely identifies the particular chunk within particular segment
 #[zenoh_macros::unstable_doc]
@@ -42,13 +42,13 @@ impl ChunkDescriptor {
 #[zenoh_macros::unstable_doc]
 pub struct AllocatedChunk {
     pub descriptor: ChunkDescriptor,
-    pub data: AtomicPtr<u8>,
+    pub data: PtrInSegment,
 }
 
 impl AllocatedChunk {
     /// Create a new Allocated Chunk
     #[zenoh_macros::unstable_doc]
-    pub fn new(descriptor: ChunkDescriptor, data: AtomicPtr<u8>) -> Self {
+    pub fn new(descriptor: ChunkDescriptor, data: PtrInSegment) -> Self {
         Self { descriptor, data }
     }
 }

@@ -31,18 +31,19 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Sending Query '{selector}'...");
-    let replies = session
+    let mut builder = session
         .get(&selector)
         // // By default get receives replies from a FIFO.
         // // Uncomment this line to use a ring channel instead.
         // // More information on the ring channel are available in the z_pull example.
         // .with(zenoh::handlers::RingChannel::default())
         // Refer to z_bytes.rs to see how to serialize different types of message
-        .payload(payload.unwrap_or_default())
         .target(target)
-        .timeout(timeout)
-        .await
-        .unwrap();
+        .timeout(timeout);
+    if let Some(payload) = payload {
+        builder = builder.payload(payload);
+    }
+    let replies = builder.await.unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.result() {
             Ok(sample) => {
@@ -62,7 +63,7 @@ async fn main() {
                     .payload()
                     .try_to_string()
                     .unwrap_or_else(|e| e.to_string().into());
-                println!(">> Received (ERROR: '{}')", payload);
+                println!(">> Received (ERROR: '{payload}')");
             }
         }
     }

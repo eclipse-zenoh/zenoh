@@ -204,15 +204,15 @@ async fn openclose_transport(
                 println!("Router dst {:?}", router_links[0].dst);
                 println!("Client src {:?}", client_links[0].src);
                 println!("Client dst {:?}", client_links[0].dst);
-                println!("Bind Addr {:?}", bind_addr);
+                println!("Bind Addr {bind_addr:?}");
 
                 if bind_addr.as_str().contains("localhost") {
                     let mut iter = bind_addr.as_str().split(":");
                     let _host = iter.next();
                     let port = iter.next().unwrap();
                     // Create representation for Localhost in v4 and v6
-                    let lh_ipv4 = format!("127.0.0.1:{}", port);
-                    let lh_ipv6 = format!("[::1]:{}", port);
+                    let lh_ipv4 = format!("127.0.0.1:{port}");
+                    let lh_ipv6 = format!("[::1]:{port}");
                     // Create addr for Localhost in v4 and v6
                     let addr_ipv4 = Address::from(lh_ipv4.as_str());
                     let addr_ipv6 = Address::from(lh_ipv6.as_str());

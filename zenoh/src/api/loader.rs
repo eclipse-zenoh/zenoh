@@ -63,9 +63,9 @@ pub(crate) fn load_plugins(config: &Config) -> PluginsManager {
         );
         if let Err(e) = load_plugin(&mut manager, &name, &id, &paths, required) {
             if required {
-                panic!("Plugin load failure: {}", e)
+                panic!("Plugin load failure: {e}")
             } else {
-                tracing::error!("Plugin load failure: {}", e)
+                tracing::error!("Plugin load failure: {e}")
             }
         }
     }

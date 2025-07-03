@@ -136,10 +136,7 @@ where
 
             values.remove(k);
             if let Some(include_values) = v.as_object_mut() {
-                let title = format!(
-                    "{}.{} -> {}::{}",
-                    title, include_property_name, include_path, k
-                );
+                let title = format!("{title}.{include_property_name} -> {include_path}::{k}");
                 recursive_include(
                     title.as_str(),
                     include_values,
@@ -157,7 +154,7 @@ where
     // process remaining object values
     for (k, v) in values.iter_mut() {
         if let Some(object) = v.as_object_mut() {
-            let title = format!("{}.{}", title, k);
+            let title = format!("{title}.{k}");
             recursive_include(
                 title.as_str(),
                 object,

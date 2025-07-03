@@ -542,24 +542,24 @@ pub mod shm {
         cleanup::cleanup_orphaned_shm_segments,
         client::{shm_client::ShmClient, shm_segment::ShmSegment},
         client_storage::{ShmClientStorage, GLOBAL_CLIENT_STORAGE},
-        common::types::{ChunkID, ProtocolID, SegmentID},
+        common::{
+            types::{ChunkID, ProtocolID, PtrInSegment, SegmentID},
+            with_id::WithProtocolID,
+        },
         protocol_implementations::posix::{
             posix_shm_client::PosixShmClient,
             posix_shm_provider_backend::{
                 LayoutedPosixShmProviderBackendBuilder, PosixShmProviderBackend,
                 PosixShmProviderBackendBuilder,
             },
-            protocol_id::POSIX_PROTOCOL_ID,
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
             shm_provider::{
                 AllocLayout, AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
                 DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
-                DynamicProtocolID, ForceDeallocPolicy, GarbageCollect, JustAlloc,
-                LayoutAllocBuilder, ProtocolIDSource, ProviderAllocBuilder, ShmProvider,
-                ShmProviderBuilder, ShmProviderBuilderBackendID, ShmProviderBuilderID,
-                StaticProtocolID,
+                ForceDeallocPolicy, GarbageCollect, JustAlloc, LayoutAllocBuilder,
+                ProviderAllocBuilder, ShmProvider, ShmProviderBuilder,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{

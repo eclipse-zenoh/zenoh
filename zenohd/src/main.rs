@@ -120,7 +120,7 @@ fn config_from_args(args: &Args) -> Config {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
     }
     if let Some(id) = &args.id {
-        config.set_id(id.parse().unwrap()).unwrap();
+        config.set_id(Some(id.parse().unwrap())).unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwriting config)
     if args.rest_http_port.is_some() {
@@ -171,7 +171,7 @@ fn config_from_args(args: &Args) -> Config {
                     .map(|v| match v.parse::<EndPoint>() {
                         Ok(v) => v,
                         Err(e) => {
-                            panic!("Couldn't parse option --peer={} into Locator: {}", v, e);
+                            panic!("Couldn't parse option --peer={v} into Locator: {e}");
                         }
                     })
                     .collect(),
@@ -188,7 +188,7 @@ fn config_from_args(args: &Args) -> Config {
                     .map(|v| match v.parse::<EndPoint>() {
                         Ok(v) => v,
                         Err(e) => {
-                            panic!("Couldn't parse option --listen={} into Locator: {}", v, e);
+                            panic!("Couldn't parse option --listen={v} into Locator: {e}");
                         }
                     })
                     .collect(),
@@ -244,8 +244,7 @@ fn config_from_args(args: &Args) -> Config {
                 })
                 .unwrap(),
             s => panic!(
-                r#"Invalid option: --adminspace-permissions={} - Accepted values: "r", "w", "rw" or "none""#,
-                s
+                r#"Invalid option: --adminspace-permissions={s} - Accepted values: "r", "w", "rw" or "none""#
             ),
         };
     }
@@ -264,10 +263,7 @@ fn config_from_args(args: &Args) -> Config {
                 }
             }
         } else {
-            panic!(
-                "--cfg accepts KEY:VALUE pairs. {} is not a valid KEY:VALUE pair.",
-                json
-            )
+            panic!("--cfg accepts KEY:VALUE pairs. {json} is not a valid KEY:VALUE pair.")
         }
     }
     tracing::debug!("Config: {:?}", &config);

@@ -33,7 +33,7 @@ use super::face::FaceState;
 pub use super::resource::*;
 use crate::net::{
     routing::{
-        hat::{self, HatTrait},
+        hat::HatTrait,
         interceptor::{interceptor_factories, InterceptorFactory},
     },
     runtime::WeakRuntime,
@@ -80,7 +80,6 @@ pub struct Tables {
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
     pub(crate) routes_version: RoutesVersion,
     pub(crate) next_interceptor_version: AtomicUsize,
 }
@@ -91,6 +90,7 @@ impl Tables {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
+        hat_code: &(dyn HatTrait + Send + Sync),
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -100,7 +100,6 @@ impl Tables {
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
-        let hat_code = hat::new_hat(whatami, config);
         Ok(Tables {
             zid,
             whatami,
@@ -116,7 +115,6 @@ impl Tables {
             mcast_faces: vec![],
             interceptors: interceptor_factories(config)?,
             hat: hat_code.new_tables(router_peers_failover_brokering),
-            hat_code: hat_code.into(),
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
         })
@@ -170,7 +168,8 @@ impl Tables {
 
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub(crate) ctrl_lock: Mutex<Box<dyn HatTrait + Send + Sync>>,
+    pub(crate) hat_code: Box<dyn HatTrait + Send + Sync>,
+    pub(crate) ctrl_lock: Mutex<()>,
     pub queries_lock: RwLock<()>,
 }
 

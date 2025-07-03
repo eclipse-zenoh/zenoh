@@ -17,11 +17,11 @@ use std::{fmt::Debug, sync::Arc};
 use zenoh_result::ZResult;
 
 use super::shm_segment::ShmSegment;
-use crate::api::common::types::SegmentID;
+use crate::api::common::{types::SegmentID, with_id::WithProtocolID};
 
 /// ShmClient - client factory implementation for particular shared memory protocol
 #[zenoh_macros::unstable_doc]
-pub trait ShmClient: Debug + Send + Sync {
+pub trait ShmClient: Debug + Send + Sync + WithProtocolID {
     /// Attach to particular shared memory segment
     #[zenoh_macros::unstable_doc]
     fn attach(&self, segment: SegmentID) -> ZResult<Arc<dyn ShmSegment>>;

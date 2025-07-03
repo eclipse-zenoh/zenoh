@@ -283,7 +283,7 @@ async fn create_net(
                 .map(|(id, _)| id + port_offset)
                 .collect::<Vec<_>>();
         let mut config = get_basic_router_config(&[port_offset + v.0], &connect, wai).await;
-        config.set_id(zid).unwrap();
+        config.set_id(Some(zid)).unwrap();
         let weights =
             v.1.iter()
                 .filter_map(|(e, w)| {
@@ -323,9 +323,9 @@ async fn create_net(
     }
 
     let mut config_client_a = get_basic_client_config(source + port_offset).await;
-    config_client_a.set_id(start_id).unwrap();
+    config_client_a.set_id(Some(start_id)).unwrap();
     let mut config_client_b = get_basic_client_config(dest + port_offset).await;
-    config_client_b.set_id(end_id).unwrap();
+    config_client_b.set_id(Some(end_id)).unwrap();
 
     let session_a = ztimeout!(open(config_client_a)).unwrap();
     let session_b = ztimeout!(open(config_client_b)).unwrap();

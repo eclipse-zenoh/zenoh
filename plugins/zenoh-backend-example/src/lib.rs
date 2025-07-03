@@ -123,7 +123,7 @@ impl Storage for ExampleStorage {
     ) -> ZResult<Vec<StoredData>> {
         match self.map.read().await.get(&key) {
             Some(v) => Ok(vec![v.clone()]),
-            None => Err(format!("Key {:?} is not present", key).into()),
+            None => Err(format!("Key {key:?} is not present").into()),
         }
     }
 

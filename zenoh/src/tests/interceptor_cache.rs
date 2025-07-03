@@ -158,7 +158,7 @@ async fn test_interceptors_cache_update_ingress() {
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27701).await;
-    config_router.set_id(router_id).unwrap();
+    config_router.set_id(Some(router_id)).unwrap();
 
     let config_client1 = get_basic_client_config(27701).await;
     let config_client2 = get_basic_client_config(27701).await;
@@ -248,7 +248,7 @@ async fn test_interceptors_cache_update_egress() {
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27702).await;
-    config_router.set_id(router_id).unwrap();
+    config_router.set_id(Some(router_id)).unwrap();
 
     let config_client1 = get_basic_client_config(27702).await;
     let config_client2 = get_basic_client_config(27702).await;
@@ -338,7 +338,7 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
 
     init_log_from_env_or("error");
     let mut config_router = get_basic_router_config(27703).await;
-    config_router.set_id(router_id).unwrap();
+    config_router.set_id(Some(router_id)).unwrap();
 
     let config_client1 = get_basic_client_config(27703).await;
     let config_client2 = get_basic_client_config(27703).await;

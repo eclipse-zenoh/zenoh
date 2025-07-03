@@ -182,19 +182,19 @@ impl Compatibility {
 impl Display for Compatibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(rust_version) = &self.rust_version {
-            writeln!(f, "Rust version:\n{}", rust_version)?;
+            writeln!(f, "Rust version:\n{rust_version}")?;
         }
         if let Some(vtable_version) = &self.vtable_version {
-            writeln!(f, "VTable version:\n{}", vtable_version)?;
+            writeln!(f, "VTable version:\n{vtable_version}")?;
         }
         if let Some(start_args_version) = &self.start_args_version {
-            writeln!(f, "StartArgs version:\n{}", start_args_version)?;
+            writeln!(f, "StartArgs version:\n{start_args_version}")?;
         }
         if let Some(instance_version) = &self.instance_version {
-            writeln!(f, "Instance version:\n{}", instance_version)?;
+            writeln!(f, "Instance version:\n{instance_version}")?;
         }
         if let Some(plugin_version) = &self.plugin_version {
-            writeln!(f, "Plugin version: {}", plugin_version)?;
+            writeln!(f, "Plugin version: {plugin_version}")?;
         }
         Ok(())
     }

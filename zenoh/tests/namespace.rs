@@ -112,10 +112,7 @@ async fn zenoh_namespace_pub_sub_inner(
     ke2: &keyexpr,
     locality: Locality,
 ) {
-    println!(
-        "zenoh_namespace_pub_sub: {ke1} -> {ke2}, locality: {:?}",
-        locality
-    );
+    println!("zenoh_namespace_pub_sub: {ke1} -> {ke2}, locality: {locality:?}");
     let publisher = session1
         .declare_publisher(ke1)
         .allowed_destination(locality)
@@ -159,10 +156,7 @@ async fn zenoh_namespace_queryable_get_inner(
     ke2: &keyexpr,
     locality: Locality,
 ) {
-    println!(
-        "zenoh_namespace_queryable_get: {ke1} -> {ke2}, locality: {:?}",
-        locality
-    );
+    println!("zenoh_namespace_queryable_get: {ke1} -> {ke2}, locality: {locality:?}");
 
     let querier = session2
         .declare_querier(ke2)

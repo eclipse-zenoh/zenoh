@@ -113,12 +113,11 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
     #[cfg(test)]
-    if let Some(test_interceptors) = tests::ID_TO_INTERCEPTOR_FACTORIES
-        .lock()
-        .unwrap()
-        .get(config.id())
-    {
-        res.extend((test_interceptors.as_ref())());
+    if let Some(id) = config.id() {
+        if let Some(test_interceptors) = tests::ID_TO_INTERCEPTOR_FACTORIES.lock().unwrap().get(id)
+        {
+            res.extend((test_interceptors.as_ref())());
+        }
     }
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
     res.extend(acl_interceptor_factories(config.access_control())?);

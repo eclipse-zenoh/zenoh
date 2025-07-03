@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{num::NonZeroUsize, sync::atomic::AtomicPtr};
+use std::num::NonZeroUsize;
 
 use zenoh_result::ZResult;
 
@@ -42,7 +42,7 @@ impl PosixShmSegment {
 }
 
 impl ShmSegment for PosixShmSegment {
-    fn map(&self, chunk: ChunkID) -> ZResult<AtomicPtr<u8>> {
-        unsafe { Ok(AtomicPtr::new(self.segment.elem_mut(chunk))) }
+    fn map(&self, chunk: ChunkID) -> ZResult<*mut u8> {
+        Ok(unsafe { self.segment.elem_mut(chunk) })
     }
 }

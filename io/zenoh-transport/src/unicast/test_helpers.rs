@@ -29,7 +29,7 @@ pub fn make_transport_manager_builder(
     zcondfeat!(
         "transport_multilink",
         {
-            println!("...with max links: {}...", max_links);
+            println!("...with max links: {max_links}...");
             transport.max_links(max_links)
         },
         transport

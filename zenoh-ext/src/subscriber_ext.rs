@@ -25,8 +25,7 @@ use zenoh::{
 
 #[allow(deprecated)]
 use crate::{
-    advanced_subscriber::{Configured, HistoryConfig},
-    querying_subscriber::QueryingSubscriberBuilder,
+    advanced_subscriber::HistoryConfig, querying_subscriber::QueryingSubscriberBuilder,
     AdvancedSubscriberBuilder, ExtractSample, FetchingSubscriberBuilder, RecoveryConfig,
 };
 
@@ -148,10 +147,7 @@ pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
-    fn recovery(
-        self,
-        conf: RecoveryConfig<Configured>,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
+    fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
     /// Allow this subscriber to be detected through liveliness.
     #[zenoh_macros::unstable]
@@ -288,10 +284,7 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
-    fn recovery(
-        self,
-        conf: RecoveryConfig<Configured>,
-    ) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
+    fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self).recovery(conf)
     }
 

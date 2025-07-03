@@ -466,7 +466,7 @@ impl fmt::Display for Parameters<'_> {
 
 impl fmt::Debug for Parameters<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

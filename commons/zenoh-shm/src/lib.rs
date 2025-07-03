@@ -17,19 +17,22 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{
-    any::Any,
-    num::NonZeroUsize,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
-};
+use std::{any::Any, num::NonZeroUsize, sync::atomic::Ordering};
 
-use api::common::types::ProtocolID;
+use api::{
+    buffer::{
+        traits::BufferRelayoutError,
+        zshm::{zshm, ZShm},
+        zshmmut::{zshmmut, ZShmMut},
+    },
+    common::types::ProtocolID,
+    provider::types::MemoryLayout,
+};
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
 use zenoh_buffers::ZSliceBuffer;
+
+use crate::api::common::types::PtrInSegment;
 
 #[macro_export]
 macro_rules! tested_module {
@@ -68,7 +71,7 @@ tested_crate_module!(shm);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShmBufInfo {
     /// Actual data length
-    /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
+    /// NOTE: data descriptor's len is >= of this len and describes the actual memory length
     /// dedicated in shared memory segment for this particular buffer.
     pub data_len: NonZeroUsize,
 
@@ -94,8 +97,8 @@ impl ShmBufInfo {
 
 /// A zenoh buffer in shared memory.
 pub struct ShmBufInner {
-    pub(crate) metadata: Arc<ConfirmedDescriptor>,
-    pub(crate) buf: AtomicPtr<u8>,
+    pub(crate) metadata: ConfirmedDescriptor,
+    pub(crate) buf: PtrInSegment,
     pub info: ShmBufInfo,
 }
 
@@ -103,8 +106,7 @@ impl PartialEq for ShmBufInner {
     fn eq(&self, other: &Self) -> bool {
         // currently there is no API to resize an SHM buffer, but it is intended in the future,
         // so I add size comparison here to avoid future bugs :)
-        self.buf.load(Ordering::Relaxed) == other.buf.load(Ordering::Relaxed)
-            && self.info.data_len == other.info.data_len
+        self.buf == other.buf && self.info.data_len == other.info.data_len
     }
 }
 impl Eq for ShmBufInner {}
@@ -128,8 +130,48 @@ impl ShmBufInner {
             .load(Ordering::Relaxed)
     }
 
+    /// # Safety
+    /// This operation is unsafe because we cannot guarantee that there is no upper level
+    /// ZSlice that have cached the size of underlying ShmBufInner. So this function should be
+    /// used only if it is guaranteed that there is no such situation
+    pub unsafe fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
+        if self.capacity() < new_size {
+            return None;
+        }
+
+        self.info.data_len = new_size;
+
+        Some(())
+    }
+
+    /// # Safety
+    /// This operation is unsafe because we cannot guarantee that there is no upper level
+    /// ZSlice that have cached the size of underlying ShmBufInner. So this function should be
+    /// used only if it is guaranteed that there is no such situation
+    pub unsafe fn try_relayout(
+        &mut self,
+        new_layout: MemoryLayout,
+    ) -> Result<(), BufferRelayoutError> {
+        let address = self.as_ref().as_ptr() as usize;
+        if address % new_layout.alignment().get_alignment_value().get() != 0 {
+            return Err(BufferRelayoutError::IncompatibleAlignment);
+        }
+
+        if self.capacity() < new_layout.size() {
+            return Err(BufferRelayoutError::SizeTooBig);
+        }
+
+        self.info.data_len = new_layout.size();
+
+        Ok(())
+    }
+
     pub fn len(&self) -> NonZeroUsize {
         self.info.data_len
+    }
+
+    pub fn capacity(&self) -> NonZeroUsize {
+        self.metadata.owned.header().len()
     }
 
     fn is_valid(&self) -> bool {
@@ -164,8 +206,7 @@ impl ShmBufInner {
     // PRIVATE:
     fn as_slice(&self) -> &[u8] {
         tracing::trace!("ShmBufInner::as_slice() == len = {:?}", self.info.data_len);
-        let bp = self.buf.load(Ordering::SeqCst);
-        unsafe { std::slice::from_raw_parts(bp, self.info.data_len.get()) }
+        unsafe { std::slice::from_raw_parts(self.buf.ptr(), self.info.data_len.get()) }
     }
 
     unsafe fn dec_ref_count(&self) {
@@ -188,8 +229,7 @@ impl ShmBufInner {
     /// In short, whilst this operation is marked as unsafe, you are safe if you can
     /// guarantee that your in applications only one process at the time will actually write.
     unsafe fn as_mut_slice_inner(&mut self) -> &mut [u8] {
-        let bp = self.buf.load(Ordering::SeqCst);
-        std::slice::from_raw_parts_mut(bp, self.info.data_len.get())
+        std::slice::from_raw_parts_mut(self.buf.ptr_mut(), self.info.data_len.get())
     }
 }
 
@@ -204,10 +244,9 @@ impl Clone for ShmBufInner {
     fn clone(&self) -> Self {
         // SAFETY: obviously, we need to increment refcount when cloning ShmBufInner instance
         unsafe { self.inc_ref_count() };
-        let bp = self.buf.load(Ordering::SeqCst);
         ShmBufInner {
             metadata: self.metadata.clone(),
-            buf: AtomicPtr::new(bp),
+            buf: self.buf.clone(),
             info: self.info.clone(),
         }
     }
@@ -238,5 +277,57 @@ impl ZSliceBuffer for ShmBufInner {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+impl From<ShmBufInner> for ZShm {
+    fn from(value: ShmBufInner) -> Self {
+        Self(value)
+    }
+}
+
+impl ZShmMut {
+    pub(crate) unsafe fn new_unchecked(data: ShmBufInner) -> Self {
+        Self(data)
+    }
+}
+
+impl TryFrom<ShmBufInner> for ZShmMut {
+    type Error = ShmBufInner;
+
+    fn try_from(value: ShmBufInner) -> Result<Self, Self::Error> {
+        match value.is_unique() && value.is_valid() {
+            true => Ok(Self(value)),
+            false => Err(value),
+        }
+    }
+}
+
+impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
+    type Error = ();
+
+    fn try_from(value: &mut ShmBufInner) -> Result<Self, Self::Error> {
+        match value.is_unique() && value.is_valid() {
+            // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+            // to ShmBufInner type, so it is safe to transmute them in any direction
+            true => Ok(unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshmmut>(value) }),
+            false => Err(()),
+        }
+    }
+}
+
+impl From<&ShmBufInner> for &zshm {
+    fn from(value: &ShmBufInner) -> Self {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+        // to ShmBufInner type, so it is safe to transmute them in any direction
+        unsafe { core::mem::transmute(value) }
+    }
+}
+
+impl From<&mut ShmBufInner> for &mut zshm {
+    fn from(value: &mut ShmBufInner) -> Self {
+        // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+        // to ShmBufInner type, so it is safe to transmute them in any direction
+        unsafe { core::mem::transmute(value) }
     }
 }

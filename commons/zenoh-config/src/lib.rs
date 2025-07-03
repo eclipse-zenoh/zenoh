@@ -242,7 +242,7 @@ pub enum InterceptorLink {
 
 impl std::fmt::Display for InterceptorLink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Transport({:?})", self)
+        write!(f, "Transport({self:?})")
     }
 }
 
@@ -357,7 +357,8 @@ validated_struct::validator! {
     #[doc(hidden)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
-        id: ZenohId,
+        /// If not specified a random Zenoh ID will be generated upon session creation.
+        id: Option<ZenohId>,
         /// The metadata of the instance. Arbitrary json data available from the admin space
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
@@ -1161,7 +1162,7 @@ impl PluginsConfig {
             let required = match value.get("__required__") {
                 None => false,
                 Some(Value::Bool(b)) => *b,
-                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", id)
+                _ => panic!("Plugin '{id}' has an invalid '__required__' configuration property (must be a boolean)")
             };
             let name = match value.get("__plugin__") {
                 Some(Value::String(p)) => p,
@@ -1171,8 +1172,8 @@ impl PluginsConfig {
             if let Some(paths) = value.get("__path__") {
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id) }).collect(),
-                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{id}' has an invalid '__path__' configuration property (must be either string or array of strings)") }).collect(),
+                    _ => panic!("Plugin '{id}' has an invalid '__path__' configuration property (must be either string or array of strings)")
                 };
                 PluginLoad { id: id.clone(), name: name.clone(), paths: Some(paths), required }
             } else {
@@ -1285,7 +1286,7 @@ impl std::fmt::Debug for PluginsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut values: Value = self.values.clone();
         sift_privates(&mut values);
-        write!(f, "{:?}", values)
+        write!(f, "{values:?}")
     }
 }
 

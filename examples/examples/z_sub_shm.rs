@@ -39,15 +39,12 @@ async fn main() {
 
         // Print overall payload information
         let (payload_type, payload) = handle_bytes(sample.payload_mut());
-        print!(
-            ">> [Subscriber] Received {} ('{}': '{}') [{}] ",
-            kind, key_str, payload, payload_type,
-        );
+        print!(">> [Subscriber] Received {kind} ('{key_str}': '{payload}') [{payload_type}] ",);
 
         // Print attachment information
         if let Some(att) = sample.attachment_mut() {
             let (attachment_type, attachment) = handle_bytes(att);
-            print!(" ({}: {})", attachment_type, attachment);
+            print!(" ({attachment_type}: {attachment})");
         }
 
         println!();
