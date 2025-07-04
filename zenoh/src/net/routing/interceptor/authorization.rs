@@ -23,7 +23,7 @@ use ahash::RandomState;
 use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclConfigPolicyEntry, AclConfigRule, AclConfigSubjects, AclMessage, CertCommonName,
-    InterceptorFlow, InterceptorLink, Interface, Permission, PolicyRule, Username,
+    InterceptorFlow, InterceptorLink, Interface, Permission, PolicyRule, Username, ZenohId,
 };
 use zenoh_keyexpr::{
     keyexpr,
@@ -42,6 +42,7 @@ pub(crate) struct Subject {
     pub(crate) cert_common_name: SubjectProperty<CertCommonName>,
     pub(crate) username: SubjectProperty<Username>,
     pub(crate) link_type: SubjectProperty<InterceptorLink>,
+    pub(crate) zid: SubjectProperty<ZenohId>,
 }
 
 impl Subject {
@@ -52,6 +53,7 @@ impl Subject {
                 .cert_common_name
                 .matches(query.cert_common_name.as_ref())
             && self.link_type.matches(query.link_protocol.as_ref())
+            && self.zid.matches(query.zid.as_ref())
     }
 }
 
@@ -79,6 +81,7 @@ pub(crate) struct SubjectQuery {
     pub(crate) cert_common_name: Option<CertCommonName>,
     pub(crate) username: Option<Username>,
     pub(crate) link_protocol: Option<InterceptorLink>,
+    pub(crate) zid: Option<ZenohId>,
 }
 
 impl std::fmt::Display for SubjectQuery {
@@ -88,6 +91,7 @@ impl std::fmt::Display for SubjectQuery {
             self.cert_common_name.as_ref().map(|ccn| format!("{ccn}")),
             self.username.as_ref().map(|username| format!("{username}")),
             self.link_protocol.as_ref().map(|link| format!("{link}")),
+            self.zid.as_ref().map(|zid| format!("{zid}")),
         ];
         write!(
             f,
@@ -473,6 +477,15 @@ impl PolicyEnforcer {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
+            // FIXME: Unnecessary .collect() because of different iterator types
+            let zids = config_subject
+                .zids
+                .map(|zids| {
+                    zids.into_iter()
+                        .map(SubjectProperty::Exactly)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(vec![SubjectProperty::Wildcard]);
 
             // create ACL subject combinations
             let subject_combination_ids = interfaces
@@ -480,15 +493,19 @@ impl PolicyEnforcer {
                 .cartesian_product(cert_common_names)
                 .cartesian_product(usernames)
                 .cartesian_product(link_types)
-                .map(|(((interface, cert_common_name), username), link_type)| {
-                    let subject = Subject {
-                        interface,
-                        cert_common_name,
-                        username,
-                        link_type,
-                    };
-                    subject_map_builder.insert_or_get(subject)
-                })
+                .cartesian_product(zids)
+                .map(
+                    |((((interface, cert_common_name), username), link_type), zid)| {
+                        let subject = Subject {
+                            interface,
+                            cert_common_name,
+                            username,
+                            link_type,
+                            zid,
+                        };
+                        subject_map_builder.insert_or_get(subject)
+                    },
+                )
                 .collect();
             subject_id_map.insert(config_subject.id.clone(), subject_combination_ids);
         }
