@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg(feature = "internal_config")]
 #![cfg(unix)]
 
 use std::{
@@ -42,14 +43,14 @@ fn build_config(
     ds_config: Vec<DownsamplingItemConf>,
     flow: InterceptorFlow,
 ) -> (Config, Config) {
-    let mut sender_config = zenoh_config::Config::default();
+    let mut sender_config = Config::default();
     sender_config
         .scouting
         .multicast
         .set_enabled(Some(false))
         .unwrap();
 
-    let mut receiver_config = zenoh_config::Config::default();
+    let mut receiver_config = Config::default();
     receiver_config
         .scouting
         .multicast
@@ -72,7 +73,7 @@ fn build_config(
         InterceptorFlow::Ingress => receiver_config.set_downsampling(ds_config).unwrap(),
     };
 
-    (sender_config.into(), receiver_config.into())
+    (sender_config, receiver_config)
 }
 
 fn downsampling_pub_sub_test<F>(
