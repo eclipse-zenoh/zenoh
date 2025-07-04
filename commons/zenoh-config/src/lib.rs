@@ -206,8 +206,8 @@ pub struct QosOverwriteItemConf {
     pub flows: Option<NEVec<InterceptorFlow>>,
     /// QoS filter to apply to the messages matching this item.
     pub qos: Option<QosFilter>,
-    /// Size limit for the messages matching this item.
-    pub size: Option<Range<u64>>,
+    /// payload_size range for the messages matching this item.
+    pub payload_size: Option<Range<u64>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]

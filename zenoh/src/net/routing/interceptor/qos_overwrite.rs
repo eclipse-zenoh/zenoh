@@ -72,6 +72,18 @@ impl QosOverwriteFactory {
             keys.insert(k, ());
         }
 
+        let mut filter = QosOverwriteFilter::default();
+        for v in conf.messages {
+            match v {
+                QosOverwriteMessage::Put => filter.put = true,
+                QosOverwriteMessage::Delete => filter.delete = true,
+                QosOverwriteMessage::Query => filter.query = true,
+                QosOverwriteMessage::Reply => filter.reply = true,
+            }
+        }
+        filter.qos = conf.qos;
+        filter.payload_size = conf.payload_size;
+
         Self {
             zids: conf.zids,
             interfaces: conf.interfaces,
@@ -81,7 +93,7 @@ impl QosOverwriteFactory {
                 ingress: true,
                 egress: true,
             }),
-            filter: (&conf.messages).into(),
+            filter,
             keys: Arc::new(keys),
         }
     }
@@ -179,21 +191,6 @@ pub(crate) struct QosOverwriteFilter {
     reply: bool,
     qos: Option<QosFilter>,
     payload_size: Option<Range<u64>>,
-}
-
-impl From<&NEVec<QosOverwriteMessage>> for QosOverwriteFilter {
-    fn from(value: &NEVec<QosOverwriteMessage>) -> Self {
-        let mut res = Self::default();
-        for v in value {
-            match v {
-                QosOverwriteMessage::Put => res.put = true,
-                QosOverwriteMessage::Delete => res.delete = true,
-                QosOverwriteMessage::Query => res.query = true,
-                QosOverwriteMessage::Reply => res.reply = true,
-            }
-        }
-        res
-    }
 }
 
 pub(crate) struct QosInterceptor {
