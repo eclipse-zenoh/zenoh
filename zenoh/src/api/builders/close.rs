@@ -21,27 +21,22 @@ use std::{
 use async_trait::async_trait;
 #[cfg(all(feature = "unstable", feature = "internal"))]
 use tokio::sync::oneshot::Receiver;
+use tracing::debug;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
 /// A builder for close operations.
-// NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
-// care about the `private_bounds` lint in this particular case.
-#[allow(private_bounds)]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct CloseBuilder<TCloseable: Closeable> {
-    closee: TCloseable::TClosee,
+pub struct CloseBuilder<TClosee: Closee> {
+    closee: TClosee,
     timeout: Duration,
 }
 
-// NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
-// care about the `private_bounds` lint in this particular case.
-#[allow(private_bounds)]
-impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
-    pub(crate) fn new(closeable: &'_ TCloseable) -> Self {
+impl<TClosee: Closee> CloseBuilder<TClosee> {
+    pub(crate) fn new(closee: TClosee) -> Self {
         Self {
-            closee: closeable.get_closee(),
+            closee,
             timeout: Duration::from_secs(10),
         }
     }
@@ -64,39 +59,44 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     #[doc(hidden)]
     pub fn in_background(
         self,
-    ) -> BackgroundCloseBuilder<<CloseBuilder<TCloseable> as Resolvable>::To> {
+    ) -> BackgroundCloseBuilder<<CloseBuilder<TClosee> as Resolvable>::To> {
         BackgroundCloseBuilder::new(self.into_future())
     }
 }
 
-impl<TCloseable: Closeable> Resolvable for CloseBuilder<TCloseable> {
+impl<TClosee: Closee> std::fmt::Display for CloseBuilder<TClosee> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Closing {} (timeout {:?})", self.closee, self.timeout)
+    }
+}
+
+impl<TClosee: Closee> Resolvable for CloseBuilder<TClosee> {
     type To = ZResult<()>;
 }
 
-impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
+impl<TClosee: Closee> Wait for CloseBuilder<TClosee> {
     fn wait(self) -> Self::To {
-        let future = self.into_future();
         match tokio::runtime::Handle::try_current() {
             Ok(_) => {
-                tracing::trace!("tokio TLS available, closing closeable directly");
-                ZRuntime::Net.block_in_place(future)
+                debug!("{self}: tokio TLS available, closing closeable directly");
+                ZRuntime::Net.block_in_place(self.into_future())
             }
             Err(e) if e.is_missing_context() => {
-                tracing::trace!("tokio TLS is just missing, closing closeable directly");
-                ZRuntime::Net.block_in_place(future)
+                debug!("{self}: tokio TLS is just missing, closing closeable directly");
+                ZRuntime::Net.block_in_place(self.into_future())
             }
             Err(_) => {
                 #[cfg(nolocal_thread_not_available)]
-                panic!("Close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, see https://github.com/rust-lang/rust/issues/138696");
+                panic!("{self}: close when thread-local storage is unavailable (typically in atexit()) does not work for this Rust 1.85..1.85.1, see https://github.com/rust-lang/rust/issues/138696");
 
                 #[cfg(not(nolocal_thread_not_available))]
                 {
                     let evaluate = move || {
-                        // NOTE: tracing logger also panics if used inside atexit() handler!!!
-                        tracing::trace!(
-                            "tokio TLS NOT available, closing closeable in separate thread"
+                        // NOTE: tracing logger also panics if used inside atexit(), so we place it here in new thread!!!
+                        debug!(
+                            "{self}: tokio TLS NOT available, closing closeable in separate thread"
                         );
-                        ZRuntime::Net.block_in_place(future)
+                        ZRuntime::Net.block_in_place(self.into_future())
                     };
                     std::thread::spawn(evaluate)
                         .join()
@@ -107,18 +107,20 @@ impl<TCloseable: Closeable> Wait for CloseBuilder<TCloseable> {
     }
 }
 
-impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
+impl<TClosee: Closee> IntoFuture for CloseBuilder<TClosee> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
+                debug!("{}: execute closing code...", self.closee);
                 if tokio::time::timeout(self.timeout, self.closee.close_inner())
                     .await
                     .is_err()
                 {
-                    bail!("close operation timed out!")
+                    debug!("{}: close operation timed out", self.closee);
+                    bail!("{}: close operation timed out", self.closee)
                 }
                 Ok(())
             }
@@ -218,11 +220,6 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
 }
 
 #[async_trait]
-pub(crate) trait Closee: Send + Sync + 'static {
+pub trait Closee: std::fmt::Display + Send + Sync + 'static {
     async fn close_inner(&self);
-}
-
-pub(crate) trait Closeable {
-    type TClosee: Closee;
-    fn get_closee(&self) -> Self::TClosee;
 }
