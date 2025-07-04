@@ -49,12 +49,13 @@ impl Router {
     pub fn new(
         zid: ZenohIdProto,
         whatami: WhatAmI,
+        south_whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
     ) -> ZResult<Self> {
         let hat_code = HatCode {
             eastwest: hat::new_hat(whatami, config),
-            south: hat::new_hat(whatami, config), // TODO: ???
+            south: hat::new_hat(south_whatami, config), // TODO: ???
         };
         let tables = Arc::new(TablesLock {
             tables: RwLock::new(Tables::new(zid, whatami, hlc, config, &hat_code)?),
