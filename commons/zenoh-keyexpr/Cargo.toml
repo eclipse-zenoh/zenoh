@@ -50,6 +50,7 @@ ahash = { workspace = true, default-features = true }
 criterion = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true, features = ["default"] }
+test-case = { workspace = true }
 
 [[bench]]
 name = "keyexpr_tree"
