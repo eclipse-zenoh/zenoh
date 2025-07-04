@@ -50,7 +50,7 @@ pub struct PublisherQoSConfig {
     pub allowed_destination: Option<PublisherLocalityConf>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum CongestionControlConf {
     Drop,
@@ -162,7 +162,7 @@ impl<'a> serde::Deserialize<'a> for PriorityUpdateConf {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReliabilityConf {
     BestEffort,
@@ -204,7 +204,7 @@ pub enum QosOverwriteMessage {
     Reply,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct QosFilter {
     pub congestion_control: Option<CongestionControlConf>,
     pub priority: Option<PriorityConf>,

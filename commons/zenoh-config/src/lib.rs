@@ -214,11 +214,7 @@ impl serde::Serialize for ConfRange {
                 serializer.serialize_str(&format!("..{}", end))
             }
             (Bound::Unbounded, Bound::Unbounded) => serializer.serialize_str(".."),
-            _ => {
-                Err(serde::ser::Error::custom(
-                    "Invalid range",
-                ))
-            }
+            _ => Err(serde::ser::Error::custom("Invalid range")),
         }
     }
 }
@@ -246,28 +242,22 @@ impl<'a> serde::Deserialize<'a> for ConfRange {
                     .next()
                     .and_then(|s| s.parse::<u64>().ok().map(Bound::Included))
                     .unwrap_or(Bound::Unbounded);
-                let end = split
-                    .next()
-                    .map(|s| {
-                        s.parse::<u64>()
-                            .ok()
-                            .map(Bound::Included)
-                            .unwrap_or(Bound::Unbounded)
-                    });
+                let end = split.next().map(|s| {
+                    s.parse::<u64>()
+                        .ok()
+                        .map(Bound::Included)
+                        .unwrap_or(Bound::Unbounded)
+                });
                 if let Some(end) = end {
-                    Ok(ConfRange {
-                        start,
-                        end,
-                    })
+                    Ok(ConfRange { start, end })
                 } else {
                     Err(serde::de::Error::custom("invalid range"))
-                }                
+                }
             }
         }
         deserializer.deserialize_str(V)
     }
 }
-
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -1130,6 +1120,39 @@ fn config_deser() {
         Some(ConfRange {
             start: Bound::Included(100),
             end: Bound::Unbounded,
+        })
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    qos: {
+                      congestion_control: "drop",
+                      priority: "data",
+                      express: true,
+                      reliability: "reliable",
+                    },
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().qos,
+        Some(QosFilter {
+            congestion_control: Some(qos::CongestionControlConf::Drop),
+            priority: Some(qos::PriorityConf::Data),
+            express: Some(true),
+            reliability: Some(qos::ReliabilityConf::Reliable),
         })
     );
 
