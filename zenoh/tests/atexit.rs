@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg(feature = "internal_config")]
+
 fn run_in_separate_process(main_name: &str, must_panic: bool) {
     let output = std::process::Command::new(std::env::current_exe().unwrap())
         .arg(main_name)
@@ -87,7 +89,7 @@ async fn session_close_in_atexit_main() {
     }
 
     // Open the sessions
-    let mut config = zenoh_config::Config::default();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints

@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg(feature = "internal_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -41,7 +43,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
-    let mut config = zenoh_config::Config::default();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -56,7 +58,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     println!("[  ][01a] Opening peer01 session: {endpoints:?}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = zenoh_config::Config::default();
+    let mut config = zenoh::Config::default();
     config
         .connect
         .endpoints
@@ -76,7 +78,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
-    let mut config = zenoh_config::Config::default();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints
@@ -86,7 +88,7 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     println!("[  ][01a] Opening peer01 session: {endpoint01}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = zenoh_config::Config::default();
+    let mut config = zenoh::Config::default();
     config
         .listen
         .endpoints

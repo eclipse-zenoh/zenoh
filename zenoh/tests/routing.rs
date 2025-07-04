@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg(feature = "internal_config")]
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -22,7 +24,7 @@ use std::{
 
 use itertools::Itertools;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::{config::WhatAmI, qos::CongestionControl, Result, Session};
+use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
 use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
@@ -270,7 +272,7 @@ struct Node {
     listen: Vec<String>,
     connect: Vec<String>,
     con_task: ConcurrentTask,
-    config: Option<zenoh_config::Config>,
+    config: Option<Config>,
     warmup: Duration,
 }
 
@@ -534,7 +536,7 @@ async fn static_failover_brokering() -> Result<()> {
     let msg_size = 8;
 
     let disable_autoconnect_config = || {
-        let mut config = zenoh_config::Config::default();
+        let mut config = Config::default();
         config
             .scouting
             .gossip
@@ -1052,7 +1054,7 @@ async fn peer_linkstate() -> Result<()> {
     let base_port = 17550;
 
     let linkstate_config = || {
-        let mut config = zenoh_config::Config::default();
+        let mut config = Config::default();
         config
             .routing
             .peer

@@ -42,6 +42,7 @@ zenoh = { workspace = true, default-features = false, features = [
   "internal",
   "plugins",
   "runtime_plugins",
+  "internal_config",
 ] }
 zenoh-config = { workspace = true }
 

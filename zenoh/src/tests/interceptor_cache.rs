@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "internal_config")]
 use std::str::FromStr;
 
 use zenoh_buffers::ZBuf;
@@ -113,13 +114,13 @@ use std::{any::Any, time::Duration};
 use zenoh_config::{InterceptorFlow, ZenohId};
 use zenoh_core::ztimeout;
 
-use crate::{config::WhatAmI, init_log_from_env_or, open};
+use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
-fn get_basic_router_config(port: u16) -> zenoh_config::Config {
-    let mut config = zenoh_config::Config::default();
+async fn get_basic_router_config(port: u16) -> Config {
+    let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
     config
         .listen
@@ -130,8 +131,8 @@ fn get_basic_router_config(port: u16) -> zenoh_config::Config {
     config
 }
 
-fn get_basic_client_config(port: u16) -> zenoh_config::Config {
-    let mut config = zenoh_config::Config::default();
+async fn get_basic_client_config(port: u16) -> Config {
+    let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
@@ -156,11 +157,11 @@ async fn test_interceptors_cache_update_ingress() {
         .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27701);
+    let mut config_router = get_basic_router_config(27701).await;
     config_router.set_id(Some(router_id)).unwrap();
 
-    let config_client1 = get_basic_client_config(27701);
-    let config_client2 = get_basic_client_config(27701);
+    let config_client1 = get_basic_client_config(27701).await;
+    let config_client2 = get_basic_client_config(27701).await;
 
     let router = ztimeout!(open(config_router.clone())).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -246,11 +247,11 @@ async fn test_interceptors_cache_update_egress() {
         .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27702);
+    let mut config_router = get_basic_router_config(27702).await;
     config_router.set_id(Some(router_id)).unwrap();
 
-    let config_client1 = get_basic_client_config(27702);
-    let config_client2 = get_basic_client_config(27702);
+    let config_client1 = get_basic_client_config(27702).await;
+    let config_client2 = get_basic_client_config(27702).await;
 
     let router = ztimeout!(open(config_router.clone())).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -336,11 +337,11 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
         .insert(router_id, Box::new(f));
 
     init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27703);
+    let mut config_router = get_basic_router_config(27703).await;
     config_router.set_id(Some(router_id)).unwrap();
 
-    let config_client1 = get_basic_client_config(27703);
-    let config_client2 = get_basic_client_config(27703);
+    let config_client1 = get_basic_client_config(27703).await;
+    let config_client2 = get_basic_client_config(27703).await;
 
     let router = ztimeout!(open(config_router.clone())).unwrap();
     tokio::time::sleep(SLEEP).await;
