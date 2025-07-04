@@ -3,8 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use zenoh_config::WhatAmI;
+
 use crate::net::{
-    primitives::EPrimitives,
+    primitives::{EPrimitives, Primitives},
     routing::dispatcher::{
         face::{Face, FaceState},
         tables::TablesLock,
@@ -14,7 +16,7 @@ use crate::net::{
 /// Add gateway between south and eastwest bounds.
 ///
 /// This method should be called at construction of a [`crate::net::routing::router::Router`].
-pub(crate) fn init(tables_lock: &Arc<TablesLock>) {
+pub(crate) fn init(tables_lock: &Arc<TablesLock>, whatami: WhatAmI, south_whatami: WhatAmI) {
     let mut tables = tables_lock.tables.write().unwrap();
 
     let zid = tables.zid;
@@ -39,7 +41,7 @@ pub(crate) fn init(tables_lock: &Arc<TablesLock>) {
                 FaceState::new(
                     south_fid,
                     zid,
-                    todo!(),
+                    whatami,
                     true,
                     #[cfg(feature = "stats")]
                     None,
@@ -62,7 +64,7 @@ pub(crate) fn init(tables_lock: &Arc<TablesLock>) {
                 FaceState::new(
                     eastwest_fid,
                     zid,
-                    todo!(),
+                    south_whatami,
                     false,
                     #[cfg(feature = "stats")]
                     None,
@@ -85,23 +87,48 @@ pub(crate) struct SouthGateway {
     south: Mutex<MaybeUninit<Face>>,
 }
 
-impl EPrimitives for SouthGateway {
-    fn send_interest(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>) {}
+impl SouthGateway {
+    /// Get a reference to the south hat's face.
+    ///
+    /// ## Safety
+    /// [`SouthGateway::south`] should have been initialized in [`init`].
+    fn with_south<F>(&self, f: F)
+    where
+        F: FnOnce(&Face),
+    {
+        let south = self.south.lock().unwrap();
+        unsafe { f(south.assume_init_ref()) };
+    }
+}
 
-    fn send_declare(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {}
+impl EPrimitives for SouthGateway {
+    fn send_interest(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>) {
+        self.with_south(|face| face.send_interest(ctx.msg));
+    }
+
+    fn send_declare(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {
+        self.with_south(|face| face.send_declare(ctx.msg));
+    }
 
     fn send_push(
         &self,
         msg: &mut zenoh_protocol::network::Push,
         reliability: zenoh_protocol::core::Reliability,
     ) {
+        self.with_south(|face| face.send_push(msg, reliability));
     }
 
-    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {}
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+        self.with_south(|face| face.send_request(msg));
+    }
 
-    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+        self.with_south(|face| face.send_response(msg));
+    }
 
-    fn send_response_final(&self, msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, msg: &mut zenoh_protocol::network::ResponseFinal) {
+        self.with_south(|face| face.send_response_final(msg));
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -113,13 +140,27 @@ pub(crate) struct EastwestGateway {
     eastwest: Mutex<MaybeUninit<Face>>,
 }
 
+impl EastwestGateway {
+    /// Get a reference to the south hat's face.
+    ///
+    /// ## Safety
+    /// [`EastwestGateway::eastwest`] should have been initialized in [`init`].
+    fn with_eastwest<F>(&self, f: F)
+    where
+        F: FnOnce(&Face),
+    {
+        let south = self.eastwest.lock().unwrap();
+        unsafe { f(south.assume_init_ref()) };
+    }
+}
+
 impl EPrimitives for EastwestGateway {
     fn send_interest(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>) {
-        todo!()
+        self.with_eastwest(|face| face.send_interest(ctx.msg));
     }
 
     fn send_declare(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {
-        todo!()
+        self.with_eastwest(|face| face.send_declare(ctx.msg));
     }
 
     fn send_push(
@@ -127,13 +168,20 @@ impl EPrimitives for EastwestGateway {
         msg: &mut zenoh_protocol::network::Push,
         reliability: zenoh_protocol::core::Reliability,
     ) {
+        self.with_eastwest(|face| face.send_push(msg, reliability));
     }
 
-    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {}
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+        self.with_eastwest(|face| face.send_request(msg));
+    }
 
-    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+        self.with_eastwest(|face| face.send_response(msg));
+    }
 
-    fn send_response_final(&self, msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, msg: &mut zenoh_protocol::network::ResponseFinal) {
+        self.with_eastwest(|face| face.send_response_final(msg));
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self

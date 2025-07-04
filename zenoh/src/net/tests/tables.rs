@@ -51,6 +51,7 @@ fn base_test() {
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
     )
@@ -145,6 +146,7 @@ fn match_test() {
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
     )
@@ -183,6 +185,7 @@ fn multisub_test() {
     let config = Config::default();
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -249,6 +252,7 @@ async fn clean_test() {
     let config = Config::default();
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
@@ -574,6 +578,7 @@ fn client_test() {
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
     )
@@ -830,6 +835,7 @@ fn get_best_key_test() {
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
         WhatAmI::Client,
+        WhatAmI::Client,
         None,
         &config,
     )
@@ -882,6 +888,7 @@ fn big_key_expr() {
     let config = Config::default();
     let router = Router::new(
         ZenohIdProto::try_from([1]).unwrap(),
+        WhatAmI::Client,
         WhatAmI::Client,
         None,
         &config,

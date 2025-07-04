@@ -64,7 +64,7 @@ impl Router {
             queries_lock: RwLock::new(()),
         });
 
-        gateway::init(&tables);
+        gateway::init(&tables, whatami, south_whatami);
 
         Ok(Router { whatami, tables })
     }
