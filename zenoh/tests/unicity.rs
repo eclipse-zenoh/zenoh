@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "internal_config")]
-
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -34,7 +32,7 @@ const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open the sessions
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config
         .listen
         .endpoints
@@ -44,7 +42,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config
         .listen
         .endpoints
@@ -59,7 +57,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config
         .connect
         .endpoints
@@ -77,7 +75,7 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
 
 async fn open_router_session() -> Session {
     // Open the sessions
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
     config
         .listen
@@ -96,7 +94,7 @@ async fn close_router_session(s: Session) {
 
 async fn open_client_sessions() -> (Session, Session, Session) {
     // Open the sessions
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
@@ -107,7 +105,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     println!("[  ][01a] Opening s01 session");
     let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
@@ -118,7 +116,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(config)).unwrap();
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
