@@ -40,6 +40,7 @@ pub trait Primitives: Send + Sync {
 
     fn send_close(&self);
 
+    #[allow(dead_code)]
     fn as_any(&self) -> &dyn Any;
 }
 

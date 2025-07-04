@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "internal_config")]
+#![cfg(feature = "internal")]
+
 use std::str::FromStr;
 
 use zenoh_buffers::ZBuf;
@@ -200,7 +202,8 @@ async fn test_interceptors_cache_update_ingress() {
 
     router
         .0
-        .runtime
+        .static_runtime()
+        .unwrap()
         .router()
         .tables
         .regen_interceptors(&config_router)
@@ -290,7 +293,8 @@ async fn test_interceptors_cache_update_egress() {
 
     router
         .0
-        .runtime
+        .static_runtime()
+        .unwrap()
         .router()
         .tables
         .regen_interceptors(&config_router)
@@ -380,7 +384,8 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
 
     router
         .0
-        .runtime
+        .static_runtime()
+        .unwrap()
         .router()
         .tables
         .regen_interceptors(&config_router)

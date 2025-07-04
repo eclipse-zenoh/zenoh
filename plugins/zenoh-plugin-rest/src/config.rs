@@ -40,9 +40,9 @@ pub struct Config {
     __plugin__: Option<String>,
 }
 
-impl From<&Config> for serde_json::Value {
+impl From<&Config> for String {
     fn from(c: &Config) -> Self {
-        serde_json::to_value(c).unwrap()
+        serde_json::to_value(c).unwrap().to_string()
     }
 }
 
