@@ -110,7 +110,7 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            tables.hat_code.ew.as_ref().declare_queryable(
+            tables.hat_code.eastwest.as_ref().declare_queryable(
                 &mut wtables,
                 face,
                 id,
@@ -170,7 +170,7 @@ pub(crate) fn undeclare_queryable(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) = tables.hat_code.ew.as_ref().undeclare_queryable(
+    if let Some(mut res) = tables.hat_code.eastwest.as_ref().undeclare_queryable(
         &mut wtables,
         face,
         id,
@@ -484,13 +484,13 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
 
             if tables_ref
                 .hat_code
-                .ew
+                .eastwest
                 .ingress_filter(&rtables, face, &mut expr)
             {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
                 let route = get_query_route(
-                    tables_ref.hat_code.ew.as_ref(),
+                    tables_ref.hat_code.eastwest.as_ref(),
                     &rtables,
                     face,
                     &res,
@@ -505,7 +505,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
                 let route = compute_final_route(
-                    tables_ref.hat_code.ew.as_ref(),
+                    tables_ref.hat_code.eastwest.as_ref(),
                     &rtables,
                     &route,
                     face,

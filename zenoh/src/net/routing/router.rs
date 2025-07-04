@@ -37,7 +37,7 @@ use super::{
 };
 use crate::net::{
     primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
-    routing::dispatcher::tables::HatsCode,
+    routing::{dispatcher::tables::HatCode, gateway},
 };
 
 pub struct Router {
@@ -52,26 +52,30 @@ impl Router {
         hlc: Option<Arc<HLC>>,
         config: &Config,
     ) -> ZResult<Self> {
-        let hat_code = HatsCode {
-            ew: hat::new_hat(whatami, config),
-            south: hat::new_hat(whatami, config), // TODO
+        let hat_code = HatCode {
+            eastwest: hat::new_hat(whatami, config),
+            south: hat::new_hat(whatami, config), // TODO: ???
         };
-        Ok(Router {
-            whatami,
-            tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config, &hat_code)?),
-                hat_code,
-                ctrl_lock: Mutex::new(()),
-                queries_lock: RwLock::new(()),
-            }),
-        })
+        let tables = Arc::new(TablesLock {
+            tables: RwLock::new(Tables::new(zid, whatami, hlc, config, &hat_code)?),
+            hat_code,
+            ctrl_lock: Mutex::new(()),
+            queries_lock: RwLock::new(()),
+        });
+
+        gateway::init(&tables);
+
+        Ok(Router { whatami, tables })
     }
 
     pub fn init_link_state(&mut self, runtime: Runtime) -> ZResult<()> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         tables.runtime = Some(Runtime::downgrade(&runtime));
-        self.tables.hat_code.ew.init(&mut tables, runtime.clone())?;
+        self.tables
+            .hat_code
+            .eastwest
+            .init(&mut tables, runtime.clone())?;
         self.tables.hat_code.south.init(&mut tables, runtime)
     }
 
@@ -99,7 +103,7 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
-                    self.tables.hat_code.ew.new_face(),
+                    self.tables.hat_code.eastwest.new_face(),
                     true,
                 )
             })
@@ -154,7 +158,7 @@ impl Router {
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
-                    self.tables.hat_code.ew.new_face(),
+                    self.tables.hat_code.eastwest.new_face(),
                     false,
                 )
             })
@@ -176,7 +180,7 @@ impl Router {
         let hat_code = if self.is_south(&transport)? {
             self.tables.hat_code.south.as_ref()
         } else {
-            self.tables.hat_code.ew.as_ref()
+            self.tables.hat_code.eastwest.as_ref()
         };
         hat_code.new_transport_unicast_face(
             &mut tables,
@@ -210,7 +214,7 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
-            self.tables.hat_code.ew.new_face(),
+            self.tables.hat_code.eastwest.new_face(),
             false,
         );
         face.set_interceptors_from_factories(
@@ -247,7 +251,7 @@ impl Router {
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),
-            self.tables.hat_code.ew.new_face(),
+            self.tables.hat_code.eastwest.new_face(),
             false,
         );
         face_state.set_interceptors_from_factories(

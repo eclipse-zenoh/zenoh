@@ -75,7 +75,7 @@ pub struct Tables {
     pub(crate) queries_default_timeout: Duration,
     pub(crate) interests_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
-    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+    pub(crate) faces: HashMap<usize, Arc<FaceState>>, // TODO: maybe have two lists, one for southern faces and one east-western faces?
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
@@ -91,7 +91,7 @@ impl Tables {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
-        hat_code: &HatsCode,
+        hat_code: &HatCode,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -115,7 +115,9 @@ impl Tables {
             mcast_groups: vec![],
             mcast_faces: vec![],
             interceptors: interceptor_factories(config)?,
-            hat: hat_code.ew.new_tables(router_peers_failover_brokering),
+            hat: hat_code
+                .eastwest
+                .new_tables(router_peers_failover_brokering),
             south_hat: hat_code.south.new_tables(router_peers_failover_brokering),
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
@@ -168,14 +170,14 @@ impl Tables {
     }
 }
 
-pub(crate) struct HatsCode {
-    pub(crate) ew: Box<dyn HatTrait + Send + Sync>,
+pub(crate) struct HatCode {
+    pub(crate) eastwest: Box<dyn HatTrait + Send + Sync>,
     pub(crate) south: Box<dyn HatTrait + Send + Sync>,
 }
 
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub(crate) hat_code: HatsCode,
+    pub(crate) hat_code: HatCode,
     pub(crate) ctrl_lock: Mutex<()>,
     pub queries_lock: RwLock<()>,
 }

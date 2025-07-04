@@ -77,7 +77,7 @@ pub(crate) fn declare_token(
                     (res, wtables)
                 };
 
-            tables.hat_code.ew.as_ref().declare_token(
+            tables.hat_code.eastwest.as_ref().declare_token(
                 &mut wtables,
                 face,
                 id,
@@ -152,7 +152,7 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    if let Some(res) = tables.hat_code.ew.as_ref().undeclare_token(
+    if let Some(res) = tables.hat_code.eastwest.as_ref().undeclare_token(
         &mut wtables,
         face,
         id,

@@ -87,7 +87,7 @@ pub(crate) fn declare_subscription(
                     (res, wtables)
                 };
 
-            tables.hat_code.ew.as_ref().declare_subscription(
+            tables.hat_code.eastwest.as_ref().declare_subscription(
                 &mut wtables,
                 face,
                 id,
@@ -145,7 +145,7 @@ pub(crate) fn undeclare_subscription(
         }
     };
     let mut wtables = zwrite!(tables.tables);
-    if let Some(mut res) = tables.hat_code.ew.as_ref().undeclare_subscription(
+    if let Some(mut res) = tables.hat_code.eastwest.as_ref().undeclare_subscription(
         &mut wtables,
         face,
         id,
@@ -319,13 +319,13 @@ pub fn route_data(
 
             if tables_ref
                 .hat_code
-                .ew
+                .eastwest
                 .ingress_filter(&tables, face, &mut expr)
             {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
                 let route = get_data_route(
-                    tables_ref.hat_code.ew.as_ref(),
+                    tables_ref.hat_code.eastwest.as_ref(),
                     &tables,
                     face,
                     &res,
@@ -340,7 +340,7 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if tables_ref
                             .hat_code
-                            .ew
+                            .eastwest
                             .egress_filter(&tables, face, outface, &mut expr)
                         {
                             drop(tables);
@@ -360,7 +360,7 @@ pub fn route_data(
                             .filter(|(outface, _key_expr, _context)| {
                                 tables_ref
                                     .hat_code
-                                    .ew
+                                    .eastwest
                                     .egress_filter(&tables, face, outface, &mut expr)
                             })
                             .cloned()

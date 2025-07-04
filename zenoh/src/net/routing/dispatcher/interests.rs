@@ -90,7 +90,11 @@ pub(crate) fn declare_final(
         finalize_pending_interest(interest, send_declare);
     }
 
-    tables.hat_code.ew.as_ref().declare_final(wtables, face, id);
+    tables
+        .hat_code
+        .eastwest
+        .as_ref()
+        .declare_final(wtables, face, id);
 }
 
 pub(crate) fn finalize_pending_interests(
@@ -247,7 +251,7 @@ pub(crate) fn declare_interest(
                         (res, wtables)
                     };
 
-                tables.hat_code.ew.as_ref().declare_interest(
+                tables.hat_code.eastwest.as_ref().declare_interest(
                     &mut wtables,
                     tables,
                     face,
@@ -267,7 +271,7 @@ pub(crate) fn declare_interest(
         }
     } else {
         let mut wtables = zwrite!(tables.tables);
-        tables.hat_code.ew.as_ref().declare_interest(
+        tables.hat_code.eastwest.as_ref().declare_interest(
             &mut wtables,
             tables,
             face,
@@ -286,7 +290,7 @@ pub(crate) fn undeclare_interest(tables: &TablesLock, face: &mut Arc<FaceState>,
     let mut wtables = zwrite!(tables.tables);
     tables
         .hat_code
-        .ew
+        .eastwest
         .as_ref()
         .undeclare_interest(&mut wtables, face, id);
 }

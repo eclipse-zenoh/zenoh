@@ -1247,13 +1247,13 @@ impl Runtime {
         router
             .tables
             .hat_code
-            .ew
+            .eastwest
             .update_from_config(&mut tables, &router.tables, self)
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        router.tables.hat_code.ew.links_info(&tables)
+        router.tables.hat_code.eastwest.links_info(&tables)
     }
 }

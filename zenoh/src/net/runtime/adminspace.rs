@@ -718,7 +718,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(
             reply_key,
-            tables.hat_code.ew.info(&rtables, WhatAmI::Router),
+            tables.hat_code.eastwest.info(&rtables, WhatAmI::Router),
         )
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
@@ -739,7 +739,10 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     let rtables = zread!(tables.tables);
 
     if let Err(e) = query
-        .reply(reply_key, tables.hat_code.ew.info(&rtables, WhatAmI::Peer))
+        .reply(
+            reply_key,
+            tables.hat_code.eastwest.info(&rtables, WhatAmI::Peer),
+        )
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
@@ -750,7 +753,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 fn subscribers_data(context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.ew.get_subscriptions(&rtables) {
+    for sub in tables.hat_code.eastwest.get_subscriptions(&rtables) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/subscriber/{}",
             context.runtime.state.zid,
@@ -775,7 +778,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
 fn publishers_data(context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.ew.get_publications(&rtables) {
+    for sub in tables.hat_code.eastwest.get_publications(&rtables) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/publisher/{}",
             context.runtime.state.zid,
@@ -800,7 +803,7 @@ fn publishers_data(context: &AdminContext, query: Query) {
 fn queryables_data(context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    for qabl in tables.hat_code.ew.get_queryables(&rtables) {
+    for qabl in tables.hat_code.eastwest.get_queryables(&rtables) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/queryable/{}",
             context.runtime.state.zid,
@@ -825,7 +828,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
 fn queriers_data(context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.ew.get_queriers(&rtables) {
+    for sub in tables.hat_code.eastwest.get_queriers(&rtables) {
         let key = KeyExpr::try_from(format!(
             "@/{}/{}/querier/{}",
             context.runtime.state.zid,
@@ -867,7 +870,7 @@ fn route_successor(context: &AdminContext, query: Query) {
         if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
             if let Some(successor) = tables
                 .hat_code
-                .ew
+                .eastwest
                 .route_successor(&rtables, src_zid, dst_zid)
             {
                 reply(query.key_expr(), successor);
@@ -876,7 +879,7 @@ fn route_successor(context: &AdminContext, query: Query) {
         }
     }
     // Reply with every successor suffix matching the keyexpr.
-    let successors = tables.hat_code.ew.route_successors(&rtables);
+    let successors = tables.hat_code.eastwest.route_successors(&rtables);
     drop(rtables);
     for entry in successors.iter() {
         let keyexpr = KeyExpr::new(format!(

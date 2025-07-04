@@ -300,7 +300,7 @@ impl Face {
         if self.state.south {
             self.tables.hat_code.south.as_ref()
         } else {
-            self.tables.hat_code.ew.as_ref()
+            self.tables.hat_code.eastwest.as_ref()
         }
     }
 }

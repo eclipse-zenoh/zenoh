@@ -40,7 +40,7 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::{face::Face, tables::HatsCode},
+    dispatcher::{face::Face, tables::HatCode},
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
@@ -437,7 +437,7 @@ impl Resource {
     }
 
     pub fn make_resource(
-        hat_code: &HatsCode,
+        hat_code: &HatCode,
         _tables: &mut Tables,
         from: &mut Arc<Resource>,
         mut suffix: &str,
@@ -470,7 +470,7 @@ impl Resource {
             suffix = rest;
         }
         let hat = ResourceContextHats {
-            ew: hat_code.ew.new_resource(),
+            ew: hat_code.eastwest.new_resource(),
             south: hat_code.south.new_resource(),
         };
         Resource::upgrade_resource(&mut from, hat);
