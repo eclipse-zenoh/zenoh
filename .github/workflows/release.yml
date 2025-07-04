@@ -97,7 +97,7 @@ jobs:
   debian:
     name: Publish Debian packages
     needs: [tag, build-debian, cargo]
-    uses: eclipse-zenoh/ci/.github/workflows/release-crates-debian.yml@main
+    uses: ZettaScaleLabs/ci/.github/workflows/release-crates-debian.yml@sign-debian-packages
     with:
       no-build: true
       live-run: ${{ inputs.live-run || false }}
