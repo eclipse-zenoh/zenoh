@@ -53,6 +53,8 @@ pub struct PublisherQoSConfig {
 pub enum CongestionControlConf {
     Drop,
     Block,
+    #[cfg(feature = "unstable")]
+    BlockFirst,
 }
 
 impl From<CongestionControlConf> for CongestionControl {
@@ -60,6 +62,8 @@ impl From<CongestionControlConf> for CongestionControl {
         match value {
             CongestionControlConf::Drop => Self::Drop,
             CongestionControlConf::Block => Self::Block,
+            #[cfg(feature = "unstable")]
+            CongestionControlConf::BlockFirst => Self::BlockFirst,
         }
     }
 }
@@ -69,6 +73,8 @@ impl From<CongestionControl> for CongestionControlConf {
         match value {
             CongestionControl::Drop => Self::Drop,
             CongestionControl::Block => Self::Block,
+            #[cfg(feature = "unstable")]
+            CongestionControl::BlockFirst => Self::BlockFirst,
         }
     }
 }
