@@ -18,12 +18,12 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{collections::HashSet, ops::Range, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
+use std::ops::RangeBounds as _;
 
 use zenoh_buffers::buffer::Buffer as _;
 use zenoh_config::{
-    qos::{QosFilter, QosOverwriteMessage, QosOverwrites},
-    QosOverwriteItemConf, ZenohId,
+    qos::{QosFilter, QosOverwriteMessage, QosOverwrites}, ConfRange, QosOverwriteItemConf, ZenohId
 };
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
@@ -190,7 +190,7 @@ pub(crate) struct QosOverwriteFilter {
     query: bool,
     reply: bool,
     qos: Option<QosFilter>,
-    payload_size: Option<Range<u64>>,
+    payload_size: Option<ConfRange>,
 }
 
 pub(crate) struct QosInterceptor {
