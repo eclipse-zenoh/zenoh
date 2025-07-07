@@ -435,6 +435,9 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     }
 }
 
+/// There is one [`RuntimeTransportPeerEventHandler`] per unicast transport.
+///
+/// The [`zenoh_transport::TransportPeerEventHandler`] impl forwards messages to the transport's [`zenoh::net::primitives::demux::DeMux`]
 pub(super) struct RuntimeTransportPeerEventHandler {
     pub(super) runtime: Runtime,
     pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,

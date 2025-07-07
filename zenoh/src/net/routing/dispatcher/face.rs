@@ -278,6 +278,7 @@ impl WeakFace {
 
 #[derive(Clone)]
 pub struct Face {
+    /// The routing table shared with [`crate::net::runtime::RuntimeState::router`].
     pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
 }

@@ -41,6 +41,7 @@ use crate::net::{
 };
 
 pub struct Router {
+    /// Same value as [`Tables::whatami`] of this [`Router::tables`].
     whatami: WhatAmI,
     pub tables: Arc<TablesLock>,
 }
