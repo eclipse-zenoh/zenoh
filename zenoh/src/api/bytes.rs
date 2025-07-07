@@ -215,13 +215,13 @@ impl ZBytes {
 const _: () = {
     use zenoh_shm::{api::buffer::zshm::zshm, ShmBufInner};
     impl ZBytes {
-        pub fn as_shm(&self) -> Option<&zshm> {
+        pub fn as_shm(&self) -> Option<&zshm<[u8]>> {
             let mut zslices = self.0.zslices();
             let buf = zslices.next()?.downcast_ref::<ShmBufInner>();
             buf.map(Into::into).filter(|_| zslices.next().is_none())
         }
 
-        pub fn as_shm_mut(&mut self) -> Option<&mut zshm> {
+        pub fn as_shm_mut(&mut self) -> Option<&mut zshm<[u8]>> {
             let mut zslices = self.0.zslices_mut();
             // SAFETY: ShmBufInner cannot change the size of the slice
             let buf = unsafe { zslices.next()?.downcast_mut::<ShmBufInner>() };
@@ -462,13 +462,13 @@ impl From<bytes::Bytes> for ZBytes {
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 const _: () = {
     use zenoh_shm::api::buffer::{zshm::ZShm, zshmmut::ZShmMut};
-    impl From<ZShm> for ZBytes {
-        fn from(value: ZShm) -> Self {
+    impl From<ZShm<[u8]>> for ZBytes {
+        fn from(value: ZShm<[u8]>) -> Self {
             Self(ZSlice::from(value).into())
         }
     }
-    impl From<ZShmMut> for ZBytes {
-        fn from(value: ZShmMut) -> Self {
+    impl From<ZShmMut<[u8]>> for ZBytes {
+        fn from(value: ZShmMut<[u8]>) -> Self {
             Self(ZSlice::from(value).into())
         }
     }

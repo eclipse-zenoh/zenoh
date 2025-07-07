@@ -120,7 +120,7 @@ impl<Backend> Resolvable for AllocLayoutSizedBuilder<'_, Backend>
 where
     Backend: ShmProviderBackend,
 {
-    type To = BufLayoutAllocResult;
+    type To = BufLayoutAllocResult<[u8]>;
 }
 
 // Sync alloc policy
@@ -516,7 +516,7 @@ impl<Backend, Policy> Resolvable for ProviderAllocBuilder<'_, Backend, Policy>
 where
     Backend: ShmProviderBackend,
 {
-    type To = BufLayoutAllocResult;
+    type To = BufLayoutAllocResult<[u8]>;
 }
 
 // Sync alloc policy
@@ -586,7 +586,7 @@ impl<Backend, Policy> Resolvable for LayoutAllocBuilder<'_, Backend, Policy>
 where
     Backend: ShmProviderBackend,
 {
-    type To = BufAllocResult;
+    type To = BufAllocResult<[u8]>;
 }
 
 // Sync alloc policy
@@ -762,7 +762,7 @@ where
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
-    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> Result<ZShmMut, ZAllocError> {
+    pub fn map(&self, chunk: AllocatedChunk, len: usize) -> Result<ZShmMut<[u8]>, ZAllocError> {
         let len = len.try_into().map_err(|_| ZAllocError::Other)?;
 
         // allocate resources for SHM buffer
@@ -837,7 +837,7 @@ where
         }
     }
 
-    fn alloc_inner<Policy>(&self, size: NonZeroUsize, layout: &MemoryLayout) -> BufAllocResult
+    fn alloc_inner<Policy>(&self, size: NonZeroUsize, layout: &MemoryLayout) -> BufAllocResult<[u8]>
     where
         Policy: AllocPolicy,
     {
@@ -924,7 +924,7 @@ where
         &self,
         size: NonZeroUsize,
         backend_layout: &MemoryLayout,
-    ) -> BufAllocResult
+    ) -> BufAllocResult<[u8]>
     where
         Policy: AsyncAllocPolicy,
     {

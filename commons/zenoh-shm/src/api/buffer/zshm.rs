@@ -15,6 +15,7 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
     num::NonZeroUsize,
 };
 
@@ -24,106 +25,156 @@ use super::{
     traits::{BufferRelayoutError, OwnedShmBuf, ShmBuf},
     zshmmut::{zshmmut, ZShmMut},
 };
-use crate::{api::provider::types::MemoryLayout, ShmBufInner};
+use crate::{
+    api::{buffer::traits::{ResideInShm, ShmBufUnsafeMut}, provider::types::MemoryLayout},
+    ShmBufInner,
+};
 
 /// An immutable SHM buffer
 #[zenoh_macros::unstable_doc]
 #[repr(transparent)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZShm(pub(crate) ShmBufInner);
+pub struct ZShm<T: ?Sized> {
+    pub(crate) inner: ShmBufInner,
+    pub(crate) _phantom: PhantomData<T>,
+}
 
-impl ShmBuf for ZShm {
+impl<T: ResideInShm> ShmBuf<T> for ZShm<T> {
     fn is_valid(&self) -> bool {
-        self.0.is_valid()
-    }
-
-    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice_inner()
+        self.inner.is_valid()
     }
 }
 
-impl OwnedShmBuf for ZShm {
+impl ShmBuf<[u8]> for ZShm<[u8]> {
+    fn is_valid(&self) -> bool {
+        self.inner.is_valid()
+    }
+}
+
+impl<T: ResideInShm> ShmBufUnsafeMut<T> for ZShm<T> {
+    unsafe fn as_mut_unchecked(&mut self) -> &mut T {
+        let slice = self.inner.as_mut_slice_inner();
+        unsafe { &mut *(slice.as_mut_ptr() as *mut T) }
+    }
+}
+
+impl ShmBufUnsafeMut<[u8]> for ZShm<[u8]> {
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
+        self.inner.as_mut_slice_inner()
+    }
+}
+
+impl<T: ResideInShm> OwnedShmBuf<T> for ZShm<T> {
     fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
         // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
         // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment)
-        unsafe { self.0.try_resize(new_size) }
+        unsafe { self.inner.try_resize(new_size) }
     }
 
     fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError> {
         // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
         // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_relayout comment)
-        unsafe { self.0.try_relayout(new_layout) }
+        unsafe { self.inner.try_relayout(new_layout) }
     }
 }
 
-impl PartialEq<&zshm> for ZShm {
-    fn eq(&self, other: &&zshm) -> bool {
-        self.0 == other.0
+impl OwnedShmBuf<[u8]> for ZShm<[u8]> {
+    fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
+        // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment)
+        unsafe { self.inner.try_resize(new_size) }
+    }
+
+    fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError> {
+        // Safety: this is safe because ZShm is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_relayout comment)
+        unsafe { self.inner.try_relayout(new_layout) }
     }
 }
 
-impl Borrow<zshm> for ZShm {
-    fn borrow(&self) -> &zshm {
+impl<T: ?Sized> PartialEq<&zshm<T>> for ZShm<T> {
+    fn eq(&self, other: &&zshm<T>) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl<T: ?Sized> Borrow<zshm<T>> for ZShm<T> {
+    fn borrow(&self) -> &zshm<T> {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
-impl BorrowMut<zshm> for ZShm {
-    fn borrow_mut(&mut self) -> &mut zshm {
+impl<T: ?Sized> BorrowMut<zshm<T>> for ZShm<T> {
+    fn borrow_mut(&mut self) -> &mut zshm<T> {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to ShmBufInner type, so it is safe to transmute them in any direction
         unsafe { core::mem::transmute(self) }
     }
 }
 
-impl Deref for ZShm {
+impl<T: ResideInShm> Deref for ZShm<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        let slice = self.inner.as_ref();
+        unsafe { &*(slice.as_ptr() as *const T) }
+    }
+}
+
+impl Deref for ZShm<[u8]> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
+        self.inner.as_ref()
     }
 }
 
-impl AsRef<[u8]> for ZShm {
+impl<T: ResideInShm> AsRef<T> for ZShm<T> {
+    fn as_ref(&self) -> &T {
+        self
+    }
+}
+
+impl AsRef<[u8]> for ZShm<[u8]> {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl From<ZShm> for ZSlice {
-    fn from(value: ZShm) -> Self {
-        value.0.into()
+impl<T: ?Sized> From<ZShm<T>> for ZSlice {
+    fn from(value: ZShm<T>) -> Self {
+        value.inner.into()
     }
 }
 
-impl From<ZShm> for ZBuf {
-    fn from(value: ZShm) -> Self {
-        value.0.into()
+impl<T: ?Sized> From<ZShm<T>> for ZBuf {
+    fn from(value: ZShm<T>) -> Self {
+        value.inner.into()
     }
 }
 
-impl TryFrom<ZShm> for ZShmMut {
-    type Error = ZShm;
+impl<T: ?Sized> TryFrom<ZShm<T>> for ZShmMut<T> {
+    type Error = ZShm<T>;
 
-    fn try_from(value: ZShm) -> Result<Self, Self::Error> {
-        match value.0.is_unique() && value.0.is_valid() {
-            true => Ok(Self(value.0)),
+    fn try_from(value: ZShm<T>) -> Result<Self, Self::Error> {
+        match value.inner.is_unique() && value.inner.is_valid() {
+            true => Ok(unsafe { std::mem::transmute(value) }),
             false => Err(value),
         }
     }
 }
 
-impl TryFrom<&mut ZShm> for &mut zshmmut {
+impl<T: ?Sized> TryFrom<&mut ZShm<T>> for &mut zshmmut<T> {
     type Error = ();
 
-    fn try_from(value: &mut ZShm) -> Result<Self, Self::Error> {
-        match value.0.is_unique() && value.0.is_valid() {
+    fn try_from(value: &mut ZShm<T>) -> Result<Self, Self::Error> {
+        match value.inner.is_unique() && value.inner.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
                 // to ShmBufInner type, so it is safe to transmute them in any direction
-                Ok(unsafe { core::mem::transmute::<&mut ZShm, &mut zshmmut>(value) })
+                Ok(unsafe { core::mem::transmute::<&mut ZShm<T>, &mut zshmmut<T>>(value) })
             }
             false => Err(()),
         }
@@ -135,55 +186,104 @@ impl TryFrom<&mut ZShm> for &mut zshmmut {
 #[derive(Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
-pub struct zshm(ShmBufInner);
+pub struct zshm<T: ?Sized> {
+    pub(crate) inner: ShmBufInner,
+    _phantom: PhantomData<T>,
+}
 
-impl ShmBuf for zshm {
+impl<T: ResideInShm> ShmBuf<T> for &zshm<T> {
     fn is_valid(&self) -> bool {
-        self.0.is_valid()
-    }
-
-    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice_inner()
+        self.inner.is_valid()
     }
 }
 
-impl Deref for zshm {
+impl ShmBuf<[u8]> for &zshm<[u8]> {
+    fn is_valid(&self) -> bool {
+        self.inner.is_valid()
+    }
+}
+
+impl<T: ResideInShm> ShmBuf<T> for &mut zshm<T> {
+    fn is_valid(&self) -> bool {
+        self.inner.is_valid()
+    }
+}
+
+impl ShmBuf<[u8]> for &mut zshm<[u8]> {
+    fn is_valid(&self) -> bool {
+        self.inner.is_valid()
+    }
+}
+
+
+impl<T: ResideInShm> ShmBufUnsafeMut<T> for &mut zshm<T> {
+    unsafe fn as_mut_unchecked(&mut self) -> &mut T {
+        let slice = self.inner.as_mut_slice_inner();
+        unsafe { &mut *(slice.as_mut_ptr() as *mut T) }
+    }
+}
+
+impl ShmBufUnsafeMut<[u8]> for &mut zshm<[u8]> {
+    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
+        self.inner.as_mut_slice_inner()
+    }
+}
+
+impl<T: ResideInShm> Deref for zshm<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        let slice = self.inner.as_ref();
+        unsafe { &*(slice.as_ptr() as *const T) }
+    }
+}
+
+impl Deref for zshm<[u8]> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
+        self.inner.as_ref()
     }
 }
 
-impl AsRef<[u8]> for zshm {
+
+impl<T: ResideInShm> AsRef<T> for zshm<T> {
+    fn as_ref(&self) -> &T {
+        self
+    }
+}
+
+impl AsRef<[u8]> for zshm<[u8]> {
     fn as_ref(&self) -> &[u8] {
         self
     }
 }
 
-impl ToOwned for zshm {
-    type Owned = ZShm;
+
+impl<T: ?Sized> ToOwned for zshm<T> {
+    type Owned = ZShm<T>;
 
     fn to_owned(&self) -> Self::Owned {
-        self.0.clone().into()
+        // SAFETY: this is safe because Self already guarantees inner to be T
+        unsafe { ZShm::new_unchecked(self.inner.clone()) }
     }
 }
 
-impl PartialEq<ZShm> for &zshm {
-    fn eq(&self, other: &ZShm) -> bool {
-        self.0 == other.0
+impl<T: ?Sized> PartialEq<ZShm<T>> for &zshm<T> {
+    fn eq(&self, other: &ZShm<T>) -> bool {
+        self.inner == other.inner
     }
 }
 
-impl TryFrom<&mut zshm> for &mut zshmmut {
+impl<T: ?Sized> TryFrom<&mut zshm<T>> for &mut zshmmut<T> {
     type Error = ();
 
-    fn try_from(value: &mut zshm) -> Result<Self, Self::Error> {
-        match value.0.is_unique() && value.0.is_valid() {
+    fn try_from(value: &mut zshm<T>) -> Result<Self, Self::Error> {
+        match value.inner.is_unique() && value.inner.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
                 // to ShmBufInner type, so it is safe to transmute them in any direction
-                Ok(unsafe { core::mem::transmute::<&mut zshm, &mut zshmmut>(value) })
+                Ok(unsafe { core::mem::transmute::<&mut zshm<T>, &mut zshmmut<T>>(value) })
             }
             false => Err(()),
         }

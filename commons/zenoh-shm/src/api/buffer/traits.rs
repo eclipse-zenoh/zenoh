@@ -11,13 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{num::NonZeroUsize, ptr};
 
-use std::{
-    num::NonZeroUsize,
-    ops::{Deref, DerefMut},
-};
+use stabby::{abi::typenum2::B0, IStable};
 
 use crate::api::provider::types::MemoryLayout;
+
+pub trait ResideInShm: IStable<ContainsIndirections = B0> {}
+
+impl<T: IStable<ContainsIndirections = B0>> ResideInShm for T {}
 
 /// Errors for buffer relayouting operation.
 #[zenoh_macros::unstable_doc]
@@ -28,10 +30,47 @@ pub enum BufferRelayoutError {
 }
 
 #[zenoh_macros::unstable_doc]
-pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
+pub trait ShmBuf<T: ?Sized>: Sized + AsRef<T> {
     #[zenoh_macros::unstable_doc]
     fn is_valid(&self) -> bool;
+}
 
+pub trait ShmConvert: Sized {
+    /// Performs the conversion.
+    fn try_convert<T: ResideInShm, Tdst: ShmBuf<T>>(self) -> Result<Tdst, Self>;
+}
+
+impl<Tsrc: ShmBuf<[u8]> + Sized> ShmConvert for Tsrc {
+    fn try_convert<T: ResideInShm, Tdst: ShmBuf<T> + Sized>(self) -> Result<Tdst, Self> {
+        // layout checks block
+        {
+            let slice = self.as_ref();
+
+            let ptr = slice.as_ptr();
+
+            // check alignment
+            let type_align = std::mem::align_of::<T>();
+            if ((ptr as usize) % type_align) != 0 {
+                return Err(self);
+            }
+
+            // check size
+            let type_size = std::mem::size_of::<T>();
+            let size = slice.len();
+            if type_size != size {
+                return Err(self);
+            }
+        }
+        let self_ptr = self.as_ref().as_ptr() as *const Tdst;
+        let new_self = unsafe { ptr::read::<Tdst>(self_ptr) };
+        std::mem::forget(self);
+
+        Ok(new_self)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+pub trait ShmBufUnsafeMut<T: ?Sized>: ShmBuf<T> {
     #[zenoh_macros::unstable_doc]
     /// Get unchecked mutable access to buffer's memory.
     ///
@@ -44,14 +83,14 @@ pub trait ShmBuf: Deref<Target = [u8]> + AsRef<[u8]> {
     /// - user code guarantees no data race across all applications that share the buffer
     /// - the buffer is not being concurrently sent to the outside of SHM domain
     /// - the buffer is valid
-    unsafe fn as_mut_unchecked(&mut self) -> &mut [u8];
+    unsafe fn as_mut_unchecked(&mut self) -> &mut T;
 }
 
 #[zenoh_macros::unstable_doc]
-pub trait ShmBufMut: ShmBuf + DerefMut + AsMut<[u8]> {}
+pub trait ShmBufMut<T: ?Sized>: ShmBuf<T> + AsMut<T> {}
 
 #[zenoh_macros::unstable_doc]
-pub trait OwnedShmBuf: ShmBuf {
+pub trait OwnedShmBuf<T: ?Sized>: ShmBuf<T> {
     #[zenoh_macros::unstable_doc]
     fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()>;
 

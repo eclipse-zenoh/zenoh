@@ -17,7 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, num::NonZeroUsize, sync::atomic::Ordering};
+use std::{any::Any, marker::PhantomData, num::NonZeroUsize, sync::atomic::Ordering};
 
 use api::{
     buffer::{
@@ -280,43 +280,56 @@ impl ZSliceBuffer for ShmBufInner {
     }
 }
 
-impl From<ShmBufInner> for ZShm {
+impl ZShm<[u8]> {
+    pub(crate) fn new(inner: ShmBufInner) -> Self {
+        Self { inner, _phantom: PhantomData::default() }
+    }
+}
+
+impl From<ShmBufInner> for ZShm<[u8]> {
     fn from(value: ShmBufInner) -> Self {
-        Self(value)
+        Self::new(value)
     }
 }
 
-impl ZShmMut {
-    pub(crate) unsafe fn new_unchecked(data: ShmBufInner) -> Self {
-        Self(data)
+impl<T: ?Sized> ZShmMut<T> {
+    pub(crate) unsafe fn new_unchecked(inner: ShmBufInner) -> Self {
+        Self { inner, _phantom: PhantomData::default() }
     }
 }
 
-impl TryFrom<ShmBufInner> for ZShmMut {
+impl<T: ?Sized> ZShm<T> {
+    pub(crate) unsafe fn new_unchecked(inner: ShmBufInner) -> Self {
+        Self { inner, _phantom: PhantomData::default() }
+    }
+}
+
+impl TryFrom<ShmBufInner> for ZShmMut<[u8]> {
     type Error = ShmBufInner;
 
     fn try_from(value: ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
-            true => Ok(Self(value)),
+            // SAFETY: we checked above
+            true => Ok(unsafe { Self::new_unchecked(value) }),
             false => Err(value),
         }
     }
 }
 
-impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
+impl TryFrom<&mut ShmBufInner> for &mut zshmmut<[u8]> {
     type Error = ();
 
     fn try_from(value: &mut ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
             // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
             // to ShmBufInner type, so it is safe to transmute them in any direction
-            true => Ok(unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshmmut>(value) }),
+            true => Ok(unsafe { core::mem::transmute(value) }),
             false => Err(()),
         }
     }
 }
 
-impl From<&ShmBufInner> for &zshm {
+impl From<&ShmBufInner> for &zshm<[u8]> {
     fn from(value: &ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to ShmBufInner type, so it is safe to transmute them in any direction
@@ -324,7 +337,7 @@ impl From<&ShmBufInner> for &zshm {
     }
 }
 
-impl From<&mut ShmBufInner> for &mut zshm {
+impl From<&mut ShmBufInner> for &mut zshm<[u8]> {
     fn from(value: &mut ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to ShmBufInner type, so it is safe to transmute them in any direction

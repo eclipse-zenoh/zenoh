@@ -31,13 +31,13 @@ fn main() {
     let _data_mut: &mut [u8] = &mut owned_shm_buf_mut;
 
     // convert into immutable owned buffer (ZShmMut -> ZShm)
-    let owned_shm_buf: ZShm = owned_shm_buf_mut.into();
+    let owned_shm_buf: ZShm<[u8]> = owned_shm_buf_mut.into();
 
     // immutable API
     let _data: &[u8] = &owned_shm_buf;
 
     // convert again into mutable owned buffer (ZShm -> ZShmMut)
-    let mut owned_shm_buf_mut: ZShmMut = owned_shm_buf.try_into().unwrap();
+    let mut owned_shm_buf_mut: ZShmMut<[u8]> = owned_shm_buf.try_into().unwrap();
 
     // mutable and immutable API
     let _data: &[u8] = &owned_shm_buf_mut;
@@ -61,7 +61,7 @@ fn main() {
         let _data: &[u8] = &owned;
 
         // try to construct mutable ZShmMut (ZShm -> ZShmMut)
-        let owned_mut: Result<ZShmMut, _> = owned.try_into();
+        let owned_mut: Result<ZShmMut<[u8]>, _> = owned.try_into();
         // the attempt fails because ZShm has two existing references ('owned' and inside 'payload')
         assert!(owned_mut.is_err())
     }
@@ -75,7 +75,7 @@ fn main() {
         let _data: &[u8] = borrowed_shm_buf;
 
         // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
-        let borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
+        let borrowed_shm_buf_mut: &mut zshmmut<[u8]> = borrowed_shm_buf.try_into().unwrap();
 
         // mutable and immutable API
         let _data: &[u8] = borrowed_shm_buf_mut;
