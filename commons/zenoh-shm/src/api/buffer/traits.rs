@@ -37,30 +37,30 @@ pub trait ShmBuf<T: ?Sized>: Sized + AsRef<T> {
 
 pub trait ShmConvert: Sized {
     /// Performs the conversion.
-    fn try_convert<T: ResideInShm, Tdst: ShmBuf<T>>(self) -> Result<Tdst, Self>;
+    fn shm_convert<T: ResideInShm, Tdst: ShmBuf<T>>(self) -> Result<Tdst, Self>;
 }
 
-impl<Tsrc: ShmBuf<[u8]> + Sized> ShmConvert for Tsrc {
-    fn try_convert<T: ResideInShm, Tdst: ShmBuf<T> + Sized>(self) -> Result<Tdst, Self> {
+impl<Tsrc: ShmBuf<[u8]>> ShmConvert for Tsrc {
+    fn shm_convert<T: ResideInShm, Tdst: ShmBuf<T>>(self) -> Result<Tdst, Self> {
         // layout checks block
         {
-            let slice = self.as_ref();
-
-            let ptr = slice.as_ptr();
-
-            // check alignment
-            let type_align = std::mem::align_of::<T>();
-            if ((ptr as usize) % type_align) != 0 {
-                return Err(self);
-            }
-
             // check size
+            let slice = self.as_ref();
             let type_size = std::mem::size_of::<T>();
             let size = slice.len();
             if type_size != size {
                 return Err(self);
             }
+
+            // check alignment
+            let ptr = slice.as_ptr();
+            let type_align = std::mem::align_of::<T>();
+            if ((ptr as usize) % type_align) != 0 {
+                return Err(self);
+            }
         }
+
+        // fully manually morph self into Tdst
         let self_ptr = self.as_ref().as_ptr() as *const Tdst;
         let new_self = unsafe { ptr::read::<Tdst>(self_ptr) };
         std::mem::forget(self);
