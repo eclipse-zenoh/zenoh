@@ -17,12 +17,17 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use zenoh_core::bail;
+use zenoh_result::{IError, ZResult};
+
 use crate::{
-    api::buffer::{traits::{ResideInShm, ShmBuf, ShmBufMut}, zshm::{zshm, ZShm}, zshmmut::{zshmmut, ZShmMut}},
+    api::buffer::{
+        traits::{ResideInShm, ShmBuf, ShmBufMut},
+        zshm::{zshm, ZShm},
+        zshmmut::{zshmmut, ZShmMut},
+    },
     ShmBufInner,
 };
-use zenoh_core::bail;
-use zenoh_result::{ZResult, IError};
 
 fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()> {
     let slice = value.as_ref();
@@ -32,7 +37,7 @@ fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()> {
     // check alignment
     let type_align = std::mem::align_of::<T>();
     if ((ptr as usize) % type_align) != 0 {
-        bail!("Incompatible alignent");
+        bail!("Incompatible alignment");
     }
 
     // check size
@@ -49,8 +54,6 @@ pub struct Typed<T: ResideInShm, Tbuf: ShmBuf> {
     buf: Tbuf,
     _phantom: PhantomData<T>,
 }
-
-
 
 impl<T: ResideInShm> TryFrom<ZShm> for Typed<T, ZShm> {
     type Error = Box<dyn IError + Send + Sync + 'static>;

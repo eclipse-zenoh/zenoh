@@ -14,7 +14,9 @@
 
 use core::ops::{Deref, DerefMut};
 use std::{
-    borrow::{Borrow, BorrowMut}, marker::PhantomData, num::NonZeroUsize
+    borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
+    num::NonZeroUsize,
 };
 
 use zenoh_buffers::{ZBuf, ZSlice};
@@ -23,7 +25,13 @@ use super::{
     traits::{BufferRelayoutError, OwnedShmBuf, ShmBuf, ShmBufMut},
     zshm::{zshm, ZShm},
 };
-use crate::{api::{buffer::traits::{ResideInShm, ShmBufUnsafeMut}, provider::types::MemoryLayout}, ShmBufInner};
+use crate::{
+    api::{
+        buffer::traits::{ResideInShm, ShmBufUnsafeMut},
+        provider::types::MemoryLayout,
+    },
+    ShmBufInner,
+};
 
 /// A mutable SHM buffer
 #[zenoh_macros::unstable_doc]
@@ -31,7 +39,7 @@ use crate::{api::{buffer::traits::{ResideInShm, ShmBufUnsafeMut}, provider::type
 #[repr(transparent)]
 pub struct ZShmMut<T: ?Sized> {
     pub(crate) inner: ShmBufInner,
-    pub(crate) _phantom: PhantomData<T>
+    pub(crate) _phantom: PhantomData<T>,
 }
 
 impl<T: ResideInShm> ShmBuf<T> for ZShmMut<T> {
@@ -58,7 +66,6 @@ impl ShmBufUnsafeMut<[u8]> for ZShmMut<[u8]> {
         self.inner.as_mut_slice_inner()
     }
 }
-
 
 impl<T: ResideInShm> ShmBufMut<T> for ZShmMut<T> {}
 impl ShmBufMut<[u8]> for ZShmMut<[u8]> {}
@@ -90,7 +97,6 @@ impl OwnedShmBuf<[u8]> for ZShmMut<[u8]> {
         unsafe { self.inner.try_relayout(new_layout) }
     }
 }
-
 
 impl<T: ?Sized> PartialEq<zshmmut<T>> for &ZShmMut<T> {
     fn eq(&self, other: &zshmmut<T>) -> bool {
@@ -146,7 +152,6 @@ impl Deref for ZShmMut<[u8]> {
         self.inner.as_ref()
     }
 }
-
 
 impl<T: ResideInShm> DerefMut for ZShmMut<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -211,7 +216,7 @@ impl<T: ?Sized> From<ZShmMut<T>> for ZBuf {
 #[repr(transparent)]
 pub struct zshmmut<T: ?Sized> {
     pub(crate) inner: ShmBufInner,
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
 
 impl<T: ?Sized> PartialEq<ZShmMut<T>> for &zshmmut<T> {
@@ -238,7 +243,6 @@ impl<T: ResideInShm> ShmBuf<T> for &mut zshmmut<T> {
     }
 }
 
-
 impl ShmBuf<[u8]> for &mut zshmmut<[u8]> {
     fn is_valid(&self) -> bool {
         self.inner.is_valid()
@@ -257,7 +261,6 @@ impl ShmBufUnsafeMut<[u8]> for &mut zshmmut<[u8]> {
         self.inner.as_mut_slice_inner()
     }
 }
-
 
 impl<T: ResideInShm> ShmBufMut<T> for &mut zshmmut<T> {}
 impl ShmBufMut<[u8]> for &mut zshmmut<[u8]> {}
@@ -279,7 +282,6 @@ impl<T: ResideInShm> Deref for zshmmut<T> {
     }
 }
 
-
 impl<T: ResideInShm> DerefMut for zshmmut<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         let slice = self.inner.as_mut();
@@ -292,7 +294,6 @@ impl DerefMut for zshmmut<[u8]> {
         self.inner.as_mut()
     }
 }
-
 
 impl AsRef<[u8]> for zshmmut<[u8]> {
     fn as_ref(&self) -> &[u8] {

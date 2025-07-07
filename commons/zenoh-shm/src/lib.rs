@@ -282,7 +282,10 @@ impl ZSliceBuffer for ShmBufInner {
 
 impl ZShm<[u8]> {
     pub(crate) fn new(inner: ShmBufInner) -> Self {
-        Self { inner, _phantom: PhantomData::default() }
+        Self {
+            inner,
+            _phantom: PhantomData::default(),
+        }
     }
 }
 
@@ -294,13 +297,19 @@ impl From<ShmBufInner> for ZShm<[u8]> {
 
 impl<T: ?Sized> ZShmMut<T> {
     pub(crate) unsafe fn new_unchecked(inner: ShmBufInner) -> Self {
-        Self { inner, _phantom: PhantomData::default() }
+        Self {
+            inner,
+            _phantom: PhantomData::default(),
+        }
     }
 }
 
 impl<T: ?Sized> ZShm<T> {
     pub(crate) unsafe fn new_unchecked(inner: ShmBufInner) -> Self {
-        Self { inner, _phantom: PhantomData::default() }
+        Self {
+            inner,
+            _phantom: PhantomData::default(),
+        }
     }
 }
 

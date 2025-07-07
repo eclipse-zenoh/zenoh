@@ -26,7 +26,10 @@ use super::{
     zshmmut::{zshmmut, ZShmMut},
 };
 use crate::{
-    api::{buffer::traits::{ResideInShm, ShmBufUnsafeMut}, provider::types::MemoryLayout},
+    api::{
+        buffer::traits::{ResideInShm, ShmBufUnsafeMut},
+        provider::types::MemoryLayout,
+    },
     ShmBufInner,
 };
 
@@ -215,7 +218,6 @@ impl ShmBuf<[u8]> for &mut zshm<[u8]> {
     }
 }
 
-
 impl<T: ResideInShm> ShmBufUnsafeMut<T> for &mut zshm<T> {
     unsafe fn as_mut_unchecked(&mut self) -> &mut T {
         let slice = self.inner.as_mut_slice_inner();
@@ -246,7 +248,6 @@ impl Deref for zshm<[u8]> {
     }
 }
 
-
 impl<T: ResideInShm> AsRef<T> for zshm<T> {
     fn as_ref(&self) -> &T {
         self
@@ -258,7 +259,6 @@ impl AsRef<[u8]> for zshm<[u8]> {
         self
     }
 }
-
 
 impl<T: ?Sized> ToOwned for zshm<T> {
     type Owned = ZShm<T>;
