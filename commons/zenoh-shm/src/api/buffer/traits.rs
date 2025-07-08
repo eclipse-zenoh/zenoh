@@ -35,18 +35,31 @@ pub trait ShmBuf<T: ?Sized>: Sized + AsRef<T> {
     fn is_valid(&self) -> bool;
 }
 
-pub trait ShmConvert: Sized {
+pub trait ShmConvert<T: ?Sized, Tother: ?Sized> {
     /// Performs the conversion.
-    fn shm_convert<T: ResideInShm, Tdst: ShmBuf<T>>(self) -> Result<Tdst, Self>;
+    fn shm_convert<Tdst: ShmBuf<Tother>>(self) -> Result<Tdst, Self>
+    where
+        Self: ShmBuf<T>;
 }
 
-impl<Tsrc: ShmBuf<[u8]>> ShmConvert for Tsrc {
-    fn shm_convert<T: ResideInShm, Tdst: ShmBuf<T>>(self) -> Result<Tdst, Self> {
+impl<T: ResideInShm, Tsrc: ShmBuf<T>> ShmConvert<T, [u8]> for Tsrc {
+    fn shm_convert<Tdst: ShmBuf<[u8]>>(self) -> Result<Tdst, Self> {
+        // fully manually morph self into Tdst
+        let self_ptr = (&self as *const Self) as *const Tdst;
+        let new_self = unsafe { ptr::read::<Tdst>(self_ptr) };
+        std::mem::forget(self);
+
+        Ok(new_self)
+    }
+}
+
+impl<Tsrc: ShmBuf<[u8]>, Tother: ResideInShm> ShmConvert<[u8], Tother> for Tsrc {
+    fn shm_convert<Tdst: ShmBuf<Tother>>(self) -> Result<Tdst, Self> {
         // layout checks block
         {
             // check size
             let slice = self.as_ref();
-            let type_size = std::mem::size_of::<T>();
+            let type_size = std::mem::size_of::<Tother>();
             let size = slice.len();
             if type_size != size {
                 return Err(self);
@@ -54,14 +67,14 @@ impl<Tsrc: ShmBuf<[u8]>> ShmConvert for Tsrc {
 
             // check alignment
             let ptr = slice.as_ptr();
-            let type_align = std::mem::align_of::<T>();
+            let type_align = std::mem::align_of::<Tother>();
             if ((ptr as usize) % type_align) != 0 {
                 return Err(self);
             }
         }
 
         // fully manually morph self into Tdst
-        let self_ptr = self.as_ref().as_ptr() as *const Tdst;
+        let self_ptr = (&self as *const Self) as *const Tdst;
         let new_self = unsafe { ptr::read::<Tdst>(self_ptr) };
         std::mem::forget(self);
 
