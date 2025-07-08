@@ -105,7 +105,7 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
-                    self.tables.hat_code.eastwest.new_face(),
+                    self.tables.hat_code.south.new_face(),
                     true,
                 )
             })
@@ -160,7 +160,11 @@ impl Router {
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
-                    self.tables.hat_code.eastwest.new_face(),
+                    if is_south {
+                        self.tables.hat_code.south.new_face()
+                    } else {
+                        self.tables.hat_code.eastwest.new_face()
+                    },
                     false,
                 )
             })
