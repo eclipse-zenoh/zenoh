@@ -183,7 +183,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn get_auth_ids(&self) -> TransportAuthId {
         // Convert LinkUnicast auth id to AuthId
-        let mut transport_auth_id = TransportAuthId::default();
+        let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         let handle = tokio::runtime::Handle::current();
         let guard =
             tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
