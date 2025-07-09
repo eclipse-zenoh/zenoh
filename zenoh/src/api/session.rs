@@ -2488,20 +2488,20 @@ impl SessionInner {
 
         drop(state);
 
-        if !queryables.is_empty() {
-            let zid = self.zid();
+        let zid = self.zid();
 
-            let query_inner = Arc::new(QueryInner {
-                key_expr: key_expr.clone().into_owned(),
-                parameters: parameters.to_owned().into(),
-                qid,
-                zid: zid.into(),
-                primitives: if local {
-                    Arc::new(WeakSession::new(self))
-                } else {
-                    primitives
-                },
-            });
+        let query_inner = Arc::new(QueryInner {
+            key_expr: key_expr.clone().into_owned(),
+            parameters: parameters.to_owned().into(),
+            qid,
+            zid: zid.into(),
+            primitives: if local {
+                Arc::new(WeakSession::new(self))
+            } else {
+                primitives
+            },
+        });
+        if !queryables.is_empty() {
             let mut query = Query {
                 inner: query_inner,
                 eid: 0,
