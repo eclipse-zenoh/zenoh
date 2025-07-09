@@ -72,6 +72,7 @@ unstable = [
   "internal_config",
   "zenoh-keyexpr/unstable",
   "zenoh-config/unstable",
+  "zenoh-protocol/unstable",
 ]
 internal_config = []
 tracing-instrument = [
