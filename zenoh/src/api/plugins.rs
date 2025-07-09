@@ -15,13 +15,11 @@
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
 use zenoh_core::zconfigurable;
-use zenoh_plugin_trait::{
-    Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, StructVersion,
-};
+use zenoh_plugin_trait::{Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec};
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
 
-use crate::{api::key_expr::KeyExpr, net::runtime::Runtime};
+use crate::{api::key_expr::KeyExpr, net::runtime::DynamicRuntime};
 
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
@@ -30,16 +28,7 @@ zconfigurable! {
 pub type RunningPlugin = Box<dyn RunningPluginTrait + Send + Sync + 'static>;
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
-pub trait ZenohPlugin: Plugin<StartArgs = Runtime, Instance = RunningPlugin> {}
-
-impl StructVersion for RunningPlugin {
-    fn struct_version() -> u64 {
-        1
-    }
-    fn struct_features() -> &'static str {
-        crate::FEATURES
-    }
-}
+pub trait ZenohPlugin: Plugin<StartArgs = DynamicRuntime, Instance = RunningPlugin> {}
 
 impl PluginControl for RunningPlugin {
     fn report(&self) -> PluginReport {
@@ -54,16 +43,16 @@ impl PluginControl for RunningPlugin {
 impl PluginInstance for RunningPlugin {}
 
 #[non_exhaustive]
-#[derive(serde::Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 /// A Response for the administration space.
 pub struct Response {
     pub key: String,
-    pub value: serde_json::Value,
+    pub json_value: String,
 }
 
 impl Response {
-    pub fn new(key: String, value: serde_json::Value) -> Self {
-        Self { key, value }
+    pub fn new(key: String, json_value: String) -> Self {
+        Self { key, json_value }
     }
 }
 
@@ -80,12 +69,7 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     ///   Useful when the changes affect settings that aren't hot-configurable for your plugin.
     /// * `Ok(None)` indicates that the plugin has accepted the configuration change.
     /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
-    fn config_checker(
-        &self,
-        _path: &str,
-        _current: &serde_json::Map<String, serde_json::Value>,
-        _new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+    fn config_checker(&self, _path: &str, _current: &str, _new: &str) -> ZResult<Option<String>> {
         bail!("Runtime configuration change not supported");
     }
     /// Used to request plugin's status for the administration space.
@@ -120,4 +104,4 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
 }
 
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
-pub type PluginsManager = zenoh_plugin_trait::PluginsManager<Runtime, RunningPlugin>;
+pub type PluginsManager = zenoh_plugin_trait::PluginsManager<DynamicRuntime, RunningPlugin>;

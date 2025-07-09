@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "internal_config")]
+#![cfg(feature = "internal")]
 
 use std::{
     any::Any,
@@ -202,7 +203,8 @@ impl Net {
             match self.wai {
                 WhatAmI::Router => self.routers[i]
                     .0
-                    .runtime
+                    .static_runtime()
+                    .unwrap()
                     .config()
                     .lock()
                     .routing
@@ -212,7 +214,8 @@ impl Net {
                     .unwrap(),
                 WhatAmI::Peer => self.routers[i]
                     .0
-                    .runtime
+                    .static_runtime()
+                    .unwrap()
                     .config()
                     .lock()
                     .routing
@@ -222,7 +225,12 @@ impl Net {
                     .unwrap(),
                 WhatAmI::Client => unreachable!(),
             };
-            self.routers[i].0.runtime.update_network().unwrap();
+            self.routers[i]
+                .0
+                .static_runtime()
+                .unwrap()
+                .update_network()
+                .unwrap();
         }
     }
 }
@@ -781,7 +789,7 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
     )
     .await;
 
-    let info = net.routers[0].0.runtime.get_links_info();
+    let info = net.routers[0].0.static_runtime().unwrap().get_links_info();
 
     let expected = HashMap::from([
         (
