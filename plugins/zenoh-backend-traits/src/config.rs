@@ -443,18 +443,24 @@ impl StorageConfig {
                 )
             }
         };
-        let complete = match config.get("complete").and_then(|x| x.as_str()) {
-            Some(s) => match s {
+        let complete = match config.get("complete") {
+            Some(Value::Bool(b)) => *b,
+            Some(Value::String(s)) => match s.as_str() {
                 "true" => true,
                 "false" => false,
                 e => {
                     bail!(
-                        "complete='{}' is not a valid value. Accepted values: ['true', 'false']",
+                        r#"complete='{}' is not a valid value. Only booleans or strings ('true','false') are accepted"#,
                         e
                     )
                 }
             },
             None => false,
+            _ => bail!(
+                "Invalid type for field `complete` of storage `{}`. Only booleans or strings ('true','false') \
+                 are accepted.",
+                storage_name
+            ),
         };
         let strip_prefix: Option<OwnedKeyExpr> = match config.get("strip_prefix") {
             Some(Value::String(s)) => {
