@@ -82,6 +82,12 @@ To build Zenoh, just type the following command after having followed the previo
 cargo build --release --all-targets
 ```
 
+Building all targets may cause an out-of-memory error if memory is limited. Reducing the number of parallel build jobs can help, though it may increase build time. You can fine-tune the job count to balance performance and resource usage.
+
+```bash
+cargo build --release --all-targets --jobs=1
+```
+
 Zenoh's router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.
 
 -------------------------------
