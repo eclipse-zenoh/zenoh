@@ -41,138 +41,35 @@ use crate::{
     },
 };
 
-#[inline]
-fn propagate_simple_subscription_to(
-    _tables: &mut Tables,
-    dst_face: &mut Arc<FaceState>,
-    res: &Arc<Resource>,
-    _sub_info: &SubscriberInfo,
-    src_face: &mut Arc<FaceState>,
-    send_declare: &mut SendDeclare,
-) {
-    if src_face.id != dst_face.id
-        && !face_hat!(dst_face).local_subs.contains_key(res)
-        && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
-    {
-        let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-        face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-        let key_expr = Resource::decl_key(res, dst_face, true);
-        send_declare(
-            &dst_face.primitives,
-            RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id,
-                        wire_expr: key_expr,
-                    }),
-                },
-                res.expr().to_string(),
-            ),
-        );
-    }
-}
-
-fn propagate_simple_subscription(
-    tables: &mut Tables,
-    res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
-    src_face: &mut Arc<FaceState>,
-    send_declare: &mut SendDeclare,
-) {
-    for mut dst_face in tables
-        .faces
-        .values()
-        .cloned()
-        .collect::<Vec<Arc<FaceState>>>()
-    {
-        propagate_simple_subscription_to(
-            tables,
-            &mut dst_face,
-            res,
-            sub_info,
-            src_face,
-            send_declare,
-        );
-    }
-}
-
-fn register_simple_subscription(
-    _tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: SubscriberId,
-    res: &mut Arc<Resource>,
-    sub_info: &SubscriberInfo,
-) {
-    // Register subscription
-    {
-        let res = get_mut_unchecked(res);
-        match res.session_ctxs.get_mut(&face.id) {
-            Some(ctx) => {
-                if ctx.subs.is_none() {
-                    get_mut_unchecked(ctx).subs = Some(*sub_info);
-                }
-            }
-            None => {
-                let ctx = res
-                    .session_ctxs
-                    .entry(face.id)
-                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
-                get_mut_unchecked(ctx).subs = Some(*sub_info);
-            }
-        }
-    }
-    face_hat_mut!(face).remote_subs.insert(id, res.clone());
-}
-
-fn declare_simple_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: SubscriberId,
-    res: &mut Arc<Resource>,
-    sub_info: &SubscriberInfo,
-    send_declare: &mut SendDeclare,
-) {
-    register_simple_subscription(tables, face, id, res, sub_info);
-
-    propagate_simple_subscription(tables, res, sub_info, face, send_declare);
-}
-
-#[inline]
-fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.session_ctxs
-        .values()
-        .filter_map(|ctx| {
-            if ctx.subs.is_some() {
-                Some(ctx.face.clone())
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn propagate_forget_simple_subscription(
-    tables: &mut Tables,
-    res: &Arc<Resource>,
-    send_declare: &mut SendDeclare,
-) {
-    for face in tables.faces.values_mut() {
-        if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+impl HatCode {
+    #[inline]
+    fn propagate_simple_subscription_to(
+        &self,
+        _tables: &mut Tables,
+        dst_face: &mut Arc<FaceState>,
+        res: &Arc<Resource>,
+        _sub_info: &SubscriberInfo,
+        src_face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if src_face.id != dst_face.id
+            && !face_hat!(dst_face).local_subs.contains_key(res)
+            && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        {
+            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+            face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
+            let key_expr = Resource::decl_key(res, dst_face, true);
             send_declare(
-                &face.primitives,
+                &dst_face.primitives,
                 RoutingContext::with_expr(
                     Declare {
                         interest_id: None,
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                             id,
-                            ext_wire_expr: WireExprType::null(),
+                            wire_expr: key_expr,
                         }),
                     },
                     res.expr().to_string(),
@@ -180,25 +77,96 @@ fn propagate_forget_simple_subscription(
             );
         }
     }
-}
 
-pub(super) fn undeclare_simple_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    res: &mut Arc<Resource>,
-    send_declare: &mut SendDeclare,
-) {
-    if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).subs = None;
+    fn propagate_simple_subscription(
+        &self,
+        tables: &mut Tables,
+        res: &Arc<Resource>,
+        sub_info: &SubscriberInfo,
+        src_face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
+        for mut dst_face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            self.propagate_simple_subscription_to(
+                tables,
+                &mut dst_face,
+                res,
+                sub_info,
+                src_face,
+                send_declare,
+            );
         }
+    }
 
-        let mut simple_subs = simple_subs(res);
-        if simple_subs.is_empty() {
-            propagate_forget_simple_subscription(tables, res, send_declare);
+    fn register_simple_subscription(
+        &self,
+        _tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: SubscriberId,
+        res: &mut Arc<Resource>,
+        sub_info: &SubscriberInfo,
+    ) {
+        // Register subscription
+        {
+            let res = get_mut_unchecked(res);
+            match res.session_ctxs.get_mut(&face.id) {
+                Some(ctx) => {
+                    if ctx.subs.is_none() {
+                        get_mut_unchecked(ctx).subs = Some(*sub_info);
+                    }
+                }
+                None => {
+                    let ctx = res
+                        .session_ctxs
+                        .entry(face.id)
+                        .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
+                    get_mut_unchecked(ctx).subs = Some(*sub_info);
+                }
+            }
         }
-        if simple_subs.len() == 1 {
-            let face = &mut simple_subs[0];
+        face_hat_mut!(face).remote_subs.insert(id, res.clone());
+    }
+
+    fn declare_simple_subscription(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: SubscriberId,
+        res: &mut Arc<Resource>,
+        sub_info: &SubscriberInfo,
+        send_declare: &mut SendDeclare,
+    ) {
+        self.register_simple_subscription(tables, face, id, res, sub_info);
+
+        self.propagate_simple_subscription(tables, res, sub_info, face, send_declare);
+    }
+
+    #[inline]
+    fn simple_subs(&self, res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
+        res.session_ctxs
+            .values()
+            .filter_map(|ctx| {
+                if ctx.subs.is_some() {
+                    Some(ctx.face.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn propagate_forget_simple_subscription(
+        &self,
+        tables: &mut Tables,
+        res: &Arc<Resource>,
+        send_declare: &mut SendDeclare,
+    ) {
+        for face in tables.faces.values_mut() {
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -219,43 +187,85 @@ pub(super) fn undeclare_simple_subscription(
             }
         }
     }
-}
 
-fn forget_simple_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: SubscriberId,
-    send_declare: &mut SendDeclare,
-) -> Option<Arc<Resource>> {
-    if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_simple_subscription(tables, face, &mut res, send_declare);
-        Some(res)
-    } else {
-        None
+    pub(super) fn undeclare_simple_subscription(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        res: &mut Arc<Resource>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
+            if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+                get_mut_unchecked(ctx).subs = None;
+            }
+
+            let mut simple_subs = self.simple_subs(res);
+            if simple_subs.is_empty() {
+                self.propagate_forget_simple_subscription(tables, res, send_declare);
+            }
+            if simple_subs.len() == 1 {
+                let face = &mut simple_subs[0];
+                if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            res.expr().to_string(),
+                        ),
+                    );
+                }
+            }
+        }
     }
-}
 
-pub(super) fn pubsub_new_face(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    send_declare: &mut SendDeclare,
-) {
-    let sub_info = SubscriberInfo;
-    for src_face in tables
-        .faces
-        .values()
-        .cloned()
-        .collect::<Vec<Arc<FaceState>>>()
-    {
-        for sub in face_hat!(src_face).remote_subs.values() {
-            propagate_simple_subscription_to(
-                tables,
-                face,
-                sub,
-                &sub_info,
-                &mut src_face.clone(),
-                send_declare,
-            );
+    fn forget_simple_subscription(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        id: SubscriberId,
+        send_declare: &mut SendDeclare,
+    ) -> Option<Arc<Resource>> {
+        if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
+            self.undeclare_simple_subscription(tables, face, &mut res, send_declare);
+            Some(res)
+        } else {
+            None
+        }
+    }
+
+    pub(super) fn pubsub_new_face(
+        &self,
+        tables: &mut Tables,
+        face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
+        let sub_info = SubscriberInfo;
+        for src_face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            for sub in face_hat!(src_face).remote_subs.values() {
+                self.propagate_simple_subscription_to(
+                    tables,
+                    face,
+                    sub,
+                    &sub_info,
+                    &mut src_face.clone(),
+                    send_declare,
+                );
+            }
         }
     }
 }
@@ -271,7 +281,7 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        declare_simple_subscription(tables, face, id, res, sub_info, send_declare);
+        self.declare_simple_subscription(tables, face, id, res, sub_info, send_declare);
     }
 
     fn undeclare_subscription(
@@ -283,7 +293,7 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        forget_simple_subscription(tables, face, id, send_declare)
+        self.forget_simple_subscription(tables, face, id, send_declare)
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
