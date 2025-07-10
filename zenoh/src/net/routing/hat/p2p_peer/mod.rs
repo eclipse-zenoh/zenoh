@@ -24,7 +24,6 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -43,12 +42,7 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
-use self::{
-    gossip::Network,
-    interests::interests_new_face,
-    pubsub::{pubsub_new_face, undeclare_simple_subscription},
-    queries::{queries_new_face, undeclare_simple_queryable},
-};
+use self::gossip::Network;
 use super::{
     super::dispatcher::{
         face::FaceState,
@@ -166,10 +160,10 @@ impl HatBaseTrait for HatCode {
         face: &mut Face,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
-        queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
+        self.interests_new_face(tables, &mut face.state);
+        self.pubsub_new_face(tables, &mut face.state, send_declare);
+        self.queries_new_face(tables, &mut face.state, send_declare);
+        self.token_new_face(tables, &mut face.state, send_declare);
         tables.disable_all_routes();
         Ok(())
     }
@@ -198,10 +192,10 @@ impl HatBaseTrait for HatCode {
             );
         }
 
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
-        queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
+        self.interests_new_face(tables, &mut face.state);
+        self.pubsub_new_face(tables, &mut face.state, send_declare);
+        self.queries_new_face(tables, &mut face.state, send_declare);
+        self.token_new_face(tables, &mut face.state, send_declare);
         tables.disable_all_routes();
 
         if face.state.whatami == WhatAmI::Peer {
@@ -256,7 +250,12 @@ impl HatBaseTrait for HatCode {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_subscription(
+                &mut wtables,
+                &mut face_clone,
+                &mut res,
+                send_declare,
+            );
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -278,7 +277,7 @@ impl HatBaseTrait for HatCode {
         let mut qabls_matches = vec![];
         for (_id, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -299,7 +298,7 @@ impl HatBaseTrait for HatCode {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
 
         for mut res in subs_matches {
