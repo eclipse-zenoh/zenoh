@@ -24,7 +24,6 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use token::{token_remove_node, undeclare_simple_token};
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
@@ -41,10 +40,6 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
-use self::{
-    pubsub::{pubsub_remove_node, undeclare_simple_subscription},
-    queries::{queries_remove_node, undeclare_simple_queryable},
-};
 use super::{
     super::dispatcher::{
         face::FaceState,
@@ -125,8 +120,9 @@ struct TreesComputationWorker {
 }
 
 impl TreesComputationWorker {
-    fn new() -> Self {
+    fn new(hat_code: &HatCode) -> Self {
         let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
+        let hat_code = hat_code.clone();
         let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(
@@ -144,9 +140,9 @@ impl TreesComputationWorker {
                         .compute_trees();
 
                     tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_children);
-                    queries::queries_tree_change(&mut tables, &new_children);
-                    token::token_tree_change(&mut tables, &new_children);
+                    hat_code.pubsub_tree_change(&mut tables, &new_children);
+                    hat_code.queries_tree_change(&mut tables, &new_children);
+                    hat_code.token_tree_change(&mut tables, &new_children);
                     tables.disable_all_routes();
                     drop(tables);
                 }
@@ -165,13 +161,13 @@ struct HatTables {
 }
 
 impl HatTables {
-    fn new() -> Self {
+    fn new(hat_code: &HatCode) -> Self {
         Self {
             linkstatepeer_subs: HashSet::new(),
             linkstatepeer_tokens: HashSet::new(),
             linkstatepeer_qabls: HashSet::new(),
             linkstatepeers_net: None,
-            linkstatepeers_trees_worker: TreesComputationWorker::new(),
+            linkstatepeers_trees_worker: TreesComputationWorker::new(hat_code),
         }
     }
 
@@ -181,6 +177,7 @@ impl HatTables {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
@@ -229,7 +226,7 @@ impl HatBaseTrait for HatCode {
     }
 
     fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
-        Box::new(HatTables::new())
+        Box::new(HatTables::new(self))
     }
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync> {
@@ -314,7 +311,12 @@ impl HatBaseTrait for HatCode {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_subscription(
+                &mut wtables,
+                &mut face_clone,
+                &mut res,
+                send_declare,
+            );
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -336,7 +338,7 @@ impl HatBaseTrait for HatCode {
         let mut qabls_matches = vec![];
         for (_, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -357,7 +359,7 @@ impl HatBaseTrait for HatCode {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
         }
 
         for mut res in subs_matches {
@@ -381,9 +383,9 @@ impl HatBaseTrait for HatCode {
                 .unwrap()
                 .remove_link(&face.zid)
             {
-                pubsub_remove_node(&mut wtables, &removed_node.zid, send_declare);
-                queries_remove_node(&mut wtables, &removed_node.zid, send_declare);
-                token_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                self.pubsub_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                self.queries_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                self.token_remove_node(&mut wtables, &removed_node.zid, send_declare);
             }
 
             hat_mut!(wtables).schedule_compute_trees(tables_ref.clone());
@@ -416,9 +418,9 @@ impl HatBaseTrait for HatCode {
                             let changes = net.link_states(list.link_states, zid);
 
                             for (_, removed_node) in changes.removed_nodes {
-                                pubsub_remove_node(tables, &removed_node.zid, send_declare);
-                                queries_remove_node(tables, &removed_node.zid, send_declare);
-                                token_remove_node(tables, &removed_node.zid, send_declare);
+                                self.pubsub_remove_node(tables, &removed_node.zid, send_declare);
+                                self.queries_remove_node(tables, &removed_node.zid, send_declare);
+                                self.token_remove_node(tables, &removed_node.zid, send_declare);
                             }
 
                             hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
