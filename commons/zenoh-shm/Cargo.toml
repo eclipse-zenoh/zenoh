@@ -48,6 +48,7 @@ stabby = { workspace = true }
 crossbeam-queue = { workspace = true }
 crossbeam-channel = { workspace = true }
 static_assertions = { workspace = true }
+zerocopy = { workspace = true, features = ["derive"] }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }

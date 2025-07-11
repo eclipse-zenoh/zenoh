@@ -14,26 +14,26 @@
 
 use zenoh_core::Wait;
 use zenoh_shm::api::{
-    buffer::{traits::ShmConvert, zshmmut::ZShmMut},
+    buffer::{typed::Typed, zshmmut::ZShmMut},
     provider::shm_provider::ShmProviderBuilder,
 };
 
 #[repr(C)]
-#[stabby::stabby]
+#[derive(zerocopy::KnownLayout, zerocopy::FromBytes)]
 struct SharedByteData {
     data: [u8; 64],
 }
 
-fn make_shm_buffer() -> ZShmMut<[u8]> {
+fn make_shm_buffer() -> ZShmMut {
     let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
     provider.alloc(64).wait().unwrap()
 }
 
-fn validate_raw_buffer_consistency(buffer: &mut ZShmMut<[u8]>) {
+fn validate_raw_buffer_consistency(buffer: &mut ZShmMut) {
     buffer.as_mut().fill(0);
 }
 
-fn validate_typed_buffer_consistency(buffer: &mut ZShmMut<SharedByteData>) {
+fn validate_typed_buffer_consistency(buffer: &mut impl AsMut<SharedByteData>) {
     buffer.as_mut().data.fill(0);
 }
 
@@ -42,9 +42,9 @@ fn shm_buffer_morph() {
     let mut buffer = make_shm_buffer();
     validate_raw_buffer_consistency(&mut buffer);
 
-    let mut buffer: ZShmMut<SharedByteData> = buffer.shm_convert().unwrap();
+    let mut buffer: Typed<SharedByteData, _> = buffer.try_into().unwrap();
     validate_typed_buffer_consistency(&mut buffer);
 
-    let mut buffer: ZShmMut<[u8]> = buffer.shm_convert().ok().unwrap();
+    let mut buffer = buffer.unwrap();
     validate_raw_buffer_consistency(&mut buffer);
 }
