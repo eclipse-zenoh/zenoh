@@ -35,10 +35,10 @@ fn shm_bytes_single_buf() {
     let owned_shm_buf_mut = layout.alloc().wait().unwrap();
 
     // convert into immutable owned buffer (ZShmMut -> ZSlceShm)
-    let owned_shm_buf: ZShm<[u8]> = owned_shm_buf_mut.into();
+    let owned_shm_buf: ZShm = owned_shm_buf_mut.into();
 
     // convert again into mutable owned buffer (ZShm -> ZSlceShmMut)
-    let owned_shm_buf_mut: ZShmMut<[u8]> = owned_shm_buf.try_into().unwrap();
+    let owned_shm_buf_mut: ZShmMut = owned_shm_buf.try_into().unwrap();
 
     // build a ZBytes from an SHM buffer (ZShmMut -> ZBytes)
     let mut payload: ZBytes = owned_shm_buf_mut.into();
@@ -52,7 +52,7 @@ fn shm_bytes_single_buf() {
         let owned = borrowed_shm_buf.to_owned();
 
         // try to construct mutable ZShmMut (ZShm -> ZShmMut)
-        let owned_mut: Result<ZShmMut<[u8]>, _> = owned.try_into();
+        let owned_mut: Result<ZShmMut, _> = owned.try_into();
         // the attempt fails because ZShm has two existing references ('owned' and inside 'payload')
         assert!(owned_mut.is_err())
     }
@@ -63,6 +63,6 @@ fn shm_bytes_single_buf() {
         let borrowed_shm_buf = payload.as_shm_mut().unwrap();
 
         // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
-        let _borrowed_shm_buf_mut: &mut zshmmut<[u8]> = borrowed_shm_buf.try_into().unwrap();
+        let _borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
     }
 }
