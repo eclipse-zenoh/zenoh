@@ -28,14 +28,14 @@ use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
     shm_provider_backend::ShmProviderBackend,
     types::{
-        AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult, MemoryLayout,
+        AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
         ZAllocError, ZLayoutAllocError, ZLayoutError,
     },
 };
 use crate::{
     api::{
         buffer::zshmmut::ZShmMut,
-        protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+        protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend, provider::memory_layout::{IntoMemoryLayout, MemoryLayout},
     },
     metadata::{
         allocated_descriptor::AllocatedMetadataDescriptor, descriptor::MetadataDescriptor,
@@ -63,39 +63,30 @@ impl BusyChunk {
     }
 }
 
-struct AllocData<'a, Backend>
+struct AllocData<'a, Backend, What>
 where
     Backend: ShmProviderBackend,
+    What: IntoMemoryLayout,
 {
-    size: usize,
-    alignment: AllocAlignment,
+    what: What,
     provider: &'a ShmProvider<Backend>,
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct AllocLayoutSizedBuilder<'a, Backend>(AllocData<'a, Backend>)
-where
-    Backend: ShmProviderBackend;
-
-impl<'a, Backend> AllocLayoutSizedBuilder<'a, Backend>
+pub struct AllocBuilder<'a, Backend, What>(AllocData<'a, Backend, What>)
 where
     Backend: ShmProviderBackend,
-{
-    fn new(provider: &'a ShmProvider<Backend>, size: usize) -> Self {
-        Self(AllocData {
-            provider,
-            size,
-            alignment: AllocAlignment::default(),
-        })
-    }
+    What: IntoMemoryLayout;
 
-    /// Set alignment
-    #[zenoh_macros::unstable_doc]
-    pub fn with_alignment(self, alignment: AllocAlignment) -> Self {
+impl<'a, Backend, What> AllocBuilder<'a, Backend, What>
+where
+    Backend: ShmProviderBackend,
+    What: IntoMemoryLayout
+{
+    fn new(provider: &'a ShmProvider<Backend>, what: What) -> Self {
         Self(AllocData {
-            provider: self.0.provider,
-            size: self.0.size,
-            alignment,
+            what,
+            provider,
         })
     }
 
@@ -107,7 +98,7 @@ where
 
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<Policy>(self) -> ProviderAllocBuilder<'a, Backend, Policy> {
+    pub fn with_policy<Policy>(self) -> ProviderAllocBuilder<'a, Backend, What, Policy> {
         ProviderAllocBuilder {
             data: self.0,
             _phantom: PhantomData,
@@ -116,20 +107,22 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Backend> Resolvable for AllocLayoutSizedBuilder<'_, Backend>
+impl<'a, Backend, What> Resolvable for AllocBuilder<'_, Backend, What>
 where
     Backend: ShmProviderBackend,
+    What: IntoMemoryLayout
 {
     type To = BufLayoutAllocResult;
 }
 
 // Sync alloc policy
-impl<'a, Backend> Wait for AllocLayoutSizedBuilder<'a, Backend>
+impl<'a, Backend, What> Wait for AllocBuilder<'a, Backend, What>
 where
     Backend: ShmProviderBackend,
+    What: IntoMemoryLayout
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let builder = ProviderAllocBuilder::<'a, Backend, JustAlloc> {
+        let builder = ProviderAllocBuilder::<'a, Backend, What> {
             data: self.0,
             _phantom: PhantomData,
         };
@@ -164,20 +157,19 @@ where
         }
     }
 
-    fn new(data: AllocData<'a, Backend>) -> Result<Self, ZLayoutError> {
+    fn new<What: IntoMemoryLayout>(data: AllocData<'a, Backend, What>) -> Result<Self, ZLayoutError> {
         // NOTE: Depending on internal implementation, provider's backend might relayout
         // the allocations for bigger alignment (ex. 4-byte aligned allocation to 8-bytes aligned)
 
-        // Create layout for specified arguments
-        let layout = MemoryLayout::new(data.size, data.alignment)
-            .map_err(|_| ZLayoutError::IncorrectLayoutArgs)?;
-        let size = layout.size();
+        // calculate required layout
+        let required_layout: MemoryLayout = data.what.try_into()?;
+        let size = required_layout.size();
 
         // Obtain provider's layout for our layout
         let provider_layout = data
             .provider
             .backend
-            .layout_for(layout)
+            .layout_for(required_layout)
             .map_err(|_| ZLayoutError::ProviderIncompatibleLayout)?;
 
         Ok(Self {
@@ -492,19 +484,24 @@ unsafe impl<'a, Policy: AllocPolicy,  Backend: ShmProviderBackend>
 
 /// Builder for making allocations with instant layout calculation
 #[zenoh_macros::unstable_doc]
-pub struct ProviderAllocBuilder<'a, Backend: ShmProviderBackend, Policy = JustAlloc> {
-    data: AllocData<'a, Backend>,
+pub struct ProviderAllocBuilder<'a, Backend, What, Policy = JustAlloc>
+where
+    Backend: ShmProviderBackend,
+    What: IntoMemoryLayout
+{
+    data: AllocData<'a, Backend, What>,
     _phantom: PhantomData<Policy>,
 }
 
 // Generic impl
-impl<'a, Backend, Policy> ProviderAllocBuilder<'a, Backend, Policy>
+impl<'a, Backend, What, Policy> ProviderAllocBuilder<'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
+    What: IntoMemoryLayout
 {
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<OtherPolicy>(self) -> ProviderAllocBuilder<'a, Backend, OtherPolicy> {
+    pub fn with_policy<OtherPolicy>(self) -> ProviderAllocBuilder<'a, Backend, What, OtherPolicy> {
         ProviderAllocBuilder {
             data: self.data,
             _phantom: PhantomData,
@@ -512,17 +509,19 @@ where
     }
 }
 
-impl<Backend, Policy> Resolvable for ProviderAllocBuilder<'_, Backend, Policy>
+impl<Backend, What, Policy> Resolvable for ProviderAllocBuilder<'_, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
+    What: IntoMemoryLayout
 {
     type To = BufLayoutAllocResult;
 }
 
 // Sync alloc policy
-impl<Backend, Policy> Wait for ProviderAllocBuilder<'_, Backend, Policy>
+impl<Backend, What, Policy> Wait for ProviderAllocBuilder<'_, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
+    What: IntoMemoryLayout,
     Policy: AllocPolicy,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -537,9 +536,10 @@ where
 }
 
 // Async alloc policy
-impl<'a, Backend, Policy> IntoFuture for ProviderAllocBuilder<'a, Backend, Policy>
+impl<'a, Backend, What, Policy> IntoFuture for ProviderAllocBuilder<'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend + Sync,
+    What: IntoMemoryLayout + Send + 'a,
     Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
@@ -748,8 +748,8 @@ where
 {
     /// Rich interface for making allocations
     #[zenoh_macros::unstable_doc]
-    pub fn alloc(&self, size: usize) -> AllocLayoutSizedBuilder<Backend> {
-        AllocLayoutSizedBuilder::new(self, size)
+    pub fn alloc<What: IntoMemoryLayout>(&self, what: What) -> AllocBuilder<Backend, What> {
+        AllocBuilder::new(self, what)
     }
 
     /// Defragment memory

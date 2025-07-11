@@ -34,9 +34,7 @@ use crate::api::{
     },
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
-        chunk::{AllocatedChunk, ChunkDescriptor},
-        shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError, ZLayoutError},
+        chunk::{AllocatedChunk, ChunkDescriptor}, memory_layout::MemoryLayout, shm_provider_backend::ShmProviderBackend, types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError}
     },
 };
 

@@ -13,7 +13,7 @@
 //
 use std::{num::NonZeroUsize, ptr};
 
-use crate::api::provider::types::MemoryLayout;
+use crate::api::provider::memory_layout::MemoryLayout;
 
 pub trait ResideInShm: zerocopy::KnownLayout {}
 

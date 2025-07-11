@@ -25,7 +25,7 @@ use super::{
     zshm::{zshm, ZShm},
 };
 use crate::{
-    api::{buffer::traits::ShmBufUnsafeMut, provider::types::MemoryLayout},
+    api::{buffer::traits::ShmBufUnsafeMut, provider::memory_layout::MemoryLayout},
     ShmBufInner,
 };
 

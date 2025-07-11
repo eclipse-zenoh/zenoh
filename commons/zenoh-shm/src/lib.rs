@@ -26,7 +26,7 @@ use api::{
         zshmmut::{zshmmut, ZShmMut},
     },
     common::types::ProtocolID,
-    provider::types::MemoryLayout,
+    provider::memory_layout::MemoryLayout,
 };
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
