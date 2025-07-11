@@ -85,7 +85,7 @@ fn handle_bytes(bytes: &mut ZBytes) -> (&str, Cow<str>) {
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
         match bytes.as_shm_mut() {
             // try to mutate SHM buffer to get it's mutability property
-            Some(shm) => match <&mut zshm<[u8]> as TryInto<&mut zshmmut<[u8]>>>::try_into(shm) {
+            Some(shm) => match <&mut zshm as TryInto<&mut zshmmut>>::try_into(shm) {
                 Ok(_shm_mut) => "SHM (MUT)",
                 Err(_) => "SHM (IMMUT)",
             },

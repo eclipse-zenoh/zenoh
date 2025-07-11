@@ -75,7 +75,7 @@ fn main() {
         let _data: &[u8] = borrowed_shm_buf;
 
         // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
-        let borrowed_shm_buf_mut: &mut zshmmut<[u8]> = borrowed_shm_buf.try_into().unwrap();
+        let borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
 
         // mutable and immutable API
         let _data: &[u8] = borrowed_shm_buf_mut;
