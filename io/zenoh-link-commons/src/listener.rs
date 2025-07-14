@@ -25,6 +25,7 @@ use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
 
 use crate::BIND_INTERFACE;
+use crate::LOCATOR_ADDRESS_OVERRIDE;
 
 pub struct ListenerUnicastIP {
     endpoint: EndPoint,
@@ -120,6 +121,13 @@ impl ListenersUnicastIP {
             let (kip, kpt) = (key.ip(), key.port());
             let config = value.endpoint.config();
             let iface = config.get(BIND_INTERFACE);
+            
+            let loc_addr = config
+                .get(LOCATOR_ADDRESS_OVERRIDE)
+                .and_then(|a| a.parse::<IpAddr>().ok());
+            if let Some(addr) = loc_addr {
+                tracing::trace!("Overriding locator address to {addr} for kip={kip}, kpt={kpt}, iface={iface:?}");
+            }
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
             if kip.is_unspecified() {
@@ -130,7 +138,7 @@ impl ListenersUnicastIP {
                 let iter = addrs.drain(..).map(|x| {
                     Locator::new(
                         value.endpoint.protocol(),
-                        SocketAddr::new(x, kpt).to_string(),
+                        SocketAddr::new(loc_addr.unwrap_or(x), kpt).to_string(),
                         value.endpoint.metadata(),
                     )
                     .unwrap()
