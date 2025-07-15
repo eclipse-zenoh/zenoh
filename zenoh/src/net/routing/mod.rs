@@ -121,6 +121,7 @@ impl RoutingContext<NetworkMessageMut<'_>> {
                 let wire_expr = wire_expr.to_owned();
                 if self.prefix.get().is_none() {
                     if let Some(prefix) = zread!(face.tables.tables)
+                        .data
                         .get_sent_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
                         .cloned()
                     {
@@ -135,6 +136,7 @@ impl RoutingContext<NetworkMessageMut<'_>> {
                 let wire_expr = wire_expr.to_owned();
                 if self.prefix.get().is_none() {
                     if let Some(prefix) = zread!(face.tables.tables)
+                        .data
                         .get_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
                         .cloned()
                     {

@@ -299,7 +299,6 @@ impl Primitives for Face {
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
             declare_interest(
-                self.tables.hat_code.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
                 msg.id,
@@ -313,12 +312,7 @@ impl Primitives for Face {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            undeclare_interest(
-                self.tables.hat_code.as_ref(),
-                &self.tables,
-                &mut self.state.clone(),
-                msg.id,
-            );
+            undeclare_interest(&self.tables, &mut self.state.clone(), msg.id);
         }
     }
 
@@ -334,7 +328,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 let mut declares = vec![];
                 declare_subscription(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -351,7 +344,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 let mut declares = vec![];
                 undeclare_subscription(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -367,7 +359,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 let mut declares = vec![];
                 declare_queryable(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -384,7 +375,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 let mut declares = vec![];
                 undeclare_queryable(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -400,7 +390,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut declares = vec![];
                 declare_token(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -417,7 +406,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 let mut declares = vec![];
                 undeclare_token(
-                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -439,15 +427,11 @@ impl Primitives for Face {
 
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
-                    declare_final(
-                        self.tables.hat_code.as_ref(),
-                        &mut wtables,
-                        &mut self.state.clone(),
-                        id,
-                        &mut |p, m| declares.push((p.clone(), m)),
-                    );
+                    declare_final(&mut wtables, &mut self.state.clone(), id, &mut |p, m| {
+                        declares.push((p.clone(), m))
+                    });
 
-                    wtables.disable_all_routes();
+                    wtables.data.disable_all_routes();
 
                     drop(wtables);
                     drop(ctrl_lock);
@@ -490,12 +474,15 @@ impl Primitives for Face {
         finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
             declares.push((p.clone(), m))
         });
-        self.tables.hat_code.close_face(
-            &self.tables,
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
+        tables.hat.close_face(
+            &mut tables.data,
             &self.tables.clone(),
             &mut state,
             &mut |p, m| declares.push((p.clone(), m)),
         );
+        drop(wtables);
         drop(ctrl_lock);
         for (p, m) in declares {
             m.with_mut(|m| p.send_declare(m));

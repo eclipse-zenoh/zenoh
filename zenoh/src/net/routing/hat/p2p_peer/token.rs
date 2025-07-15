@@ -23,18 +23,18 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, HatCode, HatFace, INITIAL_INTEREST_ID};
+use super::{face_hat, face_hat_mut, Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
-    dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
+    dispatcher::{face::FaceState, interests::RemoteInterest, tables::TablesData},
     hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
 };
 
-impl HatCode {
+impl Hat {
     fn new_token(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         src_face: &Arc<FaceState>,
         dst_face: &mut Arc<FaceState>,
@@ -53,7 +53,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     fn propagate_simple_token_to(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
         src_face: &mut Arc<FaceState>,
@@ -142,7 +142,7 @@ impl HatCode {
 
     fn propagate_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: &mut Arc<FaceState>,
         interest_id: Option<InterestId>,
@@ -168,7 +168,7 @@ impl HatCode {
 
     fn register_simple_token(
         &self,
-        _tables: &mut Tables,
+        _tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
@@ -196,7 +196,7 @@ impl HatCode {
 
     fn declare_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
@@ -259,7 +259,7 @@ impl HatCode {
     #[inline]
     fn remote_simple_tokens(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> bool {
@@ -270,7 +270,7 @@ impl HatCode {
 
     fn propagate_forget_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: &Arc<FaceState>,
         send_declare: &mut SendDeclare,
@@ -381,7 +381,7 @@ impl HatCode {
 
     pub(super) fn undeclare_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
@@ -459,7 +459,7 @@ impl HatCode {
 
     fn forget_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: Option<Arc<Resource>>,
@@ -478,7 +478,7 @@ impl HatCode {
 
     pub(super) fn token_new_face(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -527,7 +527,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_token_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -630,10 +630,10 @@ impl HatCode {
     }
 }
 
-impl HatTokenTrait for HatCode {
+impl HatTokenTrait for Hat {
     fn declare_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
@@ -645,8 +645,8 @@ impl HatTokenTrait for HatCode {
     }
 
     fn undeclare_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: Option<Arc<Resource>>,

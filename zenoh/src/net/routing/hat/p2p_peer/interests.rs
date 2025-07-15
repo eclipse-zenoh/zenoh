@@ -23,7 +23,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, initial_interest, HatCode, HatFace, INITIAL_INTEREST_ID};
+use super::{face_hat, face_hat_mut, initial_interest, Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
@@ -31,14 +31,14 @@ use crate::net::routing::{
             CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
         },
         resource::Resource,
-        tables::{Tables, TablesLock},
+        tables::{TablesData, TablesLock},
     },
     hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
     RoutingContext,
 };
 
-impl HatCode {
-    pub(super) fn interests_new_face(&self, tables: &mut Tables, face: &mut Arc<FaceState>) {
+impl Hat {
+    pub(super) fn interests_new_face(&self, tables: &mut TablesData, face: &mut Arc<FaceState>) {
         if face.whatami != WhatAmI::Client {
             for mut src_face in tables
                 .faces
@@ -83,10 +83,10 @@ impl HatCode {
     }
 }
 
-impl HatInterestTrait for HatCode {
+impl HatInterestTrait for Hat {
     fn declare_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
@@ -225,7 +225,12 @@ impl HatInterestTrait for HatCode {
         }
     }
 
-    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
+    fn undeclare_interest(
+        &self,
+        tables: &mut TablesData,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    ) {
         if let Some(interest) = face_hat_mut!(face).remote_interests.remove(&id) {
             if !tables.faces.values().any(|f| {
                 f.whatami == WhatAmI::Client
@@ -275,7 +280,7 @@ impl HatInterestTrait for HatCode {
         }
     }
 
-    fn declare_final(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
+    fn declare_final(&self, tables: &mut TablesData, face: &mut Arc<FaceState>, id: InterestId) {
         if id == INITIAL_INTEREST_ID {
             zenoh_runtime::ZRuntime::Net.block_in_place(async move {
                 if let Some(runtime) = &tables.runtime {

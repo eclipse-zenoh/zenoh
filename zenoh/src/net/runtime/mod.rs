@@ -553,8 +553,8 @@ impl Closee for Arc<RuntimeState> {
         // This should be resolved by identfying correspodning task, and placing
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
-        tables.root_res.close();
-        tables.faces.clear();
+        tables.data.root_res.close();
+        tables.data.faces.clear();
     }
 }
 

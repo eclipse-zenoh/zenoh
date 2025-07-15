@@ -29,13 +29,16 @@ pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
 use super::{
     dispatcher::{
         face::{Face, FaceState},
-        tables::{Tables, TablesLock},
+        tables::{TablesData, TablesLock},
     },
     hat,
     interceptor::InterceptorsChain,
     runtime::Runtime,
 };
-use crate::net::primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux};
+use crate::net::{
+    primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
+    routing::dispatcher::tables::Tables,
+};
 
 pub struct Router {
     // whatami: WhatAmI,
@@ -53,8 +56,10 @@ impl Router {
         Ok(Router {
             // whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config, hat_code.as_ref())?),
-                hat_code,
+                tables: RwLock::new(Tables {
+                    data: TablesData::new(zid, whatami, hlc, config)?,
+                    hat: hat_code,
+                }),
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
             }),
@@ -63,9 +68,10 @@ impl Router {
 
     pub fn init_link_state(&mut self, runtime: Runtime) -> ZResult<()> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
-        tables.runtime = Some(Runtime::downgrade(&runtime));
-        self.tables.hat_code.init(&mut tables, runtime)
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
+        tables.data.runtime = Some(Runtime::downgrade(&runtime));
+        tables.hat.init(&mut tables.data, runtime)
     }
 
     pub(crate) fn new_primitives(
@@ -73,12 +79,14 @@ impl Router {
         primitives: Arc<dyn EPrimitives + Send + Sync>,
     ) -> Arc<Face> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
 
-        let zid = tables.zid;
-        let fid = tables.face_counter;
-        tables.face_counter += 1;
+        let zid = tables.data.zid;
+        let fid = tables.data.face_counter;
+        tables.data.face_counter += 1;
         let newface = tables
+            .data
             .faces
             .entry(fid)
             .or_insert_with(|| {
@@ -91,7 +99,7 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
-                    self.tables.hat_code.new_face(),
+                    tables.hat.new_face(),
                     true,
                 )
             })
@@ -103,13 +111,13 @@ impl Router {
             state: newface,
         };
         let mut declares = vec![];
-        self.tables
-            .hat_code
-            .new_local_face(&mut tables, &self.tables, &mut face, &mut |p, m| {
+        tables
+            .hat
+            .new_local_face(&mut tables.data, &self.tables, &mut face, &mut |p, m| {
                 declares.push((p.clone(), m))
             })
             .unwrap();
-        drop(tables);
+        drop(wtables);
         drop(ctrl_lock);
         for (p, m) in declares {
             m.with_mut(|m| p.send_declare(m));
@@ -119,11 +127,12 @@ impl Router {
 
     pub fn new_transport_unicast(&self, transport: TransportUnicast) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
 
         let whatami = transport.get_whatami()?;
-        let fid = tables.face_counter;
-        tables.face_counter += 1;
+        let fid = tables.data.face_counter;
+        tables.data.face_counter += 1;
         let zid = transport.get_zid()?;
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
@@ -131,6 +140,7 @@ impl Router {
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
         let newface = tables
+            .data
             .faces
             .entry(fid)
             .or_insert_with(|| {
@@ -143,14 +153,14 @@ impl Router {
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
-                    self.tables.hat_code.new_face(),
+                    tables.hat.new_face(),
                     false,
                 )
             })
             .clone();
         newface.set_interceptors_from_factories(
-            &tables.interceptors,
-            tables.next_interceptor_version.load(Ordering::SeqCst),
+            &tables.data.interceptors,
+            tables.data.next_interceptor_version.load(Ordering::SeqCst),
         );
         tracing::debug!("New {}", newface);
 
@@ -162,14 +172,14 @@ impl Router {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        self.tables.hat_code.new_transport_unicast_face(
-            &mut tables,
+        tables.hat.new_transport_unicast_face(
+            &mut tables.data,
             &self.tables,
             &mut face,
             &transport,
             &mut |p, m| declares.push((p.clone(), m)),
         )?;
-        drop(tables);
+        drop(wtables);
         drop(ctrl_lock);
         for (p, m) in declares {
             m.with_mut(|m| p.send_declare(m));
@@ -180,9 +190,11 @@ impl Router {
 
     pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
-        let fid = tables.face_counter;
-        tables.face_counter += 1;
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
+
+        let fid = tables.data.face_counter;
+        tables.data.face_counter += 1;
         let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
         let face = FaceState::new(
             fid,
@@ -193,20 +205,20 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
-            self.tables.hat_code.new_face(),
+            tables.hat.new_face(),
             false,
         );
         face.set_interceptors_from_factories(
-            &tables.interceptors,
-            tables.next_interceptor_version.load(Ordering::SeqCst),
+            &tables.data.interceptors,
+            tables.data.next_interceptor_version.load(Ordering::SeqCst),
         );
         let _ = mux.face.set(Face {
             state: face.clone(),
             tables: self.tables.clone(),
         });
-        tables.mcast_groups.push(face);
+        tables.data.mcast_groups.push(face);
 
-        tables.disable_all_routes();
+        tables.data.disable_all_routes();
         Ok(())
     }
 
@@ -216,9 +228,11 @@ impl Router {
         peer: TransportPeer,
     ) -> ZResult<Arc<DeMux>> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
-        let fid = tables.face_counter;
-        tables.face_counter += 1;
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
+
+        let fid = tables.data.face_counter;
+        tables.data.face_counter += 1;
         let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let face_state = FaceState::new(
             fid,
@@ -229,16 +243,16 @@ impl Router {
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),
-            self.tables.hat_code.new_face(),
+            tables.hat.new_face(),
             false,
         );
         face_state.set_interceptors_from_factories(
-            &tables.interceptors,
-            tables.next_interceptor_version.load(Ordering::SeqCst),
+            &tables.data.interceptors,
+            tables.data.next_interceptor_version.load(Ordering::SeqCst),
         );
-        tables.mcast_faces.push(face_state.clone());
+        tables.data.mcast_faces.push(face_state.clone());
 
-        tables.disable_all_routes();
+        tables.data.disable_all_routes();
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

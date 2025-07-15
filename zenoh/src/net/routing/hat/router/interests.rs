@@ -23,22 +23,22 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat_mut, HatCode, HatFace};
+use super::{face_hat_mut, Hat};
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
         interests::RemoteInterest,
         resource::Resource,
-        tables::{Tables, TablesLock},
+        tables::{TablesData, TablesLock},
     },
     hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
     RoutingContext,
 };
 
-impl HatInterestTrait for HatCode {
+impl HatInterestTrait for Hat {
     fn declare_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         id: InterestId,
@@ -111,11 +111,16 @@ impl HatInterestTrait for HatCode {
         }
     }
 
-    fn undeclare_interest(&self, _tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
+    fn undeclare_interest(
+        &self,
+        _tables: &mut TablesData,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+    ) {
         face_hat_mut!(face).remote_interests.remove(&id);
     }
 
-    fn declare_final(&self, _tables: &mut Tables, _face: &mut Arc<FaceState>, _id: InterestId) {
+    fn declare_final(&self, _tables: &mut TablesData, _face: &mut Arc<FaceState>, _id: InterestId) {
         // Nothing
     }
 }

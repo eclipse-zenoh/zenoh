@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    any::Any,
     collections::HashMap,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -64,7 +63,7 @@ impl<'a> RoutingExpr<'a> {
     }
 }
 
-pub struct Tables {
+pub struct TablesData {
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     pub(crate) runtime: Option<WeakRuntime>,
@@ -79,28 +78,24 @@ pub struct Tables {
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) interceptors: Vec<InterceptorFactory>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) routes_version: RoutesVersion,
     pub(crate) next_interceptor_version: AtomicUsize,
 }
 
-impl Tables {
+impl TablesData {
     pub fn new(
         zid: ZenohIdProto,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
-        hat_code: &(dyn HatTrait + Send + Sync),
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
-        let router_peers_failover_brokering =
-            unwrap_or_default!(config.routing().router().peers_failover_brokering());
         let queries_default_timeout =
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
-        Ok(Tables {
+        Ok(TablesData {
             zid,
             whatami,
             runtime: None,
@@ -114,7 +109,6 @@ impl Tables {
             mcast_groups: vec![],
             mcast_faces: vec![],
             interceptors: interceptor_factories(config)?,
-            hat: hat_code.new_tables(router_peers_failover_brokering),
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
         })
@@ -168,23 +162,28 @@ impl Tables {
 
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub(crate) hat_code: Box<dyn HatTrait + Send + Sync>,
     pub(crate) ctrl_lock: Mutex<()>,
-    pub queries_lock: RwLock<()>,
+    pub(crate) queries_lock: RwLock<()>,
+}
+
+pub struct Tables {
+    pub data: TablesData,
+    pub hat: Box<dyn HatTrait + Send + Sync>,
 }
 
 impl TablesLock {
     #[allow(dead_code)]
     pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
         let mut tables = zwrite!(self.tables);
-        tables.interceptors = interceptor_factories(config)?;
+        tables.data.interceptors = interceptor_factories(config)?;
         drop(tables);
         let tables = zread!(self.tables);
         let version = tables
+            .data
             .next_interceptor_version
             .fetch_add(1, Ordering::SeqCst);
-        tables.faces.values().for_each(|face| {
-            face.set_interceptors_from_factories(&tables.interceptors, version + 1);
+        tables.data.faces.values().for_each(|face| {
+            face.set_interceptors_from_factories(&tables.data.interceptors, version + 1);
         });
         Ok(())
     }
