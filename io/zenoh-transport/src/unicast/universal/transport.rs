@@ -27,6 +27,8 @@ use zenoh_protocol::{
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
+#[cfg(feature = "unstable")]
+use zenoh_sync::{event, Notifier, Waiter};
 
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
@@ -63,6 +65,13 @@ pub(crate) struct TransportUnicastUniversal {
     add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
     pub(super) alive: Arc<AsyncMutex<bool>>,
+    #[cfg(feature = "unstable")]
+    // Notifier for a BlockFirst message to be ready to be sent
+    // (after the previous one has been sent)
+    pub block_first_notifier: Notifier,
+    #[cfg(feature = "unstable")]
+    // Waiter for a BlockFirst message to be ready to be sent
+    pub block_first_waiter: Waiter,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
@@ -96,6 +105,11 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
+        #[cfg(feature = "unstable")]
+        let (block_first_notifier, block_first_waiter) = event::new();
+        // notify to be make the BlockFirst "slot" available
+        #[cfg(feature = "unstable")]
+        block_first_notifier.notify().unwrap();
 
         let t = Arc::new(TransportUnicastUniversal {
             manager,
@@ -108,6 +122,10 @@ impl TransportUnicastUniversal {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "unstable")]
+            block_first_notifier,
+            #[cfg(feature = "unstable")]
+            block_first_waiter,
         });
 
         Ok(t)
@@ -405,7 +423,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
-        self.internal_schedule(msg).map(|_| ())
+        self.internal_schedule(msg)
     }
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(
