@@ -1243,16 +1243,15 @@ impl Runtime {
     pub(crate) fn update_network(&self) -> ZResult<()> {
         let router = self.router();
         let _ctrl_lock = zlock!(router.tables.ctrl_lock);
-        let mut tables = zwrite!(router.tables.tables);
-        router
-            .tables
-            .hat_code
-            .update_from_config(&mut tables, &router.tables, self)
+        let mut wtables = zwrite!(router.tables.tables);
+        let tables = &mut *wtables;
+
+        tables.hat.update_from_config(&router.tables, self)
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        router.tables.hat_code.links_info(&tables)
+        tables.hat.links_info()
     }
 }

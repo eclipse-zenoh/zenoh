@@ -36,10 +36,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{
-    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
-    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
-};
+use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, HatData};
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
@@ -48,7 +45,7 @@ use crate::net::{
         dispatcher::{
             face::FaceState,
             resource::{NodeId, Resource, SessionContext},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
         router::disable_matches_query_routes,
@@ -63,9 +60,13 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
     this
 }
 
-impl HatCode {
-    fn local_router_qabl_info(&self, tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
-        let info = if hat!(tables).full_net(WhatAmI::Peer) {
+impl HatData {
+    fn local_router_qabl_info(
+        &self,
+        tables: &TablesData,
+        res: &Arc<Resource>,
+    ) -> QueryableInfoType {
+        let info = if self.full_net(WhatAmI::Peer) {
             res.context.as_ref().and_then(|_| {
                 res_hat!(res)
                     .linkstatepeer_qabls
@@ -99,7 +100,7 @@ impl HatCode {
             .unwrap_or(QueryableInfoType::DEFAULT)
     }
 
-    fn local_peer_qabl_info(&self, tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
+    fn local_peer_qabl_info(&self, tables: &TablesData, res: &Arc<Resource>) -> QueryableInfoType {
         let info = if res.context.is_some() {
             res_hat!(res)
                 .router_qabls
@@ -134,7 +135,7 @@ impl HatCode {
 
     fn local_qabl_info(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> QueryableInfoType {
@@ -155,7 +156,7 @@ impl HatCode {
         } else {
             None
         };
-        if res.context.is_some() && hat!(tables).full_net(WhatAmI::Peer) {
+        if res.context.is_some() && self.full_net(WhatAmI::Peer) {
             info = res_hat!(res)
                 .linkstatepeer_qabls
                 .iter()
@@ -175,7 +176,7 @@ impl HatCode {
             .fold(info, |accu, ctx| {
                 if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
                     || face.whatami != WhatAmI::Peer
-                    || hat!(tables).failover_brokering(ctx.face.zid, face.zid)
+                    || self.failover_brokering(ctx.face.zid, face.zid)
                 {
                     if let Some(info) = ctx.qabl.as_ref() {
                         Some(match accu {
@@ -196,7 +197,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     fn send_sourced_queryable_to_net_children(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
@@ -213,7 +214,7 @@ impl HatCode {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = push_declaration_profile(tables, &someface);
+                            let push_declaration = self.push_declaration_profile(&someface);
                             let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
@@ -244,12 +245,12 @@ impl HatCode {
 
     fn propagate_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        let full_peers_net = hat!(tables).full_net(WhatAmI::Peer);
+        let full_peers_net = self.full_net(WhatAmI::Peer);
         let faces = tables.faces.values().cloned();
         for mut dst_face in faces {
             let info = self.local_qabl_info(tables, res, &dst_face);
@@ -272,7 +273,7 @@ impl HatCode {
                             .map(|src_face| {
                                 src_face.whatami != WhatAmI::Peer
                                     || dst_face.whatami != WhatAmI::Peer
-                                    || hat!(tables).failover_brokering(src_face.zid, dst_face.zid)
+                                    || self.failover_brokering(src_face.zid, dst_face.zid)
                             })
                             .unwrap_or(true)
                 }
@@ -283,7 +284,7 @@ impl HatCode {
                 face_hat_mut!(&mut dst_face)
                     .local_qabls
                     .insert(res.clone(), (id, info));
-                let push_declaration = push_declaration_profile(tables, &dst_face);
+                let push_declaration = self.push_declaration_profile(&dst_face);
                 let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
                 send_declare(
                     &dst_face.primitives,
@@ -308,14 +309,14 @@ impl HatCode {
 
     fn propagate_sourced_queryable(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         qabl_info: &QueryableInfoType,
         src_face: Option<&mut Arc<FaceState>>,
         source: &ZenohIdProto,
         net_type: WhatAmI,
     ) {
-        let net = hat!(tables).get_net(net_type).unwrap();
+        let net = self.get_net(net_type).unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -346,8 +347,8 @@ impl HatCode {
     }
 
     fn register_router_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         mut face: Option<&mut Arc<FaceState>>,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -359,7 +360,7 @@ impl HatCode {
             // Register router queryable
             {
                 res_hat_mut!(res).router_qabls.insert(router, *qabl_info);
-                hat_mut!(tables).router_qabls.insert(res.clone());
+                self.router_qabls.insert(res.clone());
             }
 
             // Propagate queryable to routers
@@ -373,7 +374,7 @@ impl HatCode {
             );
         }
 
-        if hat!(tables).full_net(WhatAmI::Peer) {
+        if self.full_net(WhatAmI::Peer) {
             // Propagate queryable to peers
             if face.is_none() || face.as_ref().unwrap().whatami != WhatAmI::Peer {
                 let local_info = self.local_peer_qabl_info(tables, res);
@@ -392,8 +393,8 @@ impl HatCode {
     }
 
     fn declare_router_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -404,8 +405,8 @@ impl HatCode {
     }
 
     fn register_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&mut Arc<FaceState>>,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -418,7 +419,7 @@ impl HatCode {
                 res_hat_mut!(res)
                     .linkstatepeer_qabls
                     .insert(peer, *qabl_info);
-                hat_mut!(tables).linkstatepeer_qabls.insert(res.clone());
+                self.linkstatepeer_qabls.insert(res.clone());
             }
 
             // Propagate queryable to peers
@@ -427,8 +428,8 @@ impl HatCode {
     }
 
     fn declare_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -444,7 +445,7 @@ impl HatCode {
 
     fn register_simple_queryable(
         &self,
-        _tables: &mut Tables,
+        _tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -464,8 +465,8 @@ impl HatCode {
     }
 
     fn declare_simple_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -479,7 +480,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_router_qabls(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_router_qabls(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .router_qabls
@@ -488,7 +489,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_linkstatepeer_qabls(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_linkstatepeer_qabls(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .linkstatepeer_qabls
@@ -520,7 +521,7 @@ impl HatCode {
     #[inline]
     fn send_forget_sourced_queryable_to_net_children(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
@@ -535,7 +536,7 @@ impl HatCode {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = push_declaration_profile(tables, &someface);
+                            let push_declaration = self.push_declaration_profile(&someface);
                             let wire_expr =
                                 Resource::decl_key(res, &mut someface, push_declaration);
 
@@ -566,7 +567,7 @@ impl HatCode {
 
     fn propagate_forget_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
@@ -628,11 +629,11 @@ impl HatCode {
 
     fn propagate_forget_simple_queryable_to_peers(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if !hat!(tables).full_net(WhatAmI::Peer)
+        if !self.full_net(WhatAmI::Peer)
             && res_hat!(res).router_qabls.len() == 1
             && res_hat!(res).router_qabls.contains_key(&tables.zid)
         {
@@ -649,7 +650,7 @@ impl HatCode {
                             && s.qabl.is_some()
                             && (s.face.whatami == WhatAmI::Client
                                 || (s.face.whatami == WhatAmI::Peer
-                                    && hat!(tables).failover_brokering(s.face.zid, face.zid)))
+                                    && self.failover_brokering(s.face.zid, face.zid)))
                     })
                 {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
@@ -677,13 +678,13 @@ impl HatCode {
 
     fn propagate_forget_sourced_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
         net_type: WhatAmI,
     ) {
-        let net = hat!(tables).get_net(net_type).unwrap();
+        let net = self.get_net(net_type).unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -713,8 +714,8 @@ impl HatCode {
     }
 
     fn unregister_router_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
@@ -722,11 +723,9 @@ impl HatCode {
         res_hat_mut!(res).router_qabls.remove(router);
 
         if res_hat!(res).router_qabls.is_empty() {
-            hat_mut!(tables)
-                .router_qabls
-                .retain(|qabl| !Arc::ptr_eq(qabl, res));
+            self.router_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
 
-            if hat!(tables).full_net(WhatAmI::Peer) {
+            if self.full_net(WhatAmI::Peer) {
                 self.undeclare_linkstatepeer_queryable(tables, None, res, &tables.zid.clone());
             }
             self.propagate_forget_simple_queryable(tables, res, send_declare);
@@ -736,8 +735,8 @@ impl HatCode {
     }
 
     fn undeclare_router_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -750,8 +749,8 @@ impl HatCode {
     }
 
     fn forget_router_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -760,37 +759,31 @@ impl HatCode {
         self.undeclare_router_queryable(tables, Some(face), res, router, send_declare);
     }
 
-    fn unregister_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
-        res: &mut Arc<Resource>,
-        peer: &ZenohIdProto,
-    ) {
+    fn unregister_linkstatepeer_queryable(&mut self, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
         res_hat_mut!(res).linkstatepeer_qabls.remove(peer);
 
         if res_hat!(res).linkstatepeer_qabls.is_empty() {
-            hat_mut!(tables)
-                .linkstatepeer_qabls
+            self.linkstatepeer_qabls
                 .retain(|qabl| !Arc::ptr_eq(qabl, res));
         }
     }
 
     fn undeclare_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
     ) {
         if res_hat!(res).linkstatepeer_qabls.contains_key(peer) {
-            self.unregister_linkstatepeer_queryable(tables, res, peer);
+            self.unregister_linkstatepeer_queryable(res, peer);
             self.propagate_forget_sourced_queryable(tables, res, face, peer, WhatAmI::Peer);
         }
     }
 
     fn forget_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
@@ -810,8 +803,8 @@ impl HatCode {
     }
 
     pub(super) fn undeclare_simple_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
@@ -909,8 +902,8 @@ impl HatCode {
     }
 
     fn forget_simple_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         send_declare: &mut SendDeclare,
@@ -924,8 +917,8 @@ impl HatCode {
     }
 
     pub(super) fn queries_remove_node(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         node: &ZenohIdProto,
         net_type: WhatAmI,
         send_declare: &mut SendDeclare,
@@ -933,7 +926,7 @@ impl HatCode {
         match net_type {
             WhatAmI::Router => {
                 let mut qabls = vec![];
-                for res in hat!(tables).router_qabls.iter() {
+                for res in self.router_qabls.iter() {
                     for qabl in res_hat!(res).router_qabls.keys() {
                         if qabl == node {
                             qabls.push(res.clone());
@@ -949,7 +942,7 @@ impl HatCode {
             }
             WhatAmI::Peer => {
                 let mut qabls = vec![];
-                for res in hat!(tables).router_qabls.iter() {
+                for res in self.router_qabls.iter() {
                     for qabl in res_hat!(res).router_qabls.keys() {
                         if qabl == node {
                             qabls.push(res.clone());
@@ -957,7 +950,7 @@ impl HatCode {
                     }
                 }
                 for mut res in qabls {
-                    self.unregister_linkstatepeer_queryable(tables, &mut res, node);
+                    self.unregister_linkstatepeer_queryable(&mut res, node);
 
                     let simple_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl.is_some());
                     let linkstatepeer_qabls = self.remote_linkstatepeer_qabls(tables, &res);
@@ -991,13 +984,13 @@ impl HatCode {
 
     pub(super) fn queries_linkstate_change(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         zid: &ZenohIdProto,
         links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
         send_declare: &mut SendDeclare,
     ) {
         if let Some(mut src_face) = tables.get_face(zid).cloned() {
-            if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
+            if self.router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
                 let to_forget = face_hat!(src_face)
                     .local_qabls
                     .keys()
@@ -1011,7 +1004,7 @@ impl HatCode {
                             && !res.session_ctxs.values().any(|ctx| {
                                 ctx.face.whatami == WhatAmI::Peer
                                     && src_face.id != ctx.face.id
-                                    && HatTables::failover_brokering_to(links, &ctx.face.zid)
+                                    && HatData::failover_brokering_to(links, &ctx.face.zid)
                             })
                     })
                     .cloned()
@@ -1040,7 +1033,7 @@ impl HatCode {
 
                 for mut dst_face in tables.faces.values().cloned() {
                     if src_face.id != dst_face.id
-                        && HatTables::failover_brokering_to(links, &dst_face.zid)
+                        && HatData::failover_brokering_to(links, &dst_face.zid)
                     {
                         for res in face_hat!(src_face).remote_qabls.values() {
                             if !face_hat!(dst_face).local_qabls.contains_key(res) {
@@ -1049,7 +1042,7 @@ impl HatCode {
                                 face_hat_mut!(&mut dst_face)
                                     .local_qabls
                                     .insert(res.clone(), (id, info));
-                                let push_declaration = push_declaration_profile(tables, &dst_face);
+                                let push_declaration = self.push_declaration_profile(&dst_face);
                                 let key_expr =
                                     Resource::decl_key(res, &mut dst_face, push_declaration);
                                 send_declare(
@@ -1079,11 +1072,11 @@ impl HatCode {
 
     pub(super) fn queries_tree_change(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         new_children: &[Vec<NodeIndex>],
         net_type: WhatAmI,
     ) {
-        let net = match hat!(tables).get_net(net_type) {
+        let net = match self.get_net(net_type) {
             Some(net) => net,
             None => {
                 tracing::error!("Error accessing net in queries_tree_change!");
@@ -1098,8 +1091,8 @@ impl HatCode {
                     let tree_id = net.graph[tree_idx].zid;
 
                     let qabls_res = match net_type {
-                        WhatAmI::Router => &hat!(tables).router_qabls,
-                        _ => &hat!(tables).linkstatepeer_qabls,
+                        WhatAmI::Router => &self.router_qabls,
+                        _ => &self.linkstatepeer_qabls,
                     };
 
                     for res in qabls_res {
@@ -1130,7 +1123,7 @@ impl HatCode {
         &self,
         route: &mut QueryTargetQablSet,
         expr: &mut RoutingExpr,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         source: NodeId,
         qabls: &HashMap<ZenohIdProto, QueryableInfoType>,
@@ -1196,7 +1189,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_qabl_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -1208,7 +1201,7 @@ impl HatCode {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if hat!(tables).router_qabls.iter().any(|qabl| {
+                    if self.router_qabls.iter().any(|qabl| {
                         qabl.context.is_some()
                             && qabl.matches(res)
                             && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
@@ -1222,14 +1215,13 @@ impl HatCode {
                                         && (s.face.whatami == WhatAmI::Client
                                             || face.whatami == WhatAmI::Client
                                             || (s.face.whatami == WhatAmI::Peer
-                                                && hat!(tables)
-                                                    .failover_brokering(s.face.zid, face.zid)))
+                                                && self.failover_brokering(s.face.zid, face.zid)))
                                 }))
                     }) {
                         let info = self.local_qabl_info(tables, res, face);
                         let id = self.make_qabl_id(res, face, mode, info);
                         let wire_expr =
-                            Resource::decl_key(res, face, push_declaration_profile(tables, face));
+                            Resource::decl_key(res, face, self.push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1249,7 +1241,7 @@ impl HatCode {
                         );
                     }
                 } else {
-                    for qabl in hat!(tables).router_qabls.iter() {
+                    for qabl in self.router_qabls.iter() {
                         if qabl.context.is_some()
                             && qabl.matches(res)
                             && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
@@ -1261,17 +1253,13 @@ impl HatCode {
                                     s.qabl.is_some()
                                         && (s.face.whatami != WhatAmI::Peer
                                             || face.whatami != WhatAmI::Peer
-                                            || hat!(tables)
-                                                .failover_brokering(s.face.zid, face.zid))
+                                            || self.failover_brokering(s.face.zid, face.zid))
                                 }))
                         {
                             let info = self.local_qabl_info(tables, qabl, face);
                             let id = self.make_qabl_id(qabl, face, mode, info);
-                            let key_expr = Resource::decl_key(
-                                qabl,
-                                face,
-                                push_declaration_profile(tables, face),
-                            );
+                            let key_expr =
+                                Resource::decl_key(qabl, face, self.push_declaration_profile(face));
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -1293,7 +1281,7 @@ impl HatCode {
                     }
                 }
             } else {
-                for qabl in hat!(tables).router_qabls.iter() {
+                for qabl in self.router_qabls.iter() {
                     if qabl.context.is_some()
                         && (self.remote_simple_qabls(qabl, face)
                             || self.remote_linkstatepeer_qabls(tables, qabl)
@@ -1302,7 +1290,7 @@ impl HatCode {
                         let info = self.local_qabl_info(tables, qabl, face);
                         let id = self.make_qabl_id(qabl, face, mode, info);
                         let key_expr =
-                            Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
+                            Resource::decl_key(qabl, face, self.push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1331,7 +1319,7 @@ impl HatCode {
     fn insert_faces_for_qbls(
         &self,
         route: &mut HashMap<usize, Arc<FaceState>>,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
         complete: bool,
@@ -1360,10 +1348,10 @@ impl HatCode {
     }
 }
 
-impl HatQueriesTrait for HatCode {
+impl HatQueriesTrait for HatData {
     fn declare_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -1373,7 +1361,7 @@ impl HatQueriesTrait for HatCode {
     ) {
         match face.whatami {
             WhatAmI::Router => {
-                if let Some(router) = get_router(tables, face, node_id) {
+                if let Some(router) = self.get_router(face, node_id) {
                     self.declare_router_queryable(
                         tables,
                         face,
@@ -1385,8 +1373,8 @@ impl HatQueriesTrait for HatCode {
                 }
             }
             WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(tables, face, node_id) {
+                if self.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.get_peer(face, node_id) {
                         self.declare_linkstatepeer_queryable(
                             tables,
                             face,
@@ -1405,8 +1393,8 @@ impl HatQueriesTrait for HatCode {
     }
 
     fn undeclare_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: Option<Arc<Resource>>,
@@ -1416,7 +1404,7 @@ impl HatQueriesTrait for HatCode {
         match face.whatami {
             WhatAmI::Router => {
                 if let Some(mut res) = res {
-                    if let Some(router) = get_router(tables, face, node_id) {
+                    if let Some(router) = self.get_router(face, node_id) {
                         self.forget_router_queryable(tables, face, &mut res, &router, send_declare);
                         Some(res)
                     } else {
@@ -1427,9 +1415,9 @@ impl HatQueriesTrait for HatCode {
                 }
             }
             WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
+                if self.full_net(WhatAmI::Peer) {
                     if let Some(mut res) = res {
-                        if let Some(peer) = get_peer(tables, face, node_id) {
+                        if let Some(peer) = self.get_peer(face, node_id) {
                             self.forget_linkstatepeer_queryable(
                                 tables,
                                 face,
@@ -1452,10 +1440,9 @@ impl HatQueriesTrait for HatCode {
         }
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_queryables(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
-        hat!(tables)
-            .router_qabls
+        self.router_qabls
             .iter()
             .map(|s| {
                 (
@@ -1464,7 +1451,7 @@ impl HatQueriesTrait for HatCode {
                     // sources of those queryables
                     Sources {
                         routers: Vec::from_iter(res_hat!(s).router_qabls.keys().cloned()),
-                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
+                        peers: if self.full_net(WhatAmI::Peer) {
                             Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned())
                         } else {
                             s.session_ctxs
@@ -1489,7 +1476,7 @@ impl HatQueriesTrait for HatCode {
             .collect()
     }
 
-    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in tables.faces.values() {
             for interest in face_hat!(face).remote_interests.values() {
@@ -1510,7 +1497,7 @@ impl HatQueriesTrait for HatCode {
 
     fn compute_query_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
@@ -1544,15 +1531,14 @@ impl HatQueriesTrait for HatCode {
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-        let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
-                == tables.zid;
+        let master = !self.full_net(WhatAmI::Peer)
+            || *self.elect_router(&tables.zid, &key_expr, self.shared_nodes.iter()) == tables.zid;
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             if master || source_type == WhatAmI::Router {
-                let net = hat!(tables).routers_net.as_ref().unwrap();
+                let net = self.routers_net.as_ref().unwrap();
                 let router_source = match source_type {
                     WhatAmI::Router => source,
                     _ => net.idx.index() as NodeId,
@@ -1568,8 +1554,8 @@ impl HatQueriesTrait for HatCode {
                 );
             }
 
-            if (master || source_type != WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
-                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            if (master || source_type != WhatAmI::Router) && self.full_net(WhatAmI::Peer) {
+                let net = self.linkstatepeers_net.as_ref().unwrap();
                 let peer_source = match source_type {
                     WhatAmI::Peer => source,
                     _ => net.idx.index() as NodeId,
@@ -1613,7 +1599,7 @@ impl HatQueriesTrait for HatCode {
     #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>> {
@@ -1633,9 +1619,8 @@ impl HatQueriesTrait for HatCode {
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
-        let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
-                == tables.zid;
+        let master = !self.full_net(WhatAmI::Peer)
+            || *self.elect_router(&tables.zid, key_expr, self.shared_nodes.iter()) == tables.zid;
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -1644,7 +1629,7 @@ impl HatQueriesTrait for HatCode {
             }
 
             if master {
-                let net = hat!(tables).routers_net.as_ref().unwrap();
+                let net = self.routers_net.as_ref().unwrap();
                 self.insert_faces_for_qbls(
                     &mut matching_queryables,
                     tables,
@@ -1654,8 +1639,8 @@ impl HatQueriesTrait for HatCode {
                 );
             }
 
-            if hat!(tables).full_net(WhatAmI::Peer) {
-                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            if self.full_net(WhatAmI::Peer) {
+                let net = self.linkstatepeers_net.as_ref().unwrap();
                 self.insert_faces_for_qbls(
                     &mut matching_queryables,
                     tables,

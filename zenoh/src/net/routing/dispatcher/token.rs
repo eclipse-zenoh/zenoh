@@ -27,14 +27,10 @@ use super::{
     face::FaceState,
     tables::{NodeId, TablesLock},
 };
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::Resource,
-};
+use crate::net::routing::{hat::SendDeclare, router::Resource};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_token(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -45,6 +41,7 @@ pub(crate) fn declare_token(
 ) {
     let rtables = zread!(tables.tables);
     match rtables
+        .data
         .get_mapping(face, &expr.scope, expr.mapping)
         .cloned()
     {
@@ -66,23 +63,21 @@ pub(crate) fn declare_token(
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .map(|ke| Resource::get_matches(&rtables.data, ke))
                         .unwrap_or_default();
                     drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res = Resource::make_resource(
-                        hat_code,
-                        &mut wtables,
-                        &mut prefix,
-                        expr.suffix.as_ref(),
-                    );
+                    let mut tables_wguard = zwrite!(tables.tables);
+                    let tables = &mut *tables_wguard;
+                    let mut res =
+                        Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
                     matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
+                    Resource::match_resource(&tables.data, &mut res, matches);
+                    (res, tables_wguard)
                 };
 
-            hat_code.declare_token(
-                &mut wtables,
+            let tables = &mut *wtables;
+            tables.hat.declare_token(
+                &mut tables.data,
                 face,
                 id,
                 &mut res,
@@ -102,7 +97,6 @@ pub(crate) fn declare_token(
 }
 
 pub(crate) fn undeclare_token(
-    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     id: TokenId,
@@ -115,6 +109,7 @@ pub(crate) fn undeclare_token(
     } else {
         let rtables = zread!(tables.tables);
         match rtables
+            .data
             .get_mapping(face, &expr.wire_expr.scope, expr.wire_expr.mapping)
             .cloned()
         {
@@ -130,18 +125,18 @@ pub(crate) fn undeclare_token(
                         let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.wire_expr.suffix.as_ref());
                         let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
+                            .map(|ke| Resource::get_matches(&rtables.data, ke))
                             .unwrap_or_default();
                         drop(rtables);
                         let mut wtables = zwrite!(tables.tables);
+                        let tables = &mut *wtables;
                         let mut res = Resource::make_resource(
-                            hat_code,
-                            &mut wtables,
+                            tables,
                             &mut prefix,
                             expr.wire_expr.suffix.as_ref(),
                         );
                         matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
+                        Resource::match_resource(&tables.data, &mut res, matches);
                         (Some(res), wtables)
                     }
                 }
@@ -157,7 +152,11 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
+    let tables = &mut *wtables;
+    if let Some(res) =
+        tables
+            .hat
+            .undeclare_token(&mut tables.data, face, id, res, node_id, send_declare)
     {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
     } else {

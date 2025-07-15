@@ -37,7 +37,7 @@ use crate::{
             dispatcher::{
                 face::{Face, FaceState},
                 pubsub::SubscriberInfo,
-                tables::Tables,
+                tables::TablesData,
             },
             router::*,
             RoutingContext,
@@ -75,7 +75,6 @@ fn base_test() {
     let sub_info = SubscriberInfo;
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face.upgrade().unwrap(),
         0,
@@ -85,7 +84,7 @@ fn base_test() {
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
 
-    Tables::print(&zread!(tables.tables));
+    TablesData::print(&zread!(tables.tables).data);
 }
 
 #[test]
@@ -164,7 +163,7 @@ fn match_test() {
     }
 
     for key_expr1 in key_exprs.iter() {
-        let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1);
+        let res_matches = Resource::get_matches(&zread!(tables.tables).data, key_expr1);
         dbg!(res_matches.len());
         for key_expr2 in key_exprs.iter() {
             if res_matches
@@ -197,7 +196,6 @@ fn multisub_test() {
     // --------------
     let sub_info = SubscriberInfo;
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -206,14 +204,13 @@ fn multisub_test() {
         NodeId::default(),
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
-    let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
+    let optres = Resource::get_resource(zread!(tables.tables).data._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
     assert!(optres.is_some());
     let res = optres.unwrap();
     assert!(res.upgrade().is_some());
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -225,7 +222,6 @@ fn multisub_test() {
     assert!(res.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -236,7 +232,6 @@ fn multisub_test() {
     assert!(res.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -266,7 +261,7 @@ async fn clean_test() {
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
@@ -278,14 +273,15 @@ async fn clean_test() {
         2,
         &"todrop1/todrop11".into(),
     );
-    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
-        .map(|res| Arc::downgrade(&res));
+    let optres2 =
+        Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop11")
+            .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
     register_expr(&tables, &mut face0.state.clone(), 3, &"**".into());
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**")
+    let optres3 = Resource::get_resource(zread!(tables.tables).data._get_root(), "**")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
@@ -308,7 +304,7 @@ async fn clean_test() {
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
@@ -317,7 +313,6 @@ async fn clean_test() {
     let sub_info = SubscriberInfo;
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -326,14 +321,14 @@ async fn clean_test() {
         NodeId::default(),
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
-    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
-        .map(|res| Arc::downgrade(&res));
+    let optres2 =
+        Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop11")
+            .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -342,15 +337,15 @@ async fn clean_test() {
         NodeId::default(),
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
-        .map(|res| Arc::downgrade(&res));
+    let optres3 =
+        Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop12")
+            .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     println!("COUNT: {}", res3.strong_count());
     assert!(res3.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         1,
@@ -366,7 +361,6 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         0,
@@ -386,7 +380,6 @@ async fn clean_test() {
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 2, &"todrop3".into());
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         2,
@@ -395,14 +388,13 @@ async fn clean_test() {
         NodeId::default(),
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
     undeclare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         2,
@@ -419,7 +411,6 @@ async fn clean_test() {
     register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         3,
@@ -429,7 +420,6 @@ async fn clean_test() {
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         4,
@@ -439,15 +429,15 @@ async fn clean_test() {
         &mut |p, m| m.with_mut(|m| p.send_declare(m)),
     );
 
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop4")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
-    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop5")
+    let optres2 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop5")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop6")
+    let optres3 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop6")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
@@ -617,7 +607,6 @@ fn client_test() {
         },
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face0.upgrade().unwrap(),
         0,
@@ -668,7 +657,6 @@ fn client_test() {
         },
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face1.upgrade().unwrap(),
         0,
@@ -719,7 +707,6 @@ fn client_test() {
         },
     );
     declare_subscription(
-        tables.hat_code.as_ref(),
         &tables,
         &mut face2.upgrade().unwrap(),
         0,
@@ -856,7 +843,7 @@ fn get_best_key_test() {
     let face2 = router.new_primitives(primitives.clone());
     let face3 = router.new_primitives(primitives);
 
-    let root = zread!(router.tables.tables)._get_root().clone();
+    let root = zread!(router.tables.tables).data._get_root().clone();
     let register_expr = |face: &Face, id: ExprId, expr: &str| {
         register_expr(&router.tables, &mut face.state.clone(), id, &expr.into());
     };
@@ -907,12 +894,12 @@ fn big_key_expr() {
     let primitives = Arc::new(DummyPrimitives {});
     let face = router.new_primitives(primitives.clone());
 
-    let root = zread!(router.tables.tables)._get_root().clone();
+    let root = zread!(router.tables.tables).data._get_root().clone();
     let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();
     let wire_expr = WireExpr::from(&**key_expr);
     register_expr(&router.tables, &mut face.state.clone(), 1, &wire_expr);
     let res = Resource::get_resource(&root, &key_expr).unwrap();
     root.get_best_key(&key_expr, face.state.id);
     res.get_best_key("/a", face.state.id + 1);
-    Resource::get_matches(&face.tables.tables.read().unwrap(), &key_expr);
+    Resource::get_matches(&face.tables.tables.read().unwrap().data, &key_expr);
 }

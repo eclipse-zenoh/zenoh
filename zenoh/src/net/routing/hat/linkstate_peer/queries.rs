@@ -37,8 +37,8 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, hat, hat_mut, push_declaration_profile, res_hat, res_hat_mut,
-    HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, push_declaration_profile, res_hat, res_hat_mut, HatContext, HatData,
+    HatFace,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
@@ -48,7 +48,7 @@ use crate::net::{
         dispatcher::{
             face::FaceState,
             resource::{NodeId, Resource, SessionContext},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
         router::disable_matches_query_routes,
@@ -63,8 +63,8 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
     this
 }
 
-impl HatCode {
-    fn local_peer_qabl_info(&self, _tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
+impl HatData {
+    fn local_peer_qabl_info(&self, _tables: &TablesData, res: &Arc<Resource>) -> QueryableInfoType {
         res.session_ctxs
             .values()
             .fold(None, |accu, ctx| {
@@ -82,7 +82,7 @@ impl HatCode {
 
     fn local_qabl_info(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> QueryableInfoType {
@@ -128,7 +128,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     fn send_sourced_queryable_to_net_children(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
@@ -176,7 +176,7 @@ impl HatCode {
 
     fn propagate_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
@@ -227,13 +227,13 @@ impl HatCode {
 
     fn propagate_sourced_queryable(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         qabl_info: &QueryableInfoType,
         src_face: Option<&mut Arc<FaceState>>,
         source: &ZenohIdProto,
     ) {
-        let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+        let net = self.linkstatepeers_net.as_ref().unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -264,8 +264,8 @@ impl HatCode {
     }
 
     fn register_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         mut face: Option<&mut Arc<FaceState>>,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -279,7 +279,7 @@ impl HatCode {
                 res_hat_mut!(res)
                     .linkstatepeer_qabls
                     .insert(peer, *qabl_info);
-                hat_mut!(tables).linkstatepeer_qabls.insert(res.clone());
+                self.linkstatepeer_qabls.insert(res.clone());
             }
 
             // Propagate queryable to peers
@@ -291,8 +291,8 @@ impl HatCode {
     }
 
     fn declare_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
@@ -305,7 +305,7 @@ impl HatCode {
 
     fn register_simple_queryable(
         &self,
-        _tables: &mut Tables,
+        _tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -325,8 +325,8 @@ impl HatCode {
     }
 
     fn declare_simple_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -347,7 +347,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_linkstatepeer_qabls(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_linkstatepeer_qabls(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .linkstatepeer_qabls
@@ -379,7 +379,7 @@ impl HatCode {
     #[inline]
     fn send_forget_sourced_queryable_to_net_children(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
@@ -425,7 +425,7 @@ impl HatCode {
 
     fn propagate_forget_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
@@ -486,12 +486,12 @@ impl HatCode {
 
     fn propagate_forget_sourced_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
     ) {
-        let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+        let net = self.linkstatepeers_net.as_ref().unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -521,8 +521,8 @@ impl HatCode {
     }
 
     fn unregister_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
         send_declare: &mut SendDeclare,
@@ -530,8 +530,7 @@ impl HatCode {
         res_hat_mut!(res).linkstatepeer_qabls.remove(peer);
 
         if res_hat!(res).linkstatepeer_qabls.is_empty() {
-            hat_mut!(tables)
-                .linkstatepeer_qabls
+            self.linkstatepeer_qabls
                 .retain(|qabl| !Arc::ptr_eq(qabl, res));
 
             self.propagate_forget_simple_queryable(tables, res, send_declare);
@@ -539,8 +538,8 @@ impl HatCode {
     }
 
     fn undeclare_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
@@ -553,8 +552,8 @@ impl HatCode {
     }
 
     fn forget_linkstatepeer_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
@@ -564,8 +563,8 @@ impl HatCode {
     }
 
     pub(super) fn undeclare_simple_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
@@ -660,8 +659,8 @@ impl HatCode {
     }
 
     fn forget_simple_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         send_declare: &mut SendDeclare,
@@ -675,13 +674,13 @@ impl HatCode {
     }
 
     pub(super) fn queries_remove_node(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         node: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
         let mut qabls = vec![];
-        for res in hat!(tables).linkstatepeer_qabls.iter() {
+        for res in self.linkstatepeer_qabls.iter() {
             for qabl in res_hat!(res).linkstatepeer_qabls.keys() {
                 if qabl == node {
                     qabls.push(res.clone());
@@ -696,8 +695,12 @@ impl HatCode {
         }
     }
 
-    pub(super) fn queries_tree_change(&self, tables: &mut Tables, new_children: &[Vec<NodeIndex>]) {
-        let net = match hat!(tables).linkstatepeers_net.as_ref() {
+    pub(super) fn queries_tree_change(
+        &self,
+        tables: &mut TablesData,
+        new_children: &[Vec<NodeIndex>],
+    ) {
+        let net = match self.linkstatepeers_net.as_ref() {
             Some(net) => net,
             None => {
                 tracing::error!("Error accessing peers_net in queries_tree_change!");
@@ -711,7 +714,7 @@ impl HatCode {
                 if net.graph.contains_node(tree_idx) {
                     let tree_id = net.graph[tree_idx].zid;
 
-                    let qabls_res = &hat!(tables).linkstatepeer_qabls;
+                    let qabls_res = &self.linkstatepeer_qabls;
 
                     for res in qabls_res {
                         let qabls = &res_hat!(res).linkstatepeer_qabls;
@@ -738,7 +741,7 @@ impl HatCode {
         &self,
         route: &mut QueryTargetQablSet,
         expr: &mut RoutingExpr,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         source: NodeId,
         qabls: &HashMap<ZenohIdProto, QueryableInfoType>,
@@ -804,7 +807,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn declare_qabl_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -816,7 +819,7 @@ impl HatCode {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if hat!(tables).linkstatepeer_qabls.iter().any(|qabl| {
+                    if self.linkstatepeer_qabls.iter().any(|qabl| {
                         qabl.context.is_some()
                             && qabl.matches(res)
                             && (self.remote_simple_qabls(qabl, face)
@@ -845,7 +848,7 @@ impl HatCode {
                         );
                     }
                 } else {
-                    for qabl in hat!(tables).linkstatepeer_qabls.iter() {
+                    for qabl in self.linkstatepeer_qabls.iter() {
                         if qabl.context.is_some()
                             && qabl.matches(res)
                             && (self.remote_simple_qabls(qabl, face)
@@ -876,7 +879,7 @@ impl HatCode {
                     }
                 }
             } else {
-                for qabl in hat!(tables).linkstatepeer_qabls.iter() {
+                for qabl in self.linkstatepeer_qabls.iter() {
                     if qabl.context.is_some()
                         && (self.remote_simple_qabls(qabl, face)
                             || self.remote_linkstatepeer_qabls(tables, qabl))
@@ -913,7 +916,7 @@ impl HatCode {
     fn insert_faces_for_qbls(
         &self,
         route: &mut HashMap<usize, Arc<FaceState>>,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
         complete: bool,
@@ -942,10 +945,10 @@ impl HatCode {
     }
 }
 
-impl HatQueriesTrait for HatCode {
+impl HatQueriesTrait for HatData {
     fn declare_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -954,7 +957,7 @@ impl HatQueriesTrait for HatCode {
         send_declare: &mut SendDeclare,
     ) {
         if face.whatami != WhatAmI::Client {
-            if let Some(peer) = get_peer(tables, face, node_id) {
+            if let Some(peer) = self.get_peer(face, node_id) {
                 self.declare_linkstatepeer_queryable(
                     tables,
                     face,
@@ -970,8 +973,8 @@ impl HatQueriesTrait for HatCode {
     }
 
     fn undeclare_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: Option<Arc<Resource>>,
@@ -980,7 +983,7 @@ impl HatQueriesTrait for HatCode {
     ) -> Option<Arc<Resource>> {
         if face.whatami != WhatAmI::Client {
             if let Some(mut res) = res {
-                if let Some(peer) = get_peer(tables, face, node_id) {
+                if let Some(peer) = self.get_peer(face, node_id) {
                     self.forget_linkstatepeer_queryable(
                         tables,
                         face,
@@ -1000,10 +1003,9 @@ impl HatQueriesTrait for HatCode {
         }
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_queryables(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
-        hat!(tables)
-            .linkstatepeer_qabls
+        self.linkstatepeer_qabls
             .iter()
             .map(|s| {
                 (
@@ -1027,7 +1029,7 @@ impl HatQueriesTrait for HatCode {
             .collect()
     }
 
-    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in tables.faces.values() {
             for interest in face_hat!(face).remote_interests.values() {
@@ -1048,7 +1050,7 @@ impl HatQueriesTrait for HatCode {
 
     fn compute_query_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
@@ -1086,7 +1088,7 @@ impl HatQueriesTrait for HatCode {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
 
-            let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            let net = self.linkstatepeers_net.as_ref().unwrap();
             let peer_source = match source_type {
                 WhatAmI::Router | WhatAmI::Peer => source,
                 _ => net.idx.index() as NodeId,
@@ -1127,7 +1129,7 @@ impl HatQueriesTrait for HatCode {
     #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>> {
@@ -1154,7 +1156,7 @@ impl HatQueriesTrait for HatCode {
                 continue;
             }
 
-            let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            let net = self.linkstatepeers_net.as_ref().unwrap();
             self.insert_faces_for_qbls(
                 &mut matching_queryables,
                 tables,

@@ -37,11 +37,10 @@ use zenoh_sync::{get_mut_unchecked, Cache, CacheValueType};
 use super::{
     face::FaceState,
     pubsub::SubscriberInfo,
-    tables::{Tables, TablesLock},
+    tables::{TablesData, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::face::Face,
-    hat::HatTrait,
+    dispatcher::{face::Face, tables::Tables},
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
@@ -433,19 +432,13 @@ impl Resource {
     }
 
     pub fn make_resource(
-        hat_code: &(dyn HatTrait + Send + Sync),
-        _tables: &mut Tables,
+        tables: &mut Tables,
         from: &mut Arc<Resource>,
         mut suffix: &str,
     ) -> Arc<Resource> {
         if !suffix.is_empty() && !suffix.starts_with('/') {
             if let Some(parent) = &mut from.parent.clone() {
-                return Resource::make_resource(
-                    hat_code,
-                    _tables,
-                    parent,
-                    &[from.suffix(), suffix].concat(),
-                );
+                return Resource::make_resource(tables, parent, &[from.suffix(), suffix].concat());
             }
         }
         let mut from = from.clone();
@@ -465,7 +458,7 @@ impl Resource {
             };
             suffix = rest;
         }
-        Resource::upgrade_resource(&mut from, hat_code.new_resource());
+        Resource::upgrade_resource(&mut from, tables.hat.new_resource());
         from
     }
 
@@ -654,7 +647,7 @@ impl Resource {
             .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+    pub fn get_matches(tables: &TablesData, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
         pub fn visit_nodes<T>(node: T, mut visit: impl FnMut(T, &mut VecDeque<T>)) {
             let mut nodes = VecDeque::from([node]);
             while let Some(node) = nodes.pop_front() {
@@ -747,7 +740,11 @@ impl Resource {
         matches
     }
 
-    pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
+    pub fn match_resource(
+        _tables: &TablesData, // FIXME: is there a better way to ensure that a lock is held?
+        res: &mut Arc<Resource>,
+        matches: Vec<Weak<Resource>>,
+    ) {
         if res.context.is_some() {
             for match_ in &matches {
                 let mut match_ = match_.upgrade().unwrap();
@@ -797,6 +794,7 @@ pub(crate) fn register_expr(
 ) {
     let rtables = zread!(tables.tables);
     match rtables
+        .data
         .get_mapping(face, &expr.scope, expr.mapping)
         .cloned()
     {
@@ -814,29 +812,28 @@ pub(crate) fn register_expr(
             }
             None => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) =
-                    if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                        drop(rtables);
-                        let wtables = zwrite!(tables.tables);
-                        (res.unwrap(), wtables)
-                    } else {
-                        let mut fullexpr = prefix.expr().to_string();
-                        fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
-                            .unwrap_or_default();
-                        drop(rtables);
-                        let mut wtables = zwrite!(tables.tables);
-                        let mut res = Resource::make_resource(
-                            tables.hat_code.as_ref(),
-                            &mut wtables,
-                            &mut prefix,
-                            expr.suffix.as_ref(),
-                        );
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
-                        (res, wtables)
-                    };
+                let (mut res, mut wtables) = if res
+                    .as_ref()
+                    .map(|r| r.context.is_some())
+                    .unwrap_or(false)
+                {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr().to_string();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables.data, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables.data, &mut res, matches);
+                    (res, wtables)
+                };
                 let ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
@@ -847,8 +844,8 @@ pub(crate) fn register_expr(
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
-                disable_matches_data_routes(&mut wtables, &mut res);
-                disable_matches_query_routes(&mut wtables, &mut res);
+                disable_matches_data_routes(&mut wtables.data, &mut res);
+                disable_matches_query_routes(&mut wtables.data, &mut res);
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
             }
@@ -879,6 +876,7 @@ pub(crate) fn register_expr_interest(
     if let Some(expr) = expr {
         let rtables = zread!(tables.tables);
         match rtables
+            .data
             .get_mapping(face, &expr.scope, expr.mapping)
             .cloned()
         {
@@ -892,18 +890,14 @@ pub(crate) fn register_expr_interest(
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .map(|ke| Resource::get_matches(&rtables.data, ke))
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res = Resource::make_resource(
-                        tables.hat_code.as_ref(),
-                        &mut wtables,
-                        &mut prefix,
-                        expr.suffix.as_ref(),
-                    );
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
                     matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
+                    Resource::match_resource(&wtables.data, &mut res, matches);
                     (res, wtables)
                 };
                 get_mut_unchecked(face)

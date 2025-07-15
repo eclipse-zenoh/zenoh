@@ -35,14 +35,14 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, HatCode, HatFace};
+use super::{face_hat, face_hat_mut, HatData};
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
             face::FaceState,
             resource::{NodeId, Resource, SessionContext},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{
             p2p_peer::initial_interest, CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources,
@@ -58,10 +58,10 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
     this
 }
 
-impl HatCode {
+impl HatData {
     fn local_qabl_info(
         &self,
-        _tables: &Tables,
+        _tables: &TablesData,
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> QueryableInfoType {
@@ -87,7 +87,7 @@ impl HatCode {
     #[inline]
     fn propagate_simple_queryable_to(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
         src_face: &Option<&mut Arc<FaceState>>,
@@ -142,7 +142,7 @@ impl HatCode {
 
     fn propagate_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
@@ -159,7 +159,7 @@ impl HatCode {
 
     fn register_simple_queryable(
         &self,
-        _tables: &mut Tables,
+        _tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -180,7 +180,7 @@ impl HatCode {
 
     fn declare_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -214,7 +214,7 @@ impl HatCode {
 
     fn propagate_forget_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
@@ -272,7 +272,7 @@ impl HatCode {
 
     pub(super) fn undeclare_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
@@ -349,7 +349,7 @@ impl HatCode {
 
     fn forget_simple_queryable(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         send_declare: &mut SendDeclare,
@@ -364,7 +364,7 @@ impl HatCode {
 
     pub(super) fn queries_new_face(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
@@ -414,7 +414,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn declare_qabl_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -539,10 +539,10 @@ impl HatCode {
     }
 }
 
-impl HatQueriesTrait for HatCode {
+impl HatQueriesTrait for HatData {
     fn declare_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         res: &mut Arc<Resource>,
@@ -554,8 +554,8 @@ impl HatQueriesTrait for HatCode {
     }
 
     fn undeclare_queryable(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: QueryableId,
         _res: Option<Arc<Resource>>,
@@ -565,7 +565,7 @@ impl HatQueriesTrait for HatCode {
         self.forget_simple_queryable(tables, face, id, send_declare)
     }
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
         for src_face in tables.faces.values() {
@@ -583,7 +583,7 @@ impl HatQueriesTrait for HatCode {
         Vec::from_iter(qabls)
     }
 
-    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in tables.faces.values() {
             for interest in face_hat!(face).remote_interests.values() {
@@ -604,7 +604,7 @@ impl HatQueriesTrait for HatCode {
 
     fn compute_query_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
@@ -708,7 +708,7 @@ impl HatQueriesTrait for HatCode {
     #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>> {

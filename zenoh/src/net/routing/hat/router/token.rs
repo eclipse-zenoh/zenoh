@@ -29,25 +29,22 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{
-    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
-    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
-};
+use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, HatData};
 use crate::net::{
     protocol::{linkstate::LinkEdgeWeight, network::Network},
     routing::{
-        dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
+        dispatcher::{face::FaceState, interests::RemoteInterest, tables::TablesData},
         hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
         router::{NodeId, Resource, SessionContext},
         RoutingContext,
     },
 };
 
-impl HatCode {
+impl HatData {
     #[inline]
     fn send_sourced_token_to_net_clildren(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         clildren: &[NodeIndex],
         res: &Arc<Resource>,
@@ -62,7 +59,7 @@ impl HatCode {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = push_declaration_profile(tables, &someface);
+                            let push_declaration = self.push_declaration_profile(&someface);
                             let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
@@ -93,7 +90,7 @@ impl HatCode {
     #[inline]
     fn propagate_simple_token_to(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
         src_face: &mut Arc<FaceState>,
@@ -108,7 +105,7 @@ impl HatCode {
                 dst_face.whatami != WhatAmI::Router
                     && (src_face.whatami != WhatAmI::Peer
                         || dst_face.whatami != WhatAmI::Peer
-                        || hat!(tables).failover_brokering(src_face.zid, dst_face.zid))
+                        || self.failover_brokering(src_face.zid, dst_face.zid))
             }
         {
             let matching_interests = face_hat!(dst_face)
@@ -132,11 +129,8 @@ impl HatCode {
                 if !face_hat!(dst_face).local_tokens.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(
-                        res,
-                        dst_face,
-                        push_declaration_profile(tables, dst_face),
-                    );
+                    let key_expr =
+                        Resource::decl_key(res, dst_face, self.push_declaration_profile(dst_face));
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -160,12 +154,12 @@ impl HatCode {
 
     fn propagate_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        let full_peer_net = hat!(tables).full_net(WhatAmI::Peer);
+        let full_peer_net = self.full_net(WhatAmI::Peer);
         for mut dst_face in tables
             .faces
             .values()
@@ -185,13 +179,13 @@ impl HatCode {
 
     fn propagate_sourced_token(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
         net_type: WhatAmI,
     ) {
-        let net = hat!(tables).get_net(net_type).unwrap();
+        let net = self.get_net(net_type).unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -221,8 +215,8 @@ impl HatCode {
     }
 
     fn register_router_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: ZenohIdProto,
@@ -232,14 +226,14 @@ impl HatCode {
             // Register router liveliness
             {
                 res_hat_mut!(res).router_tokens.insert(router);
-                hat_mut!(tables).router_tokens.insert(res.clone());
+                self.router_tokens.insert(res.clone());
             }
 
             // Propagate liveliness to routers
             self.propagate_sourced_token(tables, res, Some(face), &router, WhatAmI::Router);
         }
         // Propagate liveliness to peers
-        if hat!(tables).full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
+        if self.full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
             self.register_linkstatepeer_token(tables, face, res, tables.zid)
         }
 
@@ -248,8 +242,8 @@ impl HatCode {
     }
 
     fn declare_router_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: ZenohIdProto,
@@ -259,8 +253,8 @@ impl HatCode {
     }
 
     fn register_linkstatepeer_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         peer: ZenohIdProto,
@@ -269,7 +263,7 @@ impl HatCode {
             // Register peer liveliness
             {
                 res_hat_mut!(res).linkstatepeer_tokens.insert(peer);
-                hat_mut!(tables).linkstatepeer_tokens.insert(res.clone());
+                self.linkstatepeer_tokens.insert(res.clone());
             }
 
             // Propagate liveliness to peers
@@ -278,8 +272,8 @@ impl HatCode {
     }
 
     fn declare_linkstatepeer_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         peer: ZenohIdProto,
@@ -291,8 +285,8 @@ impl HatCode {
     }
 
     fn register_simple_token(
-        &self,
-        _tables: &mut Tables,
+        &mut self,
+        _tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
@@ -319,8 +313,8 @@ impl HatCode {
     }
 
     fn declare_simple_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
@@ -332,7 +326,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_router_tokens(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_router_tokens(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .router_tokens
@@ -341,7 +335,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_linkstatepeer_tokens(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_linkstatepeer_tokens(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .linkstatepeer_tokens
@@ -366,7 +360,7 @@ impl HatCode {
     #[inline]
     fn remote_simple_tokens(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> bool {
@@ -378,7 +372,7 @@ impl HatCode {
     #[inline]
     fn send_forget_sourced_token_to_net_clildren(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         clildren: &[NodeIndex],
         res: &Arc<Resource>,
@@ -393,7 +387,7 @@ impl HatCode {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = push_declaration_profile(tables, &someface);
+                            let push_declaration = self.push_declaration_profile(&someface);
                             let wire_expr =
                                 Resource::decl_key(res, &mut someface, push_declaration);
 
@@ -424,7 +418,7 @@ impl HatCode {
 
     fn propagate_forget_simple_token(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         send_declare: &mut SendDeclare,
@@ -455,7 +449,7 @@ impl HatCode {
                 src_face.id != face.id
                     && (src_face.whatami != WhatAmI::Peer
                         || face.whatami != WhatAmI::Peer
-                        || hat!(tables).failover_brokering(src_face.zid, face.zid))
+                        || self.failover_brokering(src_face.zid, face.zid))
             }) && face_hat!(face)
                 .remote_interests
                 .values()
@@ -520,7 +514,7 @@ impl HatCode {
                         && src_face.map_or(true, |src_face| {
                             src_face.whatami != WhatAmI::Peer
                                 || face.whatami != WhatAmI::Peer
-                                || hat!(tables).failover_brokering(src_face.zid, face.zid)
+                                || self.failover_brokering(src_face.zid, face.zid)
                         })
                     {
                         // Token has never been declared on this face.
@@ -551,11 +545,11 @@ impl HatCode {
 
     fn propagate_forget_simple_token_to_peers(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if !hat!(tables).full_net(WhatAmI::Peer)
+        if !self.full_net(WhatAmI::Peer)
             && res_hat!(res).router_tokens.len() == 1
             && res_hat!(res).router_tokens.contains(&tables.zid)
         {
@@ -572,7 +566,7 @@ impl HatCode {
                             && s.token
                             && (s.face.whatami == WhatAmI::Client
                                 || (s.face.whatami == WhatAmI::Peer
-                                    && hat!(tables).failover_brokering(s.face.zid, face.zid)))
+                                    && self.failover_brokering(s.face.zid, face.zid)))
                     })
                 {
                     if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
@@ -600,13 +594,13 @@ impl HatCode {
 
     fn propagate_forget_sourced_token(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
         net_type: WhatAmI,
     ) {
-        let net = hat!(tables).get_net(net_type).unwrap();
+        let net = self.get_net(net_type).unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -636,8 +630,8 @@ impl HatCode {
     }
 
     fn unregister_router_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -648,11 +642,9 @@ impl HatCode {
             .retain(|token| token != router);
 
         if res_hat!(res).router_tokens.is_empty() {
-            hat_mut!(tables)
-                .router_tokens
-                .retain(|token| !Arc::ptr_eq(token, res));
+            self.router_tokens.retain(|token| !Arc::ptr_eq(token, res));
 
-            if hat_mut!(tables).full_net(WhatAmI::Peer) {
+            if self.full_net(WhatAmI::Peer) {
                 self.undeclare_linkstatepeer_token(tables, None, res, &tables.zid.clone());
             }
             self.propagate_forget_simple_token(tables, res, face, send_declare);
@@ -662,8 +654,8 @@ impl HatCode {
     }
 
     fn undeclare_router_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -676,8 +668,8 @@ impl HatCode {
     }
 
     fn forget_router_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -686,39 +678,33 @@ impl HatCode {
         self.undeclare_router_token(tables, Some(face), res, router, send_declare);
     }
 
-    fn unregister_linkstatepeer_token(
-        &self,
-        tables: &mut Tables,
-        res: &mut Arc<Resource>,
-        peer: &ZenohIdProto,
-    ) {
+    fn unregister_linkstatepeer_token(&mut self, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
         res_hat_mut!(res)
             .linkstatepeer_tokens
             .retain(|token| token != peer);
 
         if res_hat!(res).linkstatepeer_tokens.is_empty() {
-            hat_mut!(tables)
-                .linkstatepeer_tokens
+            self.linkstatepeer_tokens
                 .retain(|token| !Arc::ptr_eq(token, res));
         }
     }
 
     fn undeclare_linkstatepeer_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
     ) {
         if res_hat!(res).linkstatepeer_tokens.contains(peer) {
-            self.unregister_linkstatepeer_token(tables, res, peer);
+            self.unregister_linkstatepeer_token(res, peer);
             self.propagate_forget_sourced_token(tables, res, face, peer, WhatAmI::Peer);
         }
     }
 
     fn forget_linkstatepeer_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
@@ -734,8 +720,8 @@ impl HatCode {
     }
 
     pub(super) fn undeclare_simple_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
@@ -825,8 +811,8 @@ impl HatCode {
     }
 
     fn forget_simple_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         send_declare: &mut SendDeclare,
@@ -840,15 +826,15 @@ impl HatCode {
     }
 
     pub(super) fn token_remove_node(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         node: &ZenohIdProto,
         net_type: WhatAmI,
         send_declare: &mut SendDeclare,
     ) {
         match net_type {
             WhatAmI::Router => {
-                for mut res in hat!(tables)
+                for mut res in self
                     .router_tokens
                     .iter()
                     .filter(|res| res_hat!(res).router_tokens.contains(node))
@@ -860,14 +846,14 @@ impl HatCode {
                 }
             }
             WhatAmI::Peer => {
-                for mut res in hat!(tables)
+                for mut res in self
                     .linkstatepeer_tokens
                     .iter()
                     .filter(|res| res_hat!(res).linkstatepeer_tokens.contains(node))
                     .cloned()
                     .collect::<Vec<Arc<Resource>>>()
                 {
-                    self.unregister_linkstatepeer_token(tables, &mut res, node);
+                    self.unregister_linkstatepeer_token(&mut res, node);
                     let simple_tokens = res.session_ctxs.values().any(|ctx| ctx.token);
                     let linkstatepeer_tokens = self.remote_linkstatepeer_tokens(tables, &res);
                     if !simple_tokens && !linkstatepeer_tokens {
@@ -888,11 +874,11 @@ impl HatCode {
 
     pub(super) fn token_tree_change(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         new_clildren: &[Vec<NodeIndex>],
         net_type: WhatAmI,
     ) {
-        let net = match hat!(tables).get_net(net_type) {
+        let net = match self.get_net(net_type) {
             Some(net) => net,
             None => {
                 tracing::error!("Error accessing net in token_tree_change!");
@@ -907,8 +893,8 @@ impl HatCode {
                     let tree_id = net.graph[tree_idx].zid;
 
                     let tokens_res = match net_type {
-                        WhatAmI::Router => &hat!(tables).router_tokens,
-                        _ => &hat!(tables).linkstatepeer_tokens,
+                        WhatAmI::Router => &self.router_tokens,
+                        _ => &self.linkstatepeer_tokens,
                     };
 
                     for res in tokens_res {
@@ -936,13 +922,13 @@ impl HatCode {
 
     pub(super) fn token_linkstate_change(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         zid: &ZenohIdProto,
         links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
         send_declare: &mut SendDeclare,
     ) {
         if let Some(mut src_face) = tables.get_face(zid).cloned() {
-            if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
+            if self.router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
                 let to_forget = face_hat!(src_face)
                     .local_tokens
                     .keys()
@@ -956,7 +942,7 @@ impl HatCode {
                             && !res.session_ctxs.values().any(|ctx| {
                                 ctx.face.whatami == WhatAmI::Peer
                                     && src_face.id != ctx.face.id
-                                    && HatTables::failover_brokering_to(links, &ctx.face.zid)
+                                    && HatData::failover_brokering_to(links, &ctx.face.zid)
                             })
                     })
                     .cloned()
@@ -985,7 +971,7 @@ impl HatCode {
 
                 for mut dst_face in tables.faces.values().cloned() {
                     if src_face.id != dst_face.id
-                        && HatTables::failover_brokering_to(links, &dst_face.zid)
+                        && HatData::failover_brokering_to(links, &dst_face.zid)
                     {
                         for res in face_hat!(src_face).remote_tokens.values() {
                             if !face_hat!(dst_face).local_tokens.contains_key(res) {
@@ -993,7 +979,7 @@ impl HatCode {
                                 face_hat_mut!(&mut dst_face)
                                     .local_tokens
                                     .insert(res.clone(), id);
-                                let push_declaration = push_declaration_profile(tables, &dst_face);
+                                let push_declaration = self.push_declaration_profile(&dst_face);
                                 let key_expr =
                                     Resource::decl_key(res, &mut dst_face, push_declaration);
                                 send_declare(
@@ -1043,7 +1029,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_token_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -1053,12 +1039,12 @@ impl HatCode {
     ) {
         if mode.current()
             && (face.whatami == WhatAmI::Client
-                || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
+                || (face.whatami == WhatAmI::Peer && !self.full_net(WhatAmI::Peer)))
         {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if hat!(tables).router_tokens.iter().any(|token| {
+                    if self.router_tokens.iter().any(|token| {
                         token.context.is_some()
                             && token.matches(res)
                             && (self.remote_simple_tokens(tables, token, face)
@@ -1067,7 +1053,7 @@ impl HatCode {
                     }) {
                         let id = self.make_token_id(res, face, mode);
                         let wire_expr =
-                            Resource::decl_key(res, face, push_declaration_profile(tables, face));
+                            Resource::decl_key(res, face, self.push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1083,7 +1069,7 @@ impl HatCode {
                         );
                     }
                 } else {
-                    for token in &hat!(tables).router_tokens {
+                    for token in &self.router_tokens {
                         if token.context.is_some()
                             && token.matches(res)
                             && (res_hat!(token)
@@ -1100,15 +1086,14 @@ impl HatCode {
                                         && (s.face.whatami == WhatAmI::Client
                                             || face.whatami == WhatAmI::Client
                                             || (s.face.whatami == WhatAmI::Peer
-                                                && hat!(tables)
-                                                    .failover_brokering(s.face.zid, face.zid)))
+                                                && self.failover_brokering(s.face.zid, face.zid)))
                                 }))
                         {
                             let id = self.make_token_id(token, face, mode);
                             let wire_expr = Resource::decl_key(
                                 token,
                                 face,
-                                push_declaration_profile(tables, face),
+                                self.push_declaration_profile(face),
                             );
                             send_declare(
                                 &face.primitives,
@@ -1130,7 +1115,7 @@ impl HatCode {
                     }
                 }
             } else {
-                for token in &hat!(tables).router_tokens {
+                for token in &self.router_tokens {
                     if token.context.is_some()
                         && (res_hat!(token)
                             .router_tokens
@@ -1144,12 +1129,12 @@ impl HatCode {
                                 s.token
                                     && (s.face.whatami != WhatAmI::Peer
                                         || face.whatami != WhatAmI::Peer
-                                        || hat!(tables).failover_brokering(s.face.zid, face.zid))
+                                        || self.failover_brokering(s.face.zid, face.zid))
                             }))
                     {
                         let id = self.make_token_id(token, face, mode);
                         let wire_expr =
-                            Resource::decl_key(token, face, push_declaration_profile(tables, face));
+                            Resource::decl_key(token, face, self.push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1170,10 +1155,10 @@ impl HatCode {
     }
 }
 
-impl HatTokenTrait for HatCode {
+impl HatTokenTrait for HatData {
     fn declare_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
@@ -1183,13 +1168,13 @@ impl HatTokenTrait for HatCode {
     ) {
         match face.whatami {
             WhatAmI::Router => {
-                if let Some(router) = get_router(tables, face, node_id) {
+                if let Some(router) = self.get_router(face, node_id) {
                     self.declare_router_token(tables, face, res, router, send_declare)
                 }
             }
             WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(tables, face, node_id) {
+                if self.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.get_peer(face, node_id) {
                         self.declare_linkstatepeer_token(tables, face, res, peer, send_declare)
                     }
                 } else {
@@ -1201,8 +1186,8 @@ impl HatTokenTrait for HatCode {
     }
 
     fn undeclare_token(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: Option<Arc<Resource>>,
@@ -1212,7 +1197,7 @@ impl HatTokenTrait for HatCode {
         match face.whatami {
             WhatAmI::Router => {
                 if let Some(mut res) = res {
-                    if let Some(router) = get_router(tables, face, node_id) {
+                    if let Some(router) = self.get_router(face, node_id) {
                         self.forget_router_token(tables, face, &mut res, &router, send_declare);
                         Some(res)
                     } else {
@@ -1223,9 +1208,9 @@ impl HatTokenTrait for HatCode {
                 }
             }
             WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
+                if self.full_net(WhatAmI::Peer) {
                     if let Some(mut res) = res {
-                        if let Some(peer) = get_peer(tables, face, node_id) {
+                        if let Some(peer) = self.get_peer(face, node_id) {
                             self.forget_linkstatepeer_token(
                                 tables,
                                 face,

@@ -46,7 +46,7 @@ use self::gossip::Network;
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
+        tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
     },
     HatBaseTrait, HatTrait, SendDeclare,
 };
@@ -69,43 +69,39 @@ mod pubsub;
 mod queries;
 mod token;
 
-macro_rules! hat_mut {
-    ($t:expr) => {
-        $t.hat.downcast_mut::<HatTables>().unwrap()
-    };
-}
-use hat_mut;
-
 macro_rules! face_hat {
     ($f:expr) => {
-        $f.hat.downcast_ref::<HatFace>().unwrap()
+        $f.hat
+            .downcast_ref::<crate::net::routing::hat::p2p_peer::HatFace>()
+            .unwrap()
     };
 }
 use face_hat;
 
 macro_rules! face_hat_mut {
     ($f:expr) => {
-        get_mut_unchecked($f).hat.downcast_mut::<HatFace>().unwrap()
+        get_mut_unchecked($f)
+            .hat
+            .downcast_mut::<crate::net::routing::hat::p2p_peer::HatFace>()
+            .unwrap()
     };
 }
 use face_hat_mut;
 
 use crate::net::common::AutoConnect;
 
-struct HatTables {
+pub(crate) struct HatData {
     gossip: Option<Network>,
 }
 
-impl HatTables {
-    fn new() -> Self {
+impl HatData {
+    pub(crate) fn new() -> Self {
         Self { gossip: None }
     }
 }
 
-pub(crate) struct HatCode {}
-
-impl HatBaseTrait for HatCode {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
+impl HatBaseTrait for HatData {
+    fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
         let config = &config_guard.0;
         let whatami = tables.whatami;
@@ -126,7 +122,7 @@ impl HatBaseTrait for HatCode {
         drop(config_guard);
 
         if gossip {
-            hat_mut!(tables).gossip = Some(Network::new(
+            self.gossip = Some(Network::new(
                 "[Gossip]".to_string(),
                 tables.zid,
                 runtime,
@@ -141,10 +137,6 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
-    fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
-        Box::new(HatTables::new())
-    }
-
     fn new_face(&self) -> Box<dyn Any + Send + Sync> {
         Box::new(HatFace::new())
     }
@@ -154,8 +146,8 @@ impl HatBaseTrait for HatCode {
     }
 
     fn new_local_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         send_declare: &mut SendDeclare,
@@ -169,15 +161,15 @@ impl HatBaseTrait for HatCode {
     }
 
     fn new_transport_unicast_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         transport: &TransportUnicast,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         if face.state.whatami != WhatAmI::Client {
-            if let Some(net) = hat_mut!(tables).gossip.as_mut() {
+            if let Some(net) = self.gossip.as_mut() {
                 net.add_link(transport.clone());
             }
         }
@@ -214,13 +206,12 @@ impl HatBaseTrait for HatCode {
     }
 
     fn close_face(
-        &self,
-        tables: &TablesLock,
+        &mut self,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
         let face = get_mut_unchecked(face);
         let hat_face = match face.hat.downcast_mut::<HatFace>() {
@@ -250,12 +241,7 @@ impl HatBaseTrait for HatCode {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(
-                &mut wtables,
-                &mut face_clone,
-                &mut res,
-                send_declare,
-            );
+            self.undeclare_simple_subscription(tables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -277,7 +263,7 @@ impl HatBaseTrait for HatCode {
         let mut qabls_matches = vec![];
         for (_id, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_queryable(tables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -298,7 +284,7 @@ impl HatBaseTrait for HatCode {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            self.undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_token(tables, &mut face_clone, &mut res, send_declare);
         }
 
         for mut res in subs_matches {
@@ -313,19 +299,18 @@ impl HatBaseTrait for HatCode {
                 .disable_query_routes();
             Resource::clean(&mut res);
         }
-        wtables.faces.remove(&face.id);
+        tables.faces.remove(&face.id);
 
         if face.whatami != WhatAmI::Client {
-            if let Some(net) = hat_mut!(wtables).gossip.as_mut() {
+            if let Some(net) = self.gossip.as_mut() {
                 net.remove_link(&face.zid);
             }
         };
-        drop(wtables);
     }
 
     fn handle_oam(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        _tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
         transport: &TransportUnicast,
@@ -336,7 +321,7 @@ impl HatBaseTrait for HatCode {
                 if let Ok(zid) = transport.get_zid() {
                     let whatami = transport.get_whatami()?;
                     if whatami != WhatAmI::Client {
-                        if let Some(net) = hat_mut!(tables).gossip.as_mut() {
+                        if let Some(net) = self.gossip.as_mut() {
                             use zenoh_buffers::reader::HasReader;
                             use zenoh_codec::RCodec;
                             let codec = Zenoh080Routing::new();
@@ -358,7 +343,7 @@ impl HatBaseTrait for HatCode {
     #[inline]
     fn map_routing_context(
         &self,
-        _tables: &Tables,
+        _tables: &TablesData,
         _face: &FaceState,
         _routing_context: NodeId,
     ) -> NodeId {
@@ -366,14 +351,19 @@ impl HatBaseTrait for HatCode {
     }
 
     #[inline]
-    fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
+    fn ingress_filter(
+        &self,
+        _tables: &TablesData,
+        _face: &FaceState,
+        _expr: &mut RoutingExpr,
+    ) -> bool {
         true
     }
 
     #[inline]
     fn egress_filter(
         &self,
-        _tables: &Tables,
+        _tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
         _expr: &mut RoutingExpr,
@@ -383,8 +373,16 @@ impl HatBaseTrait for HatCode {
                 || (src_face.whatami == WhatAmI::Client && src_face.mcast_group.is_none()))
     }
 
-    fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
+    fn info(&self, _kind: WhatAmI) -> String {
         "graph {}".to_string()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -422,7 +420,7 @@ impl HatFace {
     }
 }
 
-impl HatTrait for HatCode {}
+impl HatTrait for HatData {}
 
 // In p2p, at connection, while no interest is sent on the network,
 // peers act as if they received an interest CurrentFuture with id 0

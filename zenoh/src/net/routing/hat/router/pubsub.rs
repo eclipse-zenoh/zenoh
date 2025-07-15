@@ -30,10 +30,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{
-    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
-    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
-};
+use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, HatData};
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
@@ -44,7 +41,7 @@ use crate::net::{
             interests::RemoteInterest,
             pubsub::SubscriberInfo,
             resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
+            tables::{Route, RoutingExpr, TablesData},
         },
         hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
         router::disable_matches_data_routes,
@@ -52,12 +49,12 @@ use crate::net::{
     },
 };
 
-impl HatCode {
+impl HatData {
     #[inline]
     #[allow(clippy::too_many_arguments)]
     fn send_sourced_subscription_to_net_children(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
@@ -73,7 +70,7 @@ impl HatCode {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = push_declaration_profile(tables, &someface);
+                            let push_declaration = self.push_declaration_profile(&someface);
                             let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
@@ -102,10 +99,8 @@ impl HatCode {
     }
 
     #[inline]
-    #[allow(clippy::too_many_arguments)]
     fn propagate_simple_subscription_to(
         &self,
-        tables: &mut Tables,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
         _sub_info: &SubscriberInfo,
@@ -121,7 +116,7 @@ impl HatCode {
                 dst_face.whatami != WhatAmI::Router
                     && (src_face.whatami != WhatAmI::Peer
                         || dst_face.whatami != WhatAmI::Peer
-                        || hat!(tables).failover_brokering(src_face.zid, dst_face.zid))
+                        || self.failover_brokering(src_face.zid, dst_face.zid))
             }
         {
             let matching_interests = face_hat!(dst_face)
@@ -145,11 +140,8 @@ impl HatCode {
                 if !face_hat!(dst_face).local_subs.contains_key(res) {
                     let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                     face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-                    let key_expr = Resource::decl_key(
-                        res,
-                        dst_face,
-                        push_declaration_profile(tables, dst_face),
-                    );
+                    let key_expr =
+                        Resource::decl_key(res, dst_face, self.push_declaration_profile(dst_face));
                     send_declare(
                         &dst_face.primitives,
                         RoutingContext::with_expr(
@@ -173,13 +165,13 @@ impl HatCode {
 
     fn propagate_simple_subscription(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         sub_info: &SubscriberInfo,
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        let full_peer_net = hat!(tables).full_net(WhatAmI::Peer);
+        let full_peer_net = self.full_net(WhatAmI::Peer);
         for mut dst_face in tables
             .faces
             .values()
@@ -187,7 +179,6 @@ impl HatCode {
             .collect::<Vec<Arc<FaceState>>>()
         {
             self.propagate_simple_subscription_to(
-                tables,
                 &mut dst_face,
                 res,
                 sub_info,
@@ -200,14 +191,14 @@ impl HatCode {
 
     fn propagate_sourced_subscription(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         sub_info: &SubscriberInfo,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
         net_type: WhatAmI,
     ) {
-        let net = hat!(tables).get_net(net_type).unwrap();
+        let net = self.get_net(net_type).unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -238,8 +229,8 @@ impl HatCode {
     }
 
     fn register_router_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
@@ -250,7 +241,7 @@ impl HatCode {
             // Register router subscription
             {
                 res_hat_mut!(res).router_subs.insert(router);
-                hat_mut!(tables).router_subs.insert(res.clone());
+                self.router_subs.insert(res.clone());
             }
 
             // Propagate subscription to routers
@@ -264,7 +255,7 @@ impl HatCode {
             );
         }
         // Propagate subscription to peers
-        if hat!(tables).full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
+        if self.full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
             self.register_linkstatepeer_subscription(tables, face, res, sub_info, tables.zid)
         }
 
@@ -273,8 +264,8 @@ impl HatCode {
     }
 
     fn declare_router_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
@@ -285,8 +276,8 @@ impl HatCode {
     }
 
     fn register_linkstatepeer_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
@@ -296,7 +287,7 @@ impl HatCode {
             // Register peer subscription
             {
                 res_hat_mut!(res).linkstatepeer_subs.insert(peer);
-                hat_mut!(tables).linkstatepeer_subs.insert(res.clone());
+                self.linkstatepeer_subs.insert(res.clone());
             }
 
             // Propagate subscription to peers
@@ -312,8 +303,8 @@ impl HatCode {
     }
 
     fn declare_linkstatepeer_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
@@ -328,7 +319,7 @@ impl HatCode {
 
     fn register_simple_subscription(
         &self,
-        _tables: &mut Tables,
+        _tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: SubscriberId,
         res: &mut Arc<Resource>,
@@ -356,8 +347,8 @@ impl HatCode {
     }
 
     fn declare_simple_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: SubscriberId,
         res: &mut Arc<Resource>,
@@ -370,7 +361,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_router_subs(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_router_subs(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .router_subs
@@ -379,7 +370,7 @@ impl HatCode {
     }
 
     #[inline]
-    fn remote_linkstatepeer_subs(&self, tables: &Tables, res: &Arc<Resource>) -> bool {
+    fn remote_linkstatepeer_subs(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
             && res_hat!(res)
                 .linkstatepeer_subs
@@ -411,7 +402,7 @@ impl HatCode {
     #[inline]
     fn send_forget_sourced_subscription_to_net_children(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
@@ -426,7 +417,7 @@ impl HatCode {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = push_declaration_profile(tables, &someface);
+                            let push_declaration = self.push_declaration_profile(&someface);
                             let wire_expr =
                                 Resource::decl_key(res, &mut someface, push_declaration);
 
@@ -457,7 +448,7 @@ impl HatCode {
 
     fn propagate_forget_simple_subscription(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
@@ -519,11 +510,11 @@ impl HatCode {
 
     fn propagate_forget_simple_subscription_to_peers(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if !hat!(tables).full_net(WhatAmI::Peer)
+        if !self.full_net(WhatAmI::Peer)
             && res_hat!(res).router_subs.len() == 1
             && res_hat!(res).router_subs.contains(&tables.zid)
         {
@@ -540,7 +531,7 @@ impl HatCode {
                             && s.subs.is_some()
                             && (s.face.whatami == WhatAmI::Client
                                 || (s.face.whatami == WhatAmI::Peer
-                                    && hat!(tables).failover_brokering(s.face.zid, face.zid)))
+                                    && self.failover_brokering(s.face.zid, face.zid)))
                     })
                 {
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
@@ -568,13 +559,13 @@ impl HatCode {
 
     fn propagate_forget_sourced_subscription(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
         net_type: WhatAmI,
     ) {
-        let net = hat!(tables).get_net(net_type).unwrap();
+        let net = self.get_net(net_type).unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
@@ -604,8 +595,8 @@ impl HatCode {
     }
 
     fn unregister_router_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
@@ -613,11 +604,9 @@ impl HatCode {
         res_hat_mut!(res).router_subs.retain(|sub| sub != router);
 
         if res_hat!(res).router_subs.is_empty() {
-            hat_mut!(tables)
-                .router_subs
-                .retain(|sub| !Arc::ptr_eq(sub, res));
+            self.router_subs.retain(|sub| !Arc::ptr_eq(sub, res));
 
-            if hat_mut!(tables).full_net(WhatAmI::Peer) {
+            if self.full_net(WhatAmI::Peer) {
                 self.undeclare_linkstatepeer_subscription(tables, None, res, &tables.zid.clone());
             }
             self.propagate_forget_simple_subscription(tables, res, send_declare);
@@ -627,8 +616,8 @@ impl HatCode {
     }
 
     fn undeclare_router_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -641,8 +630,8 @@ impl HatCode {
     }
 
     fn forget_router_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
@@ -651,39 +640,32 @@ impl HatCode {
         self.undeclare_router_subscription(tables, Some(face), res, router, send_declare);
     }
 
-    fn unregister_peer_subscription(
-        &self,
-        tables: &mut Tables,
-        res: &mut Arc<Resource>,
-        peer: &ZenohIdProto,
-    ) {
+    fn unregister_peer_subscription(&mut self, res: &mut Arc<Resource>, peer: &ZenohIdProto) {
         res_hat_mut!(res)
             .linkstatepeer_subs
             .retain(|sub| sub != peer);
 
         if res_hat!(res).linkstatepeer_subs.is_empty() {
-            hat_mut!(tables)
-                .linkstatepeer_subs
-                .retain(|sub| !Arc::ptr_eq(sub, res));
+            self.linkstatepeer_subs.retain(|sub| !Arc::ptr_eq(sub, res));
         }
     }
 
     fn undeclare_linkstatepeer_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: Option<&Arc<FaceState>>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
     ) {
         if res_hat!(res).linkstatepeer_subs.contains(peer) {
-            self.unregister_peer_subscription(tables, res, peer);
+            self.unregister_peer_subscription(res, peer);
             self.propagate_forget_sourced_subscription(tables, res, face, peer, WhatAmI::Peer);
         }
     }
 
     fn forget_linkstatepeer_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         peer: &ZenohIdProto,
@@ -699,8 +681,8 @@ impl HatCode {
     }
 
     pub(super) fn undeclare_simple_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
@@ -786,8 +768,8 @@ impl HatCode {
     }
 
     fn forget_simple_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: SubscriberId,
         send_declare: &mut SendDeclare,
@@ -801,15 +783,15 @@ impl HatCode {
     }
 
     pub(super) fn pubsub_remove_node(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         node: &ZenohIdProto,
         net_type: WhatAmI,
         send_declare: &mut SendDeclare,
     ) {
         match net_type {
             WhatAmI::Router => {
-                for mut res in hat!(tables)
+                for mut res in self
                     .router_subs
                     .iter()
                     .filter(|res| res_hat!(res).router_subs.contains(node))
@@ -823,14 +805,14 @@ impl HatCode {
                 }
             }
             WhatAmI::Peer => {
-                for mut res in hat!(tables)
+                for mut res in self
                     .linkstatepeer_subs
                     .iter()
                     .filter(|res| res_hat!(res).linkstatepeer_subs.contains(node))
                     .cloned()
                     .collect::<Vec<Arc<Resource>>>()
                 {
-                    self.unregister_peer_subscription(tables, &mut res, node);
+                    self.unregister_peer_subscription(&mut res, node);
                     let simple_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
                     let linkstatepeer_subs = self.remote_linkstatepeer_subs(tables, &res);
                     if !simple_subs && !linkstatepeer_subs {
@@ -852,12 +834,12 @@ impl HatCode {
     }
 
     pub(super) fn pubsub_tree_change(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         new_children: &[Vec<NodeIndex>],
         net_type: WhatAmI,
     ) {
-        let net = match hat!(tables).get_net(net_type) {
+        let net = match self.get_net(net_type) {
             Some(net) => net,
             None => {
                 tracing::error!("Error accessing net in pubsub_tree_change!");
@@ -872,8 +854,8 @@ impl HatCode {
                     let tree_id = net.graph[tree_idx].zid;
 
                     let subs_res = match net_type {
-                        WhatAmI::Router => &hat!(tables).router_subs,
-                        _ => &hat!(tables).linkstatepeer_subs,
+                        WhatAmI::Router => &self.router_subs,
+                        _ => &self.linkstatepeer_subs,
                     };
 
                     for res in subs_res {
@@ -903,13 +885,13 @@ impl HatCode {
 
     pub(super) fn pubsub_linkstate_change(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         zid: &ZenohIdProto,
         links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
         send_declare: &mut SendDeclare,
     ) {
         if let Some(mut src_face) = tables.get_face(zid).cloned() {
-            if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
+            if self.router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
                 let to_forget = face_hat!(src_face)
                     .local_subs
                     .keys()
@@ -923,7 +905,7 @@ impl HatCode {
                             && !res.session_ctxs.values().any(|ctx| {
                                 ctx.face.whatami == WhatAmI::Peer
                                     && src_face.id != ctx.face.id
-                                    && HatTables::failover_brokering_to(links, &ctx.face.zid)
+                                    && HatData::failover_brokering_to(links, &ctx.face.zid)
                             })
                     })
                     .cloned()
@@ -952,7 +934,7 @@ impl HatCode {
 
                 for mut dst_face in tables.faces.values().cloned() {
                     if src_face.id != dst_face.id
-                        && HatTables::failover_brokering_to(links, &dst_face.zid)
+                        && HatData::failover_brokering_to(links, &dst_face.zid)
                     {
                         for res in face_hat!(src_face).remote_subs.values() {
                             if !face_hat!(dst_face).local_subs.contains_key(res) {
@@ -960,7 +942,7 @@ impl HatCode {
                                 face_hat_mut!(&mut dst_face)
                                     .local_subs
                                     .insert(res.clone(), id);
-                                let push_declaration = push_declaration_profile(tables, &dst_face);
+                                let push_declaration = self.push_declaration_profile(&dst_face);
                                 let key_expr =
                                     Resource::decl_key(res, &mut dst_face, push_declaration);
                                 send_declare(
@@ -1012,7 +994,7 @@ impl HatCode {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_sub_interest(
         &self,
-        tables: &mut Tables,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
@@ -1024,7 +1006,7 @@ impl HatCode {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if hat!(tables).router_subs.iter().any(|sub| {
+                    if self.router_subs.iter().any(|sub| {
                         sub.context.is_some()
                             && sub.matches(res)
                             && (self.remote_simple_subs(sub, face)
@@ -1033,7 +1015,7 @@ impl HatCode {
                     }) {
                         let id = self.make_sub_id(res, face, mode);
                         let wire_expr =
-                            Resource::decl_key(res, face, push_declaration_profile(tables, face));
+                            Resource::decl_key(res, face, self.push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1052,7 +1034,7 @@ impl HatCode {
                         );
                     }
                 } else {
-                    for sub in &hat!(tables).router_subs {
+                    for sub in &self.router_subs {
                         if sub.context.is_some()
                             && sub.matches(res)
                             && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
@@ -1066,16 +1048,12 @@ impl HatCode {
                                         && (s.face.whatami == WhatAmI::Client
                                             || face.whatami == WhatAmI::Client
                                             || (s.face.whatami == WhatAmI::Peer
-                                                && hat!(tables)
-                                                    .failover_brokering(s.face.zid, face.zid)))
+                                                && self.failover_brokering(s.face.zid, face.zid)))
                                 }))
                         {
                             let id = self.make_sub_id(sub, face, mode);
-                            let wire_expr = Resource::decl_key(
-                                sub,
-                                face,
-                                push_declaration_profile(tables, face),
-                            );
+                            let wire_expr =
+                                Resource::decl_key(sub, face, self.push_declaration_profile(face));
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -1096,7 +1074,7 @@ impl HatCode {
                     }
                 }
             } else {
-                for sub in &hat!(tables).router_subs {
+                for sub in &self.router_subs {
                     if sub.context.is_some()
                         && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
                             || res_hat!(sub)
@@ -1107,12 +1085,12 @@ impl HatCode {
                                 s.subs.is_some()
                                     && (s.face.whatami != WhatAmI::Peer
                                         || face.whatami != WhatAmI::Peer
-                                        || hat!(tables).failover_brokering(s.face.zid, face.zid))
+                                        || self.failover_brokering(s.face.zid, face.zid))
                             }))
                     {
                         let id = self.make_sub_id(sub, face, mode);
                         let wire_expr =
-                            Resource::decl_key(sub, face, push_declaration_profile(tables, face));
+                            Resource::decl_key(sub, face, self.push_declaration_profile(face));
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -1136,10 +1114,10 @@ impl HatCode {
     }
 }
 
-impl HatPubSubTrait for HatCode {
+impl HatPubSubTrait for HatData {
     fn declare_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: SubscriberId,
         res: &mut Arc<Resource>,
@@ -1149,7 +1127,7 @@ impl HatPubSubTrait for HatCode {
     ) {
         match face.whatami {
             WhatAmI::Router => {
-                if let Some(router) = get_router(tables, face, node_id) {
+                if let Some(router) = self.get_router(face, node_id) {
                     self.declare_router_subscription(
                         tables,
                         face,
@@ -1161,8 +1139,8 @@ impl HatPubSubTrait for HatCode {
                 }
             }
             WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(tables, face, node_id) {
+                if self.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.get_peer(face, node_id) {
                         self.declare_linkstatepeer_subscription(
                             tables,
                             face,
@@ -1181,8 +1159,8 @@ impl HatPubSubTrait for HatCode {
     }
 
     fn undeclare_subscription(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: SubscriberId,
         res: Option<Arc<Resource>>,
@@ -1192,7 +1170,7 @@ impl HatPubSubTrait for HatCode {
         match face.whatami {
             WhatAmI::Router => {
                 if let Some(mut res) = res {
-                    if let Some(router) = get_router(tables, face, node_id) {
+                    if let Some(router) = self.get_router(face, node_id) {
                         self.forget_router_subscription(
                             tables,
                             face,
@@ -1209,9 +1187,9 @@ impl HatPubSubTrait for HatCode {
                 }
             }
             WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
+                if self.full_net(WhatAmI::Peer) {
                     if let Some(mut res) = res {
-                        if let Some(peer) = get_peer(tables, face, node_id) {
+                        if let Some(peer) = self.get_peer(face, node_id) {
                             self.forget_linkstatepeer_subscription(
                                 tables,
                                 face,
@@ -1234,10 +1212,9 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_subscriptions(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known suscriptions (keys)
-        hat!(tables)
-            .router_subs
+        self.router_subs
             .iter()
             .map(|s| {
                 (
@@ -1246,7 +1223,7 @@ impl HatPubSubTrait for HatCode {
                     // sources of those subscriptions
                     Sources {
                         routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
-                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
+                        peers: if self.full_net(WhatAmI::Peer) {
                             Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned())
                         } else {
                             s.session_ctxs
@@ -1271,7 +1248,7 @@ impl HatPubSubTrait for HatCode {
             .collect()
     }
 
-    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+    fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in tables.faces.values() {
             for interest in face_hat!(face).remote_interests.values() {
@@ -1292,7 +1269,7 @@ impl HatPubSubTrait for HatCode {
 
     fn compute_data_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
@@ -1301,7 +1278,7 @@ impl HatPubSubTrait for HatCode {
         fn insert_faces_for_subs(
             route: &mut Route,
             expr: &RoutingExpr,
-            tables: &Tables,
+            tables: &TablesData,
             net: &Network,
             source: NodeId,
             subs: &HashSet<ZenohIdProto>,
@@ -1359,15 +1336,14 @@ impl HatPubSubTrait for HatCode {
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-        let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
-                == tables.zid;
+        let master = !self.full_net(WhatAmI::Peer)
+            || *self.elect_router(&tables.zid, &key_expr, self.shared_nodes.iter()) == tables.zid;
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
             if master || source_type == WhatAmI::Router {
-                let net = hat!(tables).routers_net.as_ref().unwrap();
+                let net = self.routers_net.as_ref().unwrap();
                 let router_source = match source_type {
                     WhatAmI::Router => source,
                     _ => net.idx.index() as NodeId,
@@ -1382,8 +1358,8 @@ impl HatPubSubTrait for HatCode {
                 );
             }
 
-            if (master || source_type != WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
-                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            if (master || source_type != WhatAmI::Router) && self.full_net(WhatAmI::Peer) {
+                let net = self.linkstatepeers_net.as_ref().unwrap();
                 let peer_source = match source_type {
                     WhatAmI::Peer => source,
                     _ => net.idx.index() as NodeId,
@@ -1425,13 +1401,13 @@ impl HatPubSubTrait for HatCode {
     #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
     ) -> HashMap<usize, Arc<FaceState>> {
         #[inline]
         fn insert_faces_for_subs(
             route: &mut HashMap<usize, Arc<FaceState>>,
-            tables: &Tables,
+            tables: &TablesData,
             net: &Network,
             source: usize,
             subs: &HashSet<ZenohIdProto>,
@@ -1468,15 +1444,14 @@ impl HatPubSubTrait for HatCode {
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
-        let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
-                == tables.zid;
+        let master = !self.full_net(WhatAmI::Peer)
+            || *self.elect_router(&tables.zid, key_expr, self.shared_nodes.iter()) == tables.zid;
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
             if master {
-                let net = hat!(tables).routers_net.as_ref().unwrap();
+                let net = self.routers_net.as_ref().unwrap();
                 insert_faces_for_subs(
                     &mut matching_subscriptions,
                     tables,
@@ -1486,8 +1461,8 @@ impl HatPubSubTrait for HatCode {
                 );
             }
 
-            if hat!(tables).full_net(WhatAmI::Peer) {
-                let net = hat!(tables).linkstatepeers_net.as_ref().unwrap();
+            if self.full_net(WhatAmI::Peer) {
+                let net = self.linkstatepeers_net.as_ref().unwrap();
                 insert_faces_for_subs(
                     &mut matching_subscriptions,
                     tables,
