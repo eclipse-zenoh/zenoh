@@ -205,13 +205,13 @@ impl serde::Serialize for ConfRange {
     {
         match (self.start, &self.end) {
             (Bound::Included(start), Bound::Included(end)) => {
-                serializer.serialize_str(&format!("{}..{}", start, end))
+                serializer.serialize_str(&format!("{start}..{end}"))
             }
             (Bound::Included(start), Bound::Unbounded) => {
-                serializer.serialize_str(&format!("{}..", start))
+                serializer.serialize_str(&format!("{start}.."))
             }
             (Bound::Unbounded, Bound::Included(end)) => {
-                serializer.serialize_str(&format!("..{}", end))
+                serializer.serialize_str(&format!("..{end}"))
             }
             (Bound::Unbounded, Bound::Unbounded) => serializer.serialize_str(".."),
             _ => Err(serde::ser::Error::custom("Invalid range")),
