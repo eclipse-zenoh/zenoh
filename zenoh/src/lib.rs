@@ -536,6 +536,7 @@ pub mod internal {
 pub mod shm {
     pub use zenoh_shm::api::{
         buffer::{
+            traits::{OwnedShmBuf, ShmBuf, ShmBufMut},
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },

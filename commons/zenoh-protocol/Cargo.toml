@@ -25,6 +25,7 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
+unstable = []
 internal = []
 std = [
     "rand?/std",

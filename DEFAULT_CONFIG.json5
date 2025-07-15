@@ -886,7 +886,7 @@
   //          volume: "memory",
   //          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
   //          /// If not configured, complete defaults to false.
-  //          complete: "true",
+  //          complete: true,
   //        },
   //        influx_demo: {
   //          key_expr: "demo/influxdb/**",

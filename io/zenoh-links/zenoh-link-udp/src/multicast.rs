@@ -191,7 +191,7 @@ impl LinkManagerMulticastUdp {
         config: Config<'_>,
         bind_socket: Option<&str>,
         dscp: Option<u32>,
-    ) -> ZResult<(UdpSocket, UdpSocket, SocketAddr)> {
+    ) -> ZResult<(UdpSocket, SocketAddr, UdpSocket, SocketAddr)> {
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
             IpAddr::V6(_) => Domain::IPV6,
@@ -380,8 +380,14 @@ impl LinkManagerMulticastUdp {
             .local_addr()
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
         assert_eq!(ucast_addr.ip(), local_addr.ip());
+        // We may have bind to port 0, so we need to retrieve the actual port
+        let mcast_port = mcast_sock
+            .local_addr()
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?
+            .port();
+        let mcast_addr = SocketAddr::new(mcast_addr.ip(), mcast_port);
 
-        Ok((mcast_sock, ucast_sock, ucast_addr))
+        Ok((mcast_sock, mcast_addr, ucast_sock, ucast_addr))
     }
 }
 
@@ -402,9 +408,9 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
                 .new_link_inner(&maddr, endpoint.config(), bind_socket, dscp)
                 .await
             {
-                Ok((mcast_sock, ucast_sock, ucast_addr)) => {
+                Ok((mcast_sock, mcast_addr, ucast_sock, ucast_addr)) => {
                     let link = Arc::new(LinkMulticastUdp::new(
-                        ucast_addr, ucast_sock, maddr, mcast_sock,
+                        ucast_addr, ucast_sock, mcast_addr, mcast_sock,
                     ));
 
                     return Ok(LinkMulticast(link));
