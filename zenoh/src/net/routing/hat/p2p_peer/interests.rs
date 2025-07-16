@@ -23,11 +23,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{
-    face_hat, face_hat_mut, initial_interest, pubsub::declare_sub_interest,
-    queries::declare_qabl_interest, token::declare_token_interest, HatCode, HatFace,
-    INITIAL_INTEREST_ID,
-};
+use super::{face_hat, face_hat_mut, initial_interest, HatCode, HatFace, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
@@ -41,44 +37,46 @@ use crate::net::routing::{
     RoutingContext,
 };
 
-pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    if face.whatami != WhatAmI::Client {
-        for mut src_face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            if face.whatami == WhatAmI::Router {
-                for RemoteInterest { res, options, .. } in
-                    face_hat_mut!(&mut src_face).remote_interests.values()
-                {
-                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                    get_mut_unchecked(face).local_interests.insert(
-                        id,
-                        InterestState {
-                            options: *options,
-                            res: res.as_ref().map(|res| (*res).clone()),
-                            finalized: false,
-                        },
-                    );
-                    let wire_expr = res.as_ref().map(|res| {
-                        Resource::decl_key(res, face, super::push_declaration_profile(face))
-                    });
-                    face.primitives.send_interest(RoutingContext::with_expr(
-                        &mut Interest {
+impl HatCode {
+    pub(super) fn interests_new_face(&self, tables: &mut Tables, face: &mut Arc<FaceState>) {
+        if face.whatami != WhatAmI::Client {
+            for mut src_face in tables
+                .faces
+                .values()
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                if face.whatami == WhatAmI::Router {
+                    for RemoteInterest { res, options, .. } in
+                        face_hat_mut!(&mut src_face).remote_interests.values()
+                    {
+                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        get_mut_unchecked(face).local_interests.insert(
                             id,
-                            mode: InterestMode::CurrentFuture,
-                            options: *options,
-                            wire_expr,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                        },
-                        res.as_ref()
-                            .map(|res| res.expr().to_string())
-                            .unwrap_or_default(),
-                    ));
+                            InterestState {
+                                options: *options,
+                                res: res.as_ref().map(|res| (*res).clone()),
+                                finalized: false,
+                            },
+                        );
+                        let wire_expr = res.as_ref().map(|res| {
+                            Resource::decl_key(res, face, super::push_declaration_profile(face))
+                        });
+                        face.primitives.send_interest(RoutingContext::with_expr(
+                            &mut Interest {
+                                id,
+                                mode: InterestMode::CurrentFuture,
+                                options: *options,
+                                wire_expr,
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                            },
+                            res.as_ref()
+                                .map(|res| res.expr().to_string())
+                                .unwrap_or_default(),
+                        ));
+                    }
                 }
             }
         }
@@ -98,7 +96,7 @@ impl HatInterestTrait for HatCode {
         send_declare: &mut SendDeclare,
     ) {
         if options.subscribers() {
-            declare_sub_interest(
+            self.declare_sub_interest(
                 tables,
                 face,
                 id,
@@ -109,7 +107,7 @@ impl HatInterestTrait for HatCode {
             )
         }
         if options.queryables() {
-            declare_qabl_interest(
+            self.declare_qabl_interest(
                 tables,
                 face,
                 id,
@@ -120,7 +118,7 @@ impl HatInterestTrait for HatCode {
             )
         }
         if options.tokens() {
-            declare_token_interest(
+            self.declare_token_interest(
                 tables,
                 face,
                 id,

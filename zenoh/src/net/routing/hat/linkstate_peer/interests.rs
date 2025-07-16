@@ -20,10 +20,7 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{
-    face_hat_mut, pubsub::declare_sub_interest, queries::declare_qabl_interest,
-    token::declare_token_interest, HatCode, HatFace,
-};
+use super::{face_hat_mut, HatCode, HatFace};
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
@@ -48,7 +45,7 @@ impl HatInterestTrait for HatCode {
         send_declare: &mut SendDeclare,
     ) {
         if options.subscribers() {
-            declare_sub_interest(
+            self.declare_sub_interest(
                 tables,
                 face,
                 id,
@@ -59,7 +56,7 @@ impl HatInterestTrait for HatCode {
             )
         }
         if options.queryables() {
-            declare_qabl_interest(
+            self.declare_qabl_interest(
                 tables,
                 face,
                 id,
@@ -70,7 +67,7 @@ impl HatInterestTrait for HatCode {
             )
         }
         if options.tokens() {
-            declare_token_interest(
+            self.declare_token_interest(
                 tables,
                 face,
                 id,
