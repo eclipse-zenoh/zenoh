@@ -79,8 +79,8 @@ pub struct ReplicaConfig {
 }
 
 impl StructVersion for VolumeConfig {
-    fn struct_version() -> u64 {
-        1
+    fn struct_version() -> &'static str {
+        zenoh::GIT_VERSION
     }
     fn struct_features() -> &'static str {
         concatcp!(zenoh::FEATURES, crate::FEATURES)
