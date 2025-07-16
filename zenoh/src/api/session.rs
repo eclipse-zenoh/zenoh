@@ -1935,7 +1935,7 @@ impl SessionInner {
             MatchingStatusType::Queryables(false) => state
                 .queryables
                 .values()
-                .any(|q| q.key_expr.includes(key_expr)),
+                .any(|q| q.key_expr.intersects(key_expr)),
             MatchingStatusType::Queryables(true) => state
                 .queryables
                 .values()
