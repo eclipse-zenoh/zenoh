@@ -30,7 +30,7 @@ use once_cell::sync::OnceCell;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
@@ -70,7 +70,7 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
-use super::builders::close::{CloseBuilder, Closeable, Closee};
+use super::builders::close::{CloseBuilder, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::selector::ZenohParameters;
 #[cfg(feature = "unstable")]
@@ -779,8 +779,8 @@ impl Session {
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
-    pub fn close(&self) -> CloseBuilder<Self> {
-        CloseBuilder::new(self)
+    pub fn close(&self) -> CloseBuilder<impl Closee> {
+        CloseBuilder::new(self.0.clone())
     }
 
     /// Check if the session has been closed.
@@ -1258,7 +1258,7 @@ impl Session {
         #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<ShmClientStorage>>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
-            tracing::debug!("Config: {:?}", &config);
+            debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.0.aggregation().subscribers().clone();
             let aggregated_publishers = config.0.aggregation().publishers().clone();
             #[allow(unused_mut)] // Required for shared-memory
@@ -2319,7 +2319,7 @@ impl SessionInner {
                             let mut state = zwrite!(session.state);
                             if let Some(query) = state.queries.remove(&qid) {
                                 std::mem::drop(state);
-                                tracing::debug!("Timeout on query {}! Send error and close.", qid);
+                                debug!("Timeout on query {}! Send error and close.", qid);
                                 if query.reception_mode == ConsolidationMode::Latest {
                                     for (_, reply) in query.replies.unwrap().into_iter() {
                                         query.callback.call(reply);
@@ -2423,7 +2423,7 @@ impl SessionInner {
                             let mut state = zwrite!(session.state);
                             if let Some(query) = state.liveliness_queries.remove(&id) {
                                 std::mem::drop(state);
-                                tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
+                                debug!("Timeout on liveliness query {}! Send error and close.", id);
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
@@ -3169,25 +3169,36 @@ where
     OpenBuilder::new(config)
 }
 
+impl std::fmt::Display for SessionInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.runtime, self.id)
+    }
+}
+
 #[async_trait]
 impl Closee for Arc<SessionInner> {
     async fn close_inner(&self) {
+        info!(zid = %self.zid(), "close session");
+
         let Some(primitives) = zwrite!(self.state).primitives.take() else {
+            debug!(zid = %self.zid(), "session already closed");
             return;
         };
 
+        self.task_controller.terminate_all_async().await;
+
         if self.owns_runtime {
-            info!(zid = %self.zid(), "close session");
-            self.task_controller.terminate_all_async().await;
-            self.runtime.get_closee().close_inner().await;
+            debug!(zid = %self.zid(), "closing owned runtime {}", self.runtime);
+            self.runtime.closee().close_inner().await;
         } else {
-            self.task_controller.terminate_all_async().await;
+            debug!(zid = %self.zid(), "finalize all primitives on foreign runtime {}", self.runtime);
             primitives.send_close();
         }
 
         // defer the cleanup of internal data structures by taking them out of the locked state
         // this is needed because callbacks may contain entities which need to acquire the
         // lock to be dropped, so callback must be dropped without the lock held
+        debug!(zid = %self.zid(), "acquire state lock to move out Session state");
         let mut state = zwrite!(self.state);
         let _queryables = std::mem::take(&mut state.queryables);
         let _subscribers = std::mem::take(&mut state.subscribers);
@@ -3195,25 +3206,9 @@ impl Closee for Arc<SessionInner> {
         let _local_resources = std::mem::take(&mut state.local_resources);
         let _remote_resources = std::mem::take(&mut state.remote_resources);
         let _queries = std::mem::take(&mut state.queries);
-        drop(state);
         #[cfg(feature = "unstable")]
-        {
-            // the lock from the outer scope cannot be reused because the declared variables
-            // would be undeclared at the end of the block, with the lock held, and we want
-            // to avoid that; so we reacquire the lock in the block
-            // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
-            // will be stabilized.
-            let mut state = zwrite!(self.state);
-            let _matching_listeners = std::mem::take(&mut state.matching_listeners);
-            drop(state);
-        }
-    }
-}
-
-impl Closeable for Session {
-    type TClosee = Arc<SessionInner>;
-
-    fn get_closee(&self) -> Self::TClosee {
-        self.0.clone()
+        let _matching_listeners = std::mem::take(&mut state.matching_listeners);
+        drop(state);
+        debug!(zid = %self.zid(), "state moved out");
     }
 }
