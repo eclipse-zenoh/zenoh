@@ -330,7 +330,7 @@ impl Query {
 }
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) key_expr: WireExpr<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<Query>,
