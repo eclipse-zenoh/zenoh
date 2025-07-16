@@ -17,8 +17,11 @@ use std::{fmt::Display, marker::PhantomData, num::NonZeroUsize};
 use crate::api::provider::types::{AllocAlignment, ZLayoutError};
 
 pub trait IntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
-
 impl<T> IntoMemoryLayout for T where T : TryInto<MemoryLayout, Error = ZLayoutError> {}
+
+pub trait IntoTypedMemoryLayout {
+    type Type;
+}
 
 /// Memory layout representation: alignment and size aligned for this alignment
 #[zenoh_macros::unstable_doc]
@@ -166,3 +169,6 @@ impl<T> LayoutForType<T> {
 
 }
 
+impl<T> IntoTypedMemoryLayout for LayoutForType<T> {
+    type Type = T;
+}

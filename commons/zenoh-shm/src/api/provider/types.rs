@@ -17,7 +17,7 @@ use std::{fmt::Display, num::NonZeroUsize};
 use zenoh_core::zerror;
 
 use super::chunk::AllocatedChunk;
-use crate::api::buffer::zshmmut::ZShmMut;
+use crate::api::buffer::{typed::Typed, zshmmut::ZShmMut};
 
 /// Allocation error.
 #[zenoh_macros::unstable_doc]
@@ -199,6 +199,11 @@ pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
 #[allow(type_alias_bounds)]
 pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
 
+/// SHM buffer allocation result
+#[zenoh_macros::unstable_doc]
+#[allow(type_alias_bounds)]
+pub type TypedBufAllocResult<T> = Result<Typed<T, ZShmMut>, ZAllocError>;
+
 /// Layout or allocation error.
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
@@ -222,3 +227,8 @@ impl From<ZLayoutAllocError> for zenoh_result::Error {
 #[zenoh_macros::unstable_doc]
 #[allow(type_alias_bounds)]
 pub type BufLayoutAllocResult = Result<ZShmMut, ZLayoutAllocError>;
+
+/// Typed SHM buffer layouting and allocation result
+#[zenoh_macros::unstable_doc]
+#[allow(type_alias_bounds)]
+pub type TypedBufLayoutAllocResult<T> = Result<Typed<T, ZShmMut>, ZLayoutAllocError>;
