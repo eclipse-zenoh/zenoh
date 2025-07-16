@@ -47,7 +47,7 @@ transport_unixpipe = ["zenoh-link/transport_unixpipe"]
 transport_vsock = ["zenoh-link/transport_vsock"]
 stats = []
 test = []
-unstable = []
+unstable = ["zenoh-protocol/unstable", "zenoh-config/unstable"]
 default = ["test", "transport_multilink"]
 
 [dependencies]
