@@ -248,11 +248,6 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_node(&self, zid: &ZenohIdProto) -> Option<&Node> {
-        self.graph.node_weights().find(|weight| weight.zid == *zid)
-    }
-
-    #[inline]
     pub(crate) fn get_idx(&self, zid: &ZenohIdProto) -> Option<NodeIndex> {
         self.graph
             .node_indices()
@@ -1113,14 +1108,6 @@ impl Network {
         new_children
     }
 
-    #[inline]
-    pub(crate) fn get_links(
-        &self,
-        node: ZenohIdProto,
-    ) -> Option<&HashMap<ZenohIdProto, LinkEdgeWeight>> {
-        self.get_node(&node).map(|node| &node.links)
-    }
-
     pub(crate) fn links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let mut out = HashMap::new();
         for e in self
@@ -1191,19 +1178,6 @@ impl Network {
             .filter_map(|(src, dst)| self.successor_entry(src, dst))
             .collect()
     }
-}
-
-#[inline]
-pub(crate) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohIdProto> {
-    net1.graph
-        .node_references()
-        .filter_map(|(_, node1)| {
-            net2.graph
-                .node_references()
-                .any(|(_, node2)| node1.zid == node2.zid)
-                .then_some(node1.zid)
-        })
-        .collect()
 }
 
 pub(crate) struct SuccessorEntry {

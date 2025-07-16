@@ -173,18 +173,7 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (
-            listeners,
-            peers,
-            scouting,
-            wait_scouting,
-            listen,
-            autoconnect,
-            addr,
-            ifaces,
-            delay,
-            linkstate,
-        ) = {
+        let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.state.config.lock().0;
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
@@ -201,7 +190,6 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
-                unwrap_or_default!(guard.routing().peer().mode()) == *"linkstate",
             )
         };
 
@@ -213,9 +201,7 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if linkstate {
-            tokio::time::sleep(delay).await;
-        } else if wait_scouting
+        if wait_scouting
             && (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await

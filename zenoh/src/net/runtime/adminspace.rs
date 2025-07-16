@@ -21,7 +21,7 @@ use itertools::Itertools;
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
+use zenoh_config::{wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
 use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
@@ -172,16 +172,6 @@ impl AdminSpace {
                     .try_into()
                     .unwrap(),
                 Arc::new(routers_linkstate_data),
-            );
-        }
-        if runtime.state.whatami != WhatAmI::Client
-            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
-        {
-            handlers.insert(
-                format!("@/{zid_str}/{whatami_str}/linkstate/peers")
-                    .try_into()
-                    .unwrap(),
-                Arc::new(peers_linkstate_data),
             );
         }
         handlers.insert(
@@ -717,26 +707,6 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
 
     if let Err(e) = query
         .reply(reply_key, rtables.hat.info(WhatAmI::Router))
-        .encoding(Encoding::TEXT_PLAIN)
-        .wait()
-    {
-        tracing::error!("Error sending AdminSpace reply: {:?}", e);
-    }
-}
-
-fn peers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}/linkstate/peers",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
-
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-
-    if let Err(e) = query
-        .reply(reply_key, rtables.hat.info(WhatAmI::Peer))
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
