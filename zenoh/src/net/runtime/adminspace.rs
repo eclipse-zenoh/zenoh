@@ -650,6 +650,8 @@ fn local_data(context: &AdminContext, query: Query) {
                 "group": transport.get_link().map_or_else(|_| "unknown".to_string(), |p| p.group.map_or_else(|| "unknown".to_string(), |p| p.to_string())),
                 "links": links,
             });
+            #[cfg(feature = "stats")]
+            let json = insert_stats(json, transport.get_stats().ok().as_ref());
             json
         };
     let mut transports: Vec<serde_json::Value> = vec![];
