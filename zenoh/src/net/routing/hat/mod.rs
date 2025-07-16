@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, sync::Arc};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
@@ -30,8 +30,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::TransportUnicast;
-#[cfg(feature = "unstable")]
-use {crate::key_expr::KeyExpr, std::collections::HashMap};
 
 use super::{
     dispatcher::{
@@ -41,7 +39,12 @@ use super::{
     },
     RoutingContext,
 };
-use crate::net::runtime::Runtime;
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
+use crate::net::{
+    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    runtime::Runtime,
+};
 
 mod client;
 mod linkstate_peer;
@@ -137,6 +140,32 @@ pub(crate) trait HatBaseTrait {
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     );
+
+    fn update_from_config(
+        &self,
+        _tables: &mut Tables,
+        _tables_ref: &Arc<TablesLock>,
+        _runtime: &Runtime,
+    ) -> ZResult<()> {
+        Ok(())
+    }
+
+    fn links_info(&self, _tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo> {
+        HashMap::new()
+    }
+
+    fn route_successor(
+        &self,
+        _tables: &Tables,
+        _src: ZenohIdProto,
+        _dst: ZenohIdProto,
+    ) -> Option<ZenohIdProto> {
+        None
+    }
+
+    fn route_successors(&self, _tables: &Tables) -> Vec<SuccessorEntry> {
+        Vec::new()
+    }
 }
 
 pub(crate) trait HatInterestTrait {

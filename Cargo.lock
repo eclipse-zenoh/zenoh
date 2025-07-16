@@ -1401,7 +1401,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "nanorand",
- "spin",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -1431,9 +1431,9 @@ dependencies = [
 
 [[package]]
 name = "futures"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "645c6916888f6cb6350d2550b80fb63e734897a8498abe35cfb732b6487804b0"
+checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -1446,9 +1446,9 @@ dependencies = [
 
 [[package]]
 name = "futures-channel"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eac8f7d7865dcb88bd4373ab671c8cf4508703796caa2b1985a9ca867b3fcb78"
+checksum = "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
 dependencies = [
  "futures-core",
  "futures-sink",
@@ -1456,15 +1456,15 @@ dependencies = [
 
 [[package]]
 name = "futures-core"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfc6580bb841c5a68e9ef15c77ccc837b40a7504914d52e47b8b0e9bbda25a1d"
+checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
 
 [[package]]
 name = "futures-executor"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a576fc72ae164fca6b9db127eaa9a9dda0d61316034f33a0a0d4eda41f02b01d"
+checksum = "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
 dependencies = [
  "futures-core",
  "futures-task",
@@ -1473,9 +1473,9 @@ dependencies = [
 
 [[package]]
 name = "futures-io"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a44623e20b9681a318efdd71c299b6b222ed6f231972bfe2f224ebad6311f0c1"
+checksum = "9e5c1b78ca4aae1ac06c48a526a655760685149f0d465d21f37abfe57ce075c6"
 
 [[package]]
 name = "futures-lite"
@@ -1507,9 +1507,9 @@ dependencies = [
 
 [[package]]
 name = "futures-macro"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
+checksum = "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1518,21 +1518,21 @@ dependencies = [
 
 [[package]]
 name = "futures-sink"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb8e00e87438d937621c1c6269e53f536c14d3fbd6a042bb24879e57d474fb5"
+checksum = "e575fab7d1e0dcb8d0c7bcf9a63ee213816ab51902e6d244a95819acacf1d4f7"
 
 [[package]]
 name = "futures-task"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d84fa142264698cdce1a9f9172cf383a0c82de1bddcf3092901442c4097004"
+checksum = "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988"
 
 [[package]]
 name = "futures-util"
-version = "0.3.30"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d6401deb83407ab3da39eba7e33987a73c3df0c82b4bb5813ee871c19c41d48"
+checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -1779,9 +1779,9 @@ checksum = "0fcc0b4a115bf80b728eb8ea024ad5bd707b615bfed49e0665b6e0f86fd082d9"
 
 [[package]]
 name = "humantime"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
+checksum = "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
 
 [[package]]
 name = "iana-time-zone"
@@ -2049,7 +2049,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
- "spin",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -3800,6 +3800,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "spin"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
+
+[[package]]
 name = "spki"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4481,7 +4487,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 1.0.0",
+ "cfg-if 0.1.10",
  "static_assertions",
 ]
 
@@ -4505,16 +4511,16 @@ checksum = "ed646292ffc8188ef8ea4d1e0e0150fb15a5c2e12ad9b8fc191ae7a8a7f3c4b9"
 
 [[package]]
 name = "uhlc"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79ac3c37bd9506595768f0387bd39d644525728b4a1d783218acabfb56356db7"
+checksum = "66bbb93b0c2258fe1e81a84d8de5391f2577b039decabf75a6441ea1ebbf4cb5"
 dependencies = [
  "humantime",
  "lazy_static",
  "log",
  "rand 0.8.5",
  "serde",
- "spin",
+ "spin 0.10.0",
 ]
 
 [[package]]
@@ -5155,7 +5161,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "ahash",
  "arc-swap",
@@ -5205,7 +5211,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-backend-example"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "git-version",
@@ -5218,7 +5224,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-buffers"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "rand 0.8.5",
  "zenoh-collections",
@@ -5226,7 +5232,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-codec"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "criterion",
  "rand 0.8.5",
@@ -5240,14 +5246,14 @@ dependencies = [
 
 [[package]]
 name = "zenoh-collections"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "ahash",
 ]
 
 [[package]]
 name = "zenoh-config"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "json5",
  "nonempty-collections",
@@ -5270,7 +5276,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-core"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "lazy_static",
  "tokio",
@@ -5280,7 +5286,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-crypto"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "aes 0.8.4",
  "hmac 0.12.1",
@@ -5292,7 +5298,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-examples"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "clap",
  "futures",
@@ -5308,7 +5314,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-ext"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "bincode",
@@ -5328,7 +5334,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-ext-examples"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "clap",
  "futures",
@@ -5341,7 +5347,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-keyexpr"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "ahash",
  "criterion",
@@ -5358,7 +5364,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "zenoh-config",
  "zenoh-link-commons",
@@ -5377,7 +5383,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-commons"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "flume",
@@ -5385,6 +5391,7 @@ dependencies = [
  "rustls",
  "rustls-webpki",
  "serde",
+ "socket2 0.5.7",
  "time 0.3.36",
  "tokio",
  "tokio-util",
@@ -5400,7 +5407,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-quic"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5426,7 +5433,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-serial"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "tokio",
@@ -5443,7 +5450,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-tcp"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "socket2 0.5.7",
@@ -5459,7 +5466,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-tls"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5487,7 +5494,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-udp"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "socket2 0.5.7",
@@ -5505,7 +5512,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-unixpipe"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "advisory-lock",
  "async-trait",
@@ -5526,7 +5533,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-unixsock_stream"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "nix 0.29.0",
@@ -5543,7 +5550,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-vsock"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "libc",
@@ -5560,7 +5567,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-ws"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "futures-util",
@@ -5579,7 +5586,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-macros"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5589,7 +5596,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-example"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "futures",
  "git-version",
@@ -5604,7 +5611,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-rest"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "anyhow",
  "async-std",
@@ -5629,7 +5636,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-storage-manager"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-global-executor",
  "async-trait",
@@ -5656,7 +5663,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-trait"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "git-version",
  "libloading",
@@ -5671,7 +5678,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-protocol"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "const_format",
  "lazy_static",
@@ -5685,14 +5692,14 @@ dependencies = [
 
 [[package]]
 name = "zenoh-result"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "zenoh-runtime"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "lazy_static",
  "ron",
@@ -5705,7 +5712,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-shm"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "advisory-lock",
  "async-trait",
@@ -5731,7 +5738,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-sync"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "arc-swap",
  "event-listener 5.3.1",
@@ -5745,7 +5752,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-task"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "futures",
  "tokio",
@@ -5757,7 +5764,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-transport"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "crossbeam-utils",
@@ -5793,7 +5800,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-util"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "const_format",
@@ -5817,7 +5824,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_backend_traits"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "async-trait",
  "const_format",
@@ -5833,7 +5840,7 @@ dependencies = [
 
 [[package]]
 name = "zenohd"
-version = "1.3.3"
+version = "1.4.0"
 dependencies = [
  "clap",
  "git-version",

@@ -45,7 +45,7 @@ fn error_with_source() {
         panic!();
     }
 
-    let ioerr = std::io::Error::new(std::io::ErrorKind::Other, "IOERR");
+    let ioerr = std::io::Error::other("IOERR");
     let e = zerror!( ioerr =>"ERR2");
     let s = e.to_string();
     println!("{e}");

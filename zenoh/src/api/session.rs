@@ -2876,7 +2876,7 @@ impl Primitives for WeakSession {
                                 encoding: mem::take(&mut e.encoding).into(),
                             }),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut e.ext_sinfo).map(|info| info.id.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
                         };
                         callback.call(new_reply);
                     }
@@ -2968,7 +2968,7 @@ impl Primitives for WeakSession {
                         let new_reply = Reply {
                             result: Ok(sample),
                             #[cfg(feature = "unstable")]
-                            replier_id: None,
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
                         };
                         let callback =
                             match query.reception_mode {

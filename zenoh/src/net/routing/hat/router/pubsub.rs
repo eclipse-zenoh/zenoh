@@ -31,22 +31,25 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, network::Network,
-    push_declaration_profile, res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
+    res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    dispatcher::{
-        face::FaceState,
-        interests::RemoteInterest,
-        pubsub::SubscriberInfo,
-        resource::{NodeId, Resource, SessionContext},
-        tables::{Route, RoutingExpr, Tables},
+use crate::net::{
+    protocol::{linkstate::LinkEdgeWeight, network::Network},
+    routing::{
+        dispatcher::{
+            face::FaceState,
+            interests::RemoteInterest,
+            pubsub::SubscriberInfo,
+            resource::{NodeId, Resource, SessionContext},
+            tables::{Route, RoutingExpr, Tables},
+        },
+        hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+        router::disable_matches_data_routes,
+        RoutingContext,
     },
-    hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-    router::disable_matches_data_routes,
-    RoutingContext,
 };
 
 #[inline]
@@ -840,7 +843,7 @@ pub(super) fn pubsub_tree_change(
 pub(super) fn pubsub_linkstate_change(
     tables: &mut Tables,
     zid: &ZenohIdProto,
-    links: &[ZenohIdProto],
+    links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
     send_declare: &mut SendDeclare,
 ) {
     if let Some(mut src_face) = tables.get_face(zid).cloned() {
@@ -858,7 +861,7 @@ pub(super) fn pubsub_linkstate_change(
                         && !res.session_ctxs.values().any(|ctx| {
                             ctx.face.whatami == WhatAmI::Peer
                                 && src_face.id != ctx.face.id
-                                && HatTables::failover_brokering_to(links, ctx.face.zid)
+                                && HatTables::failover_brokering_to(links, &ctx.face.zid)
                         })
                 })
                 .cloned()
@@ -887,7 +890,7 @@ pub(super) fn pubsub_linkstate_change(
 
             for mut dst_face in tables.faces.values().cloned() {
                 if src_face.id != dst_face.id
-                    && HatTables::failover_brokering_to(links, dst_face.zid)
+                    && HatTables::failover_brokering_to(links, &dst_face.zid)
                 {
                     for res in face_hat!(src_face).remote_subs.values() {
                         if !face_hat!(dst_face).local_subs.contains_key(res) {

@@ -34,7 +34,8 @@ use tokio_tungstenite::{accept_async, tungstenite::Message, MaybeTlsStream, WebS
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    get_ip_interface_names, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -212,9 +213,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        // @TODO: Not supported for now
-        tracing::debug!("The get_interface_names for LinkUnicastWs is not supported");
-        vec![]
+        get_ip_interface_names(&self.src_addr)
     }
 
     #[inline(always)]

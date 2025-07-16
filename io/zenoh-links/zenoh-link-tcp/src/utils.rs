@@ -15,8 +15,8 @@ use std::net::SocketAddr;
 
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF,
-    TCP_SO_SND_BUF,
+    parse_dscp, tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET,
+    TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{parameters, Address, Config};
 use zenoh_result::{zerror, ZResult};
@@ -51,6 +51,7 @@ pub(crate) struct TcpLinkConfig<'a> {
     pub(crate) tx_buffer_size: Option<u32>,
     pub(crate) bind_iface: Option<&'a str>,
     pub(crate) bind_socket: Option<SocketAddr>,
+    pub(crate) dscp: Option<u32>,
 }
 
 impl<'a> TcpLinkConfig<'a> {
@@ -65,6 +66,7 @@ impl<'a> TcpLinkConfig<'a> {
             tx_buffer_size: None,
             bind_iface: config.get(BIND_INTERFACE),
             bind_socket,
+            dscp: parse_dscp(config)?,
         };
 
         if let Some(size) = config.get(TCP_SO_RCV_BUF) {
@@ -91,6 +93,7 @@ impl<'a> From<TcpLinkConfig<'a>> for TcpSocketConfig<'a> {
             value.rx_buffer_size,
             value.bind_iface,
             value.bind_socket,
+            value.dscp,
         )
     }
 }

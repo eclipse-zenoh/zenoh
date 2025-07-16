@@ -37,20 +37,23 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::{
-    face_hat, face_hat_mut, get_peer, hat, hat_mut, network::Network, push_declaration_profile,
-    res_hat, res_hat_mut, HatCode, HatContext, HatFace, HatTables,
+    face_hat, face_hat_mut, get_peer, hat, hat_mut, push_declaration_profile, res_hat, res_hat_mut,
+    HatCode, HatContext, HatFace, HatTables,
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    dispatcher::{
-        face::FaceState,
-        resource::{NodeId, Resource, SessionContext},
-        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+use crate::net::{
+    protocol::network::Network,
+    routing::{
+        dispatcher::{
+            face::FaceState,
+            resource::{NodeId, Resource, SessionContext},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+        },
+        hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+        router::disable_matches_query_routes,
+        RoutingContext,
     },
-    hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-    router::disable_matches_query_routes,
-    RoutingContext,
 };
 
 #[inline]

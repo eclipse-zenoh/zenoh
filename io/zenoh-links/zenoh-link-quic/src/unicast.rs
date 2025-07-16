@@ -30,7 +30,7 @@ use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names,
+    get_ip_interface_names, parse_dscp, set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
@@ -281,6 +281,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
 
         let socket = tokio::net::UdpSocket::bind(src_addr).await?;
+        if let Some(dscp) = parse_dscp(&epconf)? {
+            set_dscp(&socket, src_addr, dscp)?;
+        }
 
         // Initialize the Endpoint
         if let Some(iface) = client_crypto.bind_iface {
@@ -289,9 +292,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let mut quic_endpoint = {
             // create the Endpoint with this socket
-            let runtime = quinn::default_runtime().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-            })?;
+            let runtime = quinn::default_runtime()
+                .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
             ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
                 EndpointConfig::default(),
                 None,
@@ -410,9 +412,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
 
                 // create the Endpoint with this socket
-                let runtime = quinn::default_runtime().ok_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-                })?;
+                let runtime = quinn::default_runtime()
+                    .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
                 ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
                     EndpointConfig::default(),
                     Some(server_config),

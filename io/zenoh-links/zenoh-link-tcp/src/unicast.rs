@@ -257,13 +257,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             )
         }
 
-        let link_config = TcpLinkConfig::new(&config).await?;
-        let socket_config = TcpSocketConfig::new(
-            link_config.tx_buffer_size,
-            link_config.rx_buffer_size,
-            link_config.bind_iface,
-            link_config.bind_socket,
-        );
+        let socket_config = TcpSocketConfig::from(TcpLinkConfig::new(&config).await?);
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs {
@@ -294,8 +288,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let config = endpoint.config();
 
-        let link_config = TcpLinkConfig::new(&config).await?;
-        let socket_config: TcpSocketConfig<'_> = link_config.into();
+        let socket_config = TcpSocketConfig::from(TcpLinkConfig::new(&config).await?);
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
