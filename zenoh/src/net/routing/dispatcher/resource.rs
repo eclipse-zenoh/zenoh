@@ -236,7 +236,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
-    pub(crate) session_ctxs: SmallHashMap<usize, Arc<SessionContext>, 64>,
+    pub(crate) session_ctxs: SmallHashMap<usize, Arc<SessionContext>, 16>,
 }
 
 impl PartialEq for Resource {
