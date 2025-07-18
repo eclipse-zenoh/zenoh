@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(test)]
+#[cfg(feature = "test")]
 use crate::zenoh::Put;
 use crate::{core::WireExpr, zenoh::PushBody};
 
