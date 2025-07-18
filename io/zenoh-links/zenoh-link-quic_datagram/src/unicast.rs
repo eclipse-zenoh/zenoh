@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -24,9 +24,7 @@ use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
-use tokio::sync::Mutex as AsyncMutex;
-use tokio_util::sync::CancellationToken;
-use zenoh_core::zasynclock;
+use tokio_util::{bytes::Bytes, sync::CancellationToken};
 use zenoh_link_commons::{
     get_ip_interface_names, parse_dscp,
     quic::{
@@ -44,37 +42,35 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
-use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
+use super::{
+    set_mtu_config, QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME, QUIC_DATAGRAM_DEFAULT_MTU,
+    QUIC_DATAGRAM_LOCATOR_PREFIX,
+};
 
-pub struct LinkUnicastQuic {
+pub struct LinkUnicastQuicDatagram {
     connection: quinn::Connection,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    send: AsyncMutex<quinn::SendStream>,
-    recv: AsyncMutex<quinn::RecvStream>,
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
-impl LinkUnicastQuic {
+impl LinkUnicastQuicDatagram {
     fn new(
         connection: quinn::Connection,
         src_addr: SocketAddr,
         dst_locator: Locator,
-        send: quinn::SendStream,
-        recv: quinn::RecvStream,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
-    ) -> LinkUnicastQuic {
+    ) -> LinkUnicastQuicDatagram {
         // Build the Quic object
-        LinkUnicastQuic {
+        LinkUnicastQuicDatagram {
             connection,
             src_addr,
-            src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
+            src_locator: Locator::new(QUIC_DATAGRAM_LOCATOR_PREFIX, src_addr.to_string(), "rel=0")
+                .unwrap(),
             dst_locator,
-            send: AsyncMutex::new(send),
-            recv: AsyncMutex::new(recv),
             auth_identifier,
             expiration_manager,
         }
@@ -82,18 +78,13 @@ impl LinkUnicastQuic {
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
-        // Flush the QUIC stream
-        let mut guard = zasynclock!(self.send);
-        if let Err(e) = guard.finish() {
-            tracing::trace!("Error closing QUIC stream {}: {}", self, e);
-        }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
     }
 }
 
 #[async_trait]
-impl LinkUnicastTrait for LinkUnicastQuic {
+impl LinkUnicastTrait for LinkUnicastQuicDatagram {
     async fn close(&self) -> ZResult<()> {
         if let Some(expiration_manager) = &self.expiration_manager {
             if !expiration_manager.set_closing() {
@@ -110,49 +101,35 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.send);
-        guard.write(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
+        let amt = buffer.len();
+        self.connection
+            .send_datagram(Bytes::copy_from_slice(buffer))?;
+        Ok(amt)
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.send);
-        guard.write_all(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
+        self.connection
+            .send_datagram(Bytes::copy_from_slice(buffer))?;
+        Ok(())
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.recv);
-        guard
-            .read(buffer)
-            .await
-            .map_err(|e| {
-                let e = zerror!("Read error on QUIC link {}: {}", self, e);
-                tracing::trace!("{}", &e);
-                e
-            })?
+        let bytes = self.connection.read_datagram().await?;
+        buffer
+            .get_mut(..bytes.len())
+            .map(|buffer| buffer.copy_from_slice(&bytes))
             .ok_or_else(|| {
-                let e = zerror!(
-                    "Read error on QUIC link {}: stream {} has been closed",
-                    self,
-                    guard.id()
-                );
-                tracing::trace!("{}", &e);
-                e.into()
-            })
+                zerror!(
+                    "QUIC datagram of len {} cannot fit in RX buffer of len {}",
+                    bytes.len(),
+                    buffer.len()
+                )
+            })?;
+        Ok(bytes.len())
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.recv);
-        guard.read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+    async fn read_exact(&self, _: &mut [u8]) -> ZResult<()> {
+        unreachable!()
     }
 
     #[inline(always)]
@@ -167,7 +144,10 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        *QUIC_DEFAULT_MTU
+        self.connection
+            .max_datagram_size()
+            .map(|mtu| mtu as BatchSize)
+            .unwrap_or(*QUIC_DATAGRAM_DEFAULT_MTU)
     }
 
     #[inline(always)]
@@ -182,7 +162,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        true
+        false
     }
 
     #[inline(always)]
@@ -192,7 +172,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 }
 
 #[async_trait]
-impl LinkWithCertExpiration for LinkUnicastQuic {
+impl LinkWithCertExpiration for LinkUnicastQuicDatagram {
     async fn expire(&self) -> ZResult<()> {
         let expiration_manager = self
             .expiration_manager
@@ -206,13 +186,13 @@ impl LinkWithCertExpiration for LinkUnicastQuic {
     }
 }
 
-impl Drop for LinkUnicastQuic {
+impl Drop for LinkUnicastQuicDatagram {
     fn drop(&mut self) {
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
     }
 }
 
-impl fmt::Display for LinkUnicastQuic {
+impl fmt::Display for LinkUnicastQuicDatagram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -224,21 +204,21 @@ impl fmt::Display for LinkUnicastQuic {
     }
 }
 
-impl fmt::Debug for LinkUnicastQuic {
+impl fmt::Debug for LinkUnicastQuicDatagram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Quic")
+        f.debug_struct("QuicDatagram")
             .field("src", &self.src_addr)
             .field("dst", &self.connection.remote_address())
             .finish()
     }
 }
 
-pub struct LinkManagerUnicastQuic {
+pub struct LinkManagerUnicastQuicDatagram {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
 }
 
-impl LinkManagerUnicastQuic {
+impl LinkManagerUnicastQuicDatagram {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
@@ -248,7 +228,7 @@ impl LinkManagerUnicastQuic {
 }
 
 #[async_trait]
-impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
+impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
@@ -265,9 +245,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         }
 
         // Initialize the QUIC connection
-        let mut client_crypto = TlsClientConfig::new(&epconf)
-            .await
-            .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
+        let mut client_crypto = TlsClientConfig::new(&epconf).await.map_err(|e| {
+            zerror!("Cannot create a new unreliable QUIC client on {dst_addr}: {e}")
+        })?;
 
         client_crypto.client_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
@@ -301,17 +281,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 runtime,
             )?)
         }
-        .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
+        .map_err(|e| zerror!("Can not create a new unreliable QUIC link bound to {host}: {e}"))?;
 
         let quic_config: QuicClientConfig = client_crypto
             .client_config
             .try_into()
-            .map_err(|e| zerror!("Can not get QUIC config {host}: {e}"))?;
+            .map_err(|e| zerror!("Can not get unreliable QUIC config {host}: {e}"))?;
         quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
 
-        let src_addr = quic_endpoint
-            .local_addr()
-            .map_err(|e| zerror!("Can not get QUIC local_addr bound to {}: {}", host, e))?;
+        let src_addr = quic_endpoint.local_addr().map_err(|e| {
+            zerror!(
+                "Can not get unreliable QUIC local_addr bound to {}: {}",
+                host,
+                e
+            )
+        })?;
 
         let quic_conn = quic_endpoint
             .connect(dst_addr, host)
@@ -326,16 +310,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let (send, recv) = quic_conn
-            .open_bi()
-            .await
-            .map_err(|e| zerror!("Can not open Quic bi-directional channel {}: {}", host, e))?;
-
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
             get_cert_chain_expiration(&quic_conn)?.expect("server should have certificate chain");
 
-        let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
+        let link = Arc::<LinkUnicastQuicDatagram>::new_cyclic(|weak_link| {
             let mut expiration_manager = None;
             if client_crypto.tls_close_link_on_expiration {
                 // setup expiration manager
@@ -343,16 +322,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                     weak_link.clone(),
                     src_addr,
                     dst_addr,
-                    QUIC_LOCATOR_PREFIX,
+                    QUIC_DATAGRAM_LOCATOR_PREFIX,
                     certchain_expiration_time,
                 ))
             }
-            LinkUnicastQuic::new(
+            LinkUnicastQuicDatagram::new(
                 quic_conn,
                 src_addr,
                 endpoint.into(),
-                send,
-                recv,
                 auth_id.into(),
                 expiration_manager,
             )
@@ -366,7 +343,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let epconf = endpoint.config();
 
         if epconf.is_empty() {
-            bail!("No QUIC configuration provided");
+            bail!("No unreliable QUIC configuration provided");
         };
 
         let addr = get_quic_addr(&epaddr).await?;
@@ -375,7 +352,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Server config
         let mut server_crypto = TlsServerConfig::new(&epconf)
             .await
-            .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
+            .map_err(|e| zerror!("Cannot create a new unreliable QUIC listener on {addr}: {e}"))?;
         server_crypto.server_config.alpn_protocols =
             ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
@@ -392,7 +369,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let quic_config: QuicServerConfig = server_crypto
             .server_config
             .try_into()
-            .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
+            .map_err(|e| zerror!("Can not create a new unreliable QUIC listener on {addr}: {e}"))?;
         let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
 
         // We do not accept unidireactional streams.
@@ -403,6 +380,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Arc::get_mut(&mut server_config.transport)
             .unwrap()
             .max_concurrent_bidi_streams(1_u8.into());
+
+        set_mtu_config(epconf, &mut server_config)?;
 
         // Initialize the Endpoint
         let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
@@ -425,11 +404,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else {
             quinn::Endpoint::server(server_config, addr).map_err(Into::into)
         }
-        .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
+        .map_err(|e| {
+            zerror!(
+                "Can not create a new unreliable QUIC listener on {}: {}",
+                addr,
+                e
+            )
+        })?;
 
-        let local_addr = quic_endpoint
-            .local_addr()
-            .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
+        let local_addr = quic_endpoint.local_addr().map_err(|e| {
+            zerror!(
+                "Can not create a new unreliable QUIC listener on {}: {}",
+                addr,
+                e
+            )
+        })?;
         let local_port = local_addr.port();
 
         // Update the endpoint locator address
@@ -493,12 +482,12 @@ async fn accept_task(
     tls_close_link_on_expiration: bool,
 ) -> ZResult<()> {
     async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
-        let qc = acceptor
-            .await
-            .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
+        let qc = acceptor.await.ok_or_else(|| {
+            zerror!("Can not accept unreliable QUIC connections: acceptor closed")
+        })?;
 
         let conn = qc.await.map_err(|e| {
-            let e = zerror!("QUIC acceptor failed: {:?}", e);
+            let e = zerror!("Unreliable QUIC acceptor failed: {:?}", e);
             tracing::warn!("{}", e);
             e
         })?;
@@ -508,10 +497,13 @@ async fn accept_task(
 
     let src_addr = quic_endpoint
         .local_addr()
-        .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
+        .map_err(|e| zerror!("Can not accept unreliable QUIC connections: {}", e))?;
 
     // The accept future
-    tracing::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
+    tracing::trace!(
+        "Ready to accept unreliable QUIC connections on: {:?}",
+        src_addr
+    );
 
     loop {
         tokio::select! {
@@ -520,25 +512,16 @@ async fn accept_task(
             res = accept(quic_endpoint.accept()) => {
                 match res {
                     Ok(quic_conn) => {
-                        // Get the bideractional streams. Note that we don't allow unidirectional streams.
-                        let (send, recv) = match quic_conn.accept_bi().await {
-                            Ok(stream) => stream,
-                            Err(e) => {
-                                tracing::warn!("QUIC connection has no streams: {:?}", e);
-                                continue;
-                            }
-                        };
-
                         // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
                         let src_addr =  match quic_conn.local_ip()  {
                             Some(ip) => SocketAddr::new(ip, src_addr.port()),
                             None => {
-                                tracing::debug!("Can not accept QUIC connection: empty local IP");
+                                tracing::debug!("Can not accept unreliable QUIC connection: empty local IP");
                                 continue;
                             }
                         };
                         let dst_addr = quic_conn.remote_address();
-                        let dst_locator = Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
+                        let dst_locator = Locator::new(QUIC_DATAGRAM_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
                         // Get Quic auth identifier
                         let auth_id = get_cert_common_name(&quic_conn)?;
 
@@ -548,16 +531,16 @@ async fn accept_task(
                             match get_cert_chain_expiration(&quic_conn)? {
                                 exp @ Some(_) => maybe_expiration_time = exp,
                                 None => tracing::warn!(
-                                    "Cannot monitor expiration for QUIC link {:?} => {:?} : client does not have certificates",
+                                    "Cannot monitor expiration for unreliable QUIC link {:?} => {:?} : client does not have certificates",
                                     src_addr,
                                     dst_addr,
                                 ),
                             }
                         }
 
-                        tracing::debug!("Accepted QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
+                        tracing::debug!("Accepted unreliable QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
                         // Create the new link object
-                        let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
+                        let link = Arc::<LinkUnicastQuicDatagram>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
                             if let Some(certchain_expiration_time) = maybe_expiration_time {
                                 // setup expiration manager
@@ -565,16 +548,14 @@ async fn accept_task(
                                     weak_link.clone(),
                                     src_addr,
                                     dst_addr,
-                                    QUIC_LOCATOR_PREFIX,
+                                    QUIC_DATAGRAM_LOCATOR_PREFIX,
                                     certchain_expiration_time,
                                 ));
                             }
-                            LinkUnicastQuic::new(
+                            LinkUnicastQuicDatagram::new(
                                 quic_conn,
                                 src_addr,
                                 dst_locator,
-                                send,
-                                recv,
                                 auth_id.into(),
                                 expiration_manager,
                             )
@@ -594,7 +575,7 @@ async fn accept_task(
                         //       Linux systems this limit can be changed by using the "ulimit" command line
                         //       tool. In case of systemd-based systems, this can be changed by using the
                         //       "sysctl" command line tool.
-                        tokio::time::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
+                        tokio::time::sleep(Duration::from_micros(*QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME)).await;
                     }
                 }
             }

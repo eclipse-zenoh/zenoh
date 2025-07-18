@@ -26,19 +26,24 @@ description = "Internal crate for zenoh."
 
 [features]
 transport_quic = ["zenoh-link-quic"]
+transport_quic_datagram = ["zenoh-link-quic_datagram"]
 transport_tcp = ["zenoh-link-tcp", "zenoh-config/transport_tcp"]
 transport_tls = ["zenoh-link-tls"]
 transport_udp = ["zenoh-link-udp"]
 transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
 transport_ws = ["zenoh-link-ws"]
 transport_serial = ["zenoh-link-serial"]
-transport_unixpipe = ["zenoh-link-unixpipe", "zenoh-link-unixpipe/transport_unixpipe"]
+transport_unixpipe = [
+    "zenoh-link-unixpipe",
+    "zenoh-link-unixpipe/transport_unixpipe",
+]
 transport_vsock = ["zenoh-link-vsock"]
 
 [dependencies]
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-link-quic = { workspace = true, optional = true }
+zenoh-link-quic_datagram = { workspace = true, optional = true }
 zenoh-link-serial = { workspace = true, optional = true }
 zenoh-link-tcp = { workspace = true, optional = true }
 zenoh-link-tls = { workspace = true, optional = true }

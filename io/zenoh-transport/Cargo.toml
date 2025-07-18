@@ -36,6 +36,7 @@ auth_usrpwd = ["transport_auth"]
 transport_auth = []
 transport_multilink = ["auth_pubkey"]
 transport_quic = ["zenoh-link/transport_quic"]
+transport_quic_datagram = ["zenoh-link/transport_quic_datagram"]
 transport_tcp = ["zenoh-link/transport_tcp", "zenoh-config/transport_tcp"]
 transport_tls = ["zenoh-link/transport_tls"]
 transport_udp = ["zenoh-link/transport_udp"]
@@ -86,12 +87,10 @@ zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
-
-
+zenoh-link-commons = { workspace = true }
 
 [dev-dependencies]
 futures-util = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }
-zenoh-link-commons = { workspace = true }
