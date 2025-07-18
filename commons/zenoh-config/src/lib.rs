@@ -241,14 +241,16 @@ impl<'a> serde::Deserialize<'a> for ConfRange {
             where
                 E: serde::de::Error,
             {
-                let mut split = v.split("..");
-                let start = split.next().and_then(|s| s.parse::<u64>().ok());
-                let end = split.next().map(|s| s.parse::<u64>().ok());
-                if let Some(end) = end {
-                    Ok(ConfRange { start, end })
-                } else {
-                    Err(serde::de::Error::custom("invalid range"))
-                }
+                let (start, end) = v
+                    .split_once("..")
+                    .ok_or_else(|| serde::de::Error::custom("invalid range"))?;
+                let parse_bound = |bound: &str| {
+                    (!bound.is_empty())
+                        .then(|| bound.parse::<u64>())
+                        .transpose()
+                        .map_err(|_| serde::de::Error::custom("invalid range bound"))
+                };
+                Ok(ConfRange::new(parse_bound(start)?, parse_bound(end)?))
             }
         }
         deserializer.deserialize_str(V)
