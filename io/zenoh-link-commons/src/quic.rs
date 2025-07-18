@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,13 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    convert::TryFrom,
+    fmt::{self, Debug},
     fs::File,
-    io::{self, BufReader, Cursor},
+    io,
+    io::{BufReader, Cursor},
     net::SocketAddr,
-    str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 
 use rustls::{
@@ -27,24 +26,24 @@ use rustls::{
     version::TLS13,
     ClientConfig, RootCertStore, ServerConfig,
 };
-use rustls_pki_types::ServerName;
 use secrecy::ExposeSecret;
+use time::OffsetDateTime;
 use webpki::anchor_from_trusted_cert;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_config::Config as ZenohConfig;
-use zenoh_link_commons::{
-    parse_dscp,
-    tcp::TcpSocketConfig,
-    tls::{
-        config::{self, *},
-        WebPkiVerifierAnyServerName,
-    },
-    ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
-};
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
     parameters,
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
+
+use crate::{
+    tls::{config::*, WebPkiVerifierAnyServerName},
+    ConfigurationInspector, LinkAuthId, BIND_INTERFACE,
+};
+
+// Default ALPN protocol
+pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -73,7 +72,7 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
 
         match (c.listen_private_key(), c.listen_private_key_base64()) {
             (Some(_), Some(_)) => {
-                bail!("Only one between 'listen_private_key' and 'listen_private_key' can be present!")
+                bail!("Only one between 'listen_private_key' and 'listen_private_key_base64' can be present!")
             }
             (Some(server_private_key), None) => {
                 ps.push((TLS_LISTEN_PRIVATE_KEY_FILE, server_private_key));
@@ -156,27 +155,14 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
-        let rx_buffer_size;
-        if let Some(size) = c.so_rcvbuf() {
-            rx_buffer_size = size.to_string();
-            ps.push((TCP_SO_RCV_BUF, &rx_buffer_size));
-        }
-
-        let tx_buffer_size;
-        if let Some(size) = c.so_sndbuf() {
-            tx_buffer_size = size.to_string();
-            ps.push((TCP_SO_SND_BUF, &tx_buffer_size));
-        }
-
         Ok(parameters::from_iter(ps.drain(..)))
     }
 }
 
-pub(crate) struct TlsServerConfig<'a> {
-    pub(crate) server_config: ServerConfig,
-    pub(crate) tls_handshake_timeout: Duration,
-    pub(crate) tls_close_link_on_expiration: bool,
-    pub(crate) tcp_socket_config: TcpSocketConfig<'a>,
+pub struct TlsServerConfig<'a> {
+    pub server_config: ServerConfig,
+    pub tls_close_link_on_expiration: bool,
+    pub bind_iface: Option<&'a str>,
 }
 
 impl<'a> TlsServerConfig<'a> {
@@ -251,45 +237,10 @@ impl<'a> TlsServerConfig<'a> {
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         };
-
-        let tls_handshake_timeout = Duration::from_millis(
-            config
-                .get(config::TLS_HANDSHAKE_TIMEOUT_MS)
-                .map(u64::from_str)
-                .transpose()?
-                .unwrap_or(config::TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT),
-        );
-
-        let mut tcp_rx_buffer_size = None;
-        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
-            tcp_rx_buffer_size = Some(
-                size.parse()
-                    .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
-            );
-        };
-        let mut tcp_tx_buffer_size = None;
-        if let Some(size) = config.get(TCP_SO_SND_BUF) {
-            tcp_tx_buffer_size = Some(
-                size.parse()
-                    .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
-            );
-        };
-        let mut bind_socket = None;
-        if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
-        };
-
         Ok(TlsServerConfig {
             server_config: sc,
-            tls_handshake_timeout,
             tls_close_link_on_expiration,
-            tcp_socket_config: TcpSocketConfig::new(
-                tcp_tx_buffer_size,
-                tcp_rx_buffer_size,
-                config.get(BIND_INTERFACE),
-                bind_socket,
-                parse_dscp(config)?,
-            ),
+            bind_iface: config.get(BIND_INTERFACE),
         })
     }
 
@@ -314,10 +265,10 @@ impl<'a> TlsServerConfig<'a> {
     }
 }
 
-pub(crate) struct TlsClientConfig<'a> {
-    pub(crate) client_config: ClientConfig,
-    pub(crate) tls_close_link_on_expiration: bool,
-    pub(crate) tcp_socket_config: TcpSocketConfig<'a>,
+pub struct TlsClientConfig<'a> {
+    pub client_config: ClientConfig,
+    pub tls_close_link_on_expiration: bool,
+    pub bind_iface: Option<&'a str>,
 }
 
 impl<'a> TlsClientConfig<'a> {
@@ -325,7 +276,7 @@ impl<'a> TlsClientConfig<'a> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
-                .map_err(|_| zerror!("Unknown enable mTLS auth argument: {}", s))?,
+                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
             None => TLS_ENABLE_MTLS_DEFAULT,
         };
 
@@ -336,7 +287,7 @@ impl<'a> TlsClientConfig<'a> {
             None => TLS_VERIFY_NAME_ON_CONNECT_DEFAULT,
         };
         if !tls_server_name_verification {
-            tracing::warn!("Skipping name verification of TLS server");
+            tracing::warn!("Skipping name verification of QUIC server");
         }
 
         let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
@@ -432,36 +383,10 @@ impl<'a> TlsClientConfig<'a> {
                     .with_no_client_auth()
             }
         };
-
-        let mut tcp_rx_buffer_size = None;
-        if let Some(size) = config.get(TCP_SO_RCV_BUF) {
-            tcp_rx_buffer_size = Some(
-                size.parse()
-                    .map_err(|_| zerror!("Unknown TCP read buffer size argument: {}", size))?,
-            );
-        };
-        let mut tcp_tx_buffer_size = None;
-        if let Some(size) = config.get(TCP_SO_SND_BUF) {
-            tcp_tx_buffer_size = Some(
-                size.parse()
-                    .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
-            );
-        };
-        let mut bind_socket = None;
-        if let Some(bind_socket_str) = config.get(BIND_SOCKET) {
-            bind_socket = Some(get_tls_addr(&Address::from(bind_socket_str)).await?);
-        };
-
         Ok(TlsClientConfig {
             client_config: cc,
             tls_close_link_on_expiration,
-            tcp_socket_config: TcpSocketConfig::new(
-                tcp_tx_buffer_size,
-                tcp_rx_buffer_size,
-                config.get(BIND_INTERFACE),
-                bind_socket,
-                parse_dscp(config)?,
-            ),
+            bind_iface: config.get(BIND_INTERFACE),
         })
     }
 
@@ -580,6 +505,21 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
     Ok(None)
 }
 
+pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
+    match tokio::net::lookup_host(address.as_str()).await?.next() {
+        Some(addr) => Ok(addr),
+        None => bail!("Couldn't resolve QUIC locator address: {}", address),
+    }
+}
+
+pub fn get_quic_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
+    address
+        .as_str()
+        .split(':')
+        .next()
+        .ok_or_else(|| zerror!("Invalid QUIC address").into())
+}
+
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
     use base64::{engine::general_purpose, Engine};
     Ok(general_purpose::STANDARD
@@ -587,21 +527,63 @@ pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
         .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)
 }
 
-pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
-    match tokio::net::lookup_host(address.as_str()).await?.next() {
-        Some(addr) => Ok(addr),
-        None => bail!("Couldn't resolve TLS locator address: {}", address),
+pub fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
+    let mut auth_id = QuicAuthId { auth_value: None };
+    if let Some(pi) = conn.peer_identity() {
+        let serv_certs = pi
+            .downcast::<Vec<rustls_pki_types::CertificateDer>>()
+            .unwrap();
+        if let Some(item) = serv_certs.iter().next() {
+            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+            let subject_name = cert
+                .subject
+                .iter_common_name()
+                .next()
+                .and_then(|cn| cn.as_str().ok())
+                .unwrap();
+            auth_id = QuicAuthId {
+                auth_value: Some(subject_name.to_string()),
+            };
+        }
+    }
+    Ok(auth_id)
+}
+
+/// Returns the minimum value of the `not_after` field in the remote certificate chain.
+/// Returns `None` if the remote certificate chain is empty
+pub fn get_cert_chain_expiration(conn: &quinn::Connection) -> ZResult<Option<OffsetDateTime>> {
+    let mut link_expiration: Option<OffsetDateTime> = None;
+    if let Some(pi) = conn.peer_identity() {
+        if let Ok(remote_certs) = pi.downcast::<Vec<rustls_pki_types::CertificateDer>>() {
+            for cert in *remote_certs {
+                let (_, cert) = X509Certificate::from_der(cert.as_ref())?;
+                let cert_expiration = cert.validity().not_after.to_datetime();
+                link_expiration = link_expiration
+                    .map(|current_min| current_min.min(cert_expiration))
+                    .or(Some(cert_expiration));
+            }
+        }
+    }
+    Ok(link_expiration)
+}
+
+#[derive(Clone)]
+pub struct QuicAuthId {
+    auth_value: Option<String>,
+}
+
+impl Debug for QuicAuthId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Common Name: {}",
+            self.auth_value.as_deref().unwrap_or("None")
+        )
     }
 }
 
-pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
-    address
-        .as_str()
-        .split(':')
-        .next()
-        .ok_or_else(|| zerror!("Invalid TLS address").into())
-}
-
-pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
-    Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
+impl From<QuicAuthId> for LinkAuthId {
+    fn from(value: QuicAuthId) -> Self {
+        LinkAuthId::Quic(value.auth_value.clone())
+    }
 }
