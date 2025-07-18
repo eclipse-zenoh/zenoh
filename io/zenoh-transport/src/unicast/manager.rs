@@ -30,7 +30,7 @@ use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{parameters, ZenohIdProto},
+    core::{parameters, Reliability, ZenohIdProto},
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -76,11 +76,42 @@ pub struct TransportManagerConfigUnicast {
     pub is_compression: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LinkKey {
+    protocol: String,
+    reliability: Option<Reliability>,
+}
+
+impl LinkKey {
+    pub fn with_protocol(protocol: &str) -> Self {
+        LinkKey {
+            protocol: protocol.to_string(),
+            reliability: None,
+        }
+    }
+}
+
+impl From<&EndPoint> for LinkKey {
+    fn from(endpoint: &EndPoint) -> Self {
+        let protocol = endpoint.protocol().to_string();
+        let reliability = Reliability::from(
+            LocatorInspector::default()
+                .is_reliable(&endpoint.to_locator())
+                .expect("endpoint protocol should be valid"),
+        );
+
+        Self {
+            protocol,
+            reliability: Some(reliability),
+        }
+    }
+}
+
 pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
     pub(super) incoming: Arc<AtomicUsize>,
     // Established listeners
-    pub(super) protocols: Arc<AsyncMutex<HashMap<String, LinkManagerUnicast>>>,
+    pub(super) link_managers: Arc<AsyncMutex<HashMap<LinkKey, LinkManagerUnicast>>>,
     // Established transports
     pub(super) transports: Arc<AsyncMutex<HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
@@ -253,7 +284,7 @@ impl TransportManagerBuilderUnicast {
 
         let state = TransportManagerStateUnicast {
             incoming: Arc::new(AtomicUsize::new(0)),
-            protocols: Arc::new(AsyncMutex::new(HashMap::new())),
+            link_managers: Arc::new(AsyncMutex::new(HashMap::new())),
             transports: Arc::new(AsyncMutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng, config.max_links > 1)?),
@@ -316,7 +347,7 @@ impl TransportManager {
     pub async fn close_unicast(&self) {
         tracing::trace!("TransportManagerUnicast::clear())");
 
-        let mut pl_guard = zasynclock!(self.state.unicast.protocols)
+        let mut pl_guard = zasynclock!(self.state.unicast.link_managers)
             .drain()
             .map(|(_, v)| v)
             .collect::<Vec<Arc<dyn LinkManagerUnicastTrait>>>();
@@ -339,42 +370,45 @@ impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    async fn new_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
-        if !self.config.protocols.iter().any(|x| x.as_str() == protocol) {
+    async fn new_link_manager_unicast(&self, endpoint: &EndPoint) -> ZResult<LinkManagerUnicast> {
+        let protocol = endpoint.protocol().as_str();
+        let link_kind = LinkKind::try_from(endpoint)?;
+        if !self.config.supported_links.contains(&link_kind) {
             bail!(
                 "Unsupported protocol: {}. Supported protocols are: {:?}",
                 protocol,
-                self.config.protocols
+                self.config.supported_links
             );
         }
 
-        let mut w_guard = zasynclock!(self.state.unicast.protocols);
-        if let Some(lm) = w_guard.get(protocol) {
+        let mut w_guard = zasynclock!(self.state.unicast.link_managers);
+        let key = LinkKey::from(endpoint);
+        if let Some(lm) = w_guard.get(&key) {
             Ok(lm.clone())
         } else {
             let lm =
-                LinkManagerBuilderUnicast::make(self.new_unicast_link_sender.clone(), protocol)?;
-            w_guard.insert(protocol.to_string(), lm.clone());
+                LinkManagerBuilderUnicast::make(self.new_unicast_link_sender.clone(), endpoint)?;
+            w_guard.insert(key, lm.clone());
             Ok(lm)
         }
     }
 
-    async fn get_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
-        match zasynclock!(self.state.unicast.protocols).get(protocol) {
+    async fn get_link_manager_unicast(&self, endpoint: &EndPoint) -> ZResult<LinkManagerUnicast> {
+        match zasynclock!(self.state.unicast.link_managers).get(&LinkKey::from(endpoint)) {
             Some(manager) => Ok(manager.clone()),
             None => bail!(
                 "Can not get the link manager for protocol ({}) because it has not been found",
-                protocol
+                endpoint.protocol()
             ),
         }
     }
 
-    async fn del_link_manager_unicast(&self, protocol: &str) -> ZResult<()> {
-        match zasynclock!(self.state.unicast.protocols).remove(protocol) {
+    async fn del_link_manager_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
+        match zasynclock!(self.state.unicast.link_managers).remove(&LinkKey::from(endpoint)) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
-                protocol
+                endpoint.protocol()
             ),
         }
     }
@@ -394,11 +428,13 @@ impl TransportManager {
             )
         }
 
-        let manager = self
-            .new_link_manager_unicast(endpoint.protocol().as_str())
-            .await?;
+        let manager = self.new_link_manager_unicast(&endpoint).await?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+        if let Some(config) = self
+            .config
+            .link_configs
+            .get(&LinkKind::try_from(&endpoint)?)
+        {
             let mut config = parameters::Parameters::from(config.as_str());
             // Overwrite config with current endpoint parameters
             config.extend_from_iter(endpoint.config().iter());
@@ -413,20 +449,17 @@ impl TransportManager {
     }
 
     pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let lm = self
-            .get_link_manager_unicast(endpoint.protocol().as_str())
-            .await?;
+        let lm = self.get_link_manager_unicast(endpoint).await?;
         lm.del_listener(endpoint).await?;
         if lm.get_listeners().await.is_empty() {
-            self.del_link_manager_unicast(endpoint.protocol().as_str())
-                .await?;
+            self.del_link_manager_unicast(endpoint).await?;
         }
         Ok(())
     }
 
     pub async fn get_listeners_unicast(&self) -> Vec<EndPoint> {
         let mut vec: Vec<EndPoint> = vec![];
-        for p in zasynclock!(self.state.unicast.protocols).values() {
+        for p in zasynclock!(self.state.unicast.link_managers).values() {
             vec.extend_from_slice(&p.get_listeners().await);
         }
         vec
@@ -434,7 +467,7 @@ impl TransportManager {
 
     pub async fn get_locators_unicast(&self) -> Vec<Locator> {
         let mut vec: Vec<Locator> = vec![];
-        for p in zasynclock!(self.state.unicast.protocols).values() {
+        for p in zasynclock!(self.state.unicast.link_managers).values() {
             vec.extend_from_slice(&p.get_locators().await);
         }
         vec
@@ -739,11 +772,13 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self
-            .new_link_manager_unicast(endpoint.protocol().as_str())
-            .await?;
+        let manager = self.new_link_manager_unicast(&endpoint).await?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+        if let Some(config) = self
+            .config
+            .link_configs
+            .get(&LinkKind::try_from(&endpoint)?)
+        {
             let mut config = parameters::Parameters::from(config.as_str());
             // Overwrite config with current endpoint parameters
             config.extend_from_iter(endpoint.config().iter());
