@@ -273,7 +273,7 @@ pub struct QosOverwriteItemConf {
     /// List of message types on which the qos overwrite will be applied.
     pub messages: NEVec<QosOverwriteMessage>,
     /// List of key expressions to apply qos overwrite.
-    pub key_exprs: Vec<OwnedKeyExpr>,
+    pub key_exprs: Option<NEVec<OwnedKeyExpr>>,
     // The qos value to overwrite with.
     pub overwrite: QosOverwrites,
     /// QosOverwrite flow directions: egress and/or ingress.
