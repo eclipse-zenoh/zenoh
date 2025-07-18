@@ -185,16 +185,28 @@ pub struct AclConfigSubjects {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfRange {
-    start: Bound<u64>,
-    end: Bound<u64>,
+    start: Option<u64>,
+    end: Option<u64>,
+}
+
+impl ConfRange {
+    pub fn new(start: Option<u64>, end: Option<u64>) -> Self {
+        Self { start, end }
+    }
 }
 
 impl RangeBounds<u64> for ConfRange {
     fn start_bound(&self) -> Bound<&u64> {
-        self.start.as_ref()
+        match self.start {
+            Some(ref start) => Bound::Included(start),
+            None => Bound::Unbounded,
+        }
     }
     fn end_bound(&self) -> Bound<&u64> {
-        self.end.as_ref()
+        match self.end {
+            Some(ref end) => Bound::Included(end),
+            None => Bound::Unbounded,
+        }
     }
 }
 
@@ -203,19 +215,11 @@ impl serde::Serialize for ConfRange {
     where
         S: serde::Serializer,
     {
-        match (self.start, &self.end) {
-            (Bound::Included(start), Bound::Included(end)) => {
-                serializer.serialize_str(&format!("{start}..{end}"))
-            }
-            (Bound::Included(start), Bound::Unbounded) => {
-                serializer.serialize_str(&format!("{start}.."))
-            }
-            (Bound::Unbounded, Bound::Included(end)) => {
-                serializer.serialize_str(&format!("..{end}"))
-            }
-            (Bound::Unbounded, Bound::Unbounded) => serializer.serialize_str(".."),
-            _ => Err(serde::ser::Error::custom("Invalid range")),
-        }
+        serializer.serialize_str(&format!(
+            "{}..{}",
+            self.start.unwrap_or_default(),
+            self.end.unwrap_or_default()
+        ))
     }
 }
 
@@ -238,16 +242,8 @@ impl<'a> serde::Deserialize<'a> for ConfRange {
                 E: serde::de::Error,
             {
                 let mut split = v.split("..");
-                let start = split
-                    .next()
-                    .and_then(|s| s.parse::<u64>().ok().map(Bound::Included))
-                    .unwrap_or(Bound::Unbounded);
-                let end = split.next().map(|s| {
-                    s.parse::<u64>()
-                        .ok()
-                        .map(Bound::Included)
-                        .unwrap_or(Bound::Unbounded)
-                });
+                let start = split.next().and_then(|s| s.parse::<u64>().ok());
+                let end = split.next().map(|s| s.parse::<u64>().ok());
                 if let Some(end) = end {
                     Ok(ConfRange { start, end })
                 } else {
@@ -1090,11 +1086,15 @@ fn config_deser() {
     )
     .unwrap();
     assert_eq!(
-        config.qos().network().first().unwrap().payload_size,
-        Some(ConfRange {
-            start: Bound::Included(0),
-            end: Bound::Included(99),
-        })
+        config
+            .qos()
+            .network()
+            .first()
+            .unwrap()
+            .payload_size
+            .as_ref()
+            .map(|r| (r.start_bound(), r.end_bound())),
+        Some((Bound::Included(&0), Bound::Included(&99)))
     );
 
     let config = Config::from_deserializer(
@@ -1116,11 +1116,15 @@ fn config_deser() {
     )
     .unwrap();
     assert_eq!(
-        config.qos().network().first().unwrap().payload_size,
-        Some(ConfRange {
-            start: Bound::Included(100),
-            end: Bound::Unbounded,
-        })
+        config
+            .qos()
+            .network()
+            .first()
+            .unwrap()
+            .payload_size
+            .as_ref()
+            .map(|r| (r.start_bound(), r.end_bound())),
+        Some((Bound::Included(&100), Bound::Unbounded))
     );
 
     let config = Config::from_deserializer(
