@@ -111,10 +111,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V, const SMALL_SIZE: us
     pub fn entry(&mut self, k: K) -> Entry<K, V> {
         self.resize(k);
         match self {
-            Self::Vec(vec) => Entry::Vec {
-                idx: k.into(),
-                value: &mut vec[k.into()].1,
-            },
+            Self::Vec(vec) => Entry::Vec(&mut vec[k.into()].1),
             Self::Map(map) => Entry::Map(map.entry(k)),
         }
     }
@@ -130,17 +127,14 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V, const SMALL_SIZE: usize> Default
 }
 
 pub enum Entry<'a, K, V> {
-    Vec {
-        idx: usize,
-        value: &'a mut Option<V>,
-    },
+    Vec(&'a mut Option<V>),
     Map(hash_map::Entry<'a, K, V>),
 }
 
 impl<'a, K, V> Entry<'a, K, V> {
     pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
         match self {
-            Entry::Vec { value, .. } => value.get_or_insert_with(default),
+            Entry::Vec(entry) => entry.get_or_insert_with(default),
             Entry::Map(entry) => entry.or_insert_with(default),
         }
     }
