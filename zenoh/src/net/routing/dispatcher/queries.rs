@@ -547,7 +547,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         );
                         outface.primitives.send_request(&mut Request {
                             id: outqid,
-                            wire_expr: key_expr.into(),
+                            wire_expr: key_expr,
                             ext_qos: msg.ext_qos,
                             ext_tstamp: msg.ext_tstamp,
                             ext_nodeid: ext::NodeIdType { node_id: context },
