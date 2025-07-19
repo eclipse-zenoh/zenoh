@@ -330,7 +330,7 @@ pub fn route_data(
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
-                        let (outface, key_expr, context) = route.values().next().unwrap();
+                        let (outface, key_expr, context) = route.iter().next().unwrap();
                         if tables_ref
                             .hat_code
                             .egress_filter(&tables, face, outface, &mut expr)
@@ -348,7 +348,7 @@ pub fn route_data(
                         }
                     } else {
                         let route = route
-                            .values()
+                            .iter()
                             .filter(|(outface, _key_expr, _context)| {
                                 tables_ref
                                     .hat_code

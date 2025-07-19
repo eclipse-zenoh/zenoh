@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "unstable")]
+use std::collections::HashMap;
 use std::{
-    collections::HashMap,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -36,14 +37,14 @@ use zenoh_util::Timed;
 
 use super::{
     face::FaceState,
-    resource::{QueryRoute, QueryTargetQablSet, Resource},
+    resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     hat::{HatTrait, SendDeclare},
-    router::get_or_set_route,
+    router::{get_or_set_route, QueryRouteBuilder},
 };
 
 pub(crate) struct Query {
@@ -210,13 +211,13 @@ fn compute_final_route(
     expr: &mut RoutingExpr,
     target: &QueryTarget,
     query: Arc<Query>,
-) -> QueryRoute {
+) -> QueryRouteBuilder {
     match target {
         QueryTarget::All => {
-            let mut route = HashMap::new();
+            let mut route = QueryRouteBuilder::new();
             for qabl in qabls.iter() {
                 if hat_code.egress_filter(tables, src_face, &qabl.direction.0, expr) {
-                    route.entry(qabl.direction.0.id).or_insert_with(|| {
+                    route.insert(qabl.direction.0.id, || {
                         let mut direction = qabl.direction.clone();
                         let qid = insert_pending_query(&mut direction.0, query.clone());
                         (direction, qid)
@@ -226,12 +227,12 @@ fn compute_final_route(
             route
         }
         QueryTarget::AllComplete => {
-            let mut route = HashMap::new();
+            let mut route = QueryRouteBuilder::new();
             for qabl in qabls.iter() {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
                     && hat_code.egress_filter(tables, src_face, &qabl.direction.0, expr)
                 {
-                    route.entry(qabl.direction.0.id).or_insert_with(|| {
+                    route.insert(qabl.direction.0.id, || {
                         let mut direction = qabl.direction.clone();
                         let qid = insert_pending_query(&mut direction.0, query.clone());
                         (direction, qid)
@@ -244,11 +245,11 @@ fn compute_final_route(
             if let Some(qabl) = qabls.iter().find(|qabl| {
                 qabl.direction.0.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
             }) {
-                let mut route = HashMap::new();
+                let mut route = QueryRouteBuilder::new();
 
                 let mut direction = qabl.direction.clone();
                 let qid = insert_pending_query(&mut direction.0, query);
-                route.insert(direction.0.id, (direction, qid));
+                route.insert(direction.0.id, || (direction, qid));
 
                 route
             } else {
@@ -508,7 +509,8 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                     &mut expr,
                     &msg.ext_target,
                     query,
-                );
+                )
+                .build();
                 let timeout = msg.ext_timeout.unwrap_or(rtables.queries_default_timeout);
                 drop(queries_lock);
                 drop(rtables);
@@ -527,9 +529,9 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             ext_tstamp: None,
                         });
                 } else {
-                    for ((outface, key_expr, context), outqid) in route.values() {
+                    for ((outface, key_expr, context), outqid) in route {
                         QueryCleanup::spawn_query_clean_up_task(
-                            outface, tables_ref, *outqid, timeout,
+                            &outface, tables_ref, outqid, timeout,
                         );
                         #[cfg(feature = "stats")]
                         if !admin {
@@ -546,11 +548,11 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             outqid
                         );
                         outface.primitives.send_request(&mut Request {
-                            id: *outqid,
-                            wire_expr: key_expr.into(),
+                            id: outqid,
+                            wire_expr: key_expr,
                             ext_qos: msg.ext_qos,
                             ext_tstamp: msg.ext_tstamp,
-                            ext_nodeid: ext::NodeIdType { node_id: *context },
+                            ext_nodeid: ext::NodeIdType { node_id: context },
                             ext_target: msg.ext_target,
                             ext_budget: msg.ext_budget,
                             ext_timeout: msg.ext_timeout,

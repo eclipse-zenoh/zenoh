@@ -47,7 +47,7 @@ use crate::net::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-        router::disable_matches_data_routes,
+        router::{disable_matches_data_routes, RouteBuilder},
         RoutingContext,
     },
 };
@@ -1210,7 +1210,7 @@ impl HatPubSubTrait for HatCode {
     ) -> Arc<Route> {
         #[inline]
         fn insert_faces_for_subs(
-            route: &mut Route,
+            route: &mut RouteBuilder,
             expr: &RoutingExpr,
             tables: &Tables,
             net: &Network,
@@ -1226,7 +1226,7 @@ impl HatPubSubTrait for HatCode {
                             {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                        route.entry(face.id).or_insert_with(|| {
+                                        route.insert(face.id, || {
                                             let key_expr = Resource::get_best_key(
                                                 expr.prefix,
                                                 expr.suffix,
@@ -1245,10 +1245,10 @@ impl HatPubSubTrait for HatCode {
             }
         }
 
-        let mut route = HashMap::new();
+        let mut route = RouteBuilder::new();
         let key_expr = expr.full_expr();
         if key_expr.ends_with('/') {
-            return Arc::new(route);
+            return Arc::new(route.build());
         }
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
@@ -1260,7 +1260,7 @@ impl HatPubSubTrait for HatCode {
             Ok(ke) => ke,
             Err(e) => {
                 tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route);
+                return Arc::new(route.build());
             }
         };
         let res = Resource::get_resource(expr.prefix, expr.suffix);
@@ -1312,7 +1312,7 @@ impl HatPubSubTrait for HatCode {
             if master || source_type == WhatAmI::Router {
                 for (sid, context) in &mres.session_ctxs {
                     if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
-                        route.entry(*sid).or_insert_with(|| {
+                        route.insert(*sid, || {
                             let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                             (context.face.clone(), key_expr.to_owned(), NodeId::default())
                         });
@@ -1321,16 +1321,15 @@ impl HatPubSubTrait for HatCode {
             }
         }
         for mcast_group in &tables.mcast_groups {
-            route.insert(
-                mcast_group.id,
+            route.insert(mcast_group.id, || {
                 (
                     mcast_group.clone(),
                     expr.full_expr().to_string().into(),
                     NodeId::default(),
-                ),
-            );
+                )
+            });
         }
-        Arc::new(route)
+        Arc::new(route.build())
     }
 
     #[zenoh_macros::unstable]

@@ -607,7 +607,7 @@ impl HatPubSubTrait for HatCode {
         let mut route = HashMap::new();
         let key_expr = expr.full_expr();
         if key_expr.ends_with('/') {
-            return Arc::new(route);
+            return Arc::new(Vec::new());
         }
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
@@ -619,7 +619,7 @@ impl HatPubSubTrait for HatCode {
             Ok(ke) => ke,
             Err(e) => {
                 tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route);
+                return Arc::new(Vec::new());
             }
         };
 
@@ -692,7 +692,7 @@ impl HatPubSubTrait for HatCode {
                 ),
             );
         }
-        Arc::new(route)
+        Arc::new(route.into_values().collect())
     }
 
     #[zenoh_macros::unstable]

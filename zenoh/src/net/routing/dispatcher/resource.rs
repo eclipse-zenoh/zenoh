@@ -14,7 +14,7 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{HashMap, VecDeque},
+    collections::{HashSet, VecDeque},
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
@@ -50,14 +50,38 @@ use crate::net::routing::{
 pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
-pub(crate) type Route = HashMap<usize, Direction>;
+pub(crate) type Route = Vec<Direction>;
 
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
     pub(crate) info: Option<QueryableInfoType>,
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
+
+pub(crate) struct RouteBuilder<T = Direction> {
+    route: Vec<T>,
+    faces: HashSet<usize>,
+}
+
+impl<T> RouteBuilder<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            route: Vec::new(),
+            faces: HashSet::new(),
+        }
+    }
+
+    pub(crate) fn build(self) -> Vec<T> {
+        self.route
+    }
+
+    pub(crate) fn insert(&mut self, face_id: usize, direction: impl FnOnce() -> T) {
+        if self.faces.insert(face_id) {
+            self.route.push(direction());
+        }
+    }
+}
+pub(crate) type QueryRouteBuilder = RouteBuilder<(Direction, RequestId)>;
 
 pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
 pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
