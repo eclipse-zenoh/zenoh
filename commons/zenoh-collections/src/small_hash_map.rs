@@ -144,13 +144,17 @@ pub enum Iter<'a, K, V> {
     Vec(slice::Iter<'a, (K, Option<V>)>),
     Map(hash_map::Iter<'a, K, V>),
 }
+
 impl<'a, K: Copy + TryFrom<usize>, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Vec(iter) => iter.next().and_then(|(k, v)| Some((k, v.as_ref()?))),
+            Self::Vec(iter) => iter
+                .by_ref()
+                .filter_map(|(k, v)| Some((k, v.as_ref()?)))
+                .next(),
             Self::Map(iter) => iter.next(),
         }
     }
@@ -166,7 +170,7 @@ impl<'a, K, V> Iterator for Values<'a, K, V> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Vec(iter) => iter.next()?.1.as_ref(),
+            Self::Vec(iter) => iter.by_ref().filter_map(|(_, v)| v.as_ref()).next(),
             Self::Map(iter) => iter.next(),
         }
     }
@@ -182,7 +186,7 @@ impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Vec(iter) => iter.next()?.1.as_mut(),
+            Self::Vec(iter) => iter.by_ref().filter_map(|(_, v)| v.as_mut()).next(),
             Self::Map(iter) => iter.next(),
         }
     }
