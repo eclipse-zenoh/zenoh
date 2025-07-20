@@ -353,7 +353,6 @@ impl fmt::Display for NetworkMessageMut<'_> {
     }
 }
 
-#[cfg(feature = "test")]
 impl From<NetworkBody> for NetworkMessage {
     #[inline]
     fn from(body: NetworkBody) -> Self {

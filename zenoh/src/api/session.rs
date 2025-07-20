@@ -2237,16 +2237,18 @@ impl SessionInner {
             }
         }
         if destination != Locality::Remote {
-            // check if the message has been consumed, and rebuild the payload in this case
-            if push.wire_expr == WireExpr::empty() {
-                push.payload = make_body();
-            }
             self.execute_subscriber_callbacks(
                 true,
                 SubscriberKind::Subscriber,
                 &wire_expr,
                 ext_qos,
-                || &mut push.payload,
+                || {
+                    // check if the message has been consumed, and rebuild the payload in this case
+                    if push.wire_expr == WireExpr::empty() {
+                        push.payload = make_body();
+                    }
+                    &mut push.payload
+                },
                 #[cfg(feature = "unstable")]
                 reliability,
             );

@@ -87,7 +87,6 @@ impl Push {
     }
 }
 
-#[cfg(feature = "test")]
 impl From<PushBody> for Push {
     fn from(value: PushBody) -> Self {
         Self {
