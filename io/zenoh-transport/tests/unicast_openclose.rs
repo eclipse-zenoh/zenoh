@@ -791,39 +791,6 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
 
 #[cfg(feature = "transport_tls")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "Elapsed")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn openclose_tls_only_connect_with_custom_locator_address() {
-    use zenoh_link::tls::config::*;
-
-    zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
-    let (ca, cert, key) = get_tls_certs();
-
-    let mut listen_endpoint: EndPoint = format!("tls/0.0.0.0:{}#loc_addr={}", 13008, addrs[0]).parse().unwrap();
-    listen_endpoint
-        .config_mut()
-        .extend_from_iter(
-            [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
-            ]
-            .iter()
-            .copied(),
-        )
-        .unwrap();
-
-    let connect_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13008)
-        .parse()
-        .unwrap();
-
-    // should not connect to local interface and external address
-    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
-}
-
-#[cfg(feature = "transport_tls")]
-#[cfg(target_os = "linux")]
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_listen_with_interface_restriction() {
@@ -850,6 +817,41 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
         .unwrap();
 
     let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13009).parse().unwrap();
+
+    // should not connect to local interface and external address
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
+#[cfg(feature = "transport_tls")]
+#[cfg(target_os = "linux")]
+#[should_panic(expected = "Elapsed")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tls_only_connect_with_custom_locator_address() {
+    use zenoh_link::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+    let addrs = get_ipv4_ipaddrs(None);
+    let (ca, cert, key) = get_tls_certs();
+
+    let mut listen_endpoint: EndPoint = format!("tls/0.0.0.0:{}#loc_addr={}", 13011, addrs[0])
+        .parse()
+        .unwrap();
+    listen_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    let connect_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13011)
+        .parse()
+        .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
