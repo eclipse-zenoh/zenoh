@@ -1,7 +1,15 @@
 use std::{collections::hash_map, hash::Hash, mem, slice};
 
+/// A hashmap with integer keys, with optimized storage when the set of keys is small.
+///
+/// Small integer key set can indeed be stored in a vector, allowing direct access instead of
+/// hashmap heavy mechanics, improving performance **a lot**. If a key with a too high value for
+/// direct access is inserted, then storage fallback to a regular hashmap.
+/// The whole API is fully compatible with `HashMap` one.
 #[derive(Debug)]
 pub enum SmallHashMap<K: Copy + Into<usize> + TryFrom<usize>, V, const SMALL_SIZE: usize> {
+    // Because maps can have holes, the value is optional in the vector. The key is also stored,
+    // in order to provide a compatible iteration API
     Vec(Vec<(K, Option<V>)>),
     Map(ahash::HashMap<K, V>),
 }
@@ -66,6 +74,12 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V, const SMALL_SIZE: us
         }
     }
 
+    /// Resize the map to be able to insert the given key.
+    ///
+    /// If its back by a vector, then it means increasing vector size to be able to use direct
+    /// access with the key.
+    /// If the key is too big to fit in the small vector, then the vector is collected into
+    /// and replaced by a hashmap.
     fn resize(&mut self, k: K) {
         let idx = k.into();
         if let Self::Vec(vec) = self {
