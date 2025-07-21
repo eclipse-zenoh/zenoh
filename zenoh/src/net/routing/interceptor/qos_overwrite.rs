@@ -62,15 +62,20 @@ pub struct QosOverwriteFactory {
     overwrite: QosOverwrites,
     flows: InterfaceEnabled,
     filter: QosOverwriteFilter,
-    keys: Arc<KeBoxTree<()>>,
+    keys: Option<Arc<KeBoxTree<()>>>,
 }
 
 impl QosOverwriteFactory {
     pub fn new(conf: QosOverwriteItemConf) -> Self {
-        let mut keys = KeBoxTree::new();
-        for k in &conf.key_exprs {
-            keys.insert(k, ());
-        }
+        let keys = if let Some(key_exprs) = conf.key_exprs.as_ref() {
+            let mut keys = KeBoxTree::new();
+            for k in key_exprs {
+                keys.insert(k, ());
+            }
+            Some(Arc::new(keys))
+        } else {
+            None
+        };
 
         let mut filter = QosOverwriteFilter::default();
         for v in conf.messages {
@@ -94,7 +99,7 @@ impl QosOverwriteFactory {
                 egress: true,
             }),
             filter,
-            keys: Arc::new(keys),
+            keys,
         }
     }
 }
@@ -196,7 +201,7 @@ pub(crate) struct QosOverwriteFilter {
 pub(crate) struct QosInterceptor {
     filter: QosOverwriteFilter,
     overwrite: QosOverwrites,
-    keys: Arc<KeBoxTree<()>>,
+    keys: Option<Arc<KeBoxTree<()>>>,
 }
 
 struct Cache {
@@ -204,10 +209,15 @@ struct Cache {
 }
 
 impl QosInterceptor {
+    #[inline]
     fn is_ke_affected(&self, ke: &keyexpr) -> bool {
-        self.keys.nodes_including(ke).any(|n| n.weight().is_some())
+        match &self.keys {
+            Some(keys) => keys.nodes_including(ke).any(|n| n.weight().is_some()),
+            None => true,
+        }
     }
 
+    #[inline]
     fn overwrite_qos<const ID: u8>(
         &self,
         message: QosOverwriteMessage,
@@ -246,17 +256,19 @@ impl QosInterceptor {
         tracing::trace!("Overwriting QoS for {:?} to {:?}", message, qos);
     }
 
+    #[inline]
     fn is_ke_affected_from_cache_or_ctx(
         &self,
         cache: Option<&Cache>,
         ctx: &RoutingContext<NetworkMessageMut<'_>>,
     ) -> bool {
-        cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-            ctx.full_keyexpr()
-                .as_ref()
-                .map(|ke| self.is_ke_affected(ke))
-                .unwrap_or(false)
-        })
+        self.keys.is_none()
+            || cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
+                ctx.full_keyexpr()
+                    .as_ref()
+                    .map(|ke| self.is_ke_affected(ke))
+                    .unwrap_or(false)
+            })
     }
 }
 

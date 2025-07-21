@@ -273,7 +273,7 @@ pub struct QosOverwriteItemConf {
     /// List of message types on which the qos overwrite will be applied.
     pub messages: NEVec<QosOverwriteMessage>,
     /// List of key expressions to apply qos overwrite.
-    pub key_exprs: Vec<OwnedKeyExpr>,
+    pub key_exprs: Option<NEVec<OwnedKeyExpr>>,
     // The qos value to overwrite with.
     pub overwrite: QosOverwrites,
     /// QosOverwrite flow directions: egress and/or ingress.
@@ -985,7 +985,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     overwrite: {
                       priority: "foo",
@@ -1005,7 +1004,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     overwrite: {
                       priority: +8,
@@ -1025,7 +1023,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     overwrite: {
                       priority: "data_high",
@@ -1051,7 +1048,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     overwrite: {
                       priority: +1,
@@ -1075,7 +1071,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     payload_size: "0..99",
                     overwrite: {},
@@ -1105,7 +1100,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     payload_size: "100..",
                     overwrite: {},
@@ -1135,7 +1129,6 @@ fn config_deser() {
               qos: {
                 network: [
                   {
-                    key_exprs: [],
                     messages: ["put"],
                     qos: {
                       congestion_control: "drop",
