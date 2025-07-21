@@ -109,13 +109,13 @@ fn div() {
 
 impl fmt::Debug for OwnedKeyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
+        self.0.fmt(f)
     }
 }
 
 impl fmt::Display for OwnedKeyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
+        self.0.fmt(f)
     }
 }
 
@@ -128,7 +128,12 @@ impl Deref for OwnedKeyExpr {
 
 impl AsRef<str> for OwnedKeyExpr {
     fn as_ref(&self) -> &str {
-        &self.0
+        self
+    }
+}
+impl AsRef<keyexpr> for OwnedKeyExpr {
+    fn as_ref(&self) -> &keyexpr {
+        self
     }
 }
 impl FromStr for OwnedKeyExpr {
