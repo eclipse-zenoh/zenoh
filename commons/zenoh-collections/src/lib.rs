@@ -39,6 +39,6 @@ pub mod stack_buffer;
 pub use stack_buffer::*;
 
 #[cfg(feature = "std")]
-pub mod small_hash_map;
+pub mod int_hash_map;
 #[cfg(feature = "std")]
-pub use small_hash_map::*;
+pub use int_hash_map::*;

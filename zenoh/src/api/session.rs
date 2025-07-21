@@ -33,7 +33,7 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_collections::{SingleOrVec, SmallHashMap};
+use zenoh_collections::{IntHashMap, SingleOrVec};
 use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
@@ -126,8 +126,8 @@ pub(crate) struct SessionState {
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
-    pub(crate) local_resources: SmallHashMap<ExprId, Resource, 64>,
-    pub(crate) remote_resources: SmallHashMap<ExprId, Resource, 64>,
+    pub(crate) local_resources: IntHashMap<ExprId, Resource>,
+    pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
     pub(crate) queriers: HashMap<Id, QuerierState>,
@@ -156,8 +156,8 @@ impl SessionState {
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
             liveliness_qid_counter: AtomicRequestId::new(0),
-            local_resources: SmallHashMap::new(),
-            remote_resources: SmallHashMap::new(),
+            local_resources: IntHashMap::new(),
+            remote_resources: IntHashMap::new(),
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
             queriers: HashMap::new(),
