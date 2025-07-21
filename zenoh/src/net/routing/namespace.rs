@@ -182,7 +182,7 @@ impl ENamespace {
             }
             false
         } else {
-            trace!("Rejecting message containing wire expression `{}`, since it does not match namespace `{}`", &key_expr, self.namespace.as_ref());
+            trace!("Rejecting message containing wire expression `{}`, since it does not match namespace `{}`", &key_expr, self.namespace.as_str());
             false
         }
     }
