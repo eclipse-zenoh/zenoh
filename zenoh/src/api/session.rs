@@ -2331,7 +2331,7 @@ impl SessionInner {
                                     replier_id: Some(zenoh_protocol::core::EntityGlobalIdProto {
                                         zid: session.zid().into(),
                                         eid: session.id.into(),
-                                    }.into()),
+                                    }),
                                 });
                             }
                         }
@@ -2433,7 +2433,7 @@ impl SessionInner {
                                     replier_id: Some(zenoh_protocol::core::EntityGlobalIdProto {
                                         zid: session.zid().into(),
                                         eid: session.id.into(),
-                                    }.into()),
+                                    }),
                                 });
                             }
                         }
@@ -2886,7 +2886,6 @@ impl Primitives for WeakSession {
                                     zid: rid.zid,
                                     eid: rid.eid,
                                 }
-                                .into()
                             }),
                         };
                         callback.call(new_reply);
@@ -2984,7 +2983,6 @@ impl Primitives for WeakSession {
                                     zid: rid.zid,
                                     eid: rid.eid,
                                 }
-                                .into()
                             }),
                         };
                         let callback =
