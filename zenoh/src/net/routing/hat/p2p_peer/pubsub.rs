@@ -644,10 +644,9 @@ impl HatPubSubTrait for HatCode {
                     .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
                 {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    route.insert(
-                        face.id,
-                        (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    );
+                    route.insert(face.id, || {
+                        (face.clone(), key_expr.to_owned(), NodeId::default())
+                    });
                 }
             }
 
