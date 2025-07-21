@@ -17,7 +17,7 @@ use std::{fmt::Display, marker::PhantomData, num::NonZeroUsize};
 use crate::api::provider::types::{AllocAlignment, ZLayoutError};
 
 pub trait IntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
-impl<T> IntoMemoryLayout for T where T : TryInto<MemoryLayout, Error = ZLayoutError> {}
+impl<T> IntoMemoryLayout for T where T: TryInto<MemoryLayout, Error = ZLayoutError> {}
 
 pub trait IntoTypedMemoryLayout {
     type Type;
@@ -60,6 +60,12 @@ impl MemoryLayout {
             0 => Ok(Self { size, alignment }),
             _ => Err(ZLayoutError::IncorrectLayoutArgs),
         }
+    }
+
+    /// #SAFETY: this is safe if size is a multiply of alignment
+    /// Note: not intended for public APIs as it is really very unsafe
+    unsafe fn new_unchecked(size: NonZeroUsize, alignment: AllocAlignment) -> Self {
+        Self { size, alignment }
     }
 
     #[zenoh_macros::unstable_doc]
@@ -132,43 +138,42 @@ impl TryFrom<(usize, AllocAlignment)> for MemoryLayout {
     }
 }
 
-impl<T> TryFrom<LayoutForType<T>> for MemoryLayout {
-    type Error = ZLayoutError;
-
-    fn try_from(value: LayoutForType<T>) -> Result<Self, Self::Error> {
-        MemoryLayout::new(value.size(), value.alignmnet())
+impl<T> From<LayoutForType<T>> for MemoryLayout {
+    fn from(value: LayoutForType<T>) -> Self {
+        // SAFETY: this is safe as LayoutForType always gives correct layout arguments
+        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignmnet()) }
     }
 }
-pub struct LayoutForType<T> {
-    _phantom: PhantomData<T>
-}
 
-impl<T> LayoutForType<T> {
+pub struct BuildLayout;
+
+impl BuildLayout {
     /// Create a new AllocAlignment for value type
     #[zenoh_macros::unstable_doc]
-    pub fn for_val(_: &T) -> Self {
-        Self::for_type()
+    pub fn for_val<T>(_: &T) -> LayoutForType<T> {
+        Self::for_type::<T>()
     }
 
     /// Create a new AllocAlignment for type
     #[zenoh_macros::unstable_doc]
-    pub fn for_type() -> Self {
-        Self {
-            _phantom: Default::default()
+    pub fn for_type<T>() -> LayoutForType<T> {
+        LayoutForType::<T> {
+            _phantom: Default::default(),
         }
     }
+}
 
+pub struct LayoutForType<T> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T> LayoutForType<T> {
     pub const fn size(&self) -> NonZeroUsize {
         // SAFETY: this is safe because std::mem::size_of should always return >0 for T: Sized
-        unsafe { NonZeroUsize::new_unchecked( std::mem::size_of::<T>() ) }
+        unsafe { NonZeroUsize::new_unchecked(std::mem::size_of::<T>()) }
     }
 
     pub const fn alignmnet(&self) -> AllocAlignment {
         AllocAlignment::for_type::<T>()
     }
-
-}
-
-impl<T> IntoTypedMemoryLayout for LayoutForType<T> {
-    type Type = T;
 }

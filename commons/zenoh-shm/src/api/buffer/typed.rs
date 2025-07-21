@@ -45,6 +45,14 @@ impl<T: ?Sized, Tbuf: ShmBuf<[u8]>> Typed<T, Tbuf> {
     pub fn unwrap(self) -> Tbuf {
         self.buf
     }
+
+    /// #SAFETY: this is safe if buf's layout is compatible with T layout
+    pub(crate) unsafe fn new_unchecked(buf: Tbuf) -> Self {
+        Self {
+            buf,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: ResideInShm + zerocopy::FromBytes> TryFrom<ZShm> for Typed<T, ZShm> {

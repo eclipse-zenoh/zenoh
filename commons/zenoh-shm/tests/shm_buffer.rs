@@ -15,7 +15,7 @@
 use zenoh_core::Wait;
 use zenoh_shm::api::{
     buffer::{typed::Typed, zshmmut::ZShmMut},
-    provider::shm_provider::ShmProviderBuilder,
+    provider::{memory_layout::{BuildLayout, LayoutForType}, shm_provider::ShmProviderBuilder},
 };
 
 #[repr(C)]
@@ -29,12 +29,42 @@ fn make_shm_buffer() -> ZShmMut {
     provider.alloc(64).wait().unwrap()
 }
 
+fn make_typed_shm_buffer<T>() -> Typed<T, ZShmMut> {
+    let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
+    provider
+        .alloc_type(BuildLayout::for_type::<T>())
+        .wait()
+        .unwrap()
+}
+
+fn fill_and_check(buf: &mut [u8], val: u8) {
+    buf.fill(val);
+    for d in buf {
+        assert!(*d == val)
+    }
+}
+
+fn validate_shm_slice(buf: &mut [u8]) {
+    for i in 0..10 {
+        fill_and_check(buf, i);
+    }
+}
+
 fn validate_raw_buffer_consistency(buffer: &mut ZShmMut) {
-    buffer.as_mut().fill(0);
+    validate_shm_slice(buffer.as_mut());
 }
 
 fn validate_typed_buffer_consistency(buffer: &mut impl AsMut<SharedByteData>) {
-    buffer.as_mut().data.fill(0);
+    validate_shm_slice(&mut buffer.as_mut().data);
+}
+
+#[test]
+fn shm_buffer_alloc_typed() {
+    let mut buffer = make_typed_shm_buffer::<SharedByteData>();
+    validate_typed_buffer_consistency(&mut buffer);
+
+    let mut buffer = buffer.unwrap();
+    validate_raw_buffer_consistency(&mut buffer);
 }
 
 #[test]
