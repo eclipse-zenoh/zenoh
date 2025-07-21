@@ -715,7 +715,7 @@ fn intersection_level_cmp() {
 
 impl fmt::Debug for keyexpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ke`{}`", self.as_ref())
+        write!(f, "ke`{}`", &self.0)
     }
 }
 
@@ -859,6 +859,11 @@ impl Deref for keyexpr {
 }
 impl AsRef<str> for keyexpr {
     fn as_ref(&self) -> &str {
+        self
+    }
+}
+impl AsRef<keyexpr> for keyexpr {
+    fn as_ref(&self) -> &keyexpr {
         self
     }
 }
