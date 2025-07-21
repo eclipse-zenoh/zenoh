@@ -18,16 +18,18 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, ops::RangeBounds as _, sync::Arc};
 
+use zenoh_buffers::buffer::Buffer as _;
 use zenoh_config::{
-    qos::{QosOverwriteMessage, QosOverwrites},
-    QosOverwriteItemConf, ZenohId,
+    qos::{QosFilter, QosOverwriteMessage, QosOverwrites},
+    ConfRange, QosOverwriteItemConf, ZenohId,
 };
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
-    network::{NetworkBodyMut, Push, Request, Response},
-    zenoh::PushBody,
+    core::Priority,
+    network::{NetworkBodyMut, NetworkMessageExt as _, Push, Request, Response},
+    zenoh::{reply::ReplyBody, PushBody, Query, Reply, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
 
@@ -60,15 +62,32 @@ pub struct QosOverwriteFactory {
     overwrite: QosOverwrites,
     flows: InterfaceEnabled,
     filter: QosOverwriteFilter,
-    keys: Arc<KeBoxTree<()>>,
+    keys: Option<Arc<KeBoxTree<()>>>,
 }
 
 impl QosOverwriteFactory {
     pub fn new(conf: QosOverwriteItemConf) -> Self {
-        let mut keys = KeBoxTree::new();
-        for k in &conf.key_exprs {
-            keys.insert(k, ());
+        let keys = if let Some(key_exprs) = conf.key_exprs.as_ref() {
+            let mut keys = KeBoxTree::new();
+            for k in key_exprs {
+                keys.insert(k, ());
+            }
+            Some(Arc::new(keys))
+        } else {
+            None
+        };
+
+        let mut filter = QosOverwriteFilter::default();
+        for v in conf.messages {
+            match v {
+                QosOverwriteMessage::Put => filter.put = true,
+                QosOverwriteMessage::Delete => filter.delete = true,
+                QosOverwriteMessage::Query => filter.query = true,
+                QosOverwriteMessage::Reply => filter.reply = true,
+            }
         }
+        filter.qos = conf.qos;
+        filter.payload_size = conf.payload_size;
 
         Self {
             zids: conf.zids,
@@ -79,8 +98,8 @@ impl QosOverwriteFactory {
                 ingress: true,
                 egress: true,
             }),
-            filter: (&conf.messages).into(),
-            keys: Arc::new(keys),
+            filter,
+            keys,
         }
     }
 }
@@ -175,27 +194,14 @@ pub(crate) struct QosOverwriteFilter {
     delete: bool,
     query: bool,
     reply: bool,
-}
-
-impl From<&NEVec<QosOverwriteMessage>> for QosOverwriteFilter {
-    fn from(value: &NEVec<QosOverwriteMessage>) -> Self {
-        let mut res = Self::default();
-        for v in value {
-            match v {
-                QosOverwriteMessage::Put => res.put = true,
-                QosOverwriteMessage::Delete => res.delete = true,
-                QosOverwriteMessage::Query => res.query = true,
-                QosOverwriteMessage::Reply => res.reply = true,
-            }
-        }
-        res
-    }
+    qos: Option<QosFilter>,
+    payload_size: Option<ConfRange>,
 }
 
 pub(crate) struct QosInterceptor {
     filter: QosOverwriteFilter,
     overwrite: QosOverwrites,
-    keys: Arc<KeBoxTree<()>>,
+    keys: Option<Arc<KeBoxTree<()>>>,
 }
 
 struct Cache {
@@ -203,17 +209,43 @@ struct Cache {
 }
 
 impl QosInterceptor {
+    #[inline]
     fn is_ke_affected(&self, ke: &keyexpr) -> bool {
-        self.keys.nodes_including(ke).any(|n| n.weight().is_some())
+        match &self.keys {
+            Some(keys) => keys.nodes_including(ke).any(|n| n.weight().is_some()),
+            None => true,
+        }
     }
 
+    #[inline]
     fn overwrite_qos<const ID: u8>(
         &self,
         message: QosOverwriteMessage,
         qos: &mut zenoh_protocol::network::ext::QoSType<ID>,
     ) {
         if let Some(p) = self.overwrite.priority {
-            qos.set_priority(p.into());
+            match p {
+                zenoh_config::qos::PriorityUpdateConf::Priority(p) => {
+                    qos.set_priority(p.into());
+                }
+                zenoh_config::qos::PriorityUpdateConf::Increment(i) => {
+                    if 1 >= 0 {
+                        qos.set_priority(
+                            (qos.get_priority() as u8)
+                                .saturating_add(i.try_into().unwrap_or(0))
+                                .try_into()
+                                .unwrap_or(Priority::Background),
+                        );
+                    } else {
+                        qos.set_priority(
+                            (qos.get_priority() as u8)
+                                .saturating_sub((-i).try_into().unwrap_or(0))
+                                .try_into()
+                                .unwrap_or(Priority::Control),
+                        );
+                    }
+                }
+            }
         }
         if let Some(c) = self.overwrite.congestion_control {
             qos.set_congestion_control(c.into());
@@ -224,17 +256,19 @@ impl QosInterceptor {
         tracing::trace!("Overwriting QoS for {:?} to {:?}", message, qos);
     }
 
+    #[inline]
     fn is_ke_affected_from_cache_or_ctx(
         &self,
         cache: Option<&Cache>,
         ctx: &RoutingContext<NetworkMessageMut<'_>>,
     ) -> bool {
-        cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-            ctx.full_keyexpr()
-                .as_ref()
-                .map(|ke| self.is_ke_affected(ke))
-                .unwrap_or(false)
-        })
+        self.keys.is_none()
+            || cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
+                ctx.full_keyexpr()
+                    .as_ref()
+                    .map(|ke| self.is_ke_affected(ke))
+                    .unwrap_or(false)
+            })
     }
 }
 
@@ -259,7 +293,7 @@ impl InterceptorTrait for QosInterceptor {
             }
         });
 
-        let should_overwrite = match &ctx.msg.body {
+        let mut should_overwrite = match &ctx.msg.body {
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ..
@@ -279,6 +313,60 @@ impl InterceptorTrait for QosInterceptor {
             NetworkBodyMut::Declare(_) => false,
             NetworkBodyMut::OAM(_) => false,
         };
+        if let Some(qos) = self.filter.qos.as_ref() {
+            if let Some(prio) = qos.priority.as_ref() {
+                if !ctx.msg.priority().eq(&((*prio).into())) {
+                    should_overwrite = false;
+                }
+            }
+            if let Some(cc) = qos.congestion_control.as_ref() {
+                if !ctx.msg.congestion_control().eq(&((*cc).into())) {
+                    should_overwrite = false;
+                }
+            }
+            if let Some(express) = qos.express.as_ref() {
+                if ctx.msg.is_express() != *express {
+                    should_overwrite = false;
+                }
+            }
+            if let Some(reliability) = qos.reliability.as_ref() {
+                if ctx.msg.reliability() != (*reliability).into() {
+                    should_overwrite = false;
+                }
+            }
+        }
+        if let Some(payload_size_range) = self.filter.payload_size.as_ref() {
+            let msg_payload_size = match &ctx.msg.body {
+                NetworkBodyMut::Push(Push {
+                    payload: PushBody::Put(put),
+                    ..
+                }) => put.payload.len(),
+                NetworkBodyMut::Request(Request {
+                    payload:
+                        RequestBody::Query(Query {
+                            ext_body: Some(body),
+                            ..
+                        }),
+                    ..
+                }) => body.payload.len(),
+                NetworkBodyMut::Response(Response {
+                    payload:
+                        ResponseBody::Reply(Reply {
+                            payload: ReplyBody::Put(put),
+                            ..
+                        }),
+                    ..
+                }) => put.payload.len(),
+                NetworkBodyMut::Response(Response {
+                    payload: ResponseBody::Err(err),
+                    ..
+                }) => err.payload.len(),
+                _ => 0,
+            };
+            if !payload_size_range.contains(&(msg_payload_size as u64)) {
+                should_overwrite = false;
+            }
+        }
         if !should_overwrite {
             return true;
         }
