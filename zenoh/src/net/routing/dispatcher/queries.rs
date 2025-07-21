@@ -23,9 +23,9 @@ use zenoh_buffers::ZBuf;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Encoding, WireExpr},
+    core::{Encoding, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfoType, QueryableId},
+        declare::{queryable::ext::QueryableInfoType, QueryableId},
         request::{ext::QueryTarget, Request, RequestId},
         response::{self, Response, ResponseFinal},
     },
@@ -37,11 +37,14 @@ use zenoh_util::Timed;
 use super::{
     face::FaceState,
     resource::{QueryRoute, QueryTargetQablSet, Resource},
-    tables::{NodeId, RoutingExpr, TablesData, TablesLock},
+    tables::{NodeId, RoutingExpr, TablesLock},
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
-use crate::net::routing::{dispatcher::tables::Tables, hat::SendDeclare, router::get_or_set_route};
+use crate::net::routing::{
+    dispatcher::{gateway::Bound, tables::Tables},
+    hat::SendDeclare,
+};
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -50,137 +53,138 @@ pub(crate) struct Query {
 
 #[zenoh_macros::unstable]
 #[inline]
-pub(crate) fn get_matching_queryables(
+pub(crate) fn get_session_matching_queryables(
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
     complete: bool,
 ) -> HashMap<usize, Arc<FaceState>> {
-    tables
-        .hat
-        .get_matching_queryables(&tables.data, key_expr, complete)
+    // REVIEW(fuzzypixelz): this depends on the session being south-bound
+    tables.hat[Bound::south0()].get_matching_queryables(&tables.data, key_expr, complete)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn declare_queryable(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: QueryableId,
-    expr: &WireExpr,
-    qabl_info: &QueryableInfoType,
-    node_id: NodeId,
-    send_declare: &mut SendDeclare,
+    _tables: &TablesLock,
+    _face: &mut Arc<FaceState>,
+    _id: QueryableId,
+    _expr: &WireExpr,
+    _qabl_info: &QueryableInfoType,
+    _node_id: NodeId,
+    _send_declare: &mut SendDeclare,
 ) {
-    let rtables = zread!(tables.tables);
-    match rtables
-        .data
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            tracing::debug!(
-                "{} Declare queryable {} ({}{})",
-                face,
-                id,
-                prefix.expr(),
-                expr.suffix
-            );
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr().to_string();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables.data, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut tables_wguard = zwrite!(tables.tables);
-                    let tables = &mut *tables_wguard;
-                    let mut res =
-                        Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&tables.data, &mut res, matches);
-                    (res, tables_wguard)
-                };
+    // FIXME(fuzzypixelz): uncomment this
+    // let rtables = zread!(tables.tables);
+    // match rtables
+    //     .data
+    //     .get_mapping(face, &expr.scope, expr.mapping)
+    //     .cloned()
+    // {
+    //     Some(mut prefix) => {
+    //         tracing::debug!(
+    //             "{} Declare queryable {} ({}{})",
+    //             face,
+    //             id,
+    //             prefix.expr(),
+    //             expr.suffix
+    //         );
+    //         let res = Resource::get_resource(&prefix, &expr.suffix);
+    //         let (mut res, mut wtables) =
+    //             if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+    //                 drop(rtables);
+    //                 let wtables = zwrite!(tables.tables);
+    //                 (res.unwrap(), wtables)
+    //             } else {
+    //                 let mut fullexpr = prefix.expr().to_string();
+    //                 fullexpr.push_str(expr.suffix.as_ref());
+    //                 let mut matches = keyexpr::new(fullexpr.as_str())
+    //                     .map(|ke| Resource::get_matches(&rtables.data, ke))
+    //                     .unwrap_or_default();
+    //                 drop(rtables);
+    //                 let mut tables_wguard = zwrite!(tables.tables);
+    //                 let tables = &mut *tables_wguard;
+    //                 let mut res =
+    //                     Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
+    //                 matches.push(Arc::downgrade(&res));
+    //                 Resource::match_resource(&tables.data, &mut res, matches);
+    //                 (res, tables_wguard)
+    //             };
 
-            let tables = &mut *wtables;
-            tables.hat.declare_queryable(
-                &mut tables.data,
-                face,
-                id,
-                &mut res,
-                qabl_info,
-                node_id,
-                send_declare,
-            );
+    //         let tables = &mut *wtables;
+    //         tables.hat.declare_queryable(
+    //             &mut tables.data,
+    //             face,
+    //             id,
+    //             &mut res,
+    //             qabl_info,
+    //             node_id,
+    //             send_declare,
+    //         );
 
-            disable_matches_query_routes(&mut tables.data, &mut res);
-            drop(wtables);
-        }
-        None => tracing::error!(
-            "{} Declare queryable {} for unknown scope {}",
-            face,
-            id,
-            expr.scope
-        ),
-    }
+    //         disable_matches_query_routes(&mut tables.data, &mut res);
+    //         drop(wtables);
+    //     }
+    //     None => tracing::error!(
+    //         "{} Declare queryable {} for unknown scope {}",
+    //         face,
+    //         id,
+    //         expr.scope
+    //     ),
+    // }
 }
 
 pub(crate) fn undeclare_queryable(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: QueryableId,
-    expr: &WireExpr,
-    node_id: NodeId,
-    send_declare: &mut SendDeclare,
+    _tables: &TablesLock,
+    _face: &mut Arc<FaceState>,
+    _id: QueryableId,
+    _expr: &WireExpr,
+    _node_id: NodeId,
+    _send_declare: &mut SendDeclare,
 ) {
-    let res = if expr.is_empty() {
-        None
-    } else {
-        let rtables = zread!(tables.tables);
-        match rtables.data.get_mapping(face, &expr.scope, expr.mapping) {
-            Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-                Some(res) => Some(res),
-                None => {
-                    tracing::error!(
-                        "{} Undeclare unknown queryable {} ({}{})",
-                        face,
-                        id,
-                        prefix.expr(),
-                        expr.suffix
-                    );
-                    return;
-                }
-            },
-            None => {
-                tracing::error!(
-                    "{} Undeclare queryable {} with unknown scope {}",
-                    face,
-                    id,
-                    expr.scope
-                );
-                return;
-            }
-        }
-    };
-    let mut wtables = zwrite!(tables.tables);
-    let tables = &mut *wtables;
-    if let Some(mut res) =
-        tables
-            .hat
-            .undeclare_queryable(&mut tables.data, face, id, res, node_id, send_declare)
-    {
-        tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
-        disable_matches_query_routes(&mut tables.data, &mut res);
-        Resource::clean(&mut res);
-        drop(wtables);
-    } else {
-        // NOTE: This is expected behavior if queryable declarations are denied with ingress ACL interceptor.
-        tracing::debug!("{} Undeclare unknown queryable {}", face, id);
-    }
+    // FIXME(fuzzypixelz): uncomment this
+    // let res = if expr.is_empty() {
+    //     None
+    // } else {
+    //     let rtables = zread!(tables.tables);
+    //     match rtables.data.get_mapping(face, &expr.scope, expr.mapping) {
+    //         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+    //             Some(res) => Some(res),
+    //             None => {
+    //                 tracing::error!(
+    //                     "{} Undeclare unknown queryable {} ({}{})",
+    //                     face,
+    //                     id,
+    //                     prefix.expr(),
+    //                     expr.suffix
+    //                 );
+    //                 return;
+    //             }
+    //         },
+    //         None => {
+    //             tracing::error!(
+    //                 "{} Undeclare queryable {} with unknown scope {}",
+    //                 face,
+    //                 id,
+    //                 expr.scope
+    //             );
+    //             return;
+    //         }
+    //     }
+    // };
+    // let mut wtables = zwrite!(tables.tables);
+    // let tables = &mut *wtables;
+    // if let Some(mut res) =
+    //     tables
+    //         .hat
+    //         .undeclare_queryable(&mut tables.data, face, id, res, node_id, send_declare)
+    // {
+    //     tracing::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
+    //     disable_matches_query_routes(&mut tables.data, &mut res);
+    //     Resource::clean(&mut res);
+    //     drop(wtables);
+    // } else {
+    //     // NOTE: This is expected behavior if queryable declarations are denied with ingress ACL interceptor.
+    //     tracing::debug!("{} Undeclare unknown queryable {}", face, id);
+    // }
 }
 
 #[inline]
@@ -210,47 +214,54 @@ fn compute_final_route(
 ) -> QueryRoute {
     match target {
         QueryTarget::All => {
-            let mut route = HashMap::new();
-            for qabl in qabls.iter() {
-                if tables
-                    .hat
-                    .egress_filter(&tables.data, src_face, &qabl.direction.0, expr)
-                {
-                    route.entry(qabl.direction.0.id).or_insert_with(|| {
-                        let mut direction = qabl.direction.clone();
-                        let qid = insert_pending_query(&mut direction.0, query.clone());
-                        (direction, qid)
-                    });
-                }
-            }
-            route
+            // FIXME(fuzzypixelz): uncomment this
+            // let mut route = HashMap::new();
+            // for qabl in qabls.iter() {
+            // if tables
+            //     .hat
+            //     .egress_filter(&tables.data, src_face, &qabl.direction.0, expr)
+            // {
+            //     route.entry(qabl.direction.0.id).or_insert_with(|| {
+            //         let mut direction = qabl.direction.clone();
+            //         let qid = insert_pending_query(&mut direction.0, query.clone());
+            //         (direction, qid)
+            //     });
+            // }
+            // }
+            // route
+
+            HashMap::new()
         }
         QueryTarget::AllComplete => {
-            let mut route = HashMap::new();
-            for qabl in qabls.iter() {
-                if qabl.info.map(|info| info.complete).unwrap_or(true)
-                    && tables
-                        .hat
-                        .egress_filter(&tables.data, src_face, &qabl.direction.0, expr)
-                {
-                    route.entry(qabl.direction.0.id).or_insert_with(|| {
-                        let mut direction = qabl.direction.clone();
-                        let qid = insert_pending_query(&mut direction.0, query.clone());
-                        (direction, qid)
-                    });
-                }
-            }
-            route
+            // FIXME(fuzzypixelz): uncomment this
+            // let mut route = HashMap::new();
+            // for qabl in qabls.iter() {
+            //     if qabl.info.map(|info| info.complete).unwrap_or(true)
+            //         && tables
+            //             .hat
+            //             .egress_filter(&tables.data, src_face, &qabl.direction.0, expr)
+            //     {
+            //         route.entry(qabl.direction.0.id).or_insert_with(|| {
+            //             let mut direction = qabl.direction.clone();
+            //             let qid = insert_pending_query(&mut direction.0, query.clone());
+            //             (direction, qid)
+            //         });
+            //     }
+            // }
+            // route
+
+            HashMap::new()
         }
         QueryTarget::BestMatching => {
             if let Some(qabl) = qabls.iter().find(|qabl| {
-                qabl.direction.0.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
+                qabl.direction.dst_face.id != src_face.id
+                    && qabl.info.is_some_and(|info| info.complete)
             }) {
                 let mut route = HashMap::new();
 
                 let mut direction = qabl.direction.clone();
-                let qid = insert_pending_query(&mut direction.0, query);
-                route.insert(direction.0.id, (direction, qid));
+                let qid = insert_pending_query(&mut direction.dst_face, query);
+                route.insert(direction.dst_face.id, (direction, qid));
 
                 route
             } else {
@@ -341,15 +352,13 @@ impl Timed for QueryCleanup {
     }
 }
 
-pub(crate) fn disable_matches_query_routes(_tables: &mut TablesData, res: &mut Arc<Resource>) {
-    if res.context.is_some() {
-        get_mut_unchecked(res).context_mut().disable_query_routes();
+pub(crate) fn disable_matches_query_routes(res: &mut Arc<Resource>, bound: Bound) {
+    if res.ctx.is_some() {
+        get_mut_unchecked(res).context_mut().hat[bound].disable_query_routes();
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_)
-                    .context_mut()
-                    .disable_query_routes();
+                get_mut_unchecked(&mut match_).context_mut().hat[bound].disable_query_routes();
             }
         }
     }
@@ -357,59 +366,63 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut TablesData, res: &mut A
 
 #[inline]
 fn get_query_route(
-    tables: &Tables,
-    face: &FaceState,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
-    routing_context: NodeId,
+    _tables: &Tables,
+    _face: &FaceState,
+    _res: &Option<Arc<Resource>>,
+    _expr: &mut RoutingExpr,
+    _routing_context: NodeId,
 ) -> Arc<QueryTargetQablSet> {
-    let local_context = tables
-        .hat
-        .map_routing_context(&tables.data, face, routing_context);
-    let mut compute_route = || {
-        tables
-            .hat
-            .compute_query_route(&tables.data, expr, local_context, face.whatami)
-    };
-    if let Some(query_routes) = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| &ctx.query_routes)
-    {
-        return get_or_set_route(
-            query_routes,
-            tables.data.routes_version,
-            face.whatami,
-            local_context,
-            compute_route,
-        );
-    }
-    compute_route()
+    // FIXME(fuzzypixelz): uncomment this
+    // let local_context = tables
+    //     .hat
+    //     .map_routing_context(&tables.data, face, routing_context);
+    // let mut compute_route = || {
+    //     tables
+    //         .hat
+    //         .compute_query_route(&tables.data, expr, local_context, face.whatami)
+    // };
+    // if let Some(query_routes) = res
+    //     .as_ref()
+    //     .and_then(|res| res.context.as_ref())
+    //     .map(|ctx| &ctx.query_routes)
+    // {
+    //     return get_or_set_route(
+    //         query_routes,
+    //         tables.data.routes_version,
+    //         face.whatami,
+    //         local_context,
+    //         compute_route,
+    //     );
+    // }
+    // compute_route()
+
+    Arc::new(QueryTargetQablSet::new())
 }
 
-#[cfg(feature = "stats")]
-macro_rules! inc_req_stats {
-    (
-        $face:expr,
-        $txrx:ident,
-        $space:ident,
-        $body:expr
-    ) => {
-        paste::paste! {
-            if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::buffer::Buffer;
-                match &$body {
-                    zenoh_protocol::zenoh::RequestBody::Query(q) => {
-                        stats.[<$txrx _z_query_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_query_pl_bytes>].[<inc_ $space>](
-                            q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
-                        );
-                    }
-                }
-            }
-        }
-    };
-}
+// FIXME(fuzzypixelz): uncomment this
+// #[cfg(feature = "stats")]
+// macro_rules! inc_req_stats {
+//     (
+//         $face:expr,
+//         $txrx:ident,
+//         $space:ident,
+//         $body:expr
+//     ) => {
+//         paste::paste! {
+//             if let Some(stats) = $face.stats.as_ref() {
+//                 use zenoh_buffers::buffer::Buffer;
+//                 match &$body {
+//                     zenoh_protocol::zenoh::RequestBody::Query(q) => {
+//                         stats.[<$txrx _z_query_msgs>].[<inc_ $space>](1);
+//                         stats.[<$txrx _z_query_pl_bytes>].[<inc_ $space>](
+//                             q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+//                         );
+//                     }
+//                 }
+//             }
+//         }
+//     };
+// }
 
 #[cfg(feature = "stats")]
 macro_rules! inc_res_stats {
@@ -454,126 +467,127 @@ macro_rules! inc_res_stats {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mut Request) {
-    let rtables = zread!(tables_ref.tables);
-    match rtables
-        .data
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
-    {
-        Some(prefix) => {
-            tracing::debug!(
-                "{}:{} Route query for res {}{}",
-                face,
-                msg.id,
-                prefix.expr(),
-                msg.wire_expr.suffix.as_ref(),
-            );
-            let prefix = prefix.clone();
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+pub fn route_query(_tables_ref: &Arc<TablesLock>, _face: &Arc<FaceState>, _msg: &mut Request) {
+    // FIXME(fuzzypixelz): uncomment this
+    // let rtables = zread!(tables_ref.tables);
+    // match rtables
+    //     .data
+    //     .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+    // {
+    //     Some(prefix) => {
+    //         tracing::debug!(
+    //             "{}:{} Route query for res {}{}",
+    //             face,
+    //             msg.id,
+    //             prefix.expr(),
+    //             msg.wire_expr.suffix.as_ref(),
+    //         );
+    //         let prefix = prefix.clone();
+    //         let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
-            #[cfg(feature = "stats")]
-            let admin = expr.full_expr().starts_with("@/");
-            #[cfg(feature = "stats")]
-            if !admin {
-                inc_req_stats!(face, rx, user, msg.payload)
-            } else {
-                inc_req_stats!(face, rx, admin, msg.payload)
-            }
+    //         #[cfg(feature = "stats")]
+    //         let admin = expr.full_expr().starts_with("@/");
+    //         #[cfg(feature = "stats")]
+    //         if !admin {
+    //             inc_req_stats!(face, rx, user, msg.payload)
+    //         } else {
+    //             inc_req_stats!(face, rx, admin, msg.payload)
+    //         }
 
-            if rtables.hat.ingress_filter(&rtables.data, face, &mut expr) {
-                let res = Resource::get_resource(&prefix, expr.suffix);
+    //         if rtables.hat.ingress_filter(&rtables.data, face, &mut expr) {
+    //             let res = Resource::get_resource(&prefix, expr.suffix);
 
-                let route =
-                    get_query_route(&rtables, face, &res, &mut expr, msg.ext_nodeid.node_id);
+    //             let route =
+    //                 get_query_route(&rtables, face, &res, &mut expr, msg.ext_nodeid.node_id);
 
-                let query = Arc::new(Query {
-                    src_face: face.clone(),
-                    src_qid: msg.id,
-                });
+    //             let query = Arc::new(Query {
+    //                 src_face: face.clone(),
+    //                 src_qid: msg.id,
+    //             });
 
-                let queries_lock = zwrite!(tables_ref.queries_lock);
-                let route =
-                    compute_final_route(&rtables, &route, face, &mut expr, &msg.ext_target, query);
-                let timeout = msg
-                    .ext_timeout
-                    .unwrap_or(rtables.data.queries_default_timeout);
-                drop(queries_lock);
-                drop(rtables);
+    //             let queries_lock = zwrite!(tables_ref.queries_lock);
+    //             let route =
+    //                 compute_final_route(&rtables, &route, face, &mut expr, &msg.ext_target, query);
+    //             let timeout = msg
+    //                 .ext_timeout
+    //                 .unwrap_or(rtables.data.queries_default_timeout);
+    //             drop(queries_lock);
+    //             drop(rtables);
 
-                if route.is_empty() {
-                    tracing::debug!(
-                        "{}:{} Send final reply (no matching queryables or not master)",
-                        face,
-                        msg.id
-                    );
-                    face.primitives
-                        .clone()
-                        .send_response_final(&mut ResponseFinal {
-                            rid: msg.id,
-                            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                            ext_tstamp: None,
-                        });
-                } else {
-                    for ((outface, key_expr, context), outqid) in route.values() {
-                        QueryCleanup::spawn_query_clean_up_task(
-                            outface, tables_ref, *outqid, timeout,
-                        );
-                        #[cfg(feature = "stats")]
-                        if !admin {
-                            inc_req_stats!(outface, tx, user, msg.payload)
-                        } else {
-                            inc_req_stats!(outface, tx, admin, msg.payload)
-                        }
+    //             if route.is_empty() {
+    //                 tracing::debug!(
+    //                     "{}:{} Send final reply (no matching queryables or not master)",
+    //                     face,
+    //                     msg.id
+    //                 );
+    //                 face.primitives
+    //                     .clone()
+    //                     .send_response_final(&mut ResponseFinal {
+    //                         rid: msg.id,
+    //                         ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+    //                         ext_tstamp: None,
+    //                     });
+    //             } else {
+    //                 for ((outface, key_expr, context), outqid) in route.values() {
+    //                     QueryCleanup::spawn_query_clean_up_task(
+    //                         outface, tables_ref, *outqid, timeout,
+    //                     );
+    //                     #[cfg(feature = "stats")]
+    //                     if !admin {
+    //                         inc_req_stats!(outface, tx, user, msg.payload)
+    //                     } else {
+    //                         inc_req_stats!(outface, tx, admin, msg.payload)
+    //                     }
 
-                        tracing::trace!(
-                            "{}:{} Propagate query to {}:{}",
-                            face,
-                            msg.id,
-                            outface,
-                            outqid
-                        );
-                        outface.primitives.send_request(&mut Request {
-                            id: *outqid,
-                            wire_expr: key_expr.into(),
-                            ext_qos: msg.ext_qos,
-                            ext_tstamp: msg.ext_tstamp,
-                            ext_nodeid: ext::NodeIdType { node_id: *context },
-                            ext_target: msg.ext_target,
-                            ext_budget: msg.ext_budget,
-                            ext_timeout: msg.ext_timeout,
-                            payload: msg.payload.clone(),
-                        });
-                    }
-                }
-            } else {
-                tracing::debug!("{}:{} Send final reply (not master)", face, msg.id);
-                drop(rtables);
-                face.primitives
-                    .clone()
-                    .send_response_final(&mut ResponseFinal {
-                        rid: msg.id,
-                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                        ext_tstamp: None,
-                    });
-            }
-        }
-        None => {
-            tracing::error!(
-                "{}:{} Route query with unknown scope {}! Send final reply.",
-                face,
-                msg.id,
-                msg.wire_expr.scope,
-            );
-            drop(rtables);
-            face.primitives
-                .clone()
-                .send_response_final(&mut ResponseFinal {
-                    rid: msg.id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
-                    ext_tstamp: None,
-                });
-        }
-    }
+    //                     tracing::trace!(
+    //                         "{}:{} Propagate query to {}:{}",
+    //                         face,
+    //                         msg.id,
+    //                         outface,
+    //                         outqid
+    //                     );
+    //                     outface.primitives.send_request(&mut Request {
+    //                         id: *outqid,
+    //                         wire_expr: key_expr.into(),
+    //                         ext_qos: msg.ext_qos,
+    //                         ext_tstamp: msg.ext_tstamp,
+    //                         ext_nodeid: ext::NodeIdType { node_id: *context },
+    //                         ext_target: msg.ext_target,
+    //                         ext_budget: msg.ext_budget,
+    //                         ext_timeout: msg.ext_timeout,
+    //                         payload: msg.payload.clone(),
+    //                     });
+    //                 }
+    //             }
+    //         } else {
+    //             tracing::debug!("{}:{} Send final reply (not master)", face, msg.id);
+    //             drop(rtables);
+    //             face.primitives
+    //                 .clone()
+    //                 .send_response_final(&mut ResponseFinal {
+    //                     rid: msg.id,
+    //                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+    //                     ext_tstamp: None,
+    //                 });
+    //         }
+    //     }
+    //     None => {
+    //         tracing::error!(
+    //             "{}:{} Route query with unknown scope {}! Send final reply.",
+    //             face,
+    //             msg.id,
+    //             msg.wire_expr.scope,
+    //         );
+    //         drop(rtables);
+    //         face.primitives
+    //             .clone()
+    //             .send_response_final(&mut ResponseFinal {
+    //                 rid: msg.id,
+    //                 ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+    //                 ext_tstamp: None,
+    //             });
+    //     }
+    // }
 }
 
 #[allow(clippy::too_many_arguments)]

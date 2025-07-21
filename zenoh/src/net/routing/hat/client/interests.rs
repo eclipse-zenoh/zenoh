@@ -23,7 +23,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, Hat};
+use super::Hat;
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
@@ -39,16 +39,16 @@ use crate::net::routing::{
 impl Hat {
     pub(super) fn interests_new_face(&self, tables: &mut TablesData, face: &mut Arc<FaceState>) {
         if face.whatami != WhatAmI::Client {
-            for mut src_face in tables
-                .faces
+            for mut src_face in self
+                .faces(tables)
                 .values()
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
                 for RemoteInterest { res, options, .. } in
-                    face_hat_mut!(&mut src_face).remote_interests.values()
+                    self.face_hat_mut(&mut src_face).remote_interests.values()
                 {
-                    let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                    let id = self.face_hat(&face).next_id.fetch_add(1, Ordering::SeqCst);
                     get_mut_unchecked(face).local_interests.insert(
                         id,
                         InterestState {
@@ -101,7 +101,7 @@ impl HatInterestTrait for Hat {
                 send_declare,
             )
         }
-        face_hat_mut!(face).remote_interests.insert(
+        self.face_hat_mut(face).remote_interests.insert(
             id,
             RemoteInterest {
                 res: res.as_ref().map(|res| (*res).clone()),
@@ -116,12 +116,17 @@ impl HatInterestTrait for Hat {
             mode,
         });
 
-        for dst_face in tables
-            .faces
+        let interests_timeout = tables.interests_timeout;
+
+        for dst_face in self
+            .faces_mut(tables)
             .values_mut()
             .filter(|f| f.whatami != WhatAmI::Client)
         {
-            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+            let id = self
+                .face_hat(dst_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
                 InterestState {
@@ -146,7 +151,7 @@ impl HatInterestTrait for Hat {
                     dst_face,
                     tables_ref,
                     id,
-                    tables.interests_timeout,
+                    interests_timeout,
                 );
             }
             let wire_expr = res
@@ -208,16 +213,17 @@ impl HatInterestTrait for Hat {
         face: &mut Arc<FaceState>,
         id: InterestId,
     ) {
-        if let Some(interest) = face_hat_mut!(face).remote_interests.remove(&id) {
-            if !tables.faces.values().any(|f| {
+        if let Some(interest) = self.face_hat_mut(face).remote_interests.remove(&id) {
+            if !self.faces(tables).values().any(|f| {
                 f.whatami == WhatAmI::Client
-                    && face_hat!(f)
+                    && self
+                        .face_hat(f)
                         .remote_interests
                         .values()
                         .any(|i| *i == interest)
             }) {
-                for dst_face in tables
-                    .faces
+                for dst_face in self
+                    .faces_mut(tables)
                     .values_mut()
                     .filter(|f| f.whatami != WhatAmI::Client)
                 {

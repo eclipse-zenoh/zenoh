@@ -36,7 +36,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, Hat};
+use super::Hat;
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
@@ -44,11 +44,11 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::FaceState,
-            resource::{NodeId, Resource, SessionContext},
+            resource::{FaceContext, NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-        router::disable_matches_query_routes,
+        router::{disable_matches_query_routes, Direction},
         RoutingContext,
     },
 };
@@ -66,7 +66,7 @@ impl Hat {
         _tables: &TablesData,
         res: &Arc<Resource>,
     ) -> QueryableInfoType {
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .fold(None, |accu, ctx| {
                 if let Some(info) = ctx.qabl.as_ref() {
@@ -87,8 +87,8 @@ impl Hat {
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> QueryableInfoType {
-        let info = if res.context.is_some() {
-            res_hat!(res)
+        let info = if res.ctx.is_some() {
+            self.res_hat(res)
                 .router_qabls
                 .iter()
                 .fold(None, |accu, (zid, info)| {
@@ -104,7 +104,7 @@ impl Hat {
         } else {
             None
         };
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .fold(info, |accu, ctx| {
                 if (ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer)
@@ -139,7 +139,7 @@ impl Hat {
     ) {
         for child in children {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .as_ref()
@@ -182,16 +182,17 @@ impl Hat {
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        let faces = tables.faces.values().cloned();
+        let faces = self.faces(tables).values().cloned();
         for mut dst_face in faces {
             let info = self.local_qabl_info(tables, res, &dst_face);
-            let current = face_hat!(dst_face).local_qabls.get(res);
+            let current = self.face_hat(&dst_face).local_qabls.get(res);
             if src_face
                 .as_ref()
                 .map(|src_face| dst_face.id != src_face.id)
                 .unwrap_or(true)
                 && (current.is_none() || current.unwrap().1 != info)
-                && face_hat!(dst_face)
+                && self
+                    .face_hat(&dst_face)
                     .remote_interests
                     .values()
                     .any(|i| i.options.queryables() && i.matches(res))
@@ -203,10 +204,12 @@ impl Hat {
                     })
                     .unwrap_or(true)
             {
-                let id = current
-                    .map(|c| c.0)
-                    .unwrap_or(face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst));
-                face_hat_mut!(&mut dst_face)
+                let id = current.map(|c| c.0).unwrap_or(
+                    self.face_hat(&dst_face)
+                        .next_id
+                        .fetch_add(1, Ordering::SeqCst),
+                );
+                self.face_hat_mut(&mut dst_face)
                     .local_qabls
                     .insert(res.clone(), (id, info));
                 let push_declaration = self.push_declaration_profile(&dst_face);
@@ -279,11 +282,13 @@ impl Hat {
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        let current_info = res_hat!(res).router_qabls.get(&router);
+        let current_info = self.res_hat(res).router_qabls.get(&router);
         if current_info.is_none() || current_info.unwrap() != qabl_info {
             // Register router queryable
             {
-                res_hat_mut!(res).router_qabls.insert(router, *qabl_info);
+                self.res_hat_mut(res)
+                    .router_qabls
+                    .insert(router, *qabl_info);
                 self.router_qabls.insert(res.clone());
             }
 
@@ -319,13 +324,13 @@ impl Hat {
         {
             let res = get_mut_unchecked(res);
             get_mut_unchecked(
-                res.session_ctxs
+                res.face_ctxs
                     .entry(face.id)
-                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
+                    .or_insert_with(|| Arc::new(FaceContext::new(face.clone()))),
             )
             .qabl = Some(*qabl_info);
         }
-        face_hat_mut!(face).remote_qabls.insert(id, res.clone());
+        self.face_hat_mut(face).remote_qabls.insert(id, res.clone());
     }
 
     fn declare_simple_queryable(
@@ -345,8 +350,9 @@ impl Hat {
 
     #[inline]
     fn remote_router_qabls(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
-        res.context.is_some()
-            && res_hat!(res)
+        res.ctx.is_some()
+            && self
+                .res_hat(res)
                 .router_qabls
                 .keys()
                 .any(|router| router != &tables.zid)
@@ -354,7 +360,7 @@ impl Hat {
 
     #[inline]
     fn simple_qabls(&self, res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .filter_map(|ctx| {
                 if ctx.qabl.is_some() {
@@ -368,7 +374,7 @@ impl Hat {
 
     #[inline]
     fn remote_simple_qabls(&self, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
     }
@@ -385,7 +391,7 @@ impl Hat {
     ) {
         for child in children {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .map(|src_face| someface.id != src_face.id)
@@ -426,8 +432,8 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut face in tables.faces.values().cloned() {
-            if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
+        for mut face in self.faces(tables).values().cloned() {
+            if let Some((id, _)) = self.face_hat_mut(&mut face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -445,7 +451,8 @@ impl Hat {
                     ),
                 );
             }
-            for res in face_hat!(&mut face)
+            for res in self
+                .face_hat(&mut face)
                 .local_qabls
                 .keys()
                 .cloned()
@@ -453,12 +460,12 @@ impl Hat {
             {
                 if !res.context().matches.iter().any(|m| {
                     m.upgrade().is_some_and(|m| {
-                        m.context.is_some()
+                        m.ctx.is_some()
                             && (self.remote_simple_qabls(&m, &face)
                                 || self.remote_router_qabls(tables, &m))
                     })
                 }) {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                    if let Some((id, _)) = self.face_hat_mut(&mut face).local_qabls.remove(&res) {
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -487,24 +494,19 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_qabls.len() == 1
-            && res_hat!(res).router_qabls.contains_key(&tables.zid)
+        if self.res_hat(res).router_qabls.len() == 1
+            && self.res_hat(res).router_qabls.contains_key(&tables.zid)
         {
-            for mut face in tables
-                .faces
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
+            for mut face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
                 if face.whatami == WhatAmI::Peer
-                    && face_hat!(face).local_qabls.contains_key(res)
-                    && !res.session_ctxs.values().any(|s| {
+                    && self.face_hat(&face).local_qabls.contains_key(res)
+                    && !res.face_ctxs.values().any(|s| {
                         face.zid != s.face.zid
                             && s.qabl.is_some()
                             && s.face.whatami == WhatAmI::Client
                     })
                 {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
+                    if let Some((id, _)) = self.face_hat_mut(&mut face).local_qabls.remove(res) {
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -570,9 +572,9 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        res_hat_mut!(res).router_qabls.remove(router);
+        self.res_hat_mut(res).router_qabls.remove(router);
 
-        if res_hat!(res).router_qabls.is_empty() {
+        if self.res_hat(res).router_qabls.is_empty() {
             self.router_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
 
             self.propagate_forget_simple_queryable(tables, res, send_declare);
@@ -589,7 +591,7 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_qabls.contains_key(router) {
+        if self.res_hat(res).router_qabls.contains_key(router) {
             self.unregister_router_queryable(tables, res, router, send_declare);
             self.propagate_forget_sourced_queryable(tables, res, face, router);
         }
@@ -613,12 +615,13 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if !face_hat_mut!(face)
+        if !self
+            .face_hat_mut(face)
             .remote_qabls
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
                 get_mut_unchecked(ctx).qabl = None;
             }
 
@@ -648,7 +651,7 @@ impl Hat {
 
             if simple_qabls.len() == 1 && !router_qabls {
                 let mut face = &mut simple_qabls[0];
-                if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+                if let Some((id, _)) = self.face_hat_mut(face).local_qabls.remove(res) {
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -666,7 +669,8 @@ impl Hat {
                         ),
                     );
                 }
-                for res in face_hat!(face)
+                for res in self
+                    .face_hat(face)
                     .local_qabls
                     .keys()
                     .cloned()
@@ -674,12 +678,13 @@ impl Hat {
                 {
                     if !res.context().matches.iter().any(|m| {
                         m.upgrade().is_some_and(|m| {
-                            m.context.is_some()
+                            m.ctx.is_some()
                                 && (self.remote_simple_qabls(&m, face)
                                     || self.remote_router_qabls(tables, &m))
                         })
                     }) {
-                        if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
+                        if let Some((id, _)) = self.face_hat_mut(&mut face).local_qabls.remove(&res)
+                        {
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -710,7 +715,7 @@ impl Hat {
         id: QueryableId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
+        if let Some(mut res) = self.face_hat_mut(face).remote_qabls.remove(&id) {
             self.undeclare_simple_queryable(tables, face, &mut res, send_declare);
             Some(res)
         } else {
@@ -726,7 +731,7 @@ impl Hat {
     ) {
         let mut qabls = vec![];
         for res in self.router_qabls.iter() {
-            for qabl in res_hat!(res).router_qabls.keys() {
+            for qabl in self.res_hat(res).router_qabls.keys() {
                 if qabl == node {
                     qabls.push(res.clone());
                 }
@@ -735,7 +740,7 @@ impl Hat {
         for mut res in qabls {
             self.unregister_router_queryable(tables, &mut res, node, send_declare);
 
-            disable_matches_query_routes(tables, &mut res);
+            disable_matches_query_routes(&mut res, self.bound);
             Resource::clean(&mut res);
         }
     }
@@ -757,7 +762,7 @@ impl Hat {
                     let qabls_res = &self.router_qabls;
 
                     for res in qabls_res {
-                        let qabls = &res_hat!(res).router_qabls;
+                        let qabls = &self.res_hat(res).router_qabls;
                         if let Some(qabl_info) = qabls.get(&tree_id) {
                             self.send_sourced_queryable_to_net_children(
                                 tables,
@@ -795,7 +800,7 @@ impl Hat {
                             net.trees[source as usize].directions[qabl_idx.index()]
                         {
                             if net.graph.contains_node(direction) {
-                                if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
                                     if net.distances.len() > qabl_idx.index() {
                                         let key_expr = Resource::get_best_key(
                                             expr.prefix,
@@ -803,7 +808,11 @@ impl Hat {
                                             face.id,
                                         );
                                         route.push(QueryTargetQabl {
-                                            direction: (face.clone(), key_expr.to_owned(), source),
+                                            direction: Direction {
+                                                dst_face: face.clone(),
+                                                wire_expr: key_expr.to_owned(),
+                                                node_id: source,
+                                            },
                                             info: Some(QueryableInfoType {
                                                 complete: complete && qabl_info.complete,
                                                 distance: net.distances[qabl_idx.index()] as u16,
@@ -830,11 +839,11 @@ impl Hat {
         info: QueryableInfoType,
     ) -> u32 {
         if mode.future() {
-            if let Some((id, _)) = face_hat!(face).local_qabls.get(res) {
+            if let Some((id, _)) = self.face_hat(&face).local_qabls.get(res) {
                 *id
             } else {
-                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                face_hat_mut!(face)
+                let id = self.face_hat(&face).next_id.fetch_add(1, Ordering::SeqCst);
+                self.face_hat_mut(face)
                     .local_qabls
                     .insert(res.clone(), (id, info));
                 id
@@ -860,10 +869,14 @@ impl Hat {
             if let Some(res) = res.as_ref() {
                 if aggregate {
                     if self.router_qabls.iter().any(|qabl| {
-                        qabl.context.is_some()
+                        qabl.ctx.is_some()
                             && qabl.matches(res)
-                            && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-                                || qabl.session_ctxs.values().any(|s| {
+                            && (self
+                                .res_hat(qabl)
+                                .router_qabls
+                                .keys()
+                                .any(|r| *r != tables.zid)
+                                || qabl.face_ctxs.values().any(|s| {
                                     s.face.id != face.id
                                         && s.qabl.is_some()
                                         && (s.face.whatami == WhatAmI::Client
@@ -894,10 +907,14 @@ impl Hat {
                     }
                 } else {
                     for qabl in self.router_qabls.iter() {
-                        if qabl.context.is_some()
+                        if qabl.ctx.is_some()
                             && qabl.matches(res)
-                            && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-                                || qabl.session_ctxs.values().any(|s| {
+                            && (self
+                                .res_hat(qabl)
+                                .router_qabls
+                                .keys()
+                                .any(|r| *r != tables.zid)
+                                || qabl.face_ctxs.values().any(|s| {
                                     s.qabl.is_some()
                                         && (s.face.whatami != WhatAmI::Peer
                                             || face.whatami != WhatAmI::Peer)
@@ -929,7 +946,7 @@ impl Hat {
                 }
             } else {
                 for qabl in self.router_qabls.iter() {
-                    if qabl.context.is_some()
+                    if qabl.ctx.is_some()
                         && (self.remote_simple_qabls(qabl, face)
                             || self.remote_router_qabls(tables, qabl))
                     {
@@ -980,7 +997,7 @@ impl Hat {
                     if net.trees[source].directions.len() > qbl_idx.index() {
                         if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
                             if net.graph.contains_node(direction) {
-                                if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
                                     route.entry(face.id).or_insert_with(|| face.clone());
                                 }
                             }
@@ -1058,9 +1075,9 @@ impl HatQueriesTrait for Hat {
                     // Compute the list of routers, peers and clients that are known
                     // sources of those queryables
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_qabls.keys().cloned()),
+                        routers: Vec::from_iter(self.res_hat(s).router_qabls.keys().cloned()),
                         peers: s
-                            .session_ctxs
+                            .face_ctxs
                             .values()
                             .filter_map(|f| {
                                 (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
@@ -1068,7 +1085,7 @@ impl HatQueriesTrait for Hat {
                             })
                             .collect(),
                         clients: s
-                            .session_ctxs
+                            .face_ctxs
                             .values()
                             .filter_map(|f| {
                                 (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
@@ -1083,8 +1100,8 @@ impl HatQueriesTrait for Hat {
 
     fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
-            for interest in face_hat!(face).remote_interests.values() {
+        for face in self.faces(tables).values() {
+            for interest in self.face_hat(&face).remote_interests.values() {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
@@ -1132,7 +1149,7 @@ impl HatQueriesTrait for Hat {
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
+            .and_then(|res| res.ctx.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
@@ -1150,20 +1167,20 @@ impl HatQueriesTrait for Hat {
                 tables,
                 net,
                 router_source,
-                &res_hat!(mres).router_qabls,
+                &self.res_hat(&mres).router_qabls,
                 complete,
             );
 
-            for (sid, context) in &mres.session_ctxs {
+            for (sid, context) in &mres.face_ctxs {
                 if context.face.whatami != WhatAmI::Router {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                     if let Some(qabl_info) = context.qabl.as_ref() {
                         route.push(QueryTargetQabl {
-                            direction: (
-                                context.face.clone(),
-                                key_expr.to_owned(),
-                                NodeId::default(),
-                            ),
+                            direction: Direction {
+                                dst_face: context.face.clone(),
+                                wire_expr: key_expr.to_owned(),
+                                node_id: NodeId::default(),
+                            },
                             info: Some(QueryableInfoType {
                                 complete: complete && qabl_info.complete,
                                 distance: 1,
@@ -1196,7 +1213,7 @@ impl HatQueriesTrait for Hat {
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
+            .and_then(|res| res.ctx.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
@@ -1211,11 +1228,11 @@ impl HatQueriesTrait for Hat {
                 &mut matching_queryables,
                 tables,
                 net,
-                &res_hat!(mres).router_qabls,
+                &self.res_hat(&mres).router_qabls,
                 complete,
             );
 
-            for (sid, context) in &mres.session_ctxs {
+            for (sid, context) in &mres.face_ctxs {
                 if match complete {
                     true => context.qabl.is_some_and(|q| q.complete),
                     false => context.qabl.is_some(),
