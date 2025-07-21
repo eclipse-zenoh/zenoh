@@ -211,10 +211,9 @@ struct Cache {
 impl QosInterceptor {
     #[inline]
     fn is_ke_affected(&self, ke: &keyexpr) -> bool {
-        if let Some(keys) = &self.keys {
-            keys.nodes_including(ke).any(|n| n.weight().is_some())
-        } else {
-            true
+        match &self.keys {
+            Some(keys) => keys.nodes_including(ke).any(|n| n.weight().is_some()),
+            None => true,
         }
     }
 
