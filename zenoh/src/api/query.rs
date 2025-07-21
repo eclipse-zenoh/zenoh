@@ -17,11 +17,9 @@ use std::{collections::HashMap, error::Error, fmt::Display};
 #[cfg(feature = "unstable")]
 use serde::Deserialize;
 #[cfg(feature = "unstable")]
-use zenoh_config::ZenohId;
+use zenoh_config::wrappers::EntityGlobalId;
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_protocol::core::Parameters;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::ZenohIdProto;
 /// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](crate::Session::get).
 pub use zenoh_protocol::network::request::ext::QueryTarget;
 #[doc(inline)]
@@ -129,7 +127,7 @@ impl Error for ReplyError {}
 pub struct Reply {
     pub(crate) result: Result<Sample, ReplyError>,
     #[cfg(feature = "unstable")]
-    pub(crate) replier_id: Option<ZenohIdProto>,
+    pub(crate) replier_id: Option<EntityGlobalId>,
 }
 
 impl Reply {
@@ -149,11 +147,9 @@ impl Reply {
     }
 
     #[zenoh_macros::unstable]
-    // @TODO: maybe return an `Option<EntityGlobalId>`?
-    //
     /// Gets the id of the zenoh instance that answered this Reply.
-    pub fn replier_id(&self) -> Option<ZenohId> {
-        self.replier_id.map(Into::into)
+    pub fn replier_id(&self) -> Option<EntityGlobalId> {
+        self.replier_id
     }
 
     /// Constructs an uninitialized empty Reply.

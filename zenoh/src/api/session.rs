@@ -2328,7 +2328,10 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(session.zid().into()),
+                                    replier_id: Some(zenoh_protocol::core::EntityGlobalIdProto {
+                                        zid: session.zid().into(),
+                                        eid: session.id.into(),
+                                    }.into()),
                                 });
                             }
                         }
@@ -2427,7 +2430,10 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(session.zid().into()),
+                                    replier_id: Some(zenoh_protocol::core::EntityGlobalIdProto {
+                                        zid: session.zid().into(),
+                                        eid: session.id.into(),
+                                    }.into()),
                                 });
                             }
                         }
@@ -2875,7 +2881,13 @@ impl Primitives for WeakSession {
                                 encoding: mem::take(&mut e.encoding).into(),
                             }),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
+                                zenoh_protocol::core::EntityGlobalIdProto {
+                                    zid: rid.zid,
+                                    eid: rid.eid,
+                                }
+                                .into()
+                            }),
                         };
                         callback.call(new_reply);
                     }
@@ -2967,7 +2979,13 @@ impl Primitives for WeakSession {
                         let new_reply = Reply {
                             result: Ok(sample),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
+                                zenoh_protocol::core::EntityGlobalIdProto {
+                                    zid: rid.zid,
+                                    eid: rid.eid,
+                                }
+                                .into()
+                            }),
                         };
                         let callback =
                             match query.reception_mode {
