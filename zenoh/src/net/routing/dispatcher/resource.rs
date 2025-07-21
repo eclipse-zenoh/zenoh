@@ -58,12 +58,16 @@ pub(crate) struct QueryTargetQabl {
 }
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
+/// Helper struct to build route, handling face deduplication.
 pub(crate) struct RouteBuilder<T = Direction> {
+    /// The route built.
     route: Vec<T>,
+    /// The faces' id already inserted.
     faces: HashSet<usize>,
 }
 
 impl<T> RouteBuilder<T> {
+    /// Create a new empty builder.
     pub(crate) fn new() -> Self {
         Self {
             route: Vec::new(),
@@ -71,14 +75,16 @@ impl<T> RouteBuilder<T> {
         }
     }
 
-    pub(crate) fn build(self) -> Vec<T> {
-        self.route
-    }
-
+    /// Insert a new direction if it has not been registered for the given face.
     pub(crate) fn insert(&mut self, face_id: usize, direction: impl FnOnce() -> T) {
         if self.faces.insert(face_id) {
             self.route.push(direction());
         }
+    }
+
+    /// Build the route, consuming the builder.
+    pub(crate) fn build(self) -> Vec<T> {
+        self.route
     }
 }
 pub(crate) type QueryRouteBuilder = RouteBuilder<(Direction, RequestId)>;
