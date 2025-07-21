@@ -25,7 +25,7 @@ pub trait IntoTypedMemoryLayout {
 
 /// Memory layout representation: alignment and size aligned for this alignment
 #[zenoh_macros::unstable_doc]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MemoryLayout {
     size: NonZeroUsize,
     alignment: AllocAlignment,

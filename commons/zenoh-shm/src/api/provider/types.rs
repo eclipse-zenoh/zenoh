@@ -214,6 +214,18 @@ pub enum ZLayoutAllocError {
     Layout(ZLayoutError),
 }
 
+impl From<ZLayoutError> for ZLayoutAllocError {
+    fn from(value: ZLayoutError) -> Self {
+        Self::Layout(value)
+    }
+}
+
+impl From<ZAllocError> for ZLayoutAllocError {
+    fn from(value: ZAllocError) -> Self {
+        Self::Alloc(value)
+    }
+}
+
 impl From<ZLayoutAllocError> for zenoh_result::Error {
     fn from(value: ZLayoutAllocError) -> Self {
         match value {

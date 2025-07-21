@@ -15,11 +15,11 @@
 use zenoh_core::Wait;
 use zenoh_shm::api::{
     buffer::{typed::Typed, zshmmut::ZShmMut},
-    provider::{memory_layout::{BuildLayout, LayoutForType}, shm_provider::ShmProviderBuilder},
+    provider::{memory_layout::BuildLayout, shm_provider::ShmProviderBuilder},
 };
 
 #[repr(C)]
-#[derive(zerocopy::KnownLayout, zerocopy::FromBytes)]
+#[derive(zerocopy::IntoBytes, zerocopy::KnownLayout, zerocopy::FromBytes)]
 struct SharedByteData {
     data: [u8; 64],
 }
