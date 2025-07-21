@@ -140,8 +140,8 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
+        for mut dst_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -202,7 +202,7 @@ impl Hat {
         // TODO: Let's deactivate this on windows until Fixed
         #[cfg(not(windows))]
         if face.whatami == WhatAmI::Client {
-            for mcast_group in &tables.mcast_groups {
+            for mcast_group in self.mcast_groups(tables) {
                 if mcast_group.mcast_group != face.mcast_group {
                     mcast_group
                         .primitives
@@ -251,7 +251,7 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut face in tables.faces.values().cloned() {
+        for mut face in self.faces(tables).values().cloned() {
             if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -400,8 +400,8 @@ impl Hat {
     ) {
         if face.whatami != WhatAmI::Client {
             let sub_info = SubscriberInfo;
-            for src_face in tables
-                .faces
+            for src_face in self
+                .faces(tables)
                 .values()
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
@@ -455,7 +455,7 @@ impl Hat {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if tables.faces.values().any(|src_face| {
+                    if self.faces(tables).values().any(|src_face| {
                         src_face.id != face.id
                             && face_hat!(src_face)
                                 .remote_subs
@@ -483,8 +483,8 @@ impl Hat {
                         );
                     }
                 } else {
-                    for src_face in tables
-                        .faces
+                    for src_face in self
+                        .faces(tables)
                         .values()
                         .cloned()
                         .collect::<Vec<Arc<FaceState>>>()
@@ -519,8 +519,8 @@ impl Hat {
                     }
                 }
             } else {
-                for src_face in tables
-                    .faces
+                for src_face in self
+                    .faces(tables)
                     .values()
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
@@ -586,7 +586,7 @@ impl HatPubSubTrait for Hat {
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known suscriptions (keys)
         let mut subs = HashMap::new();
-        for src_face in tables.faces.values() {
+        for src_face in self.faces(tables).values() {
             for sub in face_hat!(src_face).remote_subs.values() {
                 // Insert the key in the list of known suscriptions
                 let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
@@ -603,7 +603,7 @@ impl HatPubSubTrait for Hat {
 
     fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
+        for face in self.faces(tables).values() {
             for interest in face_hat!(face).remote_interests.values() {
                 if interest.options.subscribers() {
                     if let Some(res) = interest.res.as_ref() {
@@ -647,8 +647,8 @@ impl HatPubSubTrait for Hat {
         };
 
         if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
+            for face in self
+                .faces(tables)
                 .values()
                 .filter(|f| f.whatami == WhatAmI::Router)
             {
@@ -673,7 +673,7 @@ impl HatPubSubTrait for Hat {
                 }
             }
 
-            for face in tables.faces.values().filter(|f| {
+            for face in self.faces(tables).values().filter(|f| {
                 f.whatami == WhatAmI::Peer
                     && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
@@ -705,7 +705,7 @@ impl HatPubSubTrait for Hat {
                 }
             }
         }
-        for mcast_group in &tables.mcast_groups {
+        for mcast_group in self.mcast_groups(tables) {
             route.insert(
                 mcast_group.id,
                 (

@@ -1975,12 +1975,12 @@ impl SessionInner {
 
         let matches = match matching_type {
             MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
+                crate::net::routing::dispatcher::pubsub::get_session_matching_subscriptions(
                     tables, key_expr,
                 )
             }
             MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
+                crate::net::routing::dispatcher::queries::get_session_matching_queryables(
                     tables, key_expr, complete,
                 )
             }

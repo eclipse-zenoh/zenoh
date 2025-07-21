@@ -147,7 +147,7 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
+        let router = Arc::new(Router::new(zid, hlc.clone(), &config)?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -554,7 +554,8 @@ impl Closee for Arc<RuntimeState> {
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
         tables.data.root_res.close();
-        tables.data.faces.clear();
+        // FIXME(fuzzypixelz): uncomment this
+        // tables.data.faces.clear();
     }
 }
 

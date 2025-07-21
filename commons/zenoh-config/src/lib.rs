@@ -363,6 +363,13 @@ validated_struct::validator! {
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
+        pub gateway: #[derive(Default)]
+        GatewayConfig {
+            pub south: #[derive(Default)]
+            SouthGatewayConfig {
+                mode: Option<whatami::WhatAmI>,
+            },
+        },
         /// Which zenoh nodes to connect to.
         pub connect:
         ConnectConfig {

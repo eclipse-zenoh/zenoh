@@ -36,7 +36,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, Hat};
+use super::{face_hat, face_hat_mut, Hat};
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
@@ -88,7 +88,7 @@ impl Hat {
         face: &Arc<FaceState>,
     ) -> QueryableInfoType {
         let info = if res.context.is_some() {
-            res_hat!(res)
+            self.res_hat(res)
                 .router_qabls
                 .iter()
                 .fold(None, |accu, (zid, info)| {
@@ -139,7 +139,7 @@ impl Hat {
     ) {
         for child in children {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .as_ref()
@@ -182,7 +182,7 @@ impl Hat {
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        let faces = tables.faces.values().cloned();
+        let faces = self.faces(tables).values().cloned();
         for mut dst_face in faces {
             let info = self.local_qabl_info(tables, res, &dst_face);
             let current = face_hat!(dst_face).local_qabls.get(res);
@@ -279,11 +279,13 @@ impl Hat {
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        let current_info = res_hat!(res).router_qabls.get(&router);
+        let current_info = self.res_hat(res).router_qabls.get(&router);
         if current_info.is_none() || current_info.unwrap() != qabl_info {
             // Register router queryable
             {
-                res_hat_mut!(res).router_qabls.insert(router, *qabl_info);
+                self.res_hat_mut(res)
+                    .router_qabls
+                    .insert(router, *qabl_info);
                 self.router_qabls.insert(res.clone());
             }
 
@@ -346,7 +348,8 @@ impl Hat {
     #[inline]
     fn remote_router_qabls(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
-            && res_hat!(res)
+            && self
+                .res_hat(res)
                 .router_qabls
                 .keys()
                 .any(|router| router != &tables.zid)
@@ -385,7 +388,7 @@ impl Hat {
     ) {
         for child in children {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .map(|src_face| someface.id != src_face.id)
@@ -426,7 +429,7 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut face in tables.faces.values().cloned() {
+        for mut face in self.faces(tables).values().cloned() {
             if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -487,15 +490,10 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_qabls.len() == 1
-            && res_hat!(res).router_qabls.contains_key(&tables.zid)
+        if self.res_hat(res).router_qabls.len() == 1
+            && self.res_hat(res).router_qabls.contains_key(&tables.zid)
         {
-            for mut face in tables
-                .faces
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
+            for mut face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
                 if face.whatami == WhatAmI::Peer
                     && face_hat!(face).local_qabls.contains_key(res)
                     && !res.session_ctxs.values().any(|s| {
@@ -570,9 +568,9 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        res_hat_mut!(res).router_qabls.remove(router);
+        self.res_hat_mut(res).router_qabls.remove(router);
 
-        if res_hat!(res).router_qabls.is_empty() {
+        if self.res_hat(res).router_qabls.is_empty() {
             self.router_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
 
             self.propagate_forget_simple_queryable(tables, res, send_declare);
@@ -589,7 +587,7 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_qabls.contains_key(router) {
+        if self.res_hat(res).router_qabls.contains_key(router) {
             self.unregister_router_queryable(tables, res, router, send_declare);
             self.propagate_forget_sourced_queryable(tables, res, face, router);
         }
@@ -726,7 +724,7 @@ impl Hat {
     ) {
         let mut qabls = vec![];
         for res in self.router_qabls.iter() {
-            for qabl in res_hat!(res).router_qabls.keys() {
+            for qabl in self.res_hat(res).router_qabls.keys() {
                 if qabl == node {
                     qabls.push(res.clone());
                 }
@@ -757,7 +755,7 @@ impl Hat {
                     let qabls_res = &self.router_qabls;
 
                     for res in qabls_res {
-                        let qabls = &res_hat!(res).router_qabls;
+                        let qabls = &self.res_hat(res).router_qabls;
                         if let Some(qabl_info) = qabls.get(&tree_id) {
                             self.send_sourced_queryable_to_net_children(
                                 tables,
@@ -795,7 +793,7 @@ impl Hat {
                             net.trees[source as usize].directions[qabl_idx.index()]
                         {
                             if net.graph.contains_node(direction) {
-                                if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
                                     if net.distances.len() > qabl_idx.index() {
                                         let key_expr = Resource::get_best_key(
                                             expr.prefix,
@@ -862,7 +860,11 @@ impl Hat {
                     if self.router_qabls.iter().any(|qabl| {
                         qabl.context.is_some()
                             && qabl.matches(res)
-                            && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
+                            && (self
+                                .res_hat(qabl)
+                                .router_qabls
+                                .keys()
+                                .any(|r| *r != tables.zid)
                                 || qabl.session_ctxs.values().any(|s| {
                                     s.face.id != face.id
                                         && s.qabl.is_some()
@@ -896,7 +898,11 @@ impl Hat {
                     for qabl in self.router_qabls.iter() {
                         if qabl.context.is_some()
                             && qabl.matches(res)
-                            && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
+                            && (self
+                                .res_hat(qabl)
+                                .router_qabls
+                                .keys()
+                                .any(|r| *r != tables.zid)
                                 || qabl.session_ctxs.values().any(|s| {
                                     s.qabl.is_some()
                                         && (s.face.whatami != WhatAmI::Peer
@@ -980,7 +986,7 @@ impl Hat {
                     if net.trees[source].directions.len() > qbl_idx.index() {
                         if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
                             if net.graph.contains_node(direction) {
-                                if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
                                     route.entry(face.id).or_insert_with(|| face.clone());
                                 }
                             }
@@ -1058,7 +1064,7 @@ impl HatQueriesTrait for Hat {
                     // Compute the list of routers, peers and clients that are known
                     // sources of those queryables
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_qabls.keys().cloned()),
+                        routers: Vec::from_iter(self.res_hat(s).router_qabls.keys().cloned()),
                         peers: s
                             .session_ctxs
                             .values()
@@ -1083,7 +1089,7 @@ impl HatQueriesTrait for Hat {
 
     fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
+        for face in self.faces(tables).values() {
             for interest in face_hat!(face).remote_interests.values() {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
@@ -1150,7 +1156,7 @@ impl HatQueriesTrait for Hat {
                 tables,
                 net,
                 router_source,
-                &res_hat!(mres).router_qabls,
+                &self.res_hat(&mres).router_qabls,
                 complete,
             );
 
@@ -1211,7 +1217,7 @@ impl HatQueriesTrait for Hat {
                 &mut matching_queryables,
                 tables,
                 net,
-                &res_hat!(mres).router_qabls,
+                &self.res_hat(&mres).router_qabls,
                 complete,
             );
 

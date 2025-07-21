@@ -105,6 +105,7 @@ serde_json = { workspace = true }
 socket2 = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
+cfg-if = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
 zenoh-codec = { workspace = true }
 zenoh-collections = { workspace = true, features = ["std"] }

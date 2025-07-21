@@ -40,7 +40,7 @@ use super::{
     tables::{TablesData, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::{face::Face, tables::Tables},
+    dispatcher::{face::Face, gateway::BoundMap, tables::Tables},
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
@@ -205,16 +205,28 @@ pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) hat: BoundMap<HatData>,
+}
+
+impl ResourceContext {
+    pub(crate) fn new(hat: BoundMap<HatData>) -> ResourceContext {
+        ResourceContext {
+            matches: Vec::new(),
+            hat,
+        }
+    }
+}
+
+pub(crate) struct HatData {
+    pub(crate) ctx: Box<dyn Any + Send + Sync>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
 }
 
-impl ResourceContext {
-    fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
-        ResourceContext {
-            matches: Vec::new(),
-            hat,
+impl HatData {
+    pub(crate) fn new(ctx: Box<dyn Any + Send + Sync>) -> Self {
+        HatData {
+            ctx,
             data_routes: Default::default(),
             query_routes: Default::default(),
         }
@@ -458,7 +470,13 @@ impl Resource {
             };
             suffix = rest;
         }
-        Resource::upgrade_resource(&mut from, tables.hat.new_resource());
+        let hat = BoundMap::from_iter(
+            tables
+                .hat
+                .iter()
+                .map(|(b, d)| (b, HatData::new(d.new_resource()))),
+        );
+        Resource::upgrade_resource(&mut from, hat);
         from
     }
 
@@ -759,7 +777,7 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
+    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: BoundMap<HatData>) {
         if res.context.is_none() {
             get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
         }

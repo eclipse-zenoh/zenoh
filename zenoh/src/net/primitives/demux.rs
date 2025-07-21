@@ -116,25 +116,26 @@ impl TransportPeerEventHandler for DeMux {
             NetworkBodyMut::Request(m) => self.face.send_request(m),
             NetworkBodyMut::Response(m) => self.face.send_response(m),
             NetworkBodyMut::ResponseFinal(m) => self.face.send_response_final(m),
-            NetworkBodyMut::OAM(m) => {
-                if let Some(transport) = self.transport.as_ref() {
-                    let mut declares = vec![];
-                    let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
-                    let mut wtables = zwrite!(self.face.tables.tables);
-                    let tables = &mut *wtables;
-                    tables.hat.handle_oam(
-                        &mut tables.data,
-                        &self.face.tables,
-                        m,
-                        transport,
-                        &mut |p, m| declares.push((p.clone(), m)),
-                    )?;
-                    drop(wtables);
-                    drop(ctrl_lock);
-                    for (p, m) in declares {
-                        m.with_mut(|m| p.send_declare(m));
-                    }
-                }
+            NetworkBodyMut::OAM(_) => {
+                // FIXME(fuzzypixelz): uncomment this
+                // if let Some(transport) = self.transport.as_ref() {
+                //     let mut declares = vec![];
+                //     let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
+                //     let mut wtables = zwrite!(self.face.tables.tables);
+                //     let tables = &mut *wtables;
+                //     tables.hat.handle_oam(
+                //         &mut tables.data,
+                //         &self.face.tables,
+                //         m,
+                //         transport,
+                //         &mut |p, m| declares.push((p.clone(), m)),
+                //     )?;
+                //     drop(wtables);
+                //     drop(ctrl_lock);
+                //     for (p, m) in declares {
+                //         m.with_mut(|m| p.send_declare(m));
+                //     }
+                // }
             }
         }
 

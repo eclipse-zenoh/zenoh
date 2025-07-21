@@ -39,8 +39,8 @@ use crate::net::routing::{
 impl Hat {
     pub(super) fn interests_new_face(&self, tables: &mut TablesData, face: &mut Arc<FaceState>) {
         if face.whatami != WhatAmI::Client {
-            for mut src_face in tables
-                .faces
+            for mut src_face in self
+                .faces(tables)
                 .values()
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
@@ -116,8 +116,10 @@ impl HatInterestTrait for Hat {
             mode,
         });
 
-        for dst_face in tables
-            .faces
+        let interests_timeout = tables.interests_timeout;
+
+        for dst_face in self
+            .faces_mut(tables)
             .values_mut()
             .filter(|f| f.whatami != WhatAmI::Client)
         {
@@ -146,7 +148,7 @@ impl HatInterestTrait for Hat {
                     dst_face,
                     tables_ref,
                     id,
-                    tables.interests_timeout,
+                    interests_timeout,
                 );
             }
             let wire_expr = res
@@ -209,15 +211,15 @@ impl HatInterestTrait for Hat {
         id: InterestId,
     ) {
         if let Some(interest) = face_hat_mut!(face).remote_interests.remove(&id) {
-            if !tables.faces.values().any(|f| {
+            if !self.faces(tables).values().any(|f| {
                 f.whatami == WhatAmI::Client
                     && face_hat!(f)
                         .remote_interests
                         .values()
                         .any(|i| *i == interest)
             }) {
-                for dst_face in tables
-                    .faces
+                for dst_face in self
+                    .faces_mut(tables)
                     .values_mut()
                     .filter(|f| f.whatami != WhatAmI::Client)
                 {

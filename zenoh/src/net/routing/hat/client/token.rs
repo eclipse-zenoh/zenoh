@@ -74,8 +74,8 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
+        for mut dst_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -180,7 +180,7 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables.faces.values_mut() {
+        for face in self.faces_mut(tables).values_mut() {
             if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -298,8 +298,8 @@ impl Hat {
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for src_face in tables
-            .faces
+        for src_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -351,7 +351,7 @@ impl Hat {
             let interest_id = (!mode.future()).then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if tables.faces.values().any(|src_face| {
+                    if self.faces(tables).values().any(|src_face| {
                         face_hat!(src_face)
                             .remote_tokens
                             .values()
@@ -374,8 +374,8 @@ impl Hat {
                         );
                     }
                 } else {
-                    for src_face in tables
-                        .faces
+                    for src_face in self
+                        .faces(tables)
                         .values()
                         .filter(|f| f.whatami == WhatAmI::Client)
                         .cloned()
@@ -406,8 +406,8 @@ impl Hat {
                     }
                 }
             } else {
-                for src_face in tables
-                    .faces
+                for src_face in self
+                    .faces(tables)
                     .values()
                     .filter(|f| f.whatami == WhatAmI::Client)
                     .cloned()

@@ -17,8 +17,9 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
+use cfg_if::cfg_if;
 use uhlc::HLC;
-use zenoh_config::Config;
+use zenoh_config::{unwrap_or_default, Config};
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
@@ -37,7 +38,11 @@ use super::{
 };
 use crate::net::{
     primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
-    routing::dispatcher::tables::Tables,
+    routing::dispatcher::{
+        face::FaceStateBuilder,
+        gateway::{Bound, BoundMap},
+        tables::{self, Tables},
+    },
 };
 
 pub struct Router {
@@ -46,19 +51,28 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(
-        zid: ZenohIdProto,
-        whatami: WhatAmI,
-        hlc: Option<Arc<HLC>>,
-        config: &Config,
-    ) -> ZResult<Self> {
-        let hat_code = hat::new_hat(whatami, config);
+    pub fn new(zid: ZenohIdProto, hlc: Option<Arc<HLC>>, config: &Config) -> ZResult<Self> {
+        let whatami = config.mode().unwrap_or_default();
+        let south_whatami = config.gateway.south.mode().unwrap_or_default();
+
+        let eastwest = hat::new_hat(whatami, config, Bound::eastwest0());
+        let south = hat::new_hat(south_whatami, config, Bound::south0());
         Ok(Router {
-            // whatami,
             tables: Arc::new(TablesLock {
                 tables: RwLock::new(Tables {
-                    data: TablesData::new(zid, whatami, hlc, config)?,
-                    hat: hat_code,
+                    data: TablesData::new(
+                        zid,
+                        hlc,
+                        config,
+                        BoundMap::from_iter([
+                            (Bound::eastwest0(), tables::HatData::new(whatami)),
+                            (Bound::south0(), tables::HatData::new(south_whatami)),
+                        ]),
+                    )?,
+                    hat: BoundMap::from_iter([
+                        (Bound::eastwest0(), eastwest),
+                        (Bound::south0(), south),
+                    ]),
                 }),
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
@@ -90,18 +104,17 @@ impl Router {
             .faces
             .entry(fid)
             .or_insert_with(|| {
-                FaceState::new(
+                FaceStateBuilder::new(
                     fid,
                     zid,
-                    WhatAmI::Client,
-                    #[cfg(feature = "stats")]
-                    None,
+                    // REVIEW(fuzzypixelz): is this correct?
+                    Bound::south0(),
                     primitives.clone(),
-                    None,
-                    None,
                     tables.hat.new_face(),
-                    true,
                 )
+                .whatami(WhatAmI::Client)
+                .local(true)
+                .build()
             })
             .clone();
         tracing::debug!("New {}", newface);
@@ -139,23 +152,17 @@ impl Router {
 
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
+
         let newface = tables
             .data
             .faces
             .entry(fid)
             .or_insert_with(|| {
-                FaceState::new(
-                    fid,
-                    zid,
-                    whatami,
-                    #[cfg(feature = "stats")]
-                    Some(stats),
-                    mux.clone(),
-                    None,
-                    Some(ingress.clone()),
-                    tables.hat.new_face(),
-                    false,
-                )
+                let builder = FaceStateBuilder::new(fid, self.bound_of(transport), zid, mux.clone(), tables.hat.new_face())
+                    .whatami(whatami)
+                    .ingress_interceptors(ingress.clone());
+
+                cfg_if! { if #[cfg(feature = "stats")] { builder.stats(stats).build() } else { builder.build() } }
             })
             .clone();
         newface.set_interceptors_from_factories(
@@ -196,18 +203,14 @@ impl Router {
         let fid = tables.data.face_counter;
         tables.data.face_counter += 1;
         let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
-        let face = FaceState::new(
+        let face = FaceStateBuilder::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
-            WhatAmI::Peer,
-            #[cfg(feature = "stats")]
-            None,
             mux.clone(),
-            Some(transport),
-            None,
             tables.hat.new_face(),
-            false,
-        );
+        )
+        .multicast_groups(transport)
+        .build();
         face.set_interceptors_from_factories(
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
@@ -234,18 +237,23 @@ impl Router {
         let fid = tables.data.face_counter;
         tables.data.face_counter += 1;
         let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
-        let face_state = FaceState::new(
+        let face_state_builder = FaceStateBuilder::new(
             fid,
             peer.zid,
-            WhatAmI::Client, // Quick hack
-            #[cfg(feature = "stats")]
-            Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
-            Some(transport),
-            Some(interceptor.clone()),
             tables.hat.new_face(),
-            false,
-        );
+        )
+        .multicast_groups(transport)
+        .ingress_interceptors(interceptor.clone())
+        .whatami(WhatAmI::Client);
+        cfg_if! {
+            if #[cfg(feature = "stats")] {
+                let stats = transport.get_stats()?;
+                let face_state = face_state_builder.stats(stats).build();
+            } else {
+                let face_state = face_state_builder.build();
+            }
+        }
         face_state.set_interceptors_from_factories(
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
@@ -261,5 +269,12 @@ impl Router {
             None,
             interceptor,
         )))
+    }
+
+    fn bound_of(&self, transport: &TransportUnicast) -> ZResult<bool> {
+        Ok(matches!(
+            (self.whatami, transport.get_whatami()?),
+            (WhatAmI::Router, WhatAmI::Client | WhatAmI::Peer) | (WhatAmI::Peer, WhatAmI::Client)
+        ))
     }
 }

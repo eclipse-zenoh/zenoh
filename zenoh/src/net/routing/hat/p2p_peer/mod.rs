@@ -56,6 +56,7 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::{Face, InterestState},
+            gateway::Bound,
             interests::RemoteInterest,
         },
         RoutingContext,
@@ -91,12 +92,45 @@ use face_hat_mut;
 use crate::net::common::AutoConnect;
 
 pub(crate) struct Hat {
+    bound: Bound,
     gossip: Option<Network>,
 }
 
 impl Hat {
-    pub(crate) fn new() -> Self {
-        Self { gossip: None }
+    pub(crate) fn new(bound: Bound) -> Self {
+        Self {
+            bound,
+            gossip: None,
+        }
+    }
+
+    pub(crate) fn res_hat<'r>(&self, res: &'r Arc<Resource>) -> &'r HatContext {
+        res.context().hat[self.bound].ctx.downcast_ref().unwrap()
+    }
+
+    pub(crate) fn res_hat_mut<'r>(&self, res: &'r mut Arc<Resource>) -> &'r mut HatContext {
+        get_mut_unchecked(res).context_mut().hat[self.bound]
+            .ctx
+            .downcast_mut()
+            .unwrap()
+    }
+
+    pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
+        &tables.hat[self.bound].faces
+    }
+
+    pub(crate) fn faces_mut<'t>(
+        &self,
+        tables: &'t mut TablesData,
+    ) -> &'t mut HashMap<usize, Arc<FaceState>> {
+        &mut tables.hat[self.bound].faces
+    }
+
+    pub(crate) fn mcast_groups<'t>(
+        &self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> {
+        tables.hat[self.bound].mcast_groups.iter()
     }
 }
 
@@ -104,7 +138,7 @@ impl HatBaseTrait for Hat {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
         let config = &config_guard.0;
-        let whatami = tables.whatami;
+        let whatami = tables.hat[self.bound].whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
         let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
@@ -156,7 +190,7 @@ impl HatBaseTrait for Hat {
         self.pubsub_new_face(tables, &mut face.state, send_declare);
         self.queries_new_face(tables, &mut face.state, send_declare);
         self.token_new_face(tables, &mut face.state, send_declare);
-        tables.disable_all_routes();
+        tables.hat[self.bound].disable_all_routes();
         Ok(())
     }
 
@@ -188,7 +222,7 @@ impl HatBaseTrait for Hat {
         self.pubsub_new_face(tables, &mut face.state, send_declare);
         self.queries_new_face(tables, &mut face.state, send_declare);
         self.token_new_face(tables, &mut face.state, send_declare);
-        tables.disable_all_routes();
+        tables.hat[self.bound].disable_all_routes();
 
         if face.state.whatami == WhatAmI::Peer {
             send_declare(
@@ -247,15 +281,12 @@ impl HatBaseTrait for Hat {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
+                        get_mut_unchecked(&mut match_).context_mut().hat[self.bound]
                             .disable_data_routes();
                         subs_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_data_routes();
+                get_mut_unchecked(&mut res).context_mut().hat[self.bound].disable_data_routes();
                 subs_matches.push(res);
             }
         }
@@ -269,15 +300,12 @@ impl HatBaseTrait for Hat {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
+                        get_mut_unchecked(&mut match_).context_mut().hat[self.bound]
                             .disable_query_routes();
                         qabls_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_query_routes();
+                get_mut_unchecked(&mut res).context_mut().hat[self.bound].disable_query_routes();
                 qabls_matches.push(res);
             }
         }
@@ -288,18 +316,14 @@ impl HatBaseTrait for Hat {
         }
 
         for mut res in subs_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_data_routes();
+            get_mut_unchecked(&mut res).context_mut().hat[self.bound].disable_data_routes();
             Resource::clean(&mut res);
         }
         for mut res in qabls_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_query_routes();
+            get_mut_unchecked(&mut res).context_mut().hat[self.bound].disable_query_routes();
             Resource::clean(&mut res);
         }
-        tables.faces.remove(&face.id);
+        self.faces_mut(tables).remove(&face.id);
 
         if face.whatami != WhatAmI::Client {
             if let Some(net) = self.gossip.as_mut() {

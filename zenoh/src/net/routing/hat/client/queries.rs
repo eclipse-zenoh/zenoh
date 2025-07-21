@@ -86,7 +86,7 @@ impl Hat {
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        let faces = tables.faces.values().cloned();
+        let faces = self.faces(tables).values().cloned();
         for mut dst_face in faces {
             let info = self.local_qabl_info(tables, res, &dst_face);
             let current = face_hat!(dst_face).local_qabls.get(res);
@@ -184,7 +184,7 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables.faces.values_mut() {
+        for face in self.faces_mut(tables).values_mut() {
             if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -273,8 +273,8 @@ impl Hat {
         _face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables
-            .faces
+        for face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -324,7 +324,7 @@ impl HatQueriesTrait for Hat {
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
-        for src_face in tables.faces.values() {
+        for src_face in self.faces(tables).values() {
             for qabl in face_hat!(src_face).remote_qabls.values() {
                 // Insert the key in the list of known queryables
                 let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
@@ -341,7 +341,7 @@ impl HatQueriesTrait for Hat {
 
     fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
+        for face in self.faces(tables).values() {
             for interest in face_hat!(face).remote_interests.values() {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
@@ -385,8 +385,8 @@ impl HatQueriesTrait for Hat {
         };
 
         if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
+            for face in self
+                .faces(tables)
                 .values()
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
@@ -455,8 +455,8 @@ impl HatQueriesTrait for Hat {
             key_expr,
             complete
         );
-        for face in tables
-            .faces
+        for face in self
+            .faces(tables)
             .values()
             .filter(|f| f.whatami != WhatAmI::Client)
         {

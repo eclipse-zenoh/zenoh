@@ -86,8 +86,8 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
+        for mut dst_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -166,7 +166,7 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables.faces.values_mut() {
+        for face in self.faces_mut(tables).values_mut() {
             if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -250,8 +250,8 @@ impl Hat {
         send_declare: &mut SendDeclare,
     ) {
         let sub_info = SubscriberInfo;
-        for src_face in tables
-            .faces
+        for src_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -299,7 +299,7 @@ impl HatPubSubTrait for Hat {
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known suscriptions (keys)
         let mut subs = HashMap::new();
-        for src_face in tables.faces.values() {
+        for src_face in self.faces(tables).values() {
             for sub in face_hat!(src_face).remote_subs.values() {
                 // Insert the key in the list of known suscriptions
                 let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
@@ -316,7 +316,7 @@ impl HatPubSubTrait for Hat {
 
     fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
+        for face in self.faces(tables).values() {
             for interest in face_hat!(face).remote_interests.values() {
                 if interest.options.subscribers() {
                     if let Some(res) = interest.res.as_ref() {
@@ -360,8 +360,8 @@ impl HatPubSubTrait for Hat {
         };
 
         if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
+            for face in self
+                .faces(tables)
                 .values()
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
@@ -421,8 +421,8 @@ impl HatPubSubTrait for Hat {
         }
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
 
-        for face in tables
-            .faces
+        for face in self
+            .faces(tables)
             .values()
             .filter(|f| f.whatami != WhatAmI::Client)
         {

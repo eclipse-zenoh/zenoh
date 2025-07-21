@@ -26,7 +26,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, Hat};
+use super::{face_hat, face_hat_mut, Hat};
 use crate::net::{
     protocol::network::Network,
     routing::{
@@ -50,7 +50,7 @@ impl Hat {
     ) {
         for child in clildren {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .map(|src_face| someface.id != src_face.id)
@@ -149,12 +149,7 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
+        for mut dst_face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
             self.propagate_simple_token_to(tables, &mut dst_face, res, src_face, send_declare);
         }
     }
@@ -203,10 +198,10 @@ impl Hat {
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        if !res_hat!(res).router_tokens.contains(&router) {
+        if !self.res_hat(res).router_tokens.contains(&router) {
             // Register router liveliness
             {
-                res_hat_mut!(res).router_tokens.insert(router);
+                self.res_hat_mut(res).router_tokens.insert(router);
                 self.router_tokens.insert(res.clone());
             }
 
@@ -273,7 +268,8 @@ impl Hat {
     #[inline]
     fn remote_router_tokens(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
-            && res_hat!(res)
+            && self
+                .res_hat(res)
                 .router_tokens
                 .iter()
                 .any(|peer| peer != &tables.zid)
@@ -317,7 +313,7 @@ impl Hat {
     ) {
         for child in clildren {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .map(|src_face| someface.id != src_face.id)
@@ -359,7 +355,7 @@ impl Hat {
         src_face: Option<&Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut face in tables.faces.values().cloned() {
+        for mut face in self.faces(tables).values().cloned() {
             if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -480,15 +476,10 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_tokens.len() == 1
-            && res_hat!(res).router_tokens.contains(&tables.zid)
+        if self.res_hat(res).router_tokens.len() == 1
+            && self.res_hat(res).router_tokens.contains(&tables.zid)
         {
-            for mut face in tables
-                .faces
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
+            for mut face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
                 if face.whatami == WhatAmI::Peer
                     && face_hat!(face).local_tokens.contains_key(res)
                     && !res.session_ctxs.values().any(|s| {
@@ -562,11 +553,11 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        res_hat_mut!(res)
+        self.res_hat_mut(res)
             .router_tokens
             .retain(|token| token != router);
 
-        if res_hat!(res).router_tokens.is_empty() {
+        if self.res_hat(res).router_tokens.is_empty() {
             self.router_tokens.retain(|token| !Arc::ptr_eq(token, res));
 
             self.propagate_forget_simple_token(tables, res, face, send_declare);
@@ -583,7 +574,7 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_tokens.contains(router) {
+        if self.res_hat(res).router_tokens.contains(router) {
             self.unregister_router_token(tables, face, res, router, send_declare);
             self.propagate_forget_sourced_token(tables, res, face, router);
         }
@@ -713,7 +704,7 @@ impl Hat {
         for mut res in self
             .router_tokens
             .iter()
-            .filter(|res| res_hat!(res).router_tokens.contains(node))
+            .filter(|res| self.res_hat(res).router_tokens.contains(node))
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
@@ -738,7 +729,7 @@ impl Hat {
                     let tokens_res = &self.router_tokens;
 
                     for res in tokens_res {
-                        let tokens = &res_hat!(res).router_tokens;
+                        let tokens = &self.res_hat(res).router_tokens;
                         for token in tokens {
                             if *token == tree_id {
                                 self.send_sourced_token_to_net_clildren(
@@ -819,7 +810,8 @@ impl Hat {
                     for token in &self.router_tokens {
                         if token.context.is_some()
                             && token.matches(res)
-                            && (res_hat!(token)
+                            && (self
+                                .res_hat(token)
                                 .router_tokens
                                 .iter()
                                 .any(|r| *r != tables.zid)
@@ -858,7 +850,8 @@ impl Hat {
             } else {
                 for token in &self.router_tokens {
                     if token.context.is_some()
-                        && (res_hat!(token)
+                        && (self
+                            .res_hat(token)
                             .router_tokens
                             .iter()
                             .any(|r| *r != tables.zid)

@@ -45,6 +45,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::gateway::Bound,
     runtime::Runtime,
 };
 
@@ -275,11 +276,15 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, _config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(
+    whatami: WhatAmI,
+    _config: &Config,
+    bound: Bound,
+) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::Hat::new()),
-        WhatAmI::Peer => Box::new(p2p_peer::Hat::new()),
-        WhatAmI::Router => Box::new(router::Hat::new()),
+        WhatAmI::Client => Box::new(client::Hat::new(bound)),
+        WhatAmI::Peer => Box::new(p2p_peer::Hat::new(bound)),
+        WhatAmI::Router => Box::new(router::Hat::new(bound)),
     }
 }
 

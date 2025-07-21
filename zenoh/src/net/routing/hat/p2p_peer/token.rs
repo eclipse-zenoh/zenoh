@@ -148,8 +148,8 @@ impl Hat {
         interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
+        for mut dst_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
@@ -275,7 +275,7 @@ impl Hat {
         src_face: &Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut face in tables.faces.values().cloned() {
+        for mut face in self.faces(tables).values().cloned() {
             if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -483,8 +483,8 @@ impl Hat {
         send_declare: &mut SendDeclare,
     ) {
         if face.whatami != WhatAmI::Client {
-            for mut src_face in tables
-                .faces
+            for mut src_face in self
+                .faces(tables)
                 .values()
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
@@ -539,7 +539,7 @@ impl Hat {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if tables.faces.values().any(|src_face| {
+                    if self.faces(tables).values().any(|src_face| {
                         face_hat!(src_face)
                             .remote_tokens
                             .values()
@@ -563,8 +563,8 @@ impl Hat {
                         );
                     }
                 } else {
-                    for src_face in tables
-                        .faces
+                    for src_face in self
+                        .faces(tables)
                         .values()
                         .filter(|f| f.whatami != WhatAmI::Router)
                         .cloned()
@@ -599,8 +599,8 @@ impl Hat {
                     }
                 }
             } else {
-                for src_face in tables
-                    .faces
+                for src_face in self
+                    .faces(tables)
                     .values()
                     .filter(|f| f.whatami != WhatAmI::Router)
                     .cloned()

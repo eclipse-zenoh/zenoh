@@ -44,9 +44,9 @@ use super::{
     tables::TablesLock,
 };
 use crate::net::{
-    primitives::{McastMux, Mux, Primitives},
+    primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
-        dispatcher::interests::finalize_pending_interests,
+        dispatcher::{gateway::Bound, interests::finalize_pending_interests},
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -64,6 +64,7 @@ pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) bound: Bound,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -81,25 +82,21 @@ pub struct FaceState {
     pub(crate) is_local: bool,
 }
 
-impl FaceState {
-    #[allow(clippy::too_many_arguments)] // @TODO fix warning
+pub(crate) struct FaceStateBuilder(FaceState);
+
+impl FaceStateBuilder {
     pub(crate) fn new(
         id: usize,
         zid: ZenohIdProto,
-        whatami: WhatAmI,
-        #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
-        primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
-        mcast_group: Option<TransportMulticast>,
-        in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+        bound: Bound,
+        primitives: Arc<dyn EPrimitives + Send + Sync>,
         hat: Box<dyn Any + Send + Sync>,
-        is_local: bool,
-    ) -> Arc<FaceState> {
-        Arc::new(FaceState {
+    ) -> Self {
+        FaceStateBuilder(FaceState {
             id,
             zid,
-            whatami,
-            #[cfg(feature = "stats")]
-            stats,
+            whatami: WhatAmI::default(),
+            bound,
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
@@ -108,14 +105,51 @@ impl FaceState {
             remote_mappings: ahash::HashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
-            mcast_group,
-            in_interceptors,
+            mcast_group: None,
+            in_interceptors: None,
             hat,
             task_controller: TaskController::default(),
-            is_local,
+            is_local: false,
+            #[cfg(feature = "stats")]
+            stats: None,
         })
     }
 
+    pub(crate) fn whatami(mut self, whatami: WhatAmI) -> Self {
+        self.0.whatami = whatami;
+        self
+    }
+
+    pub(crate) fn ingress_interceptors(
+        mut self,
+        in_interceptors: Arc<ArcSwap<InterceptorsChain>>,
+    ) -> Self {
+        self.0.in_interceptors = Some(in_interceptors);
+        self
+    }
+
+    pub(crate) fn multicast_groups(mut self, mcast_group: TransportMulticast) -> Self {
+        self.0.mcast_group = Some(mcast_group);
+        self
+    }
+
+    pub(crate) fn local(mut self, is_local: bool) -> Self {
+        self.0.is_local = is_local;
+        self
+    }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn stats(mut self, stats: Arc<TransportStats>) -> Self {
+        self.0.stats = Some(stats);
+        self
+    }
+
+    pub(crate) fn build(self) -> FaceState {
+        self.0
+    }
+}
+
+impl FaceState {
     #[inline]
     pub(crate) fn get_mapping(
         &self,
@@ -431,7 +465,8 @@ impl Primitives for Face {
                         declares.push((p.clone(), m))
                     });
 
-                    wtables.data.disable_all_routes();
+                    // FIXME(fuzzypixelz): uncomment this
+                    // wtables.data.disable_all_routes();
 
                     drop(wtables);
                     drop(ctrl_lock);
@@ -476,7 +511,7 @@ impl Primitives for Face {
         });
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
-        tables.hat.close_face(
+        tables.hat[self.state.bound].close_face(
             &mut tables.data,
             &self.tables.clone(),
             &mut state,

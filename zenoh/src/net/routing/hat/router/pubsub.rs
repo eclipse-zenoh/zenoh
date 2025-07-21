@@ -30,7 +30,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, res_hat, res_hat_mut, Hat};
+use super::{face_hat, face_hat_mut, Hat};
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::{
@@ -64,7 +64,7 @@ impl Hat {
     ) {
         for child in children {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .map(|src_face| someface.id != src_face.id)
@@ -164,12 +164,7 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
+        for mut dst_face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
             self.propagate_simple_subscription_to(
                 &mut dst_face,
                 res,
@@ -227,10 +222,10 @@ impl Hat {
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        if !res_hat!(res).router_subs.contains(&router) {
+        if !self.res_hat(res).router_subs.contains(&router) {
             // Register router subscription
             {
-                res_hat_mut!(res).router_subs.insert(router);
+                self.res_hat_mut(res).router_subs.insert(router);
                 self.router_subs.insert(res.clone());
             }
 
@@ -300,7 +295,8 @@ impl Hat {
     #[inline]
     fn remote_router_subs(&self, tables: &TablesData, res: &Arc<Resource>) -> bool {
         res.context.is_some()
-            && res_hat!(res)
+            && self
+                .res_hat(res)
                 .router_subs
                 .iter()
                 .any(|peer| peer != &tables.zid)
@@ -339,7 +335,7 @@ impl Hat {
     ) {
         for child in children {
             if net.graph.contains_node(*child) {
-                match tables.get_face(&net.graph[*child].zid).cloned() {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
                         if src_face
                             .map(|src_face| someface.id != src_face.id)
@@ -380,7 +376,7 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut face in tables.faces.values().cloned() {
+        for mut face in self.faces(tables).values().cloned() {
             if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(res) {
                 send_declare(
                     &face.primitives,
@@ -441,13 +437,11 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_subs.len() == 1 && res_hat!(res).router_subs.contains(&tables.zid) {
-            for mut face in tables
-                .faces
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
+        if self.res_hat(res).router_subs.len() == 1
+            && self.res_hat(res).router_subs.contains(&tables.zid)
+        {
+            // REVIEW(fuzzpixelz): is this collect necessary?
+            for mut face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
                 if face.whatami == WhatAmI::Peer
                     && face_hat!(face).local_subs.contains_key(res)
                     && !res.session_ctxs.values().any(|s| {
@@ -522,9 +516,11 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        res_hat_mut!(res).router_subs.retain(|sub| sub != router);
+        self.res_hat_mut(res)
+            .router_subs
+            .retain(|sub| sub != router);
 
-        if res_hat!(res).router_subs.is_empty() {
+        if self.res_hat(res).router_subs.is_empty() {
             self.router_subs.retain(|sub| !Arc::ptr_eq(sub, res));
 
             self.propagate_forget_simple_subscription(tables, res, send_declare);
@@ -541,7 +537,7 @@ impl Hat {
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
     ) {
-        if res_hat!(res).router_subs.contains(router) {
+        if self.res_hat(res).router_subs.contains(router) {
             self.unregister_router_subscription(tables, res, router, send_declare);
             self.propagate_forget_sourced_subscription(tables, res, face, router);
         }
@@ -667,7 +663,7 @@ impl Hat {
         for mut res in self
             .router_subs
             .iter()
-            .filter(|res| res_hat!(res).router_subs.contains(node))
+            .filter(|res| self.res_hat(res).router_subs.contains(node))
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
@@ -694,7 +690,7 @@ impl Hat {
                     let subs_res = &self.router_subs;
 
                     for res in subs_res {
-                        let subs = &res_hat!(res).router_subs;
+                        let subs = &self.res_hat(res).router_subs;
                         for sub in subs {
                             if *sub == tree_id {
                                 let sub_info = SubscriberInfo;
@@ -780,7 +776,11 @@ impl Hat {
                     for sub in &self.router_subs {
                         if sub.context.is_some()
                             && sub.matches(res)
-                            && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
+                            && (self
+                                .res_hat(sub)
+                                .router_subs
+                                .iter()
+                                .any(|r| *r != tables.zid)
                                 || sub.session_ctxs.values().any(|s| {
                                     s.face.id != face.id
                                         && s.subs.is_some()
@@ -813,7 +813,11 @@ impl Hat {
             } else {
                 for sub in &self.router_subs {
                     if sub.context.is_some()
-                        && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
+                        && (self
+                            .res_hat(sub)
+                            .router_subs
+                            .iter()
+                            .any(|r| *r != tables.zid)
                             || sub.session_ctxs.values().any(|s| {
                                 s.subs.is_some()
                                     && (s.face.whatami != WhatAmI::Peer
@@ -916,7 +920,7 @@ impl HatPubSubTrait for Hat {
                     // Compute the list of routers, peers and clients that are known
                     // sources of those subscriptions
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
+                        routers: Vec::from_iter(self.res_hat(s).router_subs.iter().cloned()),
                         peers: s
                             .session_ctxs
                             .values()
@@ -941,7 +945,7 @@ impl HatPubSubTrait for Hat {
 
     fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
+        for face in self.faces(tables).values() {
             for interest in face_hat!(face).remote_interests.values() {
                 if interest.options.subscribers() {
                     if let Some(res) = interest.res.as_ref() {
@@ -967,6 +971,7 @@ impl HatPubSubTrait for Hat {
     ) -> Arc<Route> {
         #[inline]
         fn insert_faces_for_subs(
+            this: &Hat,
             route: &mut Route,
             expr: &RoutingExpr,
             tables: &TablesData,
@@ -982,7 +987,8 @@ impl HatPubSubTrait for Hat {
                                 net.trees[source as usize].directions[sub_idx.index()]
                             {
                                 if net.graph.contains_node(direction) {
-                                    if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                    if let Some(face) = this.face(tables, &net.graph[direction].zid)
+                                    {
                                         route.entry(face.id).or_insert_with(|| {
                                             let key_expr = Resource::get_best_key(
                                                 expr.prefix,
@@ -1036,12 +1042,13 @@ impl HatPubSubTrait for Hat {
                 _ => net.idx.index() as NodeId,
             };
             insert_faces_for_subs(
+                self,
                 &mut route,
                 expr,
                 tables,
                 net,
                 router_source,
-                &res_hat!(mres).router_subs,
+                &self.res_hat(&mres).router_subs,
             );
 
             for (sid, context) in &mres.session_ctxs {
@@ -1053,7 +1060,7 @@ impl HatPubSubTrait for Hat {
                 }
             }
         }
-        for mcast_group in &tables.mcast_groups {
+        for mcast_group in self.mcast_groups(tables) {
             route.insert(
                 mcast_group.id,
                 (
@@ -1074,6 +1081,7 @@ impl HatPubSubTrait for Hat {
     ) -> HashMap<usize, Arc<FaceState>> {
         #[inline]
         fn insert_faces_for_subs(
+            this: &Hat,
             route: &mut HashMap<usize, Arc<FaceState>>,
             tables: &TablesData,
             net: &Network,
@@ -1086,7 +1094,8 @@ impl HatPubSubTrait for Hat {
                         if net.trees[source].directions.len() > sub_idx.index() {
                             if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
                                 if net.graph.contains_node(direction) {
-                                    if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                    if let Some(face) = this.face(tables, &net.graph[direction].zid)
+                                    {
                                         route.entry(face.id).or_insert_with(|| face.clone());
                                     }
                                 }
@@ -1117,11 +1126,12 @@ impl HatPubSubTrait for Hat {
 
             let net = self.routers_net.as_ref().unwrap();
             insert_faces_for_subs(
+                self,
                 &mut matching_subscriptions,
                 tables,
                 net,
                 net.idx.index(),
-                &res_hat!(mres).router_subs,
+                &self.res_hat(&mres).router_subs,
             );
 
             for (sid, context) in &mres.session_ctxs {
