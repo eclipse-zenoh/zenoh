@@ -191,7 +191,6 @@ impl<Handler, const BACKGROUND: bool> SubscriberBuilder<'_, '_, Handler, BACKGRO
     ///
     /// Restricts the matching publications that will be receive by this [`Subscriber`] to the ones
     /// that have the given [`crate::sample::Locality`].
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;

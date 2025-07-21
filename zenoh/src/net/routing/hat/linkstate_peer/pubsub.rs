@@ -34,21 +34,22 @@ use super::{
     face_hat, face_hat_mut, get_peer, hat, hat_mut, push_declaration_profile, res_hat, res_hat_mut,
     HatCode, HatContext, HatFace, HatTables,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::network::Network,
-    routing::{
-        dispatcher::{
-            face::FaceState,
-            interests::RemoteInterest,
-            pubsub::SubscriberInfo,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::network::Network,
+        routing::{
+            dispatcher::{
+                face::FaceState,
+                interests::RemoteInterest,
+                pubsub::SubscriberInfo,
+                resource::{NodeId, Resource, SessionContext},
+                tables::{Route, RoutingExpr, Tables},
+            },
+            hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+            router::disable_matches_data_routes,
+            RoutingContext,
         },
-        hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-        router::disable_matches_data_routes,
-        RoutingContext,
     },
 };
 
@@ -986,7 +987,6 @@ impl HatPubSubTrait for HatCode {
         Arc::new(route)
     }
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,

@@ -695,7 +695,6 @@ impl HatPubSubTrait for HatCode {
         Arc::new(route)
     }
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,

@@ -227,14 +227,12 @@ pub mod session {
 /// or [`Queryable`](crate::query::Queryable) instances. It contains the payload and all the metadata associated with the data.
 pub mod sample {
     #[zenoh_macros::unstable]
-    pub use crate::api::sample::Locality;
-    #[zenoh_macros::unstable]
     pub use crate::api::sample::{SourceInfo, SourceSn};
     pub use crate::api::{
         builders::sample::{
             SampleBuilder, SampleBuilderAny, SampleBuilderDelete, SampleBuilderPut,
         },
-        sample::{Sample, SampleFields, SampleKind},
+        sample::{Locality, Sample, SampleFields, SampleKind},
     };
 }
 
@@ -292,25 +290,21 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
-    #[zenoh_macros::unstable]
-    pub use crate::api::{
-        builders::querier::{QuerierBuilder, QuerierGetBuilder},
-        querier::Querier,
-        query::ReplyKeyExpr,
-        selector::ZenohParameters,
-    };
     pub use crate::api::{
         builders::{
+            querier::{QuerierBuilder, QuerierGetBuilder},
             queryable::QueryableBuilder,
             reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
+        querier::Querier,
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
         queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
+    #[zenoh_macros::unstable]
+    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
-#[zenoh_macros::unstable]
 pub mod matching {
     pub use crate::api::{
         builders::matching_listener::MatchingListenerBuilder,
