@@ -28,13 +28,20 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZeroU16, ops,
-    path::Path, sync::Weak,
+    any::Any,
+    collections::HashSet,
+    fmt,
+    io::Read,
+    net::SocketAddr,
+    num::NonZeroU16,
+    ops::{self, Bound, RangeBounds},
+    path::Path,
+    sync::Weak,
 };
 
 use include::recursive_include;
 use nonempty_collections::NEVec;
-use qos::{PublisherQoSConfList, QosOverwriteMessage, QosOverwrites};
+use qos::{PublisherQoSConfList, QosFilter, QosOverwriteMessage, QosOverwrites};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -176,6 +183,80 @@ pub struct AclConfigSubjects {
     pub link_protocols: Option<NEVec<InterceptorLink>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfRange {
+    start: Option<u64>,
+    end: Option<u64>,
+}
+
+impl ConfRange {
+    pub fn new(start: Option<u64>, end: Option<u64>) -> Self {
+        Self { start, end }
+    }
+}
+
+impl RangeBounds<u64> for ConfRange {
+    fn start_bound(&self) -> Bound<&u64> {
+        match self.start {
+            Some(ref start) => Bound::Included(start),
+            None => Bound::Unbounded,
+        }
+    }
+    fn end_bound(&self) -> Bound<&u64> {
+        match self.end {
+            Some(ref end) => Bound::Included(end),
+            None => Bound::Unbounded,
+        }
+    }
+}
+
+impl serde::Serialize for ConfRange {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!(
+            "{}..{}",
+            self.start.unwrap_or_default(),
+            self.end.unwrap_or_default()
+        ))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ConfRange {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct V;
+
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = ConfRange;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("range string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let (start, end) = v
+                    .split_once("..")
+                    .ok_or_else(|| serde::de::Error::custom("invalid range"))?;
+                let parse_bound = |bound: &str| {
+                    (!bound.is_empty())
+                        .then(|| bound.parse::<u64>())
+                        .transpose()
+                        .map_err(|_| serde::de::Error::custom("invalid range bound"))
+                };
+                Ok(ConfRange::new(parse_bound(start)?, parse_bound(end)?))
+            }
+        }
+        deserializer.deserialize_str(V)
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct QosOverwriteItemConf {
@@ -197,6 +278,10 @@ pub struct QosOverwriteItemConf {
     pub overwrite: QosOverwrites,
     /// QosOverwrite flow directions: egress and/or ingress.
     pub flows: Option<NEVec<InterceptorFlow>>,
+    /// QoS filter to apply to the messages matching this item.
+    pub qos: Option<QosFilter>,
+    /// payload_size range for the messages matching this item.
+    pub payload_size: Option<ConfRange>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -893,6 +978,190 @@ fn config_deser() {
             .unwrap(),
     )
         .unwrap_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: "foo",
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    );
+    assert!(config.is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: +8,
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    );
+    assert!(config.is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: "data_high",
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().overwrite.priority,
+        Some(qos::PriorityUpdateConf::Priority(
+            qos::PriorityConf::DataHigh
+        ))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    overwrite: {
+                      priority: +1,
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().overwrite.priority,
+        Some(qos::PriorityUpdateConf::Increment(1))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    payload_size: "0..99",
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .qos()
+            .network()
+            .first()
+            .unwrap()
+            .payload_size
+            .as_ref()
+            .map(|r| (r.start_bound(), r.end_bound())),
+        Some((Bound::Included(&0), Bound::Included(&99)))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    payload_size: "100..",
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .qos()
+            .network()
+            .first()
+            .unwrap()
+            .payload_size
+            .as_ref()
+            .map(|r| (r.start_bound(), r.end_bound())),
+        Some((Bound::Included(&100), Bound::Unbounded))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    key_exprs: [],
+                    messages: ["put"],
+                    qos: {
+                      congestion_control: "drop",
+                      priority: "data",
+                      express: true,
+                      reliability: "reliable",
+                    },
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().qos,
+        Some(QosFilter {
+            congestion_control: Some(qos::CongestionControlConf::Drop),
+            priority: Some(qos::PriorityConf::Data),
+            express: Some(true),
+            reliability: Some(qos::ReliabilityConf::Reliable),
+        })
+    );
+
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
