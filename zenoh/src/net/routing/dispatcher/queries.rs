@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
-use std::collections::HashMap;
 use std::{
+    collections::HashMap,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -40,10 +39,12 @@ use super::{
     resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
-use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::{get_or_set_route, QueryRouteBuilder},
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        hat::{HatTrait, SendDeclare},
+        router::{get_or_set_route, QueryRouteBuilder},
+    },
 };
 
 pub(crate) struct Query {
