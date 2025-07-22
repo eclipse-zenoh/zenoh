@@ -32,7 +32,10 @@ transport_udp = ["zenoh-link-udp"]
 transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
 transport_ws = ["zenoh-link-ws"]
 transport_serial = ["zenoh-link-serial"]
-transport_unixpipe = ["zenoh-link-unixpipe", "zenoh-link-unixpipe/transport_unixpipe"]
+transport_unixpipe = [
+  "zenoh-link-unixpipe",
+  "zenoh-link-unixpipe/transport_unixpipe",
+]
 transport_vsock = ["zenoh-link-vsock"]
 
 [dependencies]

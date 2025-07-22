@@ -38,5 +38,10 @@ zenoh-collections = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = [
+  "macros",
+  "sync",
+  "rt-multi-thread",
+  "time",
+] }
 zenoh-result = { workspace = true }

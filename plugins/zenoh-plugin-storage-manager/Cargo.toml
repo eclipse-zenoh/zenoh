@@ -46,9 +46,9 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zenoh = { workspace = true, default-features = false, features = [
-    "plugins",
-    "internal",
-    "unstable",
+  "plugins",
+  "internal",
+  "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
 zenoh_backend_traits = { workspace = true }

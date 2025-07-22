@@ -28,13 +28,13 @@ default = ["std"]
 unstable = []
 internal = []
 std = [
-    "rand?/std",
-    "rand?/std_rng",
-    "serde/std",
-    "uhlc/std",
-    "zenoh-keyexpr/std",
-    "zenoh-result/std",
-    "zenoh-buffers/std",
+  "rand?/std",
+  "rand?/std_rng",
+  "serde/std",
+  "uhlc/std",
+  "zenoh-keyexpr/std",
+  "zenoh-result/std",
+  "zenoh-buffers/std",
 ]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
 test = ["rand", "zenoh-buffers/test"]

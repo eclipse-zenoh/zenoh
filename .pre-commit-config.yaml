@@ -14,8 +14,13 @@
 repos:
   - repo: local
     hooks:
-      - id: fmt
-        name: fmt
+      - id: fmt-rust
+        name: fmt-rust
         entry: bash -c 'rustfmt --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')'
         language: system
         types: [rust]
+      - id: fmt-toml
+        name: fmt-toml
+        entry: taplo fmt
+        language: system
+        types: [toml]

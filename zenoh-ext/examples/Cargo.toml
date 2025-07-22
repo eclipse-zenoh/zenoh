@@ -35,14 +35,16 @@ unstable = []
 clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 tokio = { workspace = true, features = [
-    "rt",
-    "sync",
-    "time",
-    "macros",
-    "io-std",
+  "rt",
+  "sync",
+  "time",
+  "macros",
+  "io-std",
 ] }
 zenoh = { workspace = true, default-features = false }
-zenoh-ext = { workspace = true, default-features = false, features = ["unstable"]}
+zenoh-ext = { workspace = true, default-features = false, features = [
+  "unstable",
+] }
 zenoh-examples = { workspace = true, default-features = false }
 
 [dev-dependencies]
