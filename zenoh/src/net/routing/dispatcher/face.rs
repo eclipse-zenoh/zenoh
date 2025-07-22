@@ -20,9 +20,9 @@ use std::{
     time::Duration,
 };
 
-use ahash::HashMapExt;
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
+use zenoh_collections::IntHashMap;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
@@ -70,8 +70,8 @@ pub struct FaceState {
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
-    pub(crate) local_mappings: ahash::HashMap<ExprId, Arc<Resource>>,
-    pub(crate) remote_mappings: ahash::HashMap<ExprId, Arc<Resource>>,
+    pub(crate) local_mappings: IntHashMap<ExprId, Arc<Resource>>,
+    pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
@@ -104,8 +104,8 @@ impl FaceState {
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
             pending_current_interests: HashMap::new(),
-            local_mappings: ahash::HashMap::new(),
-            remote_mappings: ahash::HashMap::new(),
+            local_mappings: IntHashMap::new(),
+            remote_mappings: IntHashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
