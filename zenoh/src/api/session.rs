@@ -2328,10 +2328,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(zenoh_protocol::core::EntityGlobalIdProto {
-                                        zid: session.zid().into(),
-                                        eid: session.id.into(),
-                                    }),
+                                    replier_id: None
                                 });
                             }
                         }
@@ -2430,10 +2427,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(zenoh_protocol::core::EntityGlobalIdProto {
-                                        zid: session.zid().into(),
-                                        eid: session.id.into(),
-                                    }),
+                                    replier_id: None
                                 });
                             }
                         }
