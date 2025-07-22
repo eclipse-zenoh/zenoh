@@ -23,7 +23,7 @@ use std::{
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
 
-use crate::common::{open_mode, open_router};
+use crate::common::{open_router, open_with_mode};
 
 const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -53,7 +53,7 @@ async fn time_open(endpoint: &EndPoint, connect_mode: WhatAmI, lowlatency: bool)
     /* [APP] */
     /* [1] */
     // Open a transport from the app to the router
-    let app_cfg = open_mode(connect_mode)
+    let app_cfg = open_with_mode(connect_mode)
         .connect_to(&router)
         .with("transport/unicast/lowlatency", lowlatency)
         .with("transport/unicast/qos", !lowlatency);

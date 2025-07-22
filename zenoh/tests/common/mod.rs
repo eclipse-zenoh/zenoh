@@ -24,20 +24,20 @@ use zenoh::{
     Resolvable, Session, Wait,
 };
 
-pub fn open_mode(mode: WhatAmI) -> TestOpenBuilder {
+pub fn open_with_mode(mode: WhatAmI) -> TestOpenBuilder {
     TestOpenBuilder::new(mode)
 }
 
 pub fn open_client() -> TestOpenBuilder {
-    open_mode(WhatAmI::Client)
+    open_with_mode(WhatAmI::Client)
 }
 
 pub fn open_peer() -> TestOpenBuilder {
-    open_mode(WhatAmI::Peer)
+    open_with_mode(WhatAmI::Peer)
 }
 
 pub fn open_router() -> TestOpenBuilder {
-    open_mode(WhatAmI::Router)
+    open_with_mode(WhatAmI::Router)
 }
 
 #[derive(Debug)]
