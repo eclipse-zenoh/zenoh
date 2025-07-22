@@ -125,8 +125,9 @@ zenoh-task = { workspace = true }
 once_cell = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
 libc = { workspace = true }
+tokio = { workspace = true }
+zenoh-protocol = { workspace = true, features = ["test"] }
 
 [build-dependencies]
 rustc_version = { workspace = true }
