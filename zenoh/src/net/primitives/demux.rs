@@ -89,7 +89,7 @@ impl InterceptorContext for DeMuxContext<'_> {
         self.expr.get().map(|x| x.as_str())
     }
     fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
-        if self.cache.get().is_none() {
+        if self.cache.get().is_none() && msg.wire_expr().is_some_and(|we| !we.has_suffix()) {
             if let Some(prefix) = self.prefix(msg) {
                 if let Some(cache) =
                     prefix.get_ingress_cache(&self.demux.face, &self.demux.interceptor.load())

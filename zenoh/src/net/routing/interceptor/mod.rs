@@ -180,6 +180,7 @@ impl InterceptorTrait for InterceptorsChain {
                 tracing::trace!("Msg intercepted!");
                 return false;
             }
+            ctx.index += 1;
         }
         true
     }
