@@ -424,7 +424,6 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &Tables,

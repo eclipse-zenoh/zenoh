@@ -39,11 +39,12 @@ use super::{
     resource::{QueryRoute, QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, Tables, TablesLock},
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::get_or_set_route,
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        hat::{HatTrait, SendDeclare},
+        router::get_or_set_route,
+    },
 };
 
 pub(crate) struct Query {
@@ -51,7 +52,6 @@ pub(crate) struct Query {
     src_qid: RequestId,
 }
 
-#[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_matching_queryables(
     hat_code: &(dyn HatTrait + Send + Sync),

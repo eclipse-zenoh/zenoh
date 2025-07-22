@@ -43,20 +43,17 @@ use super::{
 /// let matching_status = publisher.matching_status().await.unwrap();
 /// # }
 /// ```
-#[zenoh_macros::unstable]
 #[derive(Copy, Clone, Debug)]
 pub struct MatchingStatus {
     pub(crate) matching: bool,
 }
 
-#[cfg(feature = "unstable")]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum MatchingStatusType {
     Subscribers,
     Queryables(bool),
 }
 
-#[zenoh_macros::unstable]
 impl MatchingStatus {
     /// Return true if there exist entities matching the target (i.e either Subscribers matching Publisher's key expression or Queryables matching Querier's key expression and target).
     ///
@@ -78,7 +75,7 @@ impl MatchingStatus {
         self.matching
     }
 }
-#[zenoh_macros::unstable]
+
 pub(crate) struct MatchingListenerState {
     pub(crate) id: Id,
     pub(crate) current: Mutex<bool>,
@@ -88,7 +85,6 @@ pub(crate) struct MatchingListenerState {
     pub(crate) callback: Callback<MatchingStatus>,
 }
 
-#[cfg(feature = "unstable")]
 impl MatchingListenerState {
     pub(crate) fn is_matching(&self, key_expr: &KeyExpr, match_type: MatchingStatusType) -> bool {
         match match_type {
@@ -110,7 +106,6 @@ impl MatchingListenerState {
     }
 }
 
-#[zenoh_macros::unstable]
 impl fmt::Debug for MatchingListenerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MatchingListener")
@@ -121,7 +116,6 @@ impl fmt::Debug for MatchingListenerState {
     }
 }
 
-#[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerInner {
     pub(crate) session: WeakSession,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
@@ -153,13 +147,11 @@ pub(crate) struct MatchingListenerInner {
 /// }
 /// # }
 /// ```
-#[zenoh_macros::unstable]
 pub struct MatchingListener<Handler> {
     pub(crate) inner: MatchingListenerInner,
     pub(crate) handler: Handler,
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> MatchingListener<Handler> {
     /// Undeclare the [`MatchingListener`].
     ///
@@ -197,7 +189,6 @@ impl<Handler> MatchingListener<Handler> {
     }
 }
 
-#[cfg(feature = "unstable")]
 impl<Handler> Drop for MatchingListener<Handler> {
     fn drop(&mut self) {
         if self.inner.undeclare_on_drop {
@@ -208,7 +199,6 @@ impl<Handler> Drop for MatchingListener<Handler> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler: Send> UndeclarableSealed<()> for MatchingListener<Handler> {
     type Undeclaration = MatchingListenerUndeclaration<Handler>;
 
@@ -217,7 +207,6 @@ impl<Handler: Send> UndeclarableSealed<()> for MatchingListener<Handler> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> std::ops::Deref for MatchingListener<Handler> {
     type Target = Handler;
 
@@ -225,29 +214,25 @@ impl<Handler> std::ops::Deref for MatchingListener<Handler> {
         &self.handler
     }
 }
-#[zenoh_macros::unstable]
+
 impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.handler
     }
 }
 
-#[zenoh_macros::unstable]
 pub struct MatchingListenerUndeclaration<Handler>(MatchingListener<Handler>);
 
-#[zenoh_macros::unstable]
 impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {
     type To = ZResult<()>;
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> Wait for MatchingListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.0.undeclare_impl()
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> IntoFuture for MatchingListenerUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;

@@ -26,11 +26,11 @@ use std::{
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 #[cfg(feature = "unstable")]
 use zenoh::qos::Reliability;
-#[cfg(feature = "unstable")]
-use zenoh::query::Querier;
 #[cfg(all(feature = "internal", feature = "unstable"))]
 use zenoh::Wait;
-use zenoh::{key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
+use zenoh::{
+    key_expr::KeyExpr, qos::CongestionControl, query::Querier, sample::SampleKind, Session,
+};
 use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;
@@ -179,12 +179,10 @@ impl HasGet for SessionGetter<'_, '_> {
     }
 }
 
-#[cfg(feature = "unstable")]
 struct QuerierGetter<'a> {
     querier: Querier<'a>,
 }
 
-#[cfg(feature = "unstable")]
 impl HasGet for QuerierGetter<'_> {
     async fn get(&self, params: &str) -> zenoh::handlers::FifoChannelHandler<zenoh::query::Reply> {
         ztimeout!(self.querier.get().parameters(params)).unwrap()
@@ -322,7 +320,6 @@ async fn test_session_getrep(peer01: &Session, peer02: &Session, reliability: Re
     ))
 }
 
-#[cfg(feature = "unstable")]
 async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";
     println!("[QQ][00c] Declaring Querier on peer02 session");
@@ -344,7 +341,6 @@ async fn zenoh_session_unicast() {
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
-    #[cfg(feature = "unstable")]
     test_session_qrrep(&peer01, &peer02, Reliability::Reliable).await;
     close_session(peer01, peer02).await;
 }
@@ -452,7 +448,6 @@ async fn zenoh_session_close_in_background_sync() {
     close_task_2.wait().unwrap();
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_undeclare_subscribers_same_keyexpr() {
     let key_expr = "test/undeclare/subscribers";
@@ -464,7 +459,7 @@ async fn test_undeclare_subscribers_same_keyexpr() {
     ztimeout!(sub2.undeclare()).unwrap();
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "internal")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_session_from_cloned_config() {
     use zenoh::Config;

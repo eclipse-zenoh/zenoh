@@ -40,19 +40,20 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::{linkstate::LinkEdgeWeight, network::Network},
-    routing::{
-        dispatcher::{
-            face::FaceState,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::{linkstate::LinkEdgeWeight, network::Network},
+        routing::{
+            dispatcher::{
+                face::FaceState,
+                resource::{NodeId, Resource, SessionContext},
+                tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+            },
+            hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+            router::disable_matches_query_routes,
+            RoutingContext,
         },
-        hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-        router::disable_matches_query_routes,
-        RoutingContext,
     },
 };
 
@@ -1510,7 +1511,6 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &Tables,
@@ -1583,7 +1583,6 @@ impl HatQueriesTrait for HatCode {
     }
 }
 
-#[cfg(feature = "unstable")]
 #[inline]
 fn insert_faces_for_qbls(
     route: &mut HashMap<usize, Arc<FaceState>>,
