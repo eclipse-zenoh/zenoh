@@ -245,10 +245,11 @@ fn compute_final_route(
                 qabl.direction.0.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
             }) {
                 let mut route = QueryRouteBuilder::new();
-
-                let mut direction = qabl.direction.clone();
-                let qid = insert_pending_query(&mut direction.0, query);
-                route.insert(direction.0.id, || (direction, qid));
+                route.insert(qabl.direction.0.id, || {
+                    let mut direction = qabl.direction.clone();
+                    let qid = insert_pending_query(&mut direction.0, query);
+                    (direction, qid)
+                });
 
                 route
             } else {
