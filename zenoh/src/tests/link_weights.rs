@@ -30,10 +30,7 @@ use zenoh_protocol::{
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use crate::{
-    net::{
-        protocol::linkstate::LinkInfo,
-        routing::{interceptor::*, RoutingContext},
-    },
+    net::{protocol::linkstate::LinkInfo, routing::interceptor::*},
     Session,
 };
 
@@ -104,15 +101,11 @@ impl InterceptorTrait for LinkTraceInterceptor {
         None
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
-        _cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
+    fn intercept(&self, msg: &mut NetworkMessageMut, _ctx: &mut dyn InterceptorContext) -> bool {
         if let NetworkBodyMut::Push(&mut Push {
             payload: PushBody::Put(ref mut p),
             ..
-        }) = &mut ctx.msg.body
+        }) = &mut msg.body
         {
             let s = str::from_utf8(p.payload.to_zslice().as_slice())
                 .unwrap()
