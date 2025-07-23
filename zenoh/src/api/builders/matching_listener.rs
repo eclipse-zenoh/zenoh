@@ -71,7 +71,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     where
         F: Fn(MatchingStatus) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a mutable callback.

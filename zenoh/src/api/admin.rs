@@ -22,7 +22,11 @@ use zenoh_keyexpr::keyexpr;
 use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
-use zenoh_protocol::{core::WireExpr, network::NetworkMessageMut};
+use zenoh_protocol::{
+    core::WireExpr,
+    network::NetworkMessageMut,
+    zenoh::{Del, PushBody, Put},
+};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
@@ -33,10 +37,11 @@ use crate::{
         encoding::Encoding,
         key_expr::KeyExpr,
         queryable::Query,
-        sample::{DataInfo, Locality, SampleKind},
+        sample::{Locality, SampleKind},
         session::WeakSession,
         subscriber::SubscriberKind,
     },
+    bytes::ZBytes,
     handlers::Callback,
 };
 
@@ -75,10 +80,10 @@ pub(crate) fn init(session: WeakSession) {
             &KeyExpr::from(KE_AT / own_zid / KE_SESSION / KE_STARSTAR),
             true,
             Locality::SessionLocal,
-            Callback::new(Arc::new({
+            Callback::from({
                 let session = session.clone();
                 move |q| on_admin_query(&session, KE_AT, q)
-            })),
+            }),
         );
 
         let adv_prefix = KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
@@ -87,10 +92,10 @@ pub(crate) fn init(session: WeakSession) {
             &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),
             true,
             Locality::SessionLocal,
-            Callback::new(Arc::new({
+            Callback::from({
                 let session = session.clone();
                 move |q| on_admin_query(&session, &adv_prefix, q)
-            })),
+            }),
         );
     }
 }
@@ -195,25 +200,26 @@ impl TransportMulticastEventHandler for Handler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
-                let expr =
-                    WireExpr::from(&(KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid))
-                        .to_owned();
-                let info = DataInfo {
-                    encoding: Some(Encoding::APPLICATION_JSON),
-                    ..Default::default()
-                };
+                let expr = KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
+                let wire_expr = WireExpr::from(&expr).to_owned();
+                let mut body = None;
                 self.session.execute_subscriber_callbacks(
                     true,
-                    &expr,
-                    Some(info),
-                    serde_json::to_vec(&peer).unwrap().into(),
                     SubscriberKind::Subscriber,
+                    &wire_expr,
+                    Default::default(),
+                    || {
+                        body.insert(PushBody::from(Put {
+                            encoding: Encoding::APPLICATION_JSON.into(),
+                            payload: serde_json::to_vec(&peer).unwrap().into(),
+                            ..Put::default()
+                        }))
+                    },
                     #[cfg(feature = "unstable")]
                     Reliability::Reliable,
-                    None,
                 );
                 Ok(Arc::new(PeerHandler {
-                    expr,
+                    expr: wire_expr,
                     session: self.session.clone(),
                 }))
             } else {
@@ -236,6 +242,35 @@ pub(crate) struct PeerHandler {
     pub(crate) session: WeakSession,
 }
 
+impl PeerHandler {
+    fn push(
+        &self,
+        kind: SampleKind,
+        suffix: &str,
+        encoding: Option<Encoding>,
+        payload: Option<ZBytes>,
+    ) {
+        let mut body = None;
+        let msg = || match kind {
+            SampleKind::Put => body.insert(PushBody::Put(Put {
+                encoding: encoding.unwrap_or_default().into(),
+                payload: payload.unwrap_or_default().into(),
+                ..Put::default()
+            })),
+            SampleKind::Delete => body.insert(PushBody::Del(Del::default())),
+        };
+        self.session.execute_subscriber_callbacks(
+            true,
+            SubscriberKind::Subscriber,
+            &self.expr.clone().with_suffix(suffix),
+            Default::default(),
+            msg,
+            #[cfg(feature = "unstable")]
+            Reliability::Reliable,
+        );
+    }
+}
+
 impl TransportPeerEventHandler for PeerHandler {
     fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
         Ok(())
@@ -244,62 +279,27 @@ impl TransportPeerEventHandler for PeerHandler {
     fn new_link(&self, link: zenoh_link::Link) {
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
-        let info = DataInfo {
-            encoding: Some(Encoding::APPLICATION_JSON),
-            ..Default::default()
-        };
-        self.session.execute_subscriber_callbacks(
-            true,
-            &self
-                .expr
-                .clone()
-                .with_suffix(&format!("/link/{}", s.finish())),
-            Some(info),
-            serde_json::to_vec(&link).unwrap().into(),
-            SubscriberKind::Subscriber,
-            #[cfg(feature = "unstable")]
-            Reliability::Reliable,
-            None,
+        self.push(
+            SampleKind::Put,
+            &format!("/link/{}", s.finish()),
+            Some(Encoding::APPLICATION_JSON),
+            Some(serde_json::to_vec(&link).unwrap().into()),
         );
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
-        let info = DataInfo {
-            kind: SampleKind::Delete,
-            ..Default::default()
-        };
-        self.session.execute_subscriber_callbacks(
-            true,
-            &self
-                .expr
-                .clone()
-                .with_suffix(&format!("/link/{}", s.finish())),
-            Some(info),
-            vec![0u8; 0].into(),
-            SubscriberKind::Subscriber,
-            #[cfg(feature = "unstable")]
-            Reliability::Reliable,
+        self.push(
+            SampleKind::Delete,
+            &format!("/link/{}", s.finish()),
+            None,
             None,
         );
     }
 
     fn closed(&self) {
-        let info = DataInfo {
-            kind: SampleKind::Delete,
-            ..Default::default()
-        };
-        self.session.execute_subscriber_callbacks(
-            true,
-            &self.expr,
-            Some(info),
-            vec![0u8; 0].into(),
-            SubscriberKind::Subscriber,
-            #[cfg(feature = "unstable")]
-            Reliability::Reliable,
-            None,
-        );
+        self.push(SampleKind::Delete, "", None, None);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
