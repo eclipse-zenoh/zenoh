@@ -647,7 +647,12 @@ fn local_data(context: &AdminContext, query: Query) {
             let json = json!({
                 "peer": mcast_peer.zid.to_string(),
                 "whatami": mcast_peer.whatami.to_string(),
-                "group": transport.get_link().map_or_else(|_| "unknown".to_string(), |p| p.group.map_or_else(|| "unknown".to_string(), |p| p.to_string())),
+                "group": transport
+                    .get_link()
+                    .ok()
+                    .and_then(|t| t.group.map(|g| g.to_string()))
+                    .unwrap_or("unknown".to_string()),
+                
                 "links": links,
             });
             #[cfg(feature = "stats")]
