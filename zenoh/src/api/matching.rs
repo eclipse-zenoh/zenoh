@@ -116,6 +116,7 @@ impl fmt::Debug for MatchingListenerState {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MatchingListenerInner {
     pub(crate) session: WeakSession,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
@@ -147,6 +148,7 @@ pub(crate) struct MatchingListenerInner {
 /// }
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct MatchingListener<Handler> {
     pub(crate) inner: MatchingListenerInner,
     pub(crate) handler: Handler,
