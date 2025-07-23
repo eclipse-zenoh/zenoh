@@ -115,29 +115,10 @@ impl EPrimitives for Mux {
             body: NetworkBodyMut::Interest(ctx.msg),
             reliability: Reliability::Reliable,
         };
-        let mut ctx = MuxContext {
-            mux: self,
-            cache: OnceCell::new(),
-            expr: ctx.full_expr,
+        let mut ctx = RoutingContext {
+            msg: (),
+            full_expr: ctx.full_expr,
         };
-        // let mut ctx = RoutingContext {
-        //     msg: &mut msg,
-        //     inface: ctx.inface,
-        //     outface: ctx.outface,
-        //     // prefix: ctx.prefix,
-        //     full_expr: ctx.full_expr,
-        // };
-        // let prefix = ctx
-        //     .wire_expr()
-        //     .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-        //     .flatten()
-        //     .cloned();
-        // let interceptor = self.interceptor.load();
-        // let cache_guard = prefix
-        //     .as_ref()
-        //     .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
-
-        // let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
 
         if self
             .interceptor
@@ -154,44 +135,14 @@ impl EPrimitives for Mux {
     }
 
     fn send_declare(&self, ctx: RoutingContext<&mut Declare>) {
-        // let mut ctx = RoutingContext {
-        //     msg: NetworkMessageMut {
-        //         body: NetworkBodyMut::Declare(ctx.msg),
-        //         reliability: Reliability::Reliable,
-        //     },
-        //     inface: ctx.inface,
-        //     outface: ctx.outface,
-        //     prefix: ctx.prefix,
-        //     full_expr: ctx.full_expr,
-        // };
-        // let prefix = ctx
-        //     .wire_expr()
-        //     .and_then(|we| (!we.has_suffix()).then(|| ctx.prefix()))
-        //     .flatten()
-        //     .cloned();
-        // let interceptor = self.interceptor.load();
-        // let cache_guard = prefix
-        //     .as_ref()
-        //     .and_then(|p| p.get_egress_cache(ctx.outface.get().unwrap(), &interceptor));
-        // let cache = cache_guard.as_ref().and_then(|c| c.get_ref().as_ref());
-
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
         };
-
-        let mut ctx = MuxContext {
-            mux: self,
-            cache: OnceCell::new(),
-            expr: ctx.full_expr,
+        let mut ctx = RoutingContext {
+            msg: (),
+            full_expr: ctx.full_expr,
         };
-        // let mut ctx = RoutingContext {
-        //     msg: &mut msg,
-        //     inface: ctx.inface,
-        //     outface: ctx.outface,
-        //     // prefix: ctx.prefix,
-        //     full_expr: ctx.full_expr,
-        // };
 
         if self
             .interceptor
@@ -370,10 +321,9 @@ impl EPrimitives for McastMux {
             body: NetworkBodyMut::Interest(ctx.msg),
             reliability: Reliability::Reliable,
         };
-        let mut ctx = McastMuxContext {
-            mux: self,
-            cache: OnceCell::new(),
-            expr: ctx.full_expr,
+        let mut ctx = RoutingContext {
+            msg: (),
+            full_expr: ctx.full_expr,
         };
 
         if self
@@ -395,10 +345,9 @@ impl EPrimitives for McastMux {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
         };
-        let mut ctx = McastMuxContext {
-            mux: self,
-            cache: OnceCell::new(),
-            expr: ctx.full_expr,
+        let mut ctx = RoutingContext {
+            msg: (),
+            full_expr: ctx.full_expr,
         };
 
         if self

@@ -23,14 +23,15 @@ pub mod interceptor;
 pub mod namespace;
 pub mod router;
 
-use std::{cell::OnceCell, sync::Arc};
+use std::{any::Any, cell::OnceCell};
 
-use self::router::Resource;
+use zenoh_protocol::network::NetworkMessageMut;
+
 use super::runtime;
+use crate::net::routing::{dispatcher::face::Face, interceptor::InterceptorContext};
 
 pub(crate) struct RoutingContext<Msg> {
     pub(crate) msg: Msg,
-    pub(crate) prefix: OnceCell<Arc<Resource>>,
     pub(crate) full_expr: OnceCell<String>,
 }
 
@@ -39,7 +40,6 @@ impl<Msg> RoutingContext<Msg> {
     pub(crate) fn new(msg: Msg) -> Self {
         Self {
             msg,
-            prefix: OnceCell::new(),
             full_expr: OnceCell::new(),
         }
     }
@@ -48,7 +48,6 @@ impl<Msg> RoutingContext<Msg> {
     pub(crate) fn with_expr(msg: Msg, expr: String) -> Self {
         Self {
             msg,
-            prefix: OnceCell::new(),
             full_expr: OnceCell::from(expr),
         }
     }
@@ -56,8 +55,19 @@ impl<Msg> RoutingContext<Msg> {
     pub(crate) fn with_mut<R>(mut self, f: impl FnOnce(RoutingContext<&mut Msg>) -> R) -> R {
         f(RoutingContext {
             msg: &mut self.msg,
-            prefix: self.prefix,
             full_expr: self.full_expr,
         })
+    }
+}
+
+impl<T> InterceptorContext for RoutingContext<T> {
+    fn face(&self) -> Option<Face> {
+        None
+    }
+    fn full_expr(&self, _msg: &NetworkMessageMut) -> Option<&str> {
+        self.full_expr.get().map(|x| x.as_str())
+    }
+    fn get_cache(&self, _msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
+        None
     }
 }
