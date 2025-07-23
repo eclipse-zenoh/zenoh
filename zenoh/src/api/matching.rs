@@ -183,6 +183,20 @@ impl<Handler> MatchingListener<Handler> {
             .undeclare_matches_listener_inner(self.inner.id)
     }
 
+    /// Returns a reference to this matching listener's handler.
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this matching listener's handler.
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
+    }
+
     #[zenoh_macros::internal]
     pub fn set_background(&mut self, background: bool) {
         self.inner.undeclare_on_drop = !background;
