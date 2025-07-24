@@ -13,8 +13,8 @@
 //
 use std::collections::HashSet;
 
-use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
-use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::zerror;
 use zenoh_protocol::{
     network::{
@@ -155,8 +155,10 @@ fn map_to_shmbuf<const ID: u8>(
 ) -> ZResult<()> {
     if ext_shm.is_some() {
         *ext_shm = None;
-        for zs in zbuf.zslices_mut().filter(|x| x.kind == ZSliceKind::ShmPtr) {
-            map_zslice_to_shmbuf(zs, shmr)?;
+        for zs in zbuf.zslices_mut() {
+            if zs.kind == ZSliceKind::ShmPtr {
+                map_zslice_to_shmbuf(zs, shmr)?;
+            }
         }
     }
     Ok(())
