@@ -554,15 +554,20 @@ impl HatQueriesTrait for HatCode {
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
-        for src_face in tables.faces.values() {
-            for qabl in face_hat!(src_face).remote_qabls.values() {
+        for face in tables.faces.values() {
+            for qabl in face_hat!(face).remote_qabls.values() {
                 // Insert the key in the list of known queryables
                 let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
                 // Append src_face as a queryable source in the proper list
-                match src_face.whatami {
-                    WhatAmI::Router => srcs.routers.push(src_face.zid),
-                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
-                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                let whatami = if face.is_local {
+                    tables.whatami
+                } else {
+                    face.whatami
+                };
+                match whatami {
+                    WhatAmI::Router => srcs.routers.push(face.zid),
+                    WhatAmI::Peer => srcs.peers.push(face.zid),
+                    WhatAmI::Client => srcs.clients.push(face.zid),
                 }
             }
         }
@@ -576,7 +581,12 @@ impl HatQueriesTrait for HatCode {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),

@@ -915,21 +915,38 @@ impl HatQueriesTrait for HatCode {
             .linkstatepeer_qabls
             .iter()
             .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those queryables
+                let mut routers = vec![];
+                let mut peers = vec![];
+                let mut clients = vec![];
+                for q in res_hat!(s).linkstatepeer_qabls.keys() {
+                    if let Some(whatami) = hat!(tables)
+                        .linkstatepeers_net
+                        .as_ref()
+                        .and_then(|net| net.get_node(q))
+                        .and_then(|n| n.whatami)
+                    {
+                        match whatami {
+                            WhatAmI::Router => routers.push(*q),
+                            WhatAmI::Peer => peers.push(*q),
+                            WhatAmI::Client => clients.push(*q),
+                        }
+                    } else {
+                        peers.push(*q);
+                    }
+                }
+                for ctx in s.session_ctxs.values().filter(|ctx| {
+                    !ctx.face.is_local && ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some()
+                }) {
+                    clients.push(ctx.face.zid);
+                }
                 (
                     s.clone(),
-                    // Compute the list of routers, peers and clients that are known
-                    // sources of those queryables
                     Sources {
-                        routers: vec![],
-                        peers: Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned()),
-                        clients: s
-                            .session_ctxs
-                            .values()
-                            .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
-                                    .then_some(f.face.zid)
-                            })
-                            .collect(),
+                        routers,
+                        peers,
+                        clients,
                     },
                 )
             })
@@ -943,7 +960,12 @@ impl HatQueriesTrait for HatCode {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
