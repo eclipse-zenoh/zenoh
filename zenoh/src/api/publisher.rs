@@ -419,7 +419,7 @@ impl Sink<Sample> for Publisher<'_> {
 /// If QoS is enabled, Zenoh keeps one transmission queue per [`Priority`] P, where all messages in
 /// the queue have [`Priority`] P. These queues are serviced in the order of their assigned
 /// [`Priority`] (i.e. from [`Priority::RealTime`] to [`Priority::Background`]).
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]
 pub enum Priority {
     RealTime = 1,

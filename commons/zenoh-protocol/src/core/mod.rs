@@ -561,7 +561,7 @@ impl Channel {
 }
 
 /// Congestion control strategy.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]
