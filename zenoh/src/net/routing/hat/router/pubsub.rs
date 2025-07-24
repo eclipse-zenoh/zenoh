@@ -15,7 +15,6 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
-    vec,
 };
 
 use petgraph::graph::NodeIndex;
