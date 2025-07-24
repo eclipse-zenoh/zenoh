@@ -1,3 +1,5 @@
+exclude = ["target"]
+
 [[rule]]
 
 [rule.formatting]
