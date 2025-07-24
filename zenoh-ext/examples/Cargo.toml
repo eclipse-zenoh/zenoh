@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-authors = ["kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>"]
+authors = ["Julien Enoch <julien@enoch.fr>", "kydos <angelo@icorsaro.net>"]
 categories = { workspace = true }
 description = "Internal crate for zenoh"
 edition = { workspace = true }
@@ -28,18 +28,18 @@ version = { workspace = true }
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["zenoh/default", "zenoh-ext/default", "zenoh-examples/default"]
+default = ["zenoh-examples/default", "zenoh-ext/default", "zenoh/default"]
 unstable = []
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 tokio = { workspace = true, features = [
+  "io-std",
+  "macros",
   "rt",
   "sync",
   "time",
-  "macros",
-  "io-std",
 ] }
 zenoh = { workspace = true, default-features = false }
 zenoh-examples = { workspace = true, default-features = false }

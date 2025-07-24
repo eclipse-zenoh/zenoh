@@ -27,7 +27,7 @@ version = { workspace = true }
 [features]
 transport_quic = ["zenoh-link-quic"]
 transport_serial = ["zenoh-link-serial"]
-transport_tcp = ["zenoh-link-tcp", "zenoh-config/transport_tcp"]
+transport_tcp = ["zenoh-config/transport_tcp", "zenoh-link-tcp"]
 transport_tls = ["zenoh-link-tls"]
 transport_udp = ["zenoh-link-udp"]
 transport_unixpipe = [

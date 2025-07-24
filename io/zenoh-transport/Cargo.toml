@@ -25,14 +25,14 @@ version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-auth_pubkey = ["transport_auth", "rsa"]
+auth_pubkey = ["rsa", "transport_auth"]
 auth_usrpwd = ["transport_auth"]
 default = ["test", "transport_multilink"]
 shared-memory = [
+  "zenoh-buffers/shared-memory",
+  "zenoh-codec/shared-memory",
   "zenoh-protocol/shared-memory",
   "zenoh-shm",
-  "zenoh-codec/shared-memory",
-  "zenoh-buffers/shared-memory",
 ]
 stats = []
 test = []
@@ -41,14 +41,14 @@ transport_compression = []
 transport_multilink = ["auth_pubkey"]
 transport_quic = ["zenoh-link/transport_quic"]
 transport_serial = ["zenoh-link/transport_serial"]
-transport_tcp = ["zenoh-link/transport_tcp", "zenoh-config/transport_tcp"]
+transport_tcp = ["zenoh-config/transport_tcp", "zenoh-link/transport_tcp"]
 transport_tls = ["zenoh-link/transport_tls"]
 transport_udp = ["zenoh-link/transport_udp"]
 transport_unixpipe = ["zenoh-link/transport_unixpipe"]
 transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
 transport_vsock = ["zenoh-link/transport_vsock"]
 transport_ws = ["zenoh-link/transport_ws"]
-unstable = ["zenoh-protocol/unstable", "zenoh-config/unstable"]
+unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -63,13 +63,13 @@ rsa = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
 sha3 = { workspace = true }
 tokio = { workspace = true, features = [
-  "sync",
   "fs",
-  "time",
-  "macros",
-  "rt-multi-thread",
   "io-util",
+  "macros",
   "net",
+  "rt-multi-thread",
+  "sync",
+  "time",
 ] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }

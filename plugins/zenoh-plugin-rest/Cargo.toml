@@ -48,8 +48,8 @@ tide = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 zenoh = { workspace = true, default-features = false, features = [
-  "plugins",
   "internal",
+  "plugins",
   "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }

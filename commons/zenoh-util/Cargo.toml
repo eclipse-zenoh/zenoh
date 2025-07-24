@@ -13,9 +13,9 @@
 #
 [package]
 authors = [
-  "kydos <angelo@icorsaro.net>",
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
 categories = { workspace = true }
 description = "Internal crate for zenoh."
@@ -45,7 +45,7 @@ libloading = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 shellexpand = { workspace = true }
-tokio = { workspace = true, features = ["time", "net"] }
+tokio = { workspace = true, features = ["net", "time"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 zenoh-core = { workspace = true }

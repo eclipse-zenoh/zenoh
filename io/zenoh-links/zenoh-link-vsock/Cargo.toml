@@ -27,7 +27,7 @@ version = { workspace = true }
 [dependencies]
 async-trait = { workspace = true }
 libc = { workspace = true }
-tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
+tokio = { workspace = true, features = ["io-util", "net", "rt", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 zenoh-core = { workspace = true }

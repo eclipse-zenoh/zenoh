@@ -32,9 +32,9 @@ std = [
   "rand?/std_rng",
   "serde/std",
   "uhlc/std",
+  "zenoh-buffers/std",
   "zenoh-keyexpr/std",
   "zenoh-result/std",
-  "zenoh-buffers/std",
 ]
 test = ["rand", "zenoh-buffers/test"]
 unstable = []

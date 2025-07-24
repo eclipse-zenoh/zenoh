@@ -13,9 +13,9 @@
 #
 [package]
 authors = [
-  "kydos <angelo@icorsaro.net>",
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
 categories = { workspace = true }
 description = "Internal crate for zenoh."

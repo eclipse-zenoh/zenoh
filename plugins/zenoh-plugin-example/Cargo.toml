@@ -42,8 +42,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 zenoh = { workspace = true, features = [
   "default",
-  "plugins",
   "internal",
+  "plugins",
   "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }

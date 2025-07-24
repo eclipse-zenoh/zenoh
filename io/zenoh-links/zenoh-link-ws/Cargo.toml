@@ -13,12 +13,12 @@
 #
 [package]
 authors = [
-  "kydos <angelo@icorsaro.net>",
-  "Julien Enoch <julien@enoch.fr>",
-  "Olivier Hécart <olivier.hecart@zettascale.tech>",
-  "Luca Cominardi <luca.cominardi@zettascale.tech>",
-  "Pierre Avital <pierre.avital@zettascale.tech>",
   "Gabriele Baldoni <gabriele.baldoni@zettascale.tech>",
+  "Julien Enoch <julien@enoch.fr>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Olivier Hécart <olivier.hecart@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
 categories = { workspace = true }
 description = "Internal crate for zenoh."

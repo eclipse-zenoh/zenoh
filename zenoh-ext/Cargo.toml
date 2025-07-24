@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-authors = ["kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>"]
+authors = ["Julien Enoch <julien@enoch.fr>", "kydos <angelo@icorsaro.net>"]
 categories = { workspace = true }
 description = "Zenoh: extensions to the client API."
 edition = { workspace = true }
@@ -29,7 +29,7 @@ maintenance = { status = "actively-developed" }
 [features]
 default = ["zenoh/default"]
 internal = []
-unstable = ["zenoh/unstable", "zenoh/internal"]
+unstable = ["zenoh/internal", "zenoh/unstable"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -39,11 +39,11 @@ futures = { workspace = true }
 leb128 = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 tokio = { workspace = true, features = [
+  "io-std",
+  "macros",
   "rt",
   "sync",
   "time",
-  "macros",
-  "io-std",
 ] }
 tracing = { workspace = true }
 uhlc = { workspace = true }

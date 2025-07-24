@@ -13,9 +13,9 @@
 #
 [package]
 authors = [
-  "kydos <angelo@icorsaro.net>",
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
 categories = { workspace = true }
 description = "Internal crate for zenoh."
@@ -32,11 +32,11 @@ version = { workspace = true }
 default = ["std"]
 shared-memory = [
   "std",
-  "zenoh-shm",
-  "zenoh-protocol/shared-memory",
   "zenoh-buffers/shared-memory",
+  "zenoh-protocol/shared-memory",
+  "zenoh-shm",
 ]
-std = ["tracing", "uhlc/std", "zenoh-protocol/std", "zenoh-buffers/std"]
+std = ["tracing", "uhlc/std", "zenoh-buffers/std", "zenoh-protocol/std"]
 
 [dependencies]
 tracing = { workspace = true, optional = true }

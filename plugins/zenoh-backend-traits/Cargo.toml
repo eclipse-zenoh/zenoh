@@ -37,8 +37,8 @@ either = { workspace = true }
 schemars = { workspace = true }
 serde_json = { workspace = true }
 zenoh = { workspace = true, default-features = false, features = [
-  "unstable",
   "internal",
+  "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }

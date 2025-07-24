@@ -13,9 +13,9 @@
 #
 [package]
 authors = [
-  "kydos <angelo@icorsaro.net>",
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
 categories = { workspace = true }
 description = "Internal crate for zenoh."
@@ -40,8 +40,8 @@ zenoh-core = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = [
   "macros",
-  "sync",
   "rt-multi-thread",
+  "sync",
   "time",
 ] }
 zenoh-result = { workspace = true }

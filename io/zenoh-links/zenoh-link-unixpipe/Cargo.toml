@@ -30,7 +30,7 @@ transport_unixpipe = []
 [dependencies]
 async-trait = { workspace = true }
 rand = { workspace = true, features = ["default"] }
-tokio = { workspace = true, features = ["sync", "fs", "io-util", "macros"] }
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "sync"] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 zenoh-config = { workspace = true }
