@@ -137,8 +137,6 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
         for zs in zbuf.zslices_mut() {
             if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
                 if shm_cfg.supports_protocol(shmb.protocol()) {
-                    // Increase the reference count so to keep the ShmBufInner valid
-                    unsafe { shmb.inc_ref_count() };
                     zs.kind = ZSliceKind::ShmPtr;
                     *ext_shm = Some(ShmType::new());
                 }
