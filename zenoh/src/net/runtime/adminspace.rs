@@ -652,7 +652,7 @@ fn local_data(context: &AdminContext, query: Query) {
                     .ok()
                     .and_then(|t| t.group.map(|g| g.to_string()))
                     .unwrap_or("unknown".to_string()),
-                
+
                 "links": links,
             });
             #[cfg(feature = "stats")]
