@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh_backend_traits"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Zenoh: traits to be implemented by backends libraries"
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh_backend_traits"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -31,12 +31,15 @@ default = ["zenoh/default"]
 
 [dependencies]
 async-trait = { workspace = true }
+const_format = { workspace = true }
 derive_more = { workspace = true }
+either = { workspace = true }
+schemars = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true, default-features = false, features = ["unstable", "internal"] }
+zenoh = { workspace = true, default-features = false, features = [
+  "internal",
+  "unstable",
+] }
+zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
-schemars = { workspace = true }
-zenoh-plugin-trait = { workspace = true }
-const_format = { workspace = true }
-either = { workspace = true }

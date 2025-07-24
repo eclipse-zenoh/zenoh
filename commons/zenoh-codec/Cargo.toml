@@ -12,39 +12,34 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-codec"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-codec"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 default = ["std"]
-std = [
-    "tracing",
-    "uhlc/std",
-    "zenoh-protocol/std",
-    "zenoh-buffers/std"
-]
 shared-memory = [
-    "std",
-    "zenoh-shm",
-    "zenoh-protocol/shared-memory",
-    "zenoh-buffers/shared-memory"
+  "std",
+  "zenoh-buffers/shared-memory",
+  "zenoh-protocol/shared-memory",
+  "zenoh-shm",
 ]
+std = ["tracing", "uhlc/std", "zenoh-buffers/std", "zenoh-protocol/std"]
 
 [dependencies]
-tracing = {workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 uhlc = { workspace = true }
 zenoh-buffers = { workspace = true, default-features = false }
 zenoh-protocol = { workspace = true }
@@ -56,8 +51,8 @@ criterion = { workspace = true }
 
 rand = { workspace = true, features = ["default"] }
 zenoh-protocol = { workspace = true, features = ["test"] }
-zenoh-util = {workspace = true }
+zenoh-util = { workspace = true }
 
 [[bench]]
-name = "codec"
 harness = false
+name = "codec"

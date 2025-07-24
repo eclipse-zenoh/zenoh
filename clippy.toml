@@ -2,5 +2,5 @@
 # See https://github.com/eclipse-zenoh/zenoh/blob/b55c781220d7ea9f7f117570990f6e4e063e58fe/zenoh/src/net/routing/dispatcher/resource.rs#L193
 # A corresponding comment is present in the `Hash` implementation of `Resource` as a reminder that this configuration is set.
 ignore-interior-mutability = [
-    "zenoh::net::routing::dispatcher::resource::Resource",
+  "zenoh::net::routing::dispatcher::resource::Resource",
 ]

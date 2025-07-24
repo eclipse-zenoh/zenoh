@@ -107,6 +107,9 @@ jobs:
       - name: Install latest cargo-semver-checks
         uses: taiki-e/install-action@cargo-semver-checks
 
+      - name: Install latest taplo
+        uses: taiki-e/install-action@taplo
+
       - name: Code format check
         run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
@@ -162,6 +165,10 @@ jobs:
       - name: Check SemVer Compatibility
         run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
 
+      - name: Check TOML formatting
+        if: ${{ !contains(matrix.os, 'windows') }}
+        run: taplo fmt --check --diff
+
   test:
     needs: determine-runner
     name: Unit tests on ${{ matrix.os }}
@@ -187,7 +194,7 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -269,63 +276,63 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DavidAnson/markdownlint-cli2-action@v18
         with:
-          config: '.markdownlint.yaml'
-          globs: '**/README.md'
+          config: ".markdownlint.yaml"
+          globs: "**/README.md"
 
   coverage:
-        name: Coverage
-        strategy:
-          fail-fast: false
-          matrix:
-            os: [ubuntu-latest]
-            rust: [nightly]
-        runs-on: ${{ matrix.os }}
-        steps:
-          - name: Uninstall pre-installed packages
-            run: sudo apt remove dotnet* azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox temurin-8-jdk powershell mysql-server-core-8.0 mono-devel -y
+    name: Coverage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        rust: [nightly]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Uninstall pre-installed packages
+        run: sudo apt remove dotnet* azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox temurin-8-jdk powershell mysql-server-core-8.0 mono-devel -y
 
-          - name: Checkout sources
-            uses: actions/checkout@v4
+      - name: Checkout sources
+        uses: actions/checkout@v4
 
-          - name: Install ${{ matrix.rust }} Rust toolchain
-            run: |
-              rustup override set ${{ matrix.rust }}
-              rustup update ${{ matrix.rust }}
-              rustup component add llvm-tools-preview
+      - name: Install ${{ matrix.rust }} Rust toolchain
+        run: |
+          rustup override set ${{ matrix.rust }}
+          rustup update ${{ matrix.rust }}
+          rustup component add llvm-tools-preview
 
-          - uses: Swatinem/rust-cache@v2
-            with:
-              cache-bin: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
-          - name: Install cargo-llvm-cov
-            uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-          - name: Generate code coverage
-            run: |
-              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
-              ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
-              --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
-              --skip test_default_features \
-              --skip router_linkstate \
-              --skip three_node_combination  \
-              --skip three_node_combination_multicast \
-              --skip two_node_combination \
-              --skip test_gossip
-            env:
-              RUST_LOG: None
+      - name: Generate code coverage
+        run: |
+          cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+          ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
+          --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
+          --skip test_default_features \
+          --skip router_linkstate \
+          --skip three_node_combination  \
+          --skip three_node_combination_multicast \
+          --skip two_node_combination \
+          --skip test_gossip
+        env:
+          RUST_LOG: None
 
-          - name: Upload coverage to Codecov
-            uses: codecov/codecov-action@v5
-            with:
-              token: ${{ secrets.CODECOV_TOKEN }}
-              files: lcov.info
-              fail_ci_if_error: true
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
 
-          # Cleanup profraw files to avoid failing during rust-cache
-          # post run cleanup. It requires enough space on disk left to save the cache
-          - name: Cleanup profraw files
-            run: |
-              find . -name "*.profraw" -type f -delete
+      # Cleanup profraw files to avoid failing during rust-cache
+      # post run cleanup. It requires enough space on disk left to save the cache
+      - name: Cleanup profraw files
+        run: |
+          find . -name "*.profraw" -type f -delete
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
