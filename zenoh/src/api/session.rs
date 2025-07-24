@@ -2275,7 +2275,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(session.zid().into()),
+                                    replier_id: None
                                 });
                             }
                         }
@@ -2374,7 +2374,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(session.zid().into()),
+                                    replier_id: None
                                 });
                             }
                         }
@@ -2814,7 +2814,12 @@ impl Primitives for WeakSession {
                                 encoding: mem::take(&mut e.encoding).into(),
                             }),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
+                                zenoh_protocol::core::EntityGlobalIdProto {
+                                    zid: rid.zid,
+                                    eid: rid.eid,
+                                }
+                            }),
                         };
                         callback.call(new_reply);
                     }
@@ -2906,7 +2911,12 @@ impl Primitives for WeakSession {
                         let new_reply = Reply {
                             result: Ok(sample),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
+                                zenoh_protocol::core::EntityGlobalIdProto {
+                                    zid: rid.zid,
+                                    eid: rid.eid,
+                                }
+                            }),
                         };
                         let callback =
                             match query.reception_mode {
