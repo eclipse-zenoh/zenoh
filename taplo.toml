@@ -1,0 +1,4 @@
+[[rule]]
+
+[rule.formatting]
+reorder_keys = true

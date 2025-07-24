@@ -12,17 +12,17 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-ext-examples"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = ["kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>"]
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh"
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-ext-examples"
 publish = false
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -42,10 +42,10 @@ tokio = { workspace = true, features = [
   "io-std",
 ] }
 zenoh = { workspace = true, default-features = false }
+zenoh-examples = { workspace = true, default-features = false }
 zenoh-ext = { workspace = true, default-features = false, features = [
   "unstable",
 ] }
-zenoh-examples = { workspace = true, default-features = false }
 
 [dev-dependencies]
 zenoh-config = { workspace = true }

@@ -21,5 +21,5 @@ test(=header_check_memory_concurrent) |
 test(=header_link_concurrent) |
 test(=header_link_failure_concurrent)
 """
-threads-required = 'num-cpus'
 slow-timeout = { period = "60s", terminate-after = 6 }
+threads-required = 'num-cpus'
