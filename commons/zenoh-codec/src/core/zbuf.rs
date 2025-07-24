@@ -102,6 +102,7 @@ impl LCodec<&ZBuf> for Zenoh080 {
 #[cfg(feature = "shared-memory")]
 mod shm {
     use zenoh_buffers::{ZSlice, ZSliceKind};
+    use zenoh_shm::ShmBufInner;
 
     use super::*;
     use crate::Zenoh080Sliced;
@@ -133,10 +134,19 @@ mod shm {
 
                         for zs in x.zslices() {
                             match zs.kind {
-                                ZSliceKind::Raw => self.codec.write(&mut *writer, RAW)?,
-                                ZSliceKind::ShmPtr => self.codec.write(&mut *writer, SHM_PTR)?,
+                                ZSliceKind::Raw => {
+                                    self.codec.write(&mut *writer, RAW)?;
+                                    self.codec.write(&mut *writer, zs)?;
+                                }
+                                ZSliceKind::ShmPtr => {
+                                    self.codec.write(&mut *writer, SHM_PTR)?;
+                                    let shmb = zs.downcast_ref::<ShmBufInner>().unwrap();
+                                    Zenoh080::new().write(&mut *writer, &shmb.info)?;
+                                    // Increase the reference count so to keep the ShmBufInner
+                                    // valid until it is received.
+                                    unsafe { shmb.inc_ref_count() };
+                                }
                             }
-                            self.codec.write(&mut *writer, zs)?;
                         }
                     } else {
                         self.codec.write(&mut *writer, x)?;
