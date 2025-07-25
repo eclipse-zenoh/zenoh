@@ -176,7 +176,7 @@ mod shm {
                                     reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
                                 }
                                 SHM_PTR => {
-                                    let mut zslice: ZSlice = dbg!(self.codec.read(&mut *reader))?;
+                                    let mut zslice: ZSlice = self.codec.read(&mut *reader)?;
                                     zslice.kind = ZSliceKind::ShmPtr;
                                     zbuf.push_zslice(zslice);
                                 }
