@@ -37,8 +37,9 @@ use super::{
     tables::{register_expr_interest, Tables, TablesLock},
 };
 use crate::net::routing::{
+    dispatcher::tables::RoutingExpr,
     hat::{HatTrait, SendDeclare},
-    router::{unregister_expr_interest, Resource},
+    router::{get_data_route, unregister_expr_interest, Resource},
     RoutingContext,
 };
 
@@ -258,6 +259,19 @@ pub(crate) fn declare_interest(
                     options,
                     send_declare,
                 );
+                // Cache data route in case of subscribers interest declaration, as it should come
+                // from a publisher declaration, and publisher is expected to use the route.
+                if options.subscribers() {
+                    get_data_route(
+                        hat_code.as_ref(),
+                        &wtables,
+                        face,
+                        &Some(res),
+                        &mut RoutingExpr::new(&prefix, expr.suffix.as_ref()),
+                        ext::NodeIdType::DEFAULT.node_id,
+                        false,
+                    );
+                }
             }
             None => tracing::error!(
                 "{} Declare interest {} for unknown scope {}!",

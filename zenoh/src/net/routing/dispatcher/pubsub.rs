@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLockReadGuard},
+};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
@@ -210,31 +213,31 @@ macro_rules! treat_timestamp {
 }
 
 #[inline]
-fn get_data_route(
+pub(crate) fn get_data_route(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     face: &FaceState,
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
     routing_context: NodeId,
-) -> Arc<Route> {
+    force_compute: bool,
+) -> Option<Arc<Route>> {
     let local_context = hat_code.map_routing_context(tables, face, routing_context);
-    let mut compute_route =
-        || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
+    let compute_route = || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
     if let Some(data_routes) = res
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| &ctx.data_routes)
     {
-        return get_or_set_route(
+        return Some(get_or_set_route(
             data_routes,
             tables.routes_version,
             face.whatami,
             local_context,
             compute_route,
-        );
+        ));
     }
-    compute_route()
+    force_compute.then(compute_route)
 }
 
 #[inline]
@@ -322,7 +325,9 @@ pub fn route_data(
                     &res,
                     &mut expr,
                     msg.ext_nodeid.node_id,
-                );
+                    true,
+                )
+                .unwrap();
 
                 if !route.is_empty() {
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
