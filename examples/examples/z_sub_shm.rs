@@ -15,7 +15,7 @@ use std::borrow::Cow;
 
 use clap::Parser;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-use zenoh::shm::{zshm, zshmmut};
+use zenoh::shm::zshmmut;
 use zenoh::{bytes::ZBytes, config::Config, key_expr::KeyExpr};
 use zenoh_examples::CommonArgs;
 
@@ -85,7 +85,7 @@ fn handle_bytes(bytes: &mut ZBytes) -> (&str, Cow<str>) {
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
         match bytes.as_shm_mut() {
             // try to mutate SHM buffer to get it's mutability property
-            Some(shm) => match <&mut zshm as TryInto<&mut zshmmut>>::try_into(shm) {
+            Some(shm) => match <&mut zshmmut>::try_from(shm) {
                 Ok(_shm_mut) => "SHM (MUT)",
                 Err(_) => "SHM (IMMUT)",
             },
