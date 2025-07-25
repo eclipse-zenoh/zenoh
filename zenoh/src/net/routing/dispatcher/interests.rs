@@ -263,7 +263,7 @@ pub(crate) fn declare_interest(
                 // from a publisher declaration, and publisher is expected to use the route.
                 if options.subscribers() {
                     get_data_route(
-                        hat_code.as_ref(),
+                        hat_code,
                         &wtables,
                         face,
                         &Some(res),

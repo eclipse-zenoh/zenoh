@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLockReadGuard},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
