@@ -84,40 +84,19 @@ impl LinkMulticastTrait for LinkMulticastUdp {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         match self
             .unicast_socket
             .send_to(buffer, self.multicast_addr)
             .await
         {
-            Ok(size) => Ok(size),
-            std::io::Result::Err(e) => {
-                #[cfg(not(target_os = "macos"))]
-                {
-                    let e = zerror!("Write error on UDP link {}: {}", self, e);
-                    tracing::trace!("{}", e);
-                    Err(e.into())
-                }
-                #[cfg(target_os = "macos")]
-                if let Some(55) = e.raw_os_error() {
-                    // No buffer space available
-                    tracing::trace!("Write error on UDP link {}: {}", self, e);
-                    Ok(0)
-                } else {
-                    let e = zerror!("Write error on UDP link {}: {}", self, e);
-                    tracing::trace!("{}", e);
-                    Err(e.into())
-                }
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let e = zerror!("Write error on UDP link {}: {}", self, e);
+                tracing::trace!("{}", e);
+                Err(e.into())
             }
         }
-    }
-
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut written: usize = 0;
-        while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
-        }
-        Ok(())
     }
 
     async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, Locator>)> {
