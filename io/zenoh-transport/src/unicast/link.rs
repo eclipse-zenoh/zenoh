@@ -11,9 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{fmt, sync::Arc};
+use std::{fmt, io::IoSlice, sync::Arc};
 
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_buffers::{
+    buffer::{Buffer, SplitBuffer},
+    BBuf, ZSlice, ZSliceBuffer,
+};
 use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
@@ -163,7 +166,22 @@ impl TransportLinkUnicastTx {
         // tracing::trace!("WBytes: {:02x?}", bytes);
 
         // Send the message on the link
-        self.inner.link.write_all(bytes).await?;
+        if batch.fragbuf.is_empty() {
+            self.inner.link.write_all(bytes).await?;
+        } else if batch.fragbuf.slices().count() < 4 {
+            let mut slices = [IoSlice::new(&[]); 4];
+            slices[0] = IoSlice::new(&bytes);
+            for (i, slice) in batch.fragbuf.slices().enumerate() {
+                slices[i + 1] = IoSlice::new(slice);
+            }
+            self.inner.link.write_vectored_all(&mut slices).await?
+        } else {
+            let mut slices = std::iter::once(bytes)
+                .chain(batch.fragbuf.slices())
+                .map(IoSlice::new)
+                .collect::<Vec<_>>();
+            self.inner.link.write_vectored_all(&mut slices).await?
+        }
 
         Ok(())
     }

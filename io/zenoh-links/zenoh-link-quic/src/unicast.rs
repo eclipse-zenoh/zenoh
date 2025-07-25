@@ -109,14 +109,6 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.send);
-        guard.write(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.send);
         guard.write_all(buffer).await.map_err(|e| {

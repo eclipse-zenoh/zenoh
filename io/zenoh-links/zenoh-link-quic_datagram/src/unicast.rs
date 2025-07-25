@@ -100,13 +100,6 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let amt = buffer.len();
-        self.connection
-            .send_datagram(Bytes::copy_from_slice(buffer))?;
-        Ok(amt)
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         self.connection
             .send_datagram(Bytes::copy_from_slice(buffer))?;

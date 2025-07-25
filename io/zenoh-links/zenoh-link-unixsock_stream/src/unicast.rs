@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, os::unix::io::RawFd,
+    cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, io::IoSlice, os::unix::io::RawFd,
     path::PathBuf, sync::Arc, time::Duration,
 };
 
 use async_trait::async_trait;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{UnixListener, UnixStream},
     sync::RwLock as AsyncRwLock,
     task::JoinHandle,
@@ -27,7 +27,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
-    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    utils::write_all_vectored, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -76,20 +77,21 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         res.map_err(|e| zerror!(e).into())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        self.get_mut_socket().write(buffer).await.map_err(|e| {
-            let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
-            tracing::trace!("{}", e);
-            e.into()
-        })
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
             e.into()
         })
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.get_mut_socket().is_write_vectored()
+    }
+
+    async fn write_vectored_all(&self, bufs: &mut [IoSlice<'_>]) -> ZResult<()> {
+        write_all_vectored(self.get_mut_socket(), bufs).await?;
+        Ok(())
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
