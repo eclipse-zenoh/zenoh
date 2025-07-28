@@ -54,7 +54,7 @@ const RBLEN: usize = QueueSizeConf::MAX;
 // Inner structure to reuse serialization batches
 struct StageInRefill {
     n_ref_r: Waiter,
-    s_ref_r: RingBufferReader<WBatch, RBLEN>,
+    s_ref_r: RingBufferReader<Box<WBatch>, RBLEN>,
     batch_config: (usize, BatchConfig),
     batch_allocs: usize,
 }
@@ -69,12 +69,12 @@ impl fmt::Display for TransportClosed {
 impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
-    fn pull(&mut self) -> Option<WBatch> {
+    fn pull(&mut self) -> Option<Box<WBatch>> {
         match self.s_ref_r.pull() {
             Some(b) => Some(b),
             None if self.batch_allocs < self.batch_config.0 => {
                 self.batch_allocs += 1;
-                Some(WBatch::new(self.batch_config.1))
+                Some(Box::new(WBatch::new(self.batch_config.1)))
             }
             None => None,
         }
@@ -109,7 +109,7 @@ struct AtomicBackoff {
 // Inner structure to link the initial stage with the final stage of the pipeline
 struct StageInOut {
     n_out_w: Notifier,
-    s_out_w: RingBufferWriter<WBatch, RBLEN>,
+    s_out_w: RingBufferWriter<Box<WBatch>, RBLEN>,
     atomic_backoff: Arc<AtomicBackoff>,
 }
 
@@ -123,7 +123,7 @@ impl StageInOut {
     }
 
     #[inline]
-    fn move_batch(&mut self, batch: WBatch) {
+    fn move_batch(&mut self, batch: Box<WBatch>) {
         let _ = self.s_out_w.push(batch);
         self.atomic_backoff.bytes.store(0, Ordering::Relaxed);
         let _ = self.n_out_w.notify();
@@ -132,13 +132,13 @@ impl StageInOut {
 
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
-    current: Arc<Mutex<Option<WBatch>>>,
+    current: Arc<Mutex<Option<Box<WBatch>>>>,
     priority: TransportPriorityTx,
 }
 
 impl StageInMutex {
     #[inline]
-    fn current(&self) -> MutexGuard<'_, Option<WBatch>> {
+    fn current(&self) -> MutexGuard<'_, Option<Box<WBatch>>> {
         zlock!(self.current)
     }
 
@@ -398,7 +398,7 @@ impl StageIn {
                     tch.sn.set(sn).unwrap()
                 // Otherwise, an ephemeral batch is created to send the stop fragment
                 } else {
-                    let mut batch = WBatch::new_ephemeral(self.batch_config);
+                    let mut batch = Box::new(WBatch::new_ephemeral(self.batch_config));
                     self.fragbuf.clear();
                     fragment.ext_drop = Some(fragment::ext::Drop::new());
                     let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
@@ -505,7 +505,7 @@ impl StageIn {
 
 // The result of the pull operation
 enum Pull {
-    Some(WBatch),
+    Some(Box<WBatch>),
     None,
     Backoff(MicroSeconds),
 }
@@ -532,8 +532,8 @@ impl Backoff {
 
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
-    s_out_r: RingBufferReader<WBatch, RBLEN>,
-    current: Arc<Mutex<Option<WBatch>>>,
+    s_out_r: RingBufferReader<Box<WBatch>, RBLEN>,
+    current: Arc<Mutex<Option<Box<WBatch>>>>,
     backoff: Backoff,
 }
 
@@ -608,11 +608,11 @@ impl StageOutIn {
 
 struct StageOutRefill {
     n_ref_w: Notifier,
-    s_ref_w: RingBufferWriter<WBatch, RBLEN>,
+    s_ref_w: RingBufferWriter<Box<WBatch>, RBLEN>,
 }
 
 impl StageOutRefill {
-    fn refill(&mut self, batch: WBatch) {
+    fn refill(&mut self, batch: Box<WBatch>) {
         assert!(self.s_ref_w.push(batch).is_none());
         let _ = self.n_ref_w.notify();
     }
@@ -630,11 +630,11 @@ impl StageOut {
     }
 
     #[inline]
-    fn refill(&mut self, batch: WBatch) {
+    fn refill(&mut self, batch: Box<WBatch>) {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<Box<WBatch>>>) -> Vec<Box<WBatch>> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
@@ -686,12 +686,12 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
+            let (mut s_ref_w, s_ref_r) = RingBuffer::<Box<WBatch>, RBLEN>::init();
             let mut batch_allocs = 0;
             if *config.queue_alloc.mode() == QueueAllocMode::Init {
                 // Fill the refill ring buffer with batches
                 for _ in 0..*num {
-                    let batch = WBatch::new(config.batch);
+                    let batch = Box::new(WBatch::new(config.batch));
                     batch_allocs += 1;
                     assert!(s_ref_w.push(batch).is_none());
                 }
@@ -702,7 +702,7 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
+            let (s_out_w, s_out_r) = RingBuffer::<Box<WBatch>, RBLEN>::init();
             let current = Arc::new(Mutex::new(None));
             let bytes = Arc::new(AtomicBackoff {
                 active: CachePadded::new(AtomicBool::new(false)),
@@ -896,7 +896,7 @@ pub(crate) struct TransmissionPipelineConsumer {
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
+    pub(crate) async fn pull(&mut self) -> Option<(Box<WBatch>, Priority)> {
         while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
@@ -943,14 +943,14 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
+    pub(crate) fn refill(&mut self, batch: Box<WBatch>, priority: Priority) {
         if !batch.is_ephemeral() {
             self.stage_out[priority as usize].refill(batch);
             self.status.set_congested(priority, false);
         }
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
+    pub(crate) fn drain(&mut self) -> Vec<(Box<WBatch>, usize)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -961,7 +961,7 @@ impl TransmissionPipelineConsumer {
             .iter()
             .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
-        let mut currents: Vec<MutexGuard<'_, Option<WBatch>>> =
+        let mut currents: Vec<MutexGuard<'_, Option<Box<WBatch>>>> =
             locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
 
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
