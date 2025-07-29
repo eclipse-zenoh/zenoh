@@ -45,7 +45,7 @@ fn attachment_queries() {
     let zenoh = zenoh::open(Config::default()).wait().unwrap();
     const QUERY_ATTACHMENT: &[u8] = b"query attachment";
     const REPLY_ATTACHMENT: &[u8] = b"reply attachment";
-    zenoh
+    let _queryable = zenoh
         .declare_queryable("test/attachment")
         .callback(|query| {
             println!("{}", query.payload().unwrap().try_to_string().unwrap());

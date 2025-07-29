@@ -308,6 +308,15 @@
   //        /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //        /// If absent, the rules will be applied to both flows.
   //        flows: ["egress", "ingress"],
+  //        /// QoS filter to apply to the messages matching this item.
+  //        qos: {
+  //          congestion_control: "drop",
+  //          priority: "data",
+  //          express: true,
+  //          reliability: "reliable",
+  //        },
+  //        /// payload_size range for the messages matching this item.
+  //        payload_size: "1000000..",
   //        key_exprs: ["test/demo"],
   //        overwrite: {
   //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
@@ -457,6 +466,11 @@
   //      /// link protocols can also be used to identify transports to filter messages on.
   //      /// If absent, the rules will be applied to all transports. An empty list is invalid.
   //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //      /// ZIDs can also be used to identify transports to filter messages on.
+  //      /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
+  //      ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
+  //      ///       If managed manually in ACL config, can be useful for prototyping but should not be used in production!
+  //      zids: ["38a4829bce9166ee"],
   //     },
   //   ],
   //   /// The policies list associates rules to subjects

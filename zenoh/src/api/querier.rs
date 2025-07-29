@@ -14,7 +14,9 @@
 
 use core::fmt;
 use std::{
+    collections::HashSet,
     future::{IntoFuture, Ready},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -27,13 +29,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {
-    crate::api::builders::matching_listener::MatchingListenerBuilder,
-    crate::api::matching::{MatchingStatus, MatchingStatusType},
-    crate::api::sample::SourceInfo,
-    crate::query::ReplyKeyExpr,
-    std::collections::HashSet,
-    std::sync::{Arc, Mutex},
-    zenoh_config::wrappers::EntityGlobalId,
+    crate::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
     zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -45,7 +41,16 @@ use super::{
     session::{UndeclarableSealed, WeakSession},
     Id,
 };
-use crate::{api::handlers::DefaultHandler, qos::Priority};
+#[cfg(feature = "unstable")]
+use crate::api::sample::SourceInfo;
+use crate::{
+    api::{
+        builders::matching_listener::MatchingListenerBuilder,
+        handlers::DefaultHandler,
+        matching::{MatchingStatus, MatchingStatusType},
+    },
+    qos::Priority,
+};
 
 pub(crate) struct QuerierState {
     pub(crate) id: Id,
@@ -68,7 +73,6 @@ pub(crate) struct QuerierState {
 /// let replies = querier.get().await.unwrap();
 /// # }
 /// ```
-#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct Querier<'a> {
     pub(crate) session: WeakSession,
@@ -82,7 +86,6 @@ pub struct Querier<'a> {
     #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
     pub(crate) undeclare_on_drop: bool,
-    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
 }
 
@@ -121,21 +124,18 @@ impl<'a> Querier<'a> {
 
     /// Returns the [`KeyExpr`] this querier sends queries on.
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
     /// Get the `congestion_control` applied when routing the data.
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
     /// Get the priority of the written data.
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
@@ -160,7 +160,6 @@ impl<'a> Querier<'a> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn get(&self) -> QuerierGetBuilder<'_, '_, DefaultHandler> {
         QuerierGetBuilder {
             querier: self,
@@ -185,7 +184,6 @@ impl<'a> Querier<'a> {
     /// querier.undeclare().await.unwrap();
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         UndeclarableSealed::undeclare_inner(self, ())
     }
@@ -193,12 +191,9 @@ impl<'a> Querier<'a> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
-        #[cfg(feature = "unstable")]
-        {
-            let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
-            for id in ids {
-                self.session.undeclare_matches_listener_inner(id)?
-            }
+        let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
+        for id in ids {
+            self.session.undeclare_matches_listener_inner(id)?
         }
         self.session.undeclare_querier_inner(self.id)
     }
@@ -222,7 +217,6 @@ impl<'a> Querier<'a> {
     ///     .matching();
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
         zenoh_core::ResolveFuture::new(async move {
             self.session.matching_status(
@@ -255,7 +249,6 @@ impl<'a> Querier<'a> {
     /// }
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             session: &self.session,

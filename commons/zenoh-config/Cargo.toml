@@ -26,7 +26,7 @@ description = "Internal crate for zenoh."
 [features]
 internal = []
 transport_tcp = []
-unstable = []
+unstable = ["zenoh-protocol/unstable"]
 
 [dependencies]
 tracing = { workspace = true }

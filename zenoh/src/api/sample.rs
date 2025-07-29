@@ -32,18 +32,9 @@ use crate::api::{
 /// The sequence number of the [`Sample`] from the source.
 pub type SourceSn = u32;
 
-/// The locality of samples to be received by subscribers or targeted by publishers.
-#[zenoh_macros::unstable]
+/// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Locality {
-    SessionLocal,
-    Remote,
-    #[default]
-    Any,
-}
-#[cfg(not(feature = "unstable"))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Locality {
     SessionLocal,
     Remote,
     #[default]

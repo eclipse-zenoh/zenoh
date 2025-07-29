@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "test")]
+use crate::zenoh::Put;
 use crate::{core::WireExpr, zenoh::PushBody};
 
 pub mod flag {
@@ -82,5 +84,34 @@ impl Push {
             ext_qos,
             ext_nodeid,
         }
+    }
+}
+
+impl From<PushBody> for Push {
+    fn from(value: PushBody) -> Self {
+        Self {
+            wire_expr: WireExpr::empty(),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            payload: value,
+        }
+    }
+}
+
+#[cfg(feature = "test")]
+impl From<Put> for Push {
+    fn from(value: Put) -> Self {
+        PushBody::from(value).into()
+    }
+}
+
+#[cfg(feature = "test")]
+impl From<Vec<u8>> for Push {
+    fn from(value: Vec<u8>) -> Self {
+        Self::from(Put {
+            payload: value.into(),
+            ..Put::default()
+        })
     }
 }

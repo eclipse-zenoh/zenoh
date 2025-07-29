@@ -32,34 +32,36 @@ maintenance = { status = "actively-developed" }
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 default = [
-  "auth_pubkey",
-  "auth_usrpwd",
-  "transport_multilink",
-  "transport_compression",
-  "transport_quic",
-  "transport_tcp",
-  "transport_tls",
-  "transport_udp",
-  "transport_unixsock-stream",
-  "transport_ws",
+    "auth_pubkey",
+    "auth_usrpwd",
+    "transport_multilink",
+    "transport_compression",
+    "transport_quic",
+    "transport_quic_datagram",
+    "transport_tcp",
+    "transport_tls",
+    "transport_udp",
+    "transport_unixsock-stream",
+    "transport_ws",
 ]
 internal = [
-  "zenoh-keyexpr/internal",
-  "zenoh-config/internal",
-  "zenoh-protocol/internal",
+    "zenoh-keyexpr/internal",
+    "zenoh-config/internal",
+    "zenoh-protocol/internal",
 ]
 plugins = []
 runtime_plugins = ["plugins"]
 shared-memory = [
-  "zenoh-shm",
-  "zenoh-protocol/shared-memory",
-  "zenoh-transport/shared-memory",
-  "zenoh-buffers/shared-memory",
+    "zenoh-shm",
+    "zenoh-protocol/shared-memory",
+    "zenoh-transport/shared-memory",
+    "zenoh-buffers/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_compression = ["zenoh-transport/transport_compression"]
 transport_quic = ["zenoh-transport/transport_quic"]
+transport_quic_datagram = ["zenoh-transport/transport_quic_datagram"]
 transport_serial = ["zenoh-transport/transport_serial"]
 transport_unixpipe = ["zenoh-transport/transport_unixpipe"]
 transport_tcp = ["zenoh-transport/transport_tcp", "zenoh-config/transport_tcp"]
@@ -69,14 +71,15 @@ transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 unstable = [
-  "internal_config",
-  "zenoh-keyexpr/unstable",
-  "zenoh-config/unstable",
+    "internal_config",
+    "zenoh-keyexpr/unstable",
+    "zenoh-config/unstable",
+    "zenoh-protocol/unstable",
 ]
 internal_config = []
 tracing-instrument = [
-  "zenoh-task/tracing-instrument",
-  "zenoh-runtime/tracing-instrument",
+    "zenoh-task/tracing-instrument",
+    "zenoh-runtime/tracing-instrument",
 ]
 
 [dependencies]
@@ -111,6 +114,7 @@ zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-keyexpr = { workspace = true, features = ["internal"] }
 zenoh-link = { workspace = true }
+zenoh-link-commons = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["std"] }
@@ -124,8 +128,9 @@ zenoh-task = { workspace = true }
 once_cell = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
 libc = { workspace = true }
+tokio = { workspace = true }
+zenoh-protocol = { workspace = true, features = ["test"] }
 
 [build-dependencies]
 rustc_version = { workspace = true }
@@ -145,7 +150,7 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../LICENSE", "0"]
-depends = "zenohd (=1.4.0), zenoh-plugin-rest (=1.4.0), zenoh-plugin-storage-manager (=1.4.0)"
+depends = "zenohd (=1.5.0), zenoh-plugin-rest (=1.5.0), zenoh-plugin-storage-manager (=1.5.0)"
 maintainer-scripts = ".deb"
 assets = [["../README.md", "README.md", "644"]]
 

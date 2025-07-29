@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 ZettaScale Technology
+# Copyright (c) 2025 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -18,7 +18,7 @@ description = "Internal crate for zenoh."
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-name = "zenoh-link-quic"
+name = "zenoh-link-quic_datagram"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
@@ -26,12 +26,9 @@ version = { workspace = true }
 
 [dependencies]
 async-trait = { workspace = true }
-base64 = { workspace = true }
 quinn = { workspace = true }
 rustls = { workspace = true }
-rustls-pemfile = { workspace = true }
 rustls-webpki = { workspace = true }
-secrecy = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true, features = [
     "fs",
@@ -43,8 +40,6 @@ tokio = { workspace = true, features = [
 # tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
-webpki-roots = { workspace = true }
-zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["quic"] }
 zenoh-protocol = { workspace = true }

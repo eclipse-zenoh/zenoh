@@ -12,17 +12,27 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh_link::LinkAuthId;
+use zenoh_protocol::core::ZenohIdProto;
 
 #[cfg(feature = "auth_usrpwd")]
 use super::establishment::ext::auth::UsrPwdId;
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportAuthId {
     username: Option<String>,
+    zid: ZenohIdProto,
     link_auth_ids: Vec<LinkAuthId>,
 }
 
 impl TransportAuthId {
+    pub(crate) fn new(zid: ZenohIdProto) -> Self {
+        Self {
+            username: None,
+            zid,
+            link_auth_ids: vec![],
+        }
+    }
+
     #[cfg(feature = "auth_usrpwd")]
     pub(crate) fn set_username(&mut self, user_pwd_id: &UsrPwdId) {
         self.username = if let Some(username) = &user_pwd_id.0 {
@@ -49,5 +59,9 @@ impl TransportAuthId {
 
     pub fn link_auth_ids(&self) -> &Vec<LinkAuthId> {
         &self.link_auth_ids
+    }
+
+    pub fn zid(&self) -> &ZenohIdProto {
+        &self.zid
     }
 }

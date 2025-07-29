@@ -58,7 +58,7 @@ pub struct TransportManagerBuilderMulticast {
 
 pub struct TransportManagerStateMulticast {
     // Established listeners
-    pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
+    pub(crate) link_managers: Arc<Mutex<HashMap<LinkKind, LinkManagerMulticast>>>,
     // Established transports
     pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
 }
@@ -138,7 +138,7 @@ impl TransportManagerBuilderMulticast {
         };
 
         let state = TransportManagerStateMulticast {
-            protocols: Arc::new(Mutex::new(HashMap::new())),
+            link_managers: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
         };
 
@@ -179,7 +179,7 @@ impl TransportManager {
     pub async fn close_multicast(&self) {
         tracing::trace!("TransportManagerMulticast::clear())");
 
-        zasynclock!(self.state.multicast.protocols).clear();
+        zasynclock!(self.state.multicast.link_managers).clear();
 
         for (_, tm) in zasynclock!(self.state.multicast.transports).drain() {
             let _ = tm.close(close::reason::GENERIC).await;
@@ -189,32 +189,35 @@ impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    async fn new_link_manager_multicast(&self, protocol: &str) -> ZResult<LinkManagerMulticast> {
-        if !self.config.protocols.iter().any(|x| x.as_str() == protocol) {
+    async fn new_link_manager_multicast(
+        &self,
+        endpoint: &EndPoint,
+    ) -> ZResult<LinkManagerMulticast> {
+        let link_kind = LinkKind::try_from(endpoint)?;
+        if !self.config.supported_links.contains(&link_kind) {
             bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                protocol,
-                self.config.protocols
+                "Unsupported link: {:?}. Supported links are: {:?}",
+                link_kind,
+                self.config.supported_links
             );
         }
 
-        let mut w_guard = zasynclock!(self.state.multicast.protocols);
-        match w_guard.get(protocol) {
+        let mut w_guard = zasynclock!(self.state.multicast.link_managers);
+        match w_guard.get(&link_kind) {
             Some(lm) => Ok(lm.clone()),
             None => {
-                let lm = LinkManagerBuilderMulticast::make(protocol)?;
-                w_guard.insert(protocol.to_string(), lm.clone());
+                let lm = LinkManagerBuilderMulticast::make(link_kind)?;
+                w_guard.insert(link_kind, lm.clone());
                 Ok(lm)
             }
         }
     }
 
-    async fn del_link_manager_multicast(&self, protocol: &str) -> ZResult<()> {
-        match zasynclock!(self.state.multicast.protocols).remove(protocol) {
+    async fn del_link_manager_multicast(&self, link_kind: LinkKind) -> ZResult<()> {
+        match zasynclock!(self.state.multicast.link_managers).remove(&link_kind) {
             Some(_) => Ok(()),
             None => bail!(
-                "Can not delete the link manager for protocol ({}) because it has not been found.",
-                protocol
+                "Can not delete the link manager for link ({link_kind:?}) because it has not been found."
             ),
         }
     }
@@ -227,16 +230,12 @@ impl TransportManager {
         mut endpoint: EndPoint,
     ) -> ZResult<TransportMulticast> {
         let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
+        let link_kind = LinkKind::try_from(&endpoint)?;
+        if !self.config.supported_links.contains(&link_kind) {
             bail!(
                 "Unsupported protocol: {}. Supported protocols are: {:?}",
                 p,
-                self.config.protocols
+                self.config.supported_links
             );
         }
         if !self
@@ -251,11 +250,13 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self
-            .new_link_manager_multicast(endpoint.protocol().as_str())
-            .await?;
+        let manager = self.new_link_manager_multicast(&endpoint).await?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+        if let Some(config) = self
+            .config
+            .link_configs
+            .get(&LinkKind::try_from(&endpoint)?)
+        {
             let mut config = parameters::Parameters::from(config.as_str());
             // Overwrite config with current endpoint parameters
             config.extend_from_iter(endpoint.config().iter());
@@ -291,14 +292,13 @@ impl TransportManager {
     pub(super) async fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
         let mut guard = zasynclock!(self.state.multicast.transports);
         let res = guard.remove(locator);
+        let link_kind = LinkKind::try_from(locator)?;
 
         if !guard
             .iter()
-            .any(|(l, _)| l.protocol() == locator.protocol())
+            .any(|(l, _)| LinkKind::try_from(l).is_ok_and(|k| k == link_kind))
         {
-            let _ = self
-                .del_link_manager_multicast(locator.protocol().as_str())
-                .await;
+            let _ = self.del_link_manager_multicast(link_kind).await;
         }
 
         res.map(|_| ()).ok_or_else(|| {
@@ -322,14 +322,13 @@ impl TransportManager {
 
         let mut guard = zasynclock!(self.state.multicast.transports);
         let res = guard.remove(&locator);
+        let link_kind = LinkKind::try_from(&locator)?;
 
         if !guard
             .iter()
-            .any(|(l, _)| l.protocol() == locator.protocol())
+            .any(|(l, _)| LinkKind::try_from(l).is_ok_and(|k| k == link_kind))
         {
-            let _ = self
-                .del_link_manager_multicast(locator.protocol().as_str())
-                .await;
+            let _ = self.del_link_manager_multicast(link_kind).await;
         }
 
         res.map(|_| ()).ok_or_else(|| {
