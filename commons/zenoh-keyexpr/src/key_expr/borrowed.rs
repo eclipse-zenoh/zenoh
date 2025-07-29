@@ -769,7 +769,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
         let mut prev_chunk_double_star = false;
         while i < bytes.len() {
             match bytes[i] {
-                c if c > b'?' || (c > b'/' && c != b'?') => {}
+                c if c > b'/' && c != b'?' => {}
                 b'/' if i == chunk_start.wrapping_add(1) => {
                     return Err(KeyExprError::EmptyChunk.into_err(value))
                 }
