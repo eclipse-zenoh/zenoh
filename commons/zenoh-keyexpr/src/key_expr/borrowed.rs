@@ -803,7 +803,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                         None => break,
                         // Because a "**" chunk cannot be followed by "*" or "**", the next char is
                         // checked to not be a '*'.
-                        Some(&b'/') if matches!(bytes.get(i + 4), Some(b'*')) => {
+                        Some(&b'/') if matches!(bytes.get(i + 3), Some(b'*')) => {
                             // If there are two consecutive wildcard chunks, raise the appropriate
                             // error.
                             #[cold]
