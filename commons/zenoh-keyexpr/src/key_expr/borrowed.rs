@@ -732,10 +732,10 @@ enum KeyExprError {
     SingleStarAfterDoubleStar = -2,
     DoubleStarAfterDoubleStar = -3,
     EmptyChunk = -4,
-    StarsInChunk = -5,
+    StarInChunk = -5,
     DollarAfterDollar = -6,
-    ContainsSharpOrQMark = -7,
-    ContainsUnboundDollar = -8,
+    SharpOrQMark = -7,
+    UnboundDollar = -8,
 }
 
 impl KeyExprError {
@@ -746,10 +746,10 @@ impl KeyExprError {
             Self::SingleStarAfterDoubleStar => anyhow!("Invalid Key Expr `{s}`: `**/*` must be replaced by `*/**` to reach canon-form"),
             Self::DoubleStarAfterDoubleStar => anyhow!("Invalid Key Expr `{s}`: `**/**` must be replaced by `**` to reach canon-form"),
             Self::EmptyChunk => anyhow!("Invalid Key Expr `{s}`: empty chunks are forbidden, as well as leading and trailing slashes"),
-            Self::StarsInChunk => anyhow!("Invalid Key Expr `{s}`: `*` may only be preceded by `/` or `$`"),
+            Self::StarInChunk => anyhow!("Invalid Key Expr `{s}`: `*` may only be preceded by `/` or `$`"),
             Self::DollarAfterDollar => anyhow!("Invalid Key Expr `{s}`: `$` is not allowed after `$*`"),
-            Self::ContainsSharpOrQMark => anyhow!("Invalid Key Expr `{s}`: `#` and `?` are forbidden characters"),
-            Self::ContainsUnboundDollar => anyhow!("Invalid Key Expr `{s}`: `$` is only allowed in `$*`")
+            Self::SharpOrQMark => anyhow!("Invalid Key Expr `{s}`: `#` and `?` are forbidden characters"),
+            Self::UnboundDollar => anyhow!("Invalid Key Expr `{s}`: `$` is only allowed in `$*`")
         };
         zerror!((self) error).into()
     }
@@ -759,57 +759,59 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
     type Error = ZError;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            return Err(KeyExprError::EmptyChunk.into_err(value));
+        use KeyExprError::*;
+        if value.is_empty() || value.ends_with('/') {
+            return Err(EmptyChunk.into_err(value));
         }
         let bytes = value.as_bytes();
         let mut i = 0;
         let mut chunk_start = 0usize.wrapping_sub(1);
-        let mut chunk_stars = 0;
-        let mut prev_chunk_double_star = false;
         while i < bytes.len() {
             match bytes[i] {
                 c if c > b'/' && c != b'?' => {}
-                b'/' if i == chunk_start.wrapping_add(1) => {
-                    return Err(KeyExprError::EmptyChunk.into_err(value))
-                }
-                b'/' => {
-                    prev_chunk_double_star = chunk_stars == 2;
-                    chunk_stars = 0;
-                    chunk_start = i;
-                }
-                b'*' if chunk_stars + 1 != i.wrapping_sub(chunk_start) || chunk_stars == 2 => {
-                    return Err(KeyExprError::StarsInChunk.into_err(value));
-                }
-                b'*' if prev_chunk_double_star => {
-                    #[cold]
-                    fn double_star_err(value: &str, i: usize) -> ZError {
-                        match (value.as_bytes().get(i + 1), value.as_bytes().get(i + 2)) {
-                            (None | Some(&b'/'), _) => KeyExprError::SingleStarAfterDoubleStar,
-                            (Some(&b'*'), None | Some(&b'/')) => {
-                                KeyExprError::DoubleStarAfterDoubleStar
+                b'/' if i == chunk_start.wrapping_add(1) => return Err(EmptyChunk.into_err(value)),
+                b'/' => chunk_start = i,
+                b'*' if i != chunk_start.wrapping_add(1) => return Err(StarInChunk.into_err(value)),
+                b'*' => match bytes.get(i + 1) {
+                    None => break,
+                    Some(&b'/') => {
+                        i += 1;
+                        chunk_start = i;
+                    }
+                    Some(&b'*') => match bytes.get(i + 2) {
+                        None => break,
+                        Some(&b'/') if matches!(bytes.get(i + 4), Some(b'*')) => {
+                            #[cold]
+                            fn double_star_err(value: &str, i: usize) -> ZError {
+                                match (value.as_bytes().get(i + 1), value.as_bytes().get(i + 2)) {
+                                    (None | Some(&b'/'), _) => SingleStarAfterDoubleStar,
+                                    (Some(&b'*'), None | Some(&b'/')) => DoubleStarAfterDoubleStar,
+                                    _ => StarInChunk,
+                                }
+                                .into_err(value)
                             }
-                            _ => KeyExprError::StarsInChunk,
+                            return Err(double_star_err(value, i));
                         }
-                        .into_err(value)
-                    }
-                    return Err(double_star_err(value, i));
-                }
-                b'*' => chunk_stars += 1,
-                b'$' => {
-                    i += 1;
-                    if bytes.get(i) != Some(&b'*') {
-                        return Err(KeyExprError::ContainsUnboundDollar.into_err(value));
-                    }
-                    match bytes.get(i + 1) {
-                        Some(&b'$') => return Err(KeyExprError::DollarAfterDollar.into_err(value)),
-                        Some(&b'/') if i == chunk_start.wrapping_add(2) => {
-                            return Err(KeyExprError::LoneDollarStar.into_err(value));
+                        Some(&b'/') => {
+                            i += 2;
+                            chunk_start = i;
                         }
-                        _ => {}
-                    }
+                        _ => return Err(StarInChunk.into_err(value)),
+                    },
+                    _ => return Err(StarInChunk.into_err(value)),
+                },
+                b'$' if bytes.get(i + 1) != Some(&b'*') => {
+                    return Err(UnboundDollar.into_err(value))
                 }
-                b'#' | b'?' => return Err(KeyExprError::ContainsSharpOrQMark.into_err(value)),
+                b'$' => match bytes.get(i + 2) {
+                    None => break,
+                    Some(&b'$') => return Err(DollarAfterDollar.into_err(value)),
+                    Some(&b'/') if i == chunk_start.wrapping_add(2) => {
+                        return Err(LoneDollarStar.into_err(value))
+                    }
+                    _ => i += 1,
+                },
+                b'#' | b'?' => return Err(SharpOrQMark.into_err(value)),
                 _ => {}
             }
             i += 1;
@@ -1066,12 +1068,14 @@ mod tests {
 
     use crate::keyexpr;
 
+    #[test_case("", false; "Empty")]
     #[test_case("demo/example/test", true; "Normal key_expr")]
     #[test_case("demo/*/*/test", true; "Single star after single star")]
     #[test_case("demo/*/**/test", true; "Single star after double star")]
     #[test_case("demo/example$*/test", true; "Dollar with star")]
     #[test_case("demo/example$*-$*/test", true; "Multiple dollar with star")]
     #[test_case("/demo/example/test", false; "Leading /")]
+    #[test_case("demo/example/test/", false; "Trailing /")]
     #[test_case("demo/$*/test", false; "Lone $*")]
     #[test_case("demo/**/*/test", false; "Double star after single star")]
     #[test_case("demo/**/**/test", false; "Double star after double star")]
