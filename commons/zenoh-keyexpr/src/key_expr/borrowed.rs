@@ -740,7 +740,7 @@ enum KeyExprError {
 
 impl KeyExprError {
     #[cold]
-    fn err(self, s: &str) -> ZError {
+    fn into_err(self, s: &str) -> ZError {
         let error = match &self {
             Self::LoneDollarStar => anyhow!("Invalid Key Expr `{s}`: empty chunks are forbidden, as well as leading and trailing slashes"),
             Self::SingleStarAfterDoubleStar => anyhow!("Invalid Key Expr `{s}`: `**/*` must be replaced by `*/**` to reach canon-form"),
@@ -760,7 +760,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         if value.is_empty() {
-            return Err(KeyExprError::EmptyChunk.err(value));
+            return Err(KeyExprError::EmptyChunk.into_err(value));
         }
         let bytes = value.as_bytes();
         let mut i = 0;
@@ -771,7 +771,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             match bytes[i] {
                 c if c > b'?' || (c > b'/' && c != b'?') => {}
                 b'/' if i == chunk_start.wrapping_add(1) => {
-                    return Err(KeyExprError::EmptyChunk.err(value))
+                    return Err(KeyExprError::EmptyChunk.into_err(value))
                 }
                 b'/' => {
                     prev_chunk_double_star = chunk_stars == 2;
@@ -779,32 +779,37 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                     chunk_start = i;
                 }
                 b'*' if chunk_stars + 1 != i.wrapping_sub(chunk_start) || chunk_stars == 2 => {
-                    return Err(KeyExprError::StarsInChunk.err(value));
+                    return Err(KeyExprError::StarsInChunk.into_err(value));
                 }
-                b'*' if prev_chunk_double_star => match (bytes.get(i + 1), bytes.get(i + 2)) {
-                    (None | Some(&b'/'), _) => {
-                        return Err(KeyExprError::SingleStarAfterDoubleStar.err(value))
+                b'*' if prev_chunk_double_star => {
+                    #[cold]
+                    fn double_star_err(value: &str, i: usize) -> ZError {
+                        match (value.as_bytes().get(i + 1), value.as_bytes().get(i + 2)) {
+                            (None | Some(&b'/'), _) => KeyExprError::SingleStarAfterDoubleStar,
+                            (Some(&b'*'), None | Some(&b'/')) => {
+                                KeyExprError::DoubleStarAfterDoubleStar
+                            }
+                            _ => KeyExprError::StarsInChunk,
+                        }
+                        .into_err(value)
                     }
-                    (Some(&b'*'), None | Some(&b'/')) => {
-                        return Err(KeyExprError::DoubleStarAfterDoubleStar.err(value))
-                    }
-                    _ => return Err(KeyExprError::StarsInChunk.err(value)),
-                },
+                    return Err(double_star_err(value, i));
+                }
                 b'*' => chunk_stars += 1,
                 b'$' => {
                     i += 1;
                     if bytes.get(i) != Some(&b'*') {
-                        return Err(KeyExprError::ContainsUnboundDollar.err(value));
+                        return Err(KeyExprError::ContainsUnboundDollar.into_err(value));
                     }
                     match bytes.get(i + 1) {
-                        Some(&b'$') => return Err(KeyExprError::DollarAfterDollar.err(value)),
+                        Some(&b'$') => return Err(KeyExprError::DollarAfterDollar.into_err(value)),
                         Some(&b'/') if i == chunk_start.wrapping_add(2) => {
-                            return Err(KeyExprError::LoneDollarStar.err(value));
+                            return Err(KeyExprError::LoneDollarStar.into_err(value));
                         }
                         _ => {}
                     }
                 }
-                b'#' | b'?' => return Err(KeyExprError::ContainsSharpOrQMark.err(value)),
+                b'#' | b'?' => return Err(KeyExprError::ContainsSharpOrQMark.into_err(value)),
                 _ => {}
             }
             i += 1;
