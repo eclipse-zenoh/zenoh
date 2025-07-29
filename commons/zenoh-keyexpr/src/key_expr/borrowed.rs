@@ -760,30 +760,52 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         use KeyExprError::*;
+        // Check for emptiness or trailing slash, as they are not caught after.
         if value.is_empty() || value.ends_with('/') {
             return Err(EmptyChunk.into_err(value));
         }
         let bytes = value.as_bytes();
-        let mut i = 0;
+        // The start of the chunk, i.e. the index of the char after the '/'.
         let mut chunk_start = 0;
+        // Use a while loop to scan the string because it requires to advance the iteration
+        // manually for some characters, e.g. '$'.
+        let mut i = 0;
         while i < bytes.len() {
             match bytes[i] {
+                // In UTF-8, all keyexpr special characters are lesser or equal to '/', except '?'
+                // This shortcut greatly reduce the number of operations for alphanumeric
+                // characters, which are the most common in keyexprs.
                 c if c > b'/' && c != b'?' => i += 1,
+                // A chunk cannot start with '/'
                 b'/' if i == chunk_start => return Err(EmptyChunk.into_err(value)),
+                // `chunk_start` is updated when starting a new chunk.
                 b'/' => {
                     i += 1;
                     chunk_start = i;
                 }
+                // The first encountered '*' must be at the beginning of a chunk
                 b'*' if i != chunk_start => return Err(StarInChunk.into_err(value)),
+                // When a '*' is match, it means this is a wildcard chunk, possibly with two "**",
+                // which must be followed by a '/' or the end of the string.
+                // So the next character is checked, and the cursor
                 b'*' => match bytes.get(i + 1) {
+                    // Break if end of string is reached.
                     None => break,
+                    // If a '/' is found, start a new chunk, and advance the cursor to take in
+                    // previous check.
                     Some(&b'/') => {
                         i += 2;
                         chunk_start = i;
                     }
+                    // If a second '*' is found, the next character must be a slash.
                     Some(&b'*') => match bytes.get(i + 2) {
+                        // Break if end of string is reached.
                         None => break,
+                        // Because a "**" chunk cannot be followed by "*" or "**", the next char is
+                        // checked to not be a '*'.
                         Some(&b'/') if matches!(bytes.get(i + 4), Some(b'*')) => {
+                            // If there are two consecutive wildcard chunks, raise the appropriate
+                            // error.
                             #[cold]
                             fn double_star_err(value: &str, i: usize) -> ZError {
                                 match (value.as_bytes().get(i + 1), value.as_bytes().get(i + 2)) {
@@ -795,26 +817,36 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                             }
                             return Err(double_star_err(value, i));
                         }
+                        // If a '/' is found, start a new chunk, and advance the cursor to take in
+                        // previous checks.
                         Some(&b'/') => {
                             i += 3;
                             chunk_start = i;
                         }
+                        // This is not a "**" chunk, raise an error.
                         _ => return Err(StarInChunk.into_err(value)),
                     },
+                    // This is not a "*" chunk, raise an error.
                     _ => return Err(StarInChunk.into_err(value)),
                 },
+                // A '$' must be followed by '*'.
                 b'$' if bytes.get(i + 1) != Some(&b'*') => {
                     return Err(UnboundDollar.into_err(value))
                 }
+                // "$*" has some additional rules to check.
                 b'$' => match bytes.get(i + 2) {
+                    // Break if end of string is reached.
                     None => break,
+                    // "$*" cannot be followed by '$'.
                     Some(&b'$') => return Err(DollarAfterDollar.into_err(value)),
-                    Some(&b'/') if i == chunk_start.wrapping_add(2) => {
-                        return Err(LoneDollarStar.into_err(value))
-                    }
+                    // "$*" cannot be alone in a chunk
+                    Some(&b'/') if i == chunk_start => return Err(LoneDollarStar.into_err(value)),
+                    // Everything is fine, advance the cursor taking the '*' check in account.
                     _ => i += 2,
                 },
+                // '#' and '?' are forbidden.
                 b'#' | b'?' => return Err(SharpOrQMark.into_err(value)),
+                // Fallback for unmatched characters
                 _ => i += 1,
             }
         }
