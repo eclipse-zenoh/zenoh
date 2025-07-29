@@ -765,17 +765,20 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
         }
         let bytes = value.as_bytes();
         let mut i = 0;
-        let mut chunk_start = 0usize.wrapping_sub(1);
+        let mut chunk_start = 0;
         while i < bytes.len() {
             match bytes[i] {
-                c if c > b'/' && c != b'?' => {}
-                b'/' if i == chunk_start.wrapping_add(1) => return Err(EmptyChunk.into_err(value)),
-                b'/' => chunk_start = i,
-                b'*' if i != chunk_start.wrapping_add(1) => return Err(StarInChunk.into_err(value)),
+                c if c > b'/' && c != b'?' => i += 1,
+                b'/' if i == chunk_start => return Err(EmptyChunk.into_err(value)),
+                b'/' => {
+                    i += 1;
+                    chunk_start = i;
+                }
+                b'*' if i != chunk_start => return Err(StarInChunk.into_err(value)),
                 b'*' => match bytes.get(i + 1) {
                     None => break,
                     Some(&b'/') => {
-                        i += 1;
+                        i += 2;
                         chunk_start = i;
                     }
                     Some(&b'*') => match bytes.get(i + 2) {
@@ -793,7 +796,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                             return Err(double_star_err(value, i));
                         }
                         Some(&b'/') => {
-                            i += 2;
+                            i += 3;
                             chunk_start = i;
                         }
                         _ => return Err(StarInChunk.into_err(value)),
@@ -809,12 +812,11 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                     Some(&b'/') if i == chunk_start.wrapping_add(2) => {
                         return Err(LoneDollarStar.into_err(value))
                     }
-                    _ => i += 1,
+                    _ => i += 2,
                 },
                 b'#' | b'?' => return Err(SharpOrQMark.into_err(value)),
-                _ => {}
+                _ => i += 1,
             }
-            i += 1;
         }
         Ok(unsafe { keyexpr::from_str_unchecked(value) })
     }
