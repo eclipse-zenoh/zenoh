@@ -237,6 +237,7 @@ zenoh = { version = "=1.5.0", path = "zenoh", default-features = false }
 zenoh-runtime = { version = "=1.5.0", path = "commons/zenoh-runtime" }
 zenoh-task = { version = "=1.5.0", path = "commons/zenoh-task" }
 zenoh-examples = { version = "=1.5.0", path = "examples", default-features = false }
+zerocopy = "0.8.26"
 
 [profile.dev]
 debug = true
