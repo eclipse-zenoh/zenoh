@@ -28,9 +28,7 @@ use crate::{
     ShmBufInner,
 };
 
-fn can_transmute<T: zerocopy::KnownLayout + zerocopy::FromBytes>(
-    value: &ShmBufInner,
-) -> ZResult<()> {
+fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()> {
     let slice = value.as_ref();
     let _ = T::read_from_bytes(slice).map_err(|e| format!("Error transmutting: {e}"))?;
     Ok(())
@@ -55,7 +53,7 @@ impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
     }
 }
 
-impl<T: ResideInShm + zerocopy::FromBytes> TryFrom<ZShm> for Typed<T, ZShm> {
+impl<T: ResideInShm> TryFrom<ZShm> for Typed<T, ZShm> {
     type Error = (ZShm, Box<dyn IError + Send + Sync + 'static>);
 
     fn try_from(value: ZShm) -> Result<Self, Self::Error> {
@@ -69,7 +67,7 @@ impl<T: ResideInShm + zerocopy::FromBytes> TryFrom<ZShm> for Typed<T, ZShm> {
     }
 }
 
-impl<T: ResideInShm + zerocopy::FromBytes> TryFrom<ZShmMut> for Typed<T, ZShmMut> {
+impl<T: ResideInShm> TryFrom<ZShmMut> for Typed<T, ZShmMut> {
     type Error = (ZShmMut, Box<dyn IError + Send + Sync + 'static>);
 
     fn try_from(value: ZShmMut) -> Result<Self, Self::Error> {
@@ -83,7 +81,7 @@ impl<T: ResideInShm + zerocopy::FromBytes> TryFrom<ZShmMut> for Typed<T, ZShmMut
     }
 }
 
-impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a zshm> for Typed<T, &'a zshm> {
+impl<'a, T: ResideInShm> TryFrom<&'a zshm> for Typed<T, &'a zshm> {
     type Error = Box<dyn IError + Send + Sync + 'static>;
 
     fn try_from(value: &'a zshm) -> Result<Self, Self::Error> {
@@ -94,7 +92,7 @@ impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a zshm> for Typed<T, &'
     }
 }
 
-impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a mut zshm> for Typed<T, &'a mut zshm> {
+impl<'a, T: ResideInShm> TryFrom<&'a mut zshm> for Typed<T, &'a mut zshm> {
     type Error = Box<dyn IError + Send + Sync + 'static>;
 
     fn try_from(value: &'a mut zshm) -> Result<Self, Self::Error> {
@@ -105,7 +103,7 @@ impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a mut zshm> for Typed<T
     }
 }
 
-impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a zshmmut> for Typed<T, &'a zshmmut> {
+impl<'a, T: ResideInShm> TryFrom<&'a zshmmut> for Typed<T, &'a zshmmut> {
     type Error = Box<dyn IError + Send + Sync + 'static>;
 
     fn try_from(value: &'a zshmmut) -> Result<Self, Self::Error> {
@@ -116,9 +114,7 @@ impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a zshmmut> for Typed<T,
     }
 }
 
-impl<'a, T: ResideInShm + zerocopy::FromBytes> TryFrom<&'a mut zshmmut>
-    for Typed<T, &'a mut zshmmut>
-{
+impl<'a, T: ResideInShm> TryFrom<&'a mut zshmmut> for Typed<T, &'a mut zshmmut> {
     type Error = Box<dyn IError + Send + Sync + 'static>;
 
     fn try_from(value: &'a mut zshmmut) -> Result<Self, Self::Error> {

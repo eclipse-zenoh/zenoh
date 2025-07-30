@@ -63,8 +63,7 @@ async fn run() -> zenoh::Result<()> {
 
         // Option 2: Allocation with custom alignment
         let _shm_buf = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2)?)
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
             .wait()?;
     };
 
@@ -77,8 +76,7 @@ async fn run() -> zenoh::Result<()> {
 
         // Option 2: Comprehensive configuration:
         let comprehensive_layout = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2)?)
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
             .into_layout()?;
         let _shm_buf = comprehensive_layout.alloc().wait()?;
     };

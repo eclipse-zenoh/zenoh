@@ -15,9 +15,15 @@ use std::{num::NonZeroUsize, ptr};
 
 use crate::api::provider::memory_layout::MemoryLayout;
 
-pub trait ResideInShm: Send + zerocopy::KnownLayout + zerocopy::IntoBytes {}
+pub trait ResideInShm:
+    Send + zerocopy::KnownLayout + zerocopy::FromBytes + zerocopy::IntoBytes
+{
+}
 
-impl<T: Send + zerocopy::KnownLayout + zerocopy::IntoBytes> ResideInShm for T {}
+impl<T: Send + zerocopy::KnownLayout + zerocopy::FromBytes + zerocopy::IntoBytes> ResideInShm
+    for T
+{
+}
 
 /// Errors for buffer relayouting operation.
 #[zenoh_macros::unstable_doc]
