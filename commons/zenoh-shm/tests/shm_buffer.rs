@@ -63,7 +63,7 @@ fn shm_buffer_alloc_typed() {
     let mut buffer = make_typed_shm_buffer::<SharedByteData>();
     validate_typed_buffer_consistency(&mut buffer);
 
-    let mut buffer = buffer.unwrap();
+    let mut buffer = buffer.into_inner();
     validate_raw_buffer_consistency(&mut buffer);
 
     let mut buffer: Typed<SharedByteData, _> = buffer.try_into().unwrap();
