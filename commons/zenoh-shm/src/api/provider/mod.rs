@@ -13,7 +13,7 @@
 //
 
 pub mod chunk;
+pub mod memory_layout;
 pub mod shm_provider;
 pub mod shm_provider_backend;
 pub mod types;
-pub mod memory_layout;

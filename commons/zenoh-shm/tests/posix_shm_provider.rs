@@ -19,9 +19,8 @@ use zenoh_shm::api::{
         posix_shm_client::PosixShmClient, posix_shm_provider_backend::PosixShmProviderBackend,
     },
     provider::{
-        shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment},
-        memory_layout::MemoryLayout
+        memory_layout::MemoryLayout, shm_provider_backend::ShmProviderBackend,
+        types::AllocAlignment,
     },
 };
 

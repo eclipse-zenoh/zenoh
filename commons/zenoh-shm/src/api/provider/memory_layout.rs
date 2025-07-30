@@ -141,7 +141,7 @@ impl TryFrom<(usize, AllocAlignment)> for MemoryLayout {
 impl<T> From<LayoutForType<T>> for MemoryLayout {
     fn from(value: LayoutForType<T>) -> Self {
         // SAFETY: this is safe as LayoutForType always gives correct layout arguments
-        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignmnet()) }
+        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
     }
 }
 
@@ -173,7 +173,7 @@ impl<T> LayoutForType<T> {
         unsafe { NonZeroUsize::new_unchecked(std::mem::size_of::<T>()) }
     }
 
-    pub const fn alignmnet(&self) -> AllocAlignment {
+    pub const fn alignment(&self) -> AllocAlignment {
         AllocAlignment::for_type::<T>()
     }
 }
