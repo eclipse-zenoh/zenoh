@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -36,13 +36,13 @@ fn can_transmute<T: zerocopy::KnownLayout + zerocopy::FromBytes>(
     Ok(())
 }
 
-pub struct Typed<T: ?Sized, Tbuf: ShmBuf<[u8]>> {
+pub struct Typed<T: ?Sized, Tbuf> {
     buf: Tbuf,
     _phantom: PhantomData<T>,
 }
 
-impl<T: ?Sized, Tbuf: ShmBuf<[u8]>> Typed<T, Tbuf> {
-    pub fn unwrap(self) -> Tbuf {
+impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
+    pub fn into_inner(self) -> Tbuf {
         self.buf
     }
 }

@@ -128,6 +128,8 @@ impl TryFrom<ZShm> for ZShmMut {
 
     fn try_from(value: ZShm) -> Result<Self, Self::Error> {
         match value.inner.is_unique() && value.inner.is_valid() {
+            // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
+            // to ShmBufInner type, so it is safe to transmute them in any direction
             true => Ok(unsafe { std::mem::transmute::<ZShm, ZShmMut>(value) }),
             false => Err(value),
         }

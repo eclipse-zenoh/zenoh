@@ -273,7 +273,6 @@ pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
 
 /// SHM buffer allocation result
 #[zenoh_macros::unstable_doc]
-#[allow(type_alias_bounds)]
 pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
 
 /// Layout or allocation error.
@@ -297,5 +296,4 @@ impl From<ZLayoutAllocError> for zenoh_result::Error {
 
 /// SHM buffer layouting and allocation result
 #[zenoh_macros::unstable_doc]
-#[allow(type_alias_bounds)]
 pub type BufLayoutAllocResult = Result<ZShmMut, ZLayoutAllocError>;
