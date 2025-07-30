@@ -551,15 +551,16 @@ pub mod shm {
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
             shm_provider::{
-                AllocLayout, AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
+                AllocLayout, AllocBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
                 DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
                 ForceDeallocPolicy, GarbageCollect, JustAlloc, LayoutAllocBuilder,
                 ProviderAllocBuilder, ShmProvider, ShmProviderBuilder,
             },
             shm_provider_backend::ShmProviderBackend,
+            memory_layout::{IntoMemoryLayout, MemoryLayout, LayoutForType},
             types::{
                 AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
-                MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
+                ZAllocError, ZLayoutAllocError, ZLayoutError,
             },
         },
     };

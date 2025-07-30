@@ -20,7 +20,8 @@ use zenoh_shm::api::{
     },
     provider::{
         shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, MemoryLayout},
+        types::{AllocAlignment},
+        memory_layout::MemoryLayout
     },
 };
 

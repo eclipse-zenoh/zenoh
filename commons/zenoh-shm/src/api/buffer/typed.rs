@@ -45,6 +45,14 @@ impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
     pub fn into_inner(self) -> Tbuf {
         self.buf
     }
+
+    /// #SAFETY: this is safe if buf's layout is compatible with T layout
+    pub(crate) unsafe fn new_unchecked(buf: Tbuf) -> Self {
+        Self {
+            buf,
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: ResideInShm + zerocopy::FromBytes> TryFrom<ZShm> for Typed<T, ZShm> {
