@@ -83,7 +83,7 @@ impl MemoryLayout {
     ///
     /// ```
     /// use zenoh_shm::api::provider::types::AllocAlignment;
-    /// use zenoh_shm::api::provider::types::MemoryLayout;
+    /// use zenoh_shm::api::provider::memory_layout::MemoryLayout;
     ///
     /// // 8 bytes with 4-byte alignment
     /// let layout4b = MemoryLayout::new(8, AllocAlignment::new(2).unwrap()).unwrap();
