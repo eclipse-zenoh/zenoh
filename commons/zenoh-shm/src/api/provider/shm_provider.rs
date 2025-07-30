@@ -230,7 +230,7 @@ where
             size,
             provider_layout,
             provider,
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
         })
     }
 }
