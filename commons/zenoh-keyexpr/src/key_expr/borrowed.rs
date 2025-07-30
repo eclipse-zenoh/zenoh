@@ -808,7 +808,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                             // error.
                             #[cold]
                             fn double_star_err(value: &str, i: usize) -> ZError {
-                                match (value.as_bytes().get(i + 1), value.as_bytes().get(i + 2)) {
+                                match (value.as_bytes().get(i + 4), value.as_bytes().get(i + 5)) {
                                     (None | Some(&b'/'), _) => SingleStarAfterDoubleStar,
                                     (Some(&b'*'), None | Some(&b'/')) => DoubleStarAfterDoubleStar,
                                     _ => StarInChunk,
@@ -835,12 +835,14 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 }
                 // "$*" has some additional rules to check.
                 b'$' => match bytes.get(i + 2) {
-                    // Break if end of string is reached.
-                    None => break,
                     // "$*" cannot be followed by '$'.
                     Some(&b'$') => return Err(DollarAfterDollar.into_err(value)),
                     // "$*" cannot be alone in a chunk
-                    Some(&b'/') if i == chunk_start => return Err(LoneDollarStar.into_err(value)),
+                    Some(&b'/') | None if i == chunk_start => {
+                        return Err(LoneDollarStar.into_err(value))
+                    }
+                    // Break if end of string is reached.
+                    None => break,
                     // Everything is fine, advance the cursor taking the '*' check in account.
                     _ => i += 2,
                 },
@@ -1099,29 +1101,44 @@ fn test_keyexpr_strip_nonwild_prefix() {
 #[cfg(test)]
 mod tests {
     use test_case::test_case;
+    use zenoh_result::ErrNo;
 
-    use crate::keyexpr;
+    use crate::{
+        key_expr::borrowed::{KeyExprError, KeyExprError::*},
+        keyexpr,
+    };
 
-    #[test_case("", false; "Empty")]
-    #[test_case("demo/example/test", true; "Normal key_expr")]
-    #[test_case("demo/*/*/test", true; "Single star after single star")]
-    #[test_case("demo/*/**/test", true; "Single star after double star")]
-    #[test_case("demo/example$*/test", true; "Dollar with star")]
-    #[test_case("demo/example$*-$*/test", true; "Multiple dollar with star")]
-    #[test_case("/demo/example/test", false; "Leading /")]
-    #[test_case("demo/example/test/", false; "Trailing /")]
-    #[test_case("demo/$*/test", false; "Lone $*")]
-    #[test_case("demo/**/*/test", false; "Double star after single star")]
-    #[test_case("demo/**/**/test", false; "Double star after double star")]
-    #[test_case("demo//test", false; "Empty Chunk")]
-    #[test_case("demo/exam*ple/test", false; "Stars in chunk")]
-    #[test_case("demo/example$*$*/test", false; "Dollar after dollar or star")]
-    #[test_case("demo/example#/test", false; "Contain sharp")]
-    #[test_case("demo/example?/test", false; "Contain mark")]
-    #[test_case("demo/$/test", false; "Contain unbounded dollar")]
-    #[test_case("demo/$*?/test", false; "Contain mark after dollar start")]
-    fn test_str_to_keyexpr(key_str: &str, valid: bool) {
-        let key = keyexpr::new(key_str);
-        assert!(key.is_ok() == valid);
+    #[test_case("", EmptyChunk; "Empty")]
+    #[test_case("demo/example/test", None; "Normal key_expr")]
+    #[test_case("demo/*", None; "Single star at the end")]
+    #[test_case("demo/**", None; "Double star at the end")]
+    #[test_case("demo/*/*/test", None; "Single star after single star")]
+    #[test_case("demo/*/**/test", None; "Double star after single star")]
+    #[test_case("demo/example$*/test", None; "Dollar with star")]
+    #[test_case("demo/example$*-$*/test", None; "Multiple dollar with star")]
+    #[test_case("/demo/example/test", EmptyChunk; "Leading /")]
+    #[test_case("demo/example/test/", EmptyChunk; "Trailing /")]
+    #[test_case("demo/$*/test", LoneDollarStar; "Lone $*")]
+    #[test_case("demo/$*", LoneDollarStar; "Lone $* at the end")]
+    #[test_case("demo/example$*", None; "Trailing lone $*")]
+    #[test_case("demo/**/*/test", SingleStarAfterDoubleStar; "Single star after double star")]
+    #[test_case("demo/**/**/test", DoubleStarAfterDoubleStar; "Double star after double star")]
+    #[test_case("demo//test", EmptyChunk; "Empty Chunk")]
+    #[test_case("demo/exam*ple/test", StarInChunk; "Star in chunk")]
+    #[test_case("demo/example$*$/test", DollarAfterDollar; "Dollar after dollar or star")]
+    #[test_case("demo/example$*$*/test", DollarAfterDollar; "Dollar star after dollar or star")]
+    #[test_case("demo/example#/test", SharpOrQMark; "Contain sharp")]
+    #[test_case("demo/example?/test", SharpOrQMark; "Contain mark")]
+    #[test_case("demo/$/test", UnboundDollar; "Contain unbounded dollar")]
+    fn test_keyexpr_new(key_str: &str, error: impl Into<Option<KeyExprError>>) {
+        assert_eq!(
+            keyexpr::new(key_str).err().map(|err| {
+                err.downcast_ref::<zenoh_result::ZError>()
+                    .unwrap()
+                    .errno()
+                    .get()
+            }),
+            error.into().map(|err| err as i8)
+        );
     }
 }
