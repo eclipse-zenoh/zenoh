@@ -12,24 +12,24 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-plugin-storage-manager"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "The zenoh storages plugin."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-plugin-storage-manager"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 default = ["dynamic_plugin", "zenoh/default"]
 dynamic_plugin = []
 
 [lib]
-name = "zenoh_plugin_storage_manager"
 crate-type = ["cdylib", "rlib"]
+name = "zenoh_plugin_storage_manager"
 
 [dependencies]
 async-trait = { workspace = true }
@@ -46,32 +46,32 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 zenoh = { workspace = true, default-features = false, features = [
-    "plugins",
-    "internal",
-    "unstable",
+  "internal",
+  "plugins",
+  "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
+jsonschema = { workspace = true }
 rustc_version = { workspace = true }
-zenoh_backend_traits = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
-jsonschema = { workspace = true }
+zenoh_backend_traits = { workspace = true }
 
 [dev-dependencies]
 async-global-executor = { workspace = true }
 uhlc = { workspace = true }
 
 [package.metadata.deb]
-name = "zenoh-plugin-storage-manager"
-maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
-section = "net"
-license-file = ["../../LICENSE", "0"]
 depends = "zenohd (=1.5.0)"
+license-file = ["../../LICENSE", "0"]
+maintainer = "zenoh-dev@eclipse.org"
+name = "zenoh-plugin-storage-manager"
+section = "net"
 
 [package.metadata.cargo-machete]
 ignored = ["git-version"]

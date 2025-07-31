@@ -12,12 +12,12 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-plugin-example"
-version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+name = "zenoh-plugin-example"
 publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 default = ["dynamic_plugin"]
@@ -34,20 +34,20 @@ name = "zenoh_plugin_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-zenoh-util = { workspace = true }
 futures = { workspace = true }
-lazy_static = { workspace = true }
 git-version = { workspace = true }
-tracing = { workspace = true }
-tokio = { workspace = true }
+lazy_static = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 zenoh = { workspace = true, features = [
-    "default",
-    "plugins",
-    "internal",
-    "unstable",
+  "default",
+  "internal",
+  "plugins",
+  "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
+zenoh-util = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["git-version"]
