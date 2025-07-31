@@ -34,7 +34,7 @@ use super::{
 };
 use crate::{
     api::{
-        buffer::{typed::Typed, zshmmut::ZShmMut},
+        buffer::{traits::ResideInShm, typed::Typed, zshmmut::ZShmMut},
         protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
         provider::{
             memory_layout::{IntoMemoryLayout, LayoutForType, MemoryLayout},
@@ -113,6 +113,7 @@ where
 impl<'a, Backend, T> AllocBuilder<'a, Backend, LayoutForType<T>>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
 {
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
@@ -157,6 +158,7 @@ where
 impl<'a, Backend, T> Resolvable for AllocBuilder<'a, Backend, LayoutForType<T>>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
 {
     type To = TypedBufLayoutAllocResult<T>;
 }
@@ -165,6 +167,7 @@ where
 impl<'a, Backend, T> Wait for AllocBuilder<'a, Backend, LayoutForType<T>>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
     ProviderAllocBuilder<'a, Backend, LayoutForType<T>>:
         Resolvable<To = TypedBufLayoutAllocResult<T>>,
 {
@@ -615,6 +618,7 @@ impl<'a, Backend, T, Policy> Resolvable
     for ProviderAllocBuilder<'a, Backend, LayoutForType<T>, Policy>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
 {
     type To = TypedBufLayoutAllocResult<T>;
 }
@@ -623,6 +627,7 @@ where
 impl<'a, Backend, T, Policy> Wait for ProviderAllocBuilder<'a, Backend, LayoutForType<T>, Policy>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
     Policy: AllocPolicy,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -639,8 +644,8 @@ impl<'a, Backend, T, Policy> IntoFuture
     for ProviderAllocBuilder<'a, Backend, LayoutForType<T>, Policy>
 where
     Backend: ShmProviderBackend + Sync,
+    T: ResideInShm + 'a,
     Policy: AsyncAllocPolicy,
-    T: Send + 'a,
 {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
@@ -741,6 +746,7 @@ impl<'b, 'a: 'b, Backend, T, Policy> Resolvable
     for LayoutAllocBuilder<'b, 'a, Backend, LayoutForType<T>, Policy>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
 {
     type To = TypedBufAllocResult<T>;
 }
@@ -750,6 +756,7 @@ impl<'b, 'a: 'b, Backend, T, Policy> Wait
     for LayoutAllocBuilder<'b, 'a, Backend, LayoutForType<T>, Policy>
 where
     Backend: ShmProviderBackend,
+    T: ResideInShm,
     Policy: AllocPolicy,
     Self: Resolvable<To = TypedBufAllocResult<T>>,
 {
@@ -768,7 +775,7 @@ impl<'a, Backend, T, Policy> IntoFuture
     for LayoutAllocBuilder<'a, 'a, Backend, LayoutForType<T>, Policy>
 where
     Backend: ShmProviderBackend + Sync,
-    T: Send + 'a,
+    T: ResideInShm + 'a,
     Policy: AsyncAllocPolicy,
     LayoutAllocBuilder<'a, 'a, Backend, LayoutForType<T>, Policy>:
         Resolvable<To = TypedBufAllocResult<T>>,
@@ -922,9 +929,12 @@ where
         AllocBuilder::new(self, what)
     }
 
-    /// Rich interface for making allocations
+    /// Rich interface for making typed allocations
     #[zenoh_macros::unstable_doc]
-    pub fn alloc_type<T>(&self, what: LayoutForType<T>) -> AllocBuilder<Backend, LayoutForType<T>> {
+    pub fn alloc_type<T: ResideInShm>(
+        &self,
+        what: LayoutForType<T>,
+    ) -> AllocBuilder<Backend, LayoutForType<T>> {
         AllocBuilder::new(self, what)
     }
 

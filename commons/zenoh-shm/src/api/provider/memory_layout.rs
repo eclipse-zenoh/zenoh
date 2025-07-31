@@ -145,6 +145,7 @@ impl<T> From<LayoutForType<T>> for MemoryLayout {
     }
 }
 
+/// Helper type to build LayoutForType
 pub struct BuildLayout;
 
 impl BuildLayout {
@@ -163,6 +164,7 @@ impl BuildLayout {
     }
 }
 
+/// A generic descriptor for type and it's layout
 pub struct LayoutForType<T> {
     _phantom: PhantomData<T>,
 }

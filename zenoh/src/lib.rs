@@ -530,7 +530,8 @@ pub mod internal {
 pub mod shm {
     pub use zenoh_shm::api::{
         buffer::{
-            traits::{OwnedShmBuf, ShmBuf, ShmBufMut},
+            traits::{OwnedShmBuf, ResideInShm, ShmBuf, ShmBufMut},
+            typed::Typed,
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
@@ -550,7 +551,7 @@ pub mod shm {
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
-            memory_layout::{IntoMemoryLayout, LayoutForType, MemoryLayout},
+            memory_layout::{BuildLayout, IntoMemoryLayout, LayoutForType, MemoryLayout},
             shm_provider::{
                 AllocBuilder, AllocLayout, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
                 DeallocOptimal, DeallocYoungest, Deallocate, Defragment, ForceDeallocPolicy,
@@ -560,7 +561,8 @@ pub mod shm {
             shm_provider_backend::ShmProviderBackend,
             types::{
                 AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
-                ZAllocError, ZLayoutAllocError, ZLayoutError,
+                TypedBufAllocResult, TypedBufLayoutAllocResult, ZAllocError, ZLayoutAllocError,
+                ZLayoutError,
             },
         },
     };

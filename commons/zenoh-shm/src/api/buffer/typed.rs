@@ -28,18 +28,14 @@ use crate::{
     ShmBufInner,
 };
 
-fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()> {
-    let slice = value.as_ref();
-    let _ = T::read_from_bytes(slice).map_err(|e| format!("Error transmutting: {e}"))?;
-    Ok(())
-}
-
+/// Wrapper for SHM buffer types that is used for safe typed access to SHM data
 pub struct Typed<T: ?Sized, Tbuf> {
     buf: Tbuf,
     _phantom: PhantomData<T>,
 }
 
 impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
+    /// Convert into underlying SHM buffer
     pub fn into_inner(self) -> Tbuf {
         self.buf
     }
@@ -165,4 +161,10 @@ impl<T: ResideInShm, Tbuf: ShmBufUnsafeMut<[u8]>> ShmBufUnsafeMut<T> for Typed<T
     unsafe fn as_mut_unchecked(&mut self) -> &mut T {
         &mut *(self.buf.as_mut_unchecked().as_mut_ptr() as *mut T)
     }
+}
+
+fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()> {
+    let slice = value.as_ref();
+    let _ = T::read_from_bytes(slice).map_err(|e| format!("Error transmutting: {e}"))?;
+    Ok(())
 }

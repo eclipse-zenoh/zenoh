@@ -14,7 +14,7 @@
 
 use zenoh_core::Wait;
 use zenoh_shm::api::{
-    buffer::{typed::Typed, zshmmut::ZShmMut},
+    buffer::{traits::ResideInShm, typed::Typed, zshmmut::ZShmMut},
     provider::{memory_layout::BuildLayout, shm_provider::ShmProviderBuilder},
 };
 
@@ -29,7 +29,7 @@ fn make_shm_buffer() -> ZShmMut {
     provider.alloc(64).wait().unwrap()
 }
 
-fn make_typed_shm_buffer<T>() -> Typed<T, ZShmMut> {
+fn make_typed_shm_buffer<T: ResideInShm>() -> Typed<T, ZShmMut> {
     let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
     provider
         .alloc_type(BuildLayout::for_type::<T>())
