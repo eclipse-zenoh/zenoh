@@ -34,6 +34,12 @@ pub struct Typed<T: ?Sized, Tbuf> {
     _phantom: PhantomData<T>,
 }
 
+impl<T: ?Sized, Tbuf: Clone> Clone for Typed<T, Tbuf> {
+    fn clone(&self) -> Self {
+        Self { buf: self.buf.clone(), _phantom: PhantomData }
+    }
+}
+
 impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
     /// Convert into underlying SHM buffer
     pub fn into_inner(self) -> Tbuf {
