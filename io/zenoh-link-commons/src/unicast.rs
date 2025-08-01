@@ -17,7 +17,7 @@ use core::{
     hash::{Hash, Hasher},
     ops::Deref,
 };
-use std::net::SocketAddr;
+use std::{io::IoSlice, net::SocketAddr};
 
 use async_trait::async_trait;
 use serde::Serialize;
@@ -54,8 +54,13 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
     fn get_auth_id(&self) -> &LinkAuthId;
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
+    fn is_write_vectored(&self) -> bool {
+        false
+    }
+    async fn write_vectored_all(&self, _bufs: &mut [IoSlice<'_>]) -> ZResult<()> {
+        unimplemented!()
+    }
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
