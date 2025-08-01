@@ -312,7 +312,7 @@ pub(crate) fn derive_generic_runtime_param(input: DeriveInput) -> Result<TokenSt
                 let #meta_param { #(#field_names,)* } = value;
                 Self {
                     #(#field_names,)*
-                    _phantom: PhantomData::default(),
+                    _phantom: PhantomData,
                 }
             }
         }
