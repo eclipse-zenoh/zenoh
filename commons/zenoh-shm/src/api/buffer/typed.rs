@@ -41,6 +41,11 @@ impl<T: ?Sized, Tbuf: Clone> Clone for Typed<T, Tbuf> {
 }
 
 impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
+    /// Get the underlying SHM buffer
+    pub fn inner(&self) -> &Tbuf {
+        &self.buf
+    }
+
     /// Convert into underlying SHM buffer
     pub fn into_inner(self) -> Tbuf {
         self.buf
