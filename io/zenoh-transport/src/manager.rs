@@ -481,6 +481,7 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
+        self.close_multicast().await;
         self.task_controller.terminate_all_async().await;
     }
 
