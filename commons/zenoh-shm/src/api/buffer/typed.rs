@@ -36,7 +36,10 @@ pub struct Typed<T: ?Sized, Tbuf> {
 
 impl<T: ?Sized, Tbuf: Clone> Clone for Typed<T, Tbuf> {
     fn clone(&self) -> Self {
-        Self { buf: self.buf.clone(), _phantom: PhantomData }
+        Self {
+            buf: self.buf.clone(),
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -55,6 +58,80 @@ impl<T: ?Sized, Tbuf> Typed<T, Tbuf> {
     pub(crate) unsafe fn new_unchecked(buf: Tbuf) -> Self {
         Self {
             buf,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: ResideInShm> From<Typed<T, ZShmMut>> for Typed<T, ZShm> {
+    fn from(value: Typed<T, ZShmMut>) -> Self {
+        Self {
+            buf: value.buf.into(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: ResideInShm> TryFrom<Typed<T, ZShm>> for Typed<T, ZShmMut> {
+    type Error = Typed<T, ZShm>;
+
+    fn try_from(value: Typed<T, ZShm>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            buf: value.buf.try_into().map_err(|e| Typed::<T, ZShm> {
+                buf: e,
+                _phantom: PhantomData,
+            })?,
+            _phantom: PhantomData,
+        })
+    }
+}
+
+impl<'a, T: ResideInShm> TryFrom<Typed<T, &'a zshm>> for Typed<T, &'a zshmmut> {
+    type Error = ();
+
+    fn try_from(value: Typed<T, &'a zshm>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            buf: value.buf.try_into()?,
+            _phantom: PhantomData,
+        })
+    }
+}
+
+impl<'a, T: ResideInShm> TryFrom<Typed<T, &'a mut zshm>> for Typed<T, &'a mut zshmmut> {
+    type Error = ();
+
+    fn try_from(value: Typed<T, &'a mut zshm>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            buf: value.buf.try_into()?,
+            _phantom: PhantomData,
+        })
+    }
+}
+
+impl<'a, T: ResideInShm> TryFrom<Typed<T, &'a mut ZShm>> for Typed<T, &'a mut zshmmut> {
+    type Error = ();
+
+    fn try_from(value: Typed<T, &'a mut ZShm>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            buf: value.buf.try_into()?,
+            _phantom: PhantomData,
+        })
+    }
+}
+
+impl<T: ResideInShm> From<Typed<T, &zshmmut>> for Typed<T, &zshm> {
+    fn from(value: Typed<T, &zshmmut>) -> Self {
+        Self {
+            buf: value.buf.into(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: ResideInShm> From<Typed<T, &mut zshmmut>> for Typed<T, &mut zshm> {
+    fn from(value: Typed<T, &mut zshmmut>) -> Self {
+        Self {
+            buf: value.buf.into(),
             _phantom: PhantomData,
         }
     }
