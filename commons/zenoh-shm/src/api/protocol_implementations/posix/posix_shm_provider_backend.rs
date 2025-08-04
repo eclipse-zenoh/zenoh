@@ -78,29 +78,30 @@ impl<What: IntoMemoryLayout> Resolvable for PosixShmProviderBackendBuilder<What>
 #[zenoh_macros::unstable_doc]
 impl<What: IntoMemoryLayout> Wait for PosixShmProviderBackendBuilder<What> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackend::new(&self.what.try_into()?)
+        let layout: MemoryLayout = self.what.try_into()?;
+        PosixShmProviderBackend::new(&layout)
     }
 }
 
 #[zenoh_macros::unstable_doc]
-impl Resolvable for PosixShmProviderBackendBuilder<MemoryLayout> {
+impl Resolvable for PosixShmProviderBackendBuilder<&MemoryLayout> {
     type To = ZResult<PosixShmProviderBackend>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl Wait for PosixShmProviderBackendBuilder<MemoryLayout> {
+impl Wait for PosixShmProviderBackendBuilder<&MemoryLayout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackend::new(&self.what)
+        PosixShmProviderBackend::new(self.what)
     }
 }
 
 #[zenoh_macros::unstable_doc]
-impl<T> Resolvable for PosixShmProviderBackendBuilder<LayoutForType<T>> {
+impl<T> Resolvable for PosixShmProviderBackendBuilder<&LayoutForType<T>> {
     type To = ZResult<PosixShmProviderBackend>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<T> Wait for PosixShmProviderBackendBuilder<LayoutForType<T>> {
+impl<T> Wait for PosixShmProviderBackendBuilder<&LayoutForType<T>> {
     fn wait(self) -> <Self as Resolvable>::To {
         PosixShmProviderBackend::new(&self.what.into())
     }

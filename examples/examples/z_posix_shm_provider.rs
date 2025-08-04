@@ -33,7 +33,7 @@ fn main() {
         let provider_layout = MemoryLayout::new(size, provider_alignment).unwrap();
 
         // Build a provider backend
-        PosixShmProviderBackend::builder(provider_layout)
+        PosixShmProviderBackend::builder(&provider_layout)
             .wait()
             .unwrap()
     };

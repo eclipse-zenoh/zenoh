@@ -52,7 +52,7 @@ impl MemoryLayout {
             return Err(ZLayoutError::IncorrectLayoutArgs);
         };
 
-        // size of an allocation must be a multiple of its alignment!
+        // size of a layout must be a multiple of its alignment!
         match size.get() % alignment.get_alignment_value() {
             0 => Ok(Self { size, alignment }),
             _ => Err(ZLayoutError::IncorrectLayoutArgs),
@@ -135,13 +135,6 @@ impl TryFrom<(usize, AllocAlignment)> for MemoryLayout {
     }
 }
 
-impl<T> From<LayoutForType<T>> for MemoryLayout {
-    fn from(value: LayoutForType<T>) -> Self {
-        // SAFETY: this is safe as LayoutForType always gives correct layout arguments
-        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
-    }
-}
-
 /// Helper type to build LayoutForType
 #[zenoh_macros::unstable_doc]
 pub struct BuildLayout;
@@ -157,7 +150,9 @@ impl BuildLayout {
     #[zenoh_macros::unstable_doc]
     pub fn for_type<T>() -> LayoutForType<T> {
         LayoutForType::<T> {
-            _phantom: Default::default(),
+            inner: StaticLayout::<T> {
+                _phantom: PhantomData,
+            },
         }
     }
 }
@@ -165,10 +160,32 @@ impl BuildLayout {
 /// A generic descriptor for type and it's layout
 #[zenoh_macros::unstable_doc]
 pub struct LayoutForType<T> {
-    _phantom: PhantomData<T>,
+    inner: StaticLayout<T>,
 }
 
 impl<T> LayoutForType<T> {
+    pub fn layout(&self) -> &StaticLayout<T> {
+        &self.inner
+    }
+}
+
+impl<T> From<&LayoutForType<T>> for MemoryLayout {
+    fn from(value: &LayoutForType<T>) -> Self {
+        value.layout().into()
+    }
+}
+
+impl<T> From<LayoutForType<T>> for MemoryLayout {
+    fn from(value: LayoutForType<T>) -> Self {
+        value.layout().into()
+    }
+}
+
+pub struct StaticLayout<T> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T> StaticLayout<T> {
     pub const fn size(&self) -> NonZeroUsize {
         // SAFETY: this is safe because std::mem::size_of should always return >0 for T: Sized
         unsafe { NonZeroUsize::new_unchecked(std::mem::size_of::<T>()) }
@@ -176,5 +193,11 @@ impl<T> LayoutForType<T> {
 
     pub const fn alignment(&self) -> AllocAlignment {
         AllocAlignment::for_type::<T>()
+    }
+}
+impl<T> From<&StaticLayout<T>> for MemoryLayout {
+    fn from(value: &StaticLayout<T>) -> Self {
+        // SAFETY: this is safe as LayoutForType always gives correct layout arguments
+        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
     }
 }
