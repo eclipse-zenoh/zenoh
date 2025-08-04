@@ -1,3 +1,5 @@
+use std::fmt;
+
 //
 // Copyright (c) 2024 ZettaScale Technology
 //
@@ -48,11 +50,13 @@ pub struct PublisherQoSConfig {
     pub allowed_destination: Option<PublisherLocalityConf>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum CongestionControlConf {
     Drop,
     Block,
+    #[cfg(feature = "unstable")]
+    BlockFirst,
 }
 
 impl From<CongestionControlConf> for CongestionControl {
@@ -60,6 +64,8 @@ impl From<CongestionControlConf> for CongestionControl {
         match value {
             CongestionControlConf::Drop => Self::Drop,
             CongestionControlConf::Block => Self::Block,
+            #[cfg(feature = "unstable")]
+            CongestionControlConf::BlockFirst => Self::BlockFirst,
         }
     }
 }
@@ -69,11 +75,13 @@ impl From<CongestionControl> for CongestionControlConf {
         match value {
             CongestionControl::Drop => Self::Drop,
             CongestionControl::Block => Self::Block,
+            #[cfg(feature = "unstable")]
+            CongestionControl::BlockFirst => Self::BlockFirst,
         }
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PriorityConf {
     RealTime = 1,
@@ -99,7 +107,68 @@ impl From<PriorityConf> for Priority {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PriorityUpdateConf {
+    Priority(PriorityConf),
+    Increment(i8),
+}
+
+impl serde::Serialize for PriorityUpdateConf {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            PriorityUpdateConf::Priority(value) => value.serialize(serializer),
+            PriorityUpdateConf::Increment(value) => value.serialize(serializer),
+        }
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for PriorityUpdateConf {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct PriorityOrIncrement<U>(std::marker::PhantomData<fn() -> U>);
+
+        impl<'de> serde::de::Visitor<'de> for PriorityOrIncrement<PriorityUpdateConf> {
+            type Value = PriorityUpdateConf;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("priority string or increment integer")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                PriorityConf::deserialize(serde::de::value::StrDeserializer::new(v))
+                    .map(PriorityUpdateConf::Priority)
+            }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if v > 7 {
+                    Err(serde::de::Error::custom(
+                        "invalid priority increment (> +7)",
+                    ))
+                } else if v < -7 {
+                    Err(serde::de::Error::custom(
+                        "invalid priority increment (< -7)",
+                    ))
+                } else {
+                    Ok(PriorityUpdateConf::Increment(v as i8))
+                }
+            }
+        }
+        deserializer.deserialize_any(PriorityOrIncrement(std::marker::PhantomData))
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReliabilityConf {
     BestEffort,
@@ -141,10 +210,18 @@ pub enum QosOverwriteMessage {
     Reply,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct QosFilter {
+    pub congestion_control: Option<CongestionControlConf>,
+    pub priority: Option<PriorityConf>,
+    pub express: Option<bool>,
+    pub reliability: Option<ReliabilityConf>,
+}
+
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct QosOverwrites {
     pub congestion_control: Option<CongestionControlConf>,
-    pub priority: Option<PriorityConf>,
+    pub priority: Option<PriorityUpdateConf>,
     pub express: Option<bool>,
     // TODO: Add support for reliability overwrite (it is not possible right now, since reliability is not a part of RoutingContext, nor NetworkMessage)
     // #[cfg(feature = "unstable")]

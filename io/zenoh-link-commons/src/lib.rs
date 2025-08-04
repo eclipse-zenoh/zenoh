@@ -22,6 +22,8 @@ extern crate alloc;
 mod dscp;
 mod listener;
 mod multicast;
+#[cfg(feature = "quic")]
+pub mod quic;
 pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;

@@ -2,8 +2,8 @@
 extend-exclude = [
   # Ignore files containing hexa.
   "io/zenoh-transport/tests/*.rs",
-  "zenoh/tests/open_time.rs",
   "zenoh/tests/authentication.rs",
+  "zenoh/tests/open_time.rs",
 ]
 
 

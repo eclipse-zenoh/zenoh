@@ -131,24 +131,24 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         );
         (
             self.flows.ingress.then(|| {
-                Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                Box::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
                     #[cfg(feature = "stats")]
                     InterceptorFlow::Ingress,
                     #[cfg(feature = "stats")]
                     transport.get_stats().unwrap_or_default(),
-                ))) as IngressInterceptor
+                )) as IngressInterceptor
             }),
             self.flows.egress.then(|| {
-                Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                Box::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
                     #[cfg(feature = "stats")]
                     InterceptorFlow::Egress,
                     #[cfg(feature = "stats")]
                     transport.get_stats().unwrap_or_default(),
-                ))) as EgressInterceptor
+                )) as EgressInterceptor
             }),
         )
     }
@@ -202,8 +202,8 @@ pub(crate) struct DownsamplingInterceptor {
 }
 
 impl DownsamplingInterceptor {
-    fn is_msg_filtered(&self, ctx: &RoutingContext<NetworkMessageMut>) -> bool {
-        match ctx.msg.body {
+    fn is_msg_filtered(&self, msg: &mut NetworkMessageMut) -> bool {
+        match msg.body {
             NetworkBodyMut::Push(_) => self.filtered_messages.push,
             NetworkBodyMut::Request(_) => self.filtered_messages.query,
             NetworkBodyMut::Response(_) => self.filtered_messages.reply,
@@ -229,13 +229,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
         Some(Box::new(None::<usize>))
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
-        cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
-        if self.is_msg_filtered(ctx) {
-            if let Some(cache) = cache {
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let cache = ComputedOnMiss::new(self, msg, ctx);
+        if self.is_msg_filtered(msg) {
+            if let Some(cache) = cache.as_ref() {
                 if let Some(id) = cache.downcast_ref::<Option<usize>>() {
                     if let Some(id) = id {
                         let mut ke_state = zlock!(self.ke_state);
@@ -251,10 +248,10 @@ impl InterceptorTrait for DownsamplingInterceptor {
                                 }
                                 tracing::trace!(
                                     "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
-                                    ctx.msg,
-                                    ctx.full_expr().unwrap_or_default(),
-                                    ctx.inface().map(|f| f.to_string()).unwrap_or_default(),
-                                    ctx.outface().map(|f| f.to_string()).unwrap_or_default(),
+                                    msg,
+                                    ctx.full_expr(msg).unwrap_or_default(),
+                                    ctx.face().map(|f| f.to_string()).unwrap_or_default(),
+                                    ctx.face().map(|f| f.to_string()).unwrap_or_default(),
                                 );
                                 #[cfg(feature = "stats")]
                                 match self.flow {
@@ -272,7 +269,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
                         }
                     }
                 } else {
-                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
+                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr(msg));
                 }
             }
         }

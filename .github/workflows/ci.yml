@@ -106,6 +106,9 @@ jobs:
 
       - name: Install latest cargo-semver-checks
         uses: taiki-e/install-action@cargo-semver-checks
+        
+      - name: Install latest taplo
+        uses: taiki-e/install-action@taplo
 
       - name: Code format check
         run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
@@ -161,6 +164,10 @@ jobs:
 
       - name: Check SemVer Compatibility
         run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
+        
+      - name: Check TOML formatting
+        if: ${{ !contains(matrix.os, 'windows') }}
+        run: taplo fmt --check --diff
 
   test:
     needs: determine-runner
