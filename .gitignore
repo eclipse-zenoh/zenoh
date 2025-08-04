@@ -17,7 +17,11 @@
 # MacOS Related
 .DS_Store
 
+# VS Code
 .vscode
+
+# Zed
+.zed
 
 cargo-timing*.html
 
