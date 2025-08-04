@@ -456,7 +456,7 @@ pub mod queryable {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct QueryableInfoType {
             pub complete: bool, // Default false: incomplete
-            pub distance: u16,  // Default 0: no distance
+            pub distance: u16,  // Default 0: distance is null (e.g. intra-process communication)
         }
 
         impl QueryableInfoType {
@@ -557,7 +557,7 @@ pub mod token {
     /// +-+-+-+-+-+-+-+-+
     /// |Z|M|N|  D_TKN  |
     /// +---------------+
-    /// ~ token_id:z32  ~  
+    /// ~ token_id:z32  ~
     /// +---------------+
     /// ~ key_scope:z16 ~
     /// +---------------+
@@ -596,7 +596,7 @@ pub mod token {
     /// +-+-+-+-+-+-+-+-+
     /// |Z|X|X|  U_TKN  |
     /// +---------------+
-    /// ~ token_id:z32  ~  
+    /// ~ token_id:z32  ~
     /// +---------------+
     /// ~  [decl_exts]  ~  if Z==1
     /// +---------------+
