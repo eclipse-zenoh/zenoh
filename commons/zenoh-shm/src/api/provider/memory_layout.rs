@@ -164,7 +164,6 @@ impl BuildLayout {
 
 /// A generic descriptor for type and it's layout
 #[zenoh_macros::unstable_doc]
-#[derive(Debug, Clone)]
 pub struct LayoutForType<T> {
     _phantom: PhantomData<T>,
 }
