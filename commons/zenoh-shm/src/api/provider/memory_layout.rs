@@ -16,12 +16,9 @@ use std::{fmt::Display, marker::PhantomData, num::NonZeroUsize};
 
 use crate::api::provider::types::{AllocAlignment, ZLayoutError};
 
+#[zenoh_macros::unstable_doc]
 pub trait IntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
 impl<T> IntoMemoryLayout for T where T: TryInto<MemoryLayout, Error = ZLayoutError> {}
-
-pub trait IntoTypedMemoryLayout {
-    type Type;
-}
 
 /// Memory layout representation: alignment and size aligned for this alignment
 #[zenoh_macros::unstable_doc]
@@ -146,6 +143,7 @@ impl<T> From<LayoutForType<T>> for MemoryLayout {
 }
 
 /// Helper type to build LayoutForType
+#[zenoh_macros::unstable_doc]
 pub struct BuildLayout;
 
 impl BuildLayout {
@@ -165,6 +163,8 @@ impl BuildLayout {
 }
 
 /// A generic descriptor for type and it's layout
+#[zenoh_macros::unstable_doc]
+#[derive(Debug, Clone)]
 pub struct LayoutForType<T> {
     _phantom: PhantomData<T>,
 }

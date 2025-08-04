@@ -544,10 +544,7 @@ pub mod shm {
         },
         protocol_implementations::posix::{
             posix_shm_client::PosixShmClient,
-            posix_shm_provider_backend::{
-                LayoutedPosixShmProviderBackendBuilder, PosixShmProviderBackend,
-                PosixShmProviderBackendBuilder,
-            },
+            posix_shm_provider_backend::{PosixShmProviderBackend, PosixShmProviderBackendBuilder},
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},

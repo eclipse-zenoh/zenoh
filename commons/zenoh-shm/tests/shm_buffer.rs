@@ -31,10 +31,7 @@ fn make_shm_buffer() -> ZShmMut {
 
 fn make_typed_shm_buffer<T: ResideInShm>() -> Typed<T, ZShmMut> {
     let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
-    provider
-        .alloc_type(BuildLayout::for_type::<T>())
-        .wait()
-        .unwrap()
+    provider.alloc(BuildLayout::for_type::<T>()).wait().unwrap()
 }
 
 fn fill_and_check(buf: &mut [u8], val: u8) {
