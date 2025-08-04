@@ -5841,6 +5841,7 @@ name = "zenoh-transport"
 version = "1.5.0"
 dependencies = [
  "async-trait",
+ "base64ct",
  "crossbeam-utils",
  "flume",
  "futures",

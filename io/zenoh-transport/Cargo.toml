@@ -61,6 +61,7 @@ paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
+base64ct = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 sha3 = { workspace = true }
 tokio = { workspace = true, features = [
