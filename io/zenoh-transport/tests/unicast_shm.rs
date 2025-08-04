@@ -152,8 +152,7 @@ mod tests {
         let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
-        let backend = PosixShmProviderBackend::builder()
-            .with_size(2 * MSG_SIZE)
+        let backend = PosixShmProviderBackend::builder(2 * MSG_SIZE)
             .wait()
             .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();

@@ -530,7 +530,10 @@ pub mod internal {
 pub mod shm {
     pub use zenoh_shm::api::{
         buffer::{
-            traits::{OwnedShmBuf, ShmBuf, ShmBufMut},
+            traits::{
+                BufferRelayoutError, OwnedShmBuf, ResideInShm, ShmBuf, ShmBufMut, ShmBufUnsafeMut,
+            },
+            typed::Typed,
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
@@ -543,23 +546,22 @@ pub mod shm {
         },
         protocol_implementations::posix::{
             posix_shm_client::PosixShmClient,
-            posix_shm_provider_backend::{
-                LayoutedPosixShmProviderBackendBuilder, PosixShmProviderBackend,
-                PosixShmProviderBackendBuilder,
-            },
+            posix_shm_provider_backend::{PosixShmProviderBackend, PosixShmProviderBackendBuilder},
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
+            memory_layout::{BuildLayout, IntoMemoryLayout, LayoutForType, MemoryLayout},
             shm_provider::{
-                AllocLayout, AllocLayoutSizedBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn,
-                DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
-                ForceDeallocPolicy, GarbageCollect, JustAlloc, LayoutAllocBuilder,
-                ProviderAllocBuilder, ShmProvider, ShmProviderBuilder,
+                AllocBuilder, AllocLayout, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
+                DeallocOptimal, DeallocYoungest, Deallocate, Defragment, ForceDeallocPolicy,
+                GarbageCollect, JustAlloc, LayoutAllocBuilder, ProviderAllocBuilder, ShmProvider,
+                ShmProviderBuilder,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{
                 AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
-                MemoryLayout, ZAllocError, ZLayoutAllocError, ZLayoutError,
+                TypedBufAllocResult, TypedBufLayoutAllocResult, ZAllocError, ZLayoutAllocError,
+                ZLayoutError,
             },
         },
     };
