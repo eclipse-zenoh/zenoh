@@ -25,7 +25,7 @@ use quinn::{
     EndpointConfig,
 };
 use tokio::sync::Mutex as AsyncMutex;
-use tokio_util::sync::CancellationToken;
+use tokio_util::{bytes::Bytes, sync::CancellationToken};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, parse_dscp,
@@ -36,7 +36,7 @@ use zenoh_link_commons::{
     set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    LocatorInspector, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Address, EndPoint, Locator},
@@ -45,36 +45,56 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
+use crate::QuicLocatorInspector;
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
+    kind: LinkUnicastQuicKind,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    send: AsyncMutex<quinn::SendStream>,
-    recv: AsyncMutex<quinn::RecvStream>,
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
+#[derive(Debug)]
+enum LinkUnicastQuicKind {
+    Unreliable,
+    Reliable {
+        send: AsyncMutex<quinn::SendStream>,
+        recv: AsyncMutex<quinn::RecvStream>,
+    },
+}
+
+impl LinkUnicastQuicKind {
+    async fn finish(&self) -> ZResult<()> {
+        if let LinkUnicastQuicKind::Reliable { send, .. } = &self {
+            let mut guard = zasynclock!(send);
+            if let Err(e) = guard.finish() {
+                tracing::trace!("Error closing QUIC stream {self:?}: {e}");
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl LinkUnicastQuic {
     fn new(
-        connection: quinn::Connection,
+        conn: quinn::Connection,
+        kind: LinkUnicastQuicKind,
         src_addr: SocketAddr,
         dst_locator: Locator,
-        send: quinn::SendStream,
-        recv: quinn::RecvStream,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
         // Build the Quic object
         LinkUnicastQuic {
-            connection,
+            connection: conn,
+            kind,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
-            send: AsyncMutex::new(send),
-            recv: AsyncMutex::new(recv),
             auth_identifier,
             expiration_manager,
         }
@@ -83,10 +103,7 @@ impl LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
-        let mut guard = zasynclock!(self.send);
-        if let Err(e) = guard.finish() {
-            tracing::trace!("Error closing QUIC stream {}: {}", self, e);
-        }
+        self.kind.finish().await?;
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
     }
@@ -110,49 +127,91 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.send);
-        guard.write(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
+        match &self.kind {
+            LinkUnicastQuicKind::Unreliable => {
+                let amt = buffer.len();
+                self.connection
+                    .send_datagram(Bytes::copy_from_slice(buffer))?;
+                Ok(amt)
+            }
+            LinkUnicastQuicKind::Reliable { send, .. } => {
+                let mut guard = zasynclock!(send);
+                guard.write(buffer).await.map_err(|e| {
+                    tracing::trace!("Write error on QUIC link {}: {}", self, e);
+                    zerror!(e).into()
+                })
+            }
+        }
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.send);
-        guard.write_all(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
+        match &self.kind {
+            LinkUnicastQuicKind::Unreliable => {
+                self.connection
+                    .send_datagram(Bytes::copy_from_slice(buffer))?;
+                Ok(())
+            }
+            LinkUnicastQuicKind::Reliable { send, .. } => {
+                let mut guard = zasynclock!(send);
+                guard.write_all(buffer).await.map_err(|e| {
+                    tracing::trace!("Write error on QUIC link {}: {}", self, e);
+                    zerror!(e).into()
+                })
+            }
+        }
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.recv);
-        guard
-            .read(buffer)
-            .await
-            .map_err(|e| {
-                let e = zerror!("Read error on QUIC link {}: {}", self, e);
-                tracing::trace!("{}", &e);
-                e
-            })?
-            .ok_or_else(|| {
-                let e = zerror!(
-                    "Read error on QUIC link {}: stream {} has been closed",
-                    self,
-                    guard.id()
-                );
-                tracing::trace!("{}", &e);
-                e.into()
-            })
+        match &self.kind {
+            LinkUnicastQuicKind::Unreliable => {
+                let bytes = self.connection.read_datagram().await?;
+                buffer
+                    .get_mut(..bytes.len())
+                    .map(|buffer| buffer.copy_from_slice(&bytes))
+                    .ok_or_else(|| {
+                        zerror!(
+                            "QUIC datagram of len {} cannot fit in RX buffer of len {}",
+                            bytes.len(),
+                            buffer.len()
+                        )
+                    })?;
+                Ok(bytes.len())
+            }
+            LinkUnicastQuicKind::Reliable { recv, .. } => {
+                let mut guard = zasynclock!(recv);
+                guard
+                    .read(buffer)
+                    .await
+                    .map_err(|e| {
+                        let e = zerror!("Read error on QUIC link {}: {}", self, e);
+                        tracing::trace!("{}", &e);
+                        e
+                    })?
+                    .ok_or_else(|| {
+                        let e = zerror!(
+                            "Read error on QUIC link {}: stream {} has been closed",
+                            self,
+                            guard.id()
+                        );
+                        tracing::trace!("{}", &e);
+                        e.into()
+                    })
+            }
+        }
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.recv);
-        guard.read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+        match &self.kind {
+            LinkUnicastQuicKind::Unreliable => unreachable!(),
+            LinkUnicastQuicKind::Reliable { recv, .. } => {
+                let mut guard = zasynclock!(recv);
+                guard.read_exact(buffer).await.map_err(|e| {
+                    let e = zerror!("Read error on QUIC link {}: {}", self, e);
+                    tracing::trace!("{}", &e);
+                    e.into()
+                })
+            }
+        }
     }
 
     #[inline(always)]
@@ -177,12 +236,12 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        super::IS_RELIABLE
+        matches!(&self.kind, LinkUnicastQuicKind::Reliable { .. })
     }
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        true
+        matches!(&self.kind, LinkUnicastQuicKind::Reliable { .. })
     }
 
     #[inline(always)]
@@ -326,10 +385,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let (send, recv) = quic_conn
-            .open_bi()
-            .await
-            .map_err(|e| zerror!("Can not open Quic bi-directional channel {}: {}", host, e))?;
+        let kind = if QuicLocatorInspector.is_reliable(&endpoint.to_locator())? {
+            let (send, recv) = quic_conn
+                .open_bi()
+                .await
+                .map_err(|e| zerror!("Can not open Quic bi-directional channel {}: {}", host, e))?;
+
+            LinkUnicastQuicKind::Reliable {
+                send: AsyncMutex::new(send),
+                recv: AsyncMutex::new(recv),
+            }
+        } else {
+            LinkUnicastQuicKind::Unreliable
+        };
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
@@ -349,10 +417,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             }
             LinkUnicastQuic::new(
                 quic_conn,
+                kind,
                 src_addr,
                 endpoint.into(),
-                send,
-                recv,
                 auth_id.into(),
                 expiration_manager,
             )
@@ -451,6 +518,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let task = {
             let token = token.clone();
             let manager = self.manager.clone();
+            let is_reliable = QuicLocatorInspector.is_reliable(&locator)?;
 
             async move {
                 accept_task(
@@ -458,6 +526,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                     token,
                     manager,
                     server_crypto.tls_close_link_on_expiration,
+                    is_reliable,
                 )
                 .await
             }
@@ -491,6 +560,7 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_close_link_on_expiration: bool,
+    is_reliable: bool,
 ) -> ZResult<()> {
     async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
         let qc = acceptor
@@ -520,13 +590,22 @@ async fn accept_task(
             res = accept(quic_endpoint.accept()) => {
                 match res {
                     Ok(quic_conn) => {
-                        // Get the bideractional streams. Note that we don't allow unidirectional streams.
-                        let (send, recv) = match quic_conn.accept_bi().await {
-                            Ok(stream) => stream,
-                            Err(e) => {
-                                tracing::warn!("QUIC connection has no streams: {:?}", e);
-                                continue;
+                        let kind = if is_reliable {
+                            // Get the bideractional streams. Note that we don't allow unidirectional streams.
+                            let (send, recv) = match quic_conn.accept_bi().await {
+                                Ok(stream) => stream,
+                                Err(e) => {
+                                    tracing::warn!("QUIC connection has no streams: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            LinkUnicastQuicKind::Reliable {
+                                send: AsyncMutex::new(send),
+                                recv: AsyncMutex::new(recv),
                             }
+                        } else {
+                            LinkUnicastQuicKind::Unreliable
                         };
 
                         // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
@@ -571,10 +650,9 @@ async fn accept_task(
                             }
                             LinkUnicastQuic::new(
                                 quic_conn,
+                                kind,
                                 src_addr,
                                 dst_locator,
-                                send,
-                                recv,
                                 auth_id.into(),
                                 expiration_manager,
                             )
