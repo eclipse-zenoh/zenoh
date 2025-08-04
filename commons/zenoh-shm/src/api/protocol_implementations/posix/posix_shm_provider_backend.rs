@@ -34,7 +34,7 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
-        memory_layout::{IntoMemoryLayout, MemoryLayout},
+        memory_layout::{IntoMemoryLayout, LayoutForType, MemoryLayout},
         shm_provider_backend::ShmProviderBackend,
         types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
@@ -91,6 +91,18 @@ impl Resolvable for PosixShmProviderBackendBuilder<MemoryLayout> {
 impl Wait for PosixShmProviderBackendBuilder<MemoryLayout> {
     fn wait(self) -> <Self as Resolvable>::To {
         PosixShmProviderBackend::new(&self.what)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Resolvable for PosixShmProviderBackendBuilder<LayoutForType<T>> {
+    type To = ZResult<PosixShmProviderBackend>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Wait for PosixShmProviderBackendBuilder<LayoutForType<T>> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackend::new(&self.what.into())
     }
 }
 
