@@ -35,7 +35,9 @@ use super::{
 use crate::{
     api::{
         buffer::{traits::ResideInShm, typed::Typed, zshmmut::ZShmMut},
-        protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+        protocol_implementations::posix::posix_shm_provider_backend::{
+            PosixShmProviderBackend, PosixShmProviderBackendBuilder,
+        },
         provider::{
             memory_layout::{IntoMemoryLayout, LayoutForType, MemoryLayout},
             types::{TypedBufAllocResult, TypedBufLayoutAllocResult},
@@ -932,9 +934,7 @@ impl ShmProviderBuilder {
 
     /// Set the default backend
     #[zenoh_macros::unstable_doc]
-    pub fn default_backend<What: IntoMemoryLayout>(
-        what: What,
-    ) -> ShmProviderBuilderWithDefaultBackend<What> {
+    pub fn default_backend<What>(what: What) -> ShmProviderBuilderWithDefaultBackend<What> {
         ShmProviderBuilderWithDefaultBackend { what }
     }
 }
@@ -966,17 +966,20 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct ShmProviderBuilderWithDefaultBackend<What: IntoMemoryLayout> {
+pub struct ShmProviderBuilderWithDefaultBackend<What> {
     what: What,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<What: IntoMemoryLayout> Resolvable for ShmProviderBuilderWithDefaultBackend<What> {
+impl<What> Resolvable for ShmProviderBuilderWithDefaultBackend<What> {
     type To = ZResult<ShmProvider<PosixShmProviderBackend>>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<What: IntoMemoryLayout> Wait for ShmProviderBuilderWithDefaultBackend<What> {
+impl<What> Wait for ShmProviderBuilderWithDefaultBackend<What>
+where
+    PosixShmProviderBackendBuilder<What>: Resolvable<To = ZResult<PosixShmProviderBackend>> + Wait,
+{
     /// build ShmProvider
     fn wait(self) -> <Self as Resolvable>::To {
         let backend = PosixShmProviderBackend::builder(self.what).wait()?;
