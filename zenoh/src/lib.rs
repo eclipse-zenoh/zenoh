@@ -530,7 +530,9 @@ pub mod internal {
 pub mod shm {
     pub use zenoh_shm::api::{
         buffer::{
-            traits::{OwnedShmBuf, ResideInShm, ShmBuf, ShmBufMut},
+            traits::{
+                BufferRelayoutError, OwnedShmBuf, ResideInShm, ShmBuf, ShmBufMut, ShmBufUnsafeMut,
+            },
             typed::Typed,
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
