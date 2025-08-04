@@ -391,7 +391,7 @@ impl VolumeConfig {
                 required,
                 rest: config
                     .iter()
-                    .filter(|&(k, _v)| (!["__path__", "__required__"].contains(&k.as_str())))
+                    .filter(|&(k, _v)| !["__path__", "__required__"].contains(&k.as_str()))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect(),
             })

@@ -38,22 +38,22 @@ pub trait Intersector<Left, Right> {
 }
 
 pub(crate) mod restriction {
-    use core::ops::Deref;
+    // use core::ops::Deref;
 
-    #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct NoBigWilds<T>(pub T);
+    // #[repr(transparent)]
+    // #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    // pub struct NoBigWilds<T>(pub T);
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct NoSubWilds<T>(pub T);
 
-    impl<T> Deref for NoBigWilds<T> {
-        type Target = T;
+    // impl<T> Deref for NoBigWilds<T> {
+    //     type Target = T;
 
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
+    //     fn deref(&self) -> &Self::Target {
+    //         &self.0
+    //     }
+    // }
 }
 #[repr(u8)]
 enum MatchComplexity {

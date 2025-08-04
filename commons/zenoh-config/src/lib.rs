@@ -1174,7 +1174,7 @@ impl Config {
     pub fn get(
         &self,
         key: &str,
-    ) -> Result<<Self as ValidatedMapAssociatedTypes>::Accessor, GetError> {
+    ) -> Result<<Self as ValidatedMapAssociatedTypes<'_>>::Accessor, GetError> {
         <Self as ValidatedMap>::get(self, key)
     }
 
