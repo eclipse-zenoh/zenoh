@@ -460,6 +460,15 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
+    fn update_self_locators(&self, tables: &mut Tables) {
+        if let Some(net) = hat_mut!(tables).routers_net.as_mut() {
+            net.update_locators();
+        }
+        if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
+            net.update_locators();
+        }
+    }
+
     fn close_face(
         &self,
         tables: &TablesLock,
