@@ -95,3 +95,6 @@ futures = { workspace = true }
 futures-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 zenoh-util = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = [ "base64ct" ]

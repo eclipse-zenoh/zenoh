@@ -45,10 +45,6 @@ zenoh = { workspace = true, default-features = false, features = [
 ] }
 zenoh-config = { workspace = true }
 zenoh-util = { workspace = true }
-pest = { workspace = true }
-pest_derive = { workspace = true }
-pest_meta = { workspace = true }
-pest_generator = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

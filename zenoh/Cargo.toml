@@ -98,10 +98,6 @@ once_cell = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
-pest = { workspace = true }
-pest_derive = { workspace = true }
-pest_meta = { workspace = true }
-pest_generator = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ref-cast = { workspace = true }
 serde = { workspace = true, features = ["default"] }

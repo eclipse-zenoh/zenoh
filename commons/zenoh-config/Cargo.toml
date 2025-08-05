@@ -52,4 +52,4 @@ pest_meta = { workspace = true }
 pest_generator = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["tracing"]
+ignored = ["tracing", "pest", "pest_derive", "pest_meta", "pest_generator"]
