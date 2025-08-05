@@ -5302,10 +5302,6 @@ dependencies = [
  "json5",
  "nonempty-collections",
  "num_cpus",
- "pest",
- "pest_derive",
- "pest_generator",
- "pest_meta",
  "secrecy",
  "serde",
  "serde_json",
@@ -5864,7 +5860,6 @@ name = "zenoh-transport"
 version = "1.5.0"
 dependencies = [
  "async-trait",
- "base64ct",
  "crossbeam-utils",
  "flume",
  "futures",
@@ -5887,7 +5882,6 @@ dependencies = [
  "zenoh-crypto",
  "zenoh-link",
  "zenoh-link-commons",
- "zenoh-pinned-deps",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",

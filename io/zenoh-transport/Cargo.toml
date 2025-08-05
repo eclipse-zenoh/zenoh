@@ -50,7 +50,6 @@ transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
 transport_vsock = ["zenoh-link/transport_vsock"]
 transport_ws = ["zenoh-link/transport_ws"]
 unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
-pinned_deps = ["dep:zenoh-pinned-deps"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -62,7 +61,6 @@ paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
-base64ct = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 sha3 = { workspace = true }
 tokio = { workspace = true, features = [
@@ -90,13 +88,9 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-pinned-deps = { path = "../../commons/zenoh-pinned-deps", optional = true }
 
 [dev-dependencies]
 futures = { workspace = true }
 futures-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 zenoh-util = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [ "base64ct" ]

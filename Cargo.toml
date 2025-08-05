@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [workspace]
-exclude = ["ci/nostd-check", "ci/valgrind-check", "commons/zenoh-pinned-deps"]
+exclude = ["ci/nostd-check", "ci/valgrind-check"]
 members = [
   "commons/zenoh-buffers",
   "commons/zenoh-codec",
@@ -29,6 +29,7 @@ members = [
   "commons/zenoh-sync",
   "commons/zenoh-task",
   "commons/zenoh-util",
+  "commons/zenoh-pinned-deps",
   "examples",
   "io/zenoh-link",
   "io/zenoh-link-commons",
@@ -245,6 +246,7 @@ zenoh-task = { version = "=1.5.0", path = "commons/zenoh-task" }
 zenoh-transport = { version = "=1.5.0", path = "io/zenoh-transport", default-features = false }
 zenoh-util = { version = "=1.5.0", path = "commons/zenoh-util" }
 zenoh_backend_traits = { version = "=1.5.0", path = "plugins/zenoh-backend-traits", default-features = false }
+zenoh-pinned-deps = { version = "=1.5.0", path = "commons/zenoh-pinned-deps", default-features = false }
 
 [profile.dev]
 debug = true

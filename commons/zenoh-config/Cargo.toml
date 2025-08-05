@@ -46,10 +46,6 @@ zenoh-macros = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
-pest = { workspace = true }
-pest_derive = { workspace = true }
-pest_meta = { workspace = true }
-pest_generator = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["tracing", "pest", "pest_derive", "pest_meta", "pest_generator"]
+ignored = ["tracing"]
