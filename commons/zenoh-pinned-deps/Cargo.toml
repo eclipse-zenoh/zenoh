@@ -31,14 +31,14 @@ base64ct = "=1.6.0"
 home = "=0.5.9"
 jsonschema = { version = "=0.20.0", default-features = false }
 lz4_flex = "=0.11.3"
-static_init = "=1.0.3"
-twox-hash = "=1.6.3"
-url = "=2.5.2"
 pest = "=2.7.12"
 pest_derive = "=2.7.12"
-pest_meta = "=2.7.12"
 pest_generator = "=2.7.12"
+pest_meta = "=2.7.12"
+static_init = "=1.0.3"
 thiserror = "=1.0.69"
+twox-hash = "=1.6.3"
+url = "=2.5.2"
 
 [package.metadata.cargo-machete]
 ignored = [
@@ -46,14 +46,12 @@ ignored = [
   "home",
   "jsonschema",
   "lz4_flex",
-  "static_init",
-  "twox-hash",
-  "url",
   "pest",
   "pest_derive",
-  "pest_meta",
   "pest_generator",
-  "thiserror"
+  "pest_meta",
+  "static_init",
+  "thiserror",
+  "twox-hash",
+  "url",
 ]
-
-
