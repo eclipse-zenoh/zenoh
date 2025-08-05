@@ -50,6 +50,7 @@ transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
 transport_vsock = ["zenoh-link/transport_vsock"]
 transport_ws = ["zenoh-link/transport_ws"]
 unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
+pinned_deps = ["dep:zenoh-pinned-deps"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -89,6 +90,7 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-pinned-deps = { path = "../../commons/zenoh-pinned-deps", optional = true }
 
 [dev-dependencies]
 futures = { workspace = true }
