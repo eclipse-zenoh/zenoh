@@ -673,6 +673,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     let direction = TransportLinkUnicastDirection::Inbound;
     let mtu = link.get_mtu();
     let is_streamed = link.is_streamed();
+    let is_vectored = link.is_write_vectored();
     let config = TransportLinkUnicastConfig {
         direction,
         batch: BatchConfig {
@@ -680,6 +681,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            is_vectored,
         },
         priorities: None,
         reliability: None,
@@ -822,6 +824,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
+            is_vectored,
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
