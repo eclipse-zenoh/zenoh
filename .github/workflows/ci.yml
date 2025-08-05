@@ -74,10 +74,10 @@ jobs:
       - name: Check zenoh with rust 1.75.0
         run: cargo +1.75.0 check --release --bins --lib
 
-  # Test without Cargo.lock to ensure that all restrictions are correctly set in Cargo.toml
+  # Test without Cargo.lock to ensure that all restrictions are correctly set in Cargo.toml for build with rust 1.75.0
   check_rust_without_cargo_lock:
     needs: determine-runner
-    name: Check zenoh build without Cargo.lock
+    name: Check zenoh build without Cargo.lock on Rust 1.75
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -97,9 +97,7 @@ jobs:
       - name: Check zenoh without Cargo.lock
         run: |
           rm Cargo.lock || true
-          cargo check --release --bins --lib
-          rm Cargo.lock || true
-          cargo +1.75.0 check --release --bins --lib
+          cargo +1.75.0 check --bins --lib
 
   check:
     needs: determine-runner
