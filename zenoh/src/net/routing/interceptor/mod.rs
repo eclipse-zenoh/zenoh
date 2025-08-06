@@ -211,38 +211,6 @@ impl InterceptorContext for ChainContext<'_> {
     }
 }
 
-pub(crate) enum ComputedOnMiss<'a> {
-    Hit(Option<&'a Box<dyn Any + Send + Sync>>),
-    Computed(Option<Box<dyn Any + Send + Sync>>),
-}
-
-impl ComputedOnMiss<'_> {
-    fn as_ref(&self) -> Option<&Box<dyn Any + Send + Sync>> {
-        match self {
-            ComputedOnMiss::Hit(cache) => *cache,
-            ComputedOnMiss::Computed(cache) => cache.as_ref(),
-        }
-    }
-}
-
-impl<'a> ComputedOnMiss<'a> {
-    pub(crate) fn new(
-        interceptor: &dyn InterceptorTrait,
-        msg: &mut NetworkMessageMut,
-        ctx: &'a mut dyn InterceptorContext,
-    ) -> Self {
-        match ctx.get_cache(msg) {
-            Some(cache) => ComputedOnMiss::Hit(Some(cache)),
-            None => {
-                let cache = ctx
-                    .full_keyexpr(msg)
-                    .and_then(|key_expr| interceptor.compute_keyexpr_cache(&key_expr));
-                ComputedOnMiss::Computed(cache)
-            }
-        }
-    }
-}
-
 #[allow(dead_code)]
 pub(crate) struct IngressMsgLogger {}
 
