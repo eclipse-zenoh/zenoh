@@ -15,5 +15,8 @@
 //! ⚠️ WARNING ⚠️
 //!
 //! This crate is intended for Zenoh's internal use.
+//! 
+//! This is empty crate which pins exact versions of dependent crates 
+//! necessary to build zenoh with Rust 1.75.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)

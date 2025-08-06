@@ -18,7 +18,7 @@ description = "Internal crate for zenoh."
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-name = "zenoh-pinned-deps"
+name = "zenoh-pinned-deps-1-75"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }

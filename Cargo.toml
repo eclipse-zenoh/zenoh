@@ -22,7 +22,7 @@ members = [
   "commons/zenoh-crypto",
   "commons/zenoh-keyexpr",
   "commons/zenoh-macros",
-  "commons/zenoh-pinned-deps",
+  "commons/zenoh-pinned-deps-1-75",
   "commons/zenoh-protocol",
   "commons/zenoh-result",
   "commons/zenoh-runtime",
