@@ -748,7 +748,7 @@ where
 {
     /// Rich interface for making allocations
     #[zenoh_macros::unstable_doc]
-    pub fn alloc(&self, size: usize) -> AllocLayoutSizedBuilder<Backend> {
+    pub fn alloc(&self, size: usize) -> AllocLayoutSizedBuilder<'_, Backend> {
         AllocLayoutSizedBuilder::new(self, size)
     }
 
