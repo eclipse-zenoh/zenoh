@@ -130,18 +130,33 @@ impl StageInOut {
     }
 }
 
+struct Current {
+    batch: Option<WBatch>,
+    status: Arc<TransmissionPipelineStatus>,
+    prioflag: u8,
+}
+
+impl Current {
+    fn notify_pending(&mut self) {
+        self.status
+            .pending
+            .fetch_or(self.prioflag, Ordering::Relaxed);
+    }
+
+    fn reset_pending(&mut self) {
+        self.status
+            .pending
+            .fetch_and(!self.prioflag, Ordering::Relaxed);
+    }
+}
+
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
-    current: Arc<Mutex<Option<WBatch>>>,
+    current: Arc<Mutex<Current>>,
     priority: TransportPriorityTx,
 }
 
 impl StageInMutex {
-    #[inline]
-    fn current(&self) -> MutexGuard<'_, Option<WBatch>> {
-        zlock!(self.current)
-    }
-
     #[inline]
     fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
         if is_reliable {
@@ -278,12 +293,13 @@ impl StageIn {
         deadline: &mut Deadline,
     ) -> Result<bool, TransportClosed> {
         // Lock the current serialization batch.
-        let mut c_guard = self.mutex.current();
+        let mut c_guard = zlock!(self.mutex.current);
+        c_guard.notify_pending();
 
         macro_rules! zgetbatch_rets {
             ($($restore_sn:stmt)?) => {
                 loop {
-                    match c_guard.take() {
+                    match c_guard.batch.take() {
                         Some(batch) => break batch,
                         None => match self.s_ref.pull() {
                             Some(mut batch) => {
@@ -321,7 +337,7 @@ impl StageIn {
                     return Ok(true);
                 } else {
                     let bytes = $batch.len();
-                    *c_guard = Some($batch);
+                    c_guard.batch = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
                     return Ok(true);
@@ -371,7 +387,7 @@ impl StageIn {
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
         // Reinsert the current batch for fragmentation.
-        *c_guard = Some(batch);
+        c_guard.batch = Some(batch);
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
@@ -419,7 +435,7 @@ impl StageIn {
                     // Restore the sequence number
                     tch.sn.set(sn).unwrap();
                     // Reinsert the batch
-                    *c_guard = Some(batch);
+                    c_guard.batch = Some(batch);
                     tracing::warn!(
                         "Zenoh message dropped because it can not be fragmented: {:?}",
                         msg
@@ -441,12 +457,13 @@ impl StageIn {
     #[inline]
     fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
         // Lock the current serialization batch.
-        let mut c_guard = self.mutex.current();
+        let mut c_guard = zlock!(self.mutex.current);
+        c_guard.notify_pending();
 
         macro_rules! zgetbatch_rets {
             () => {
                 loop {
-                    match c_guard.take() {
+                    match c_guard.batch.take() {
                         Some(batch) => break batch,
                         None => match self.s_ref.pull() {
                             Some(mut batch) => {
@@ -476,7 +493,7 @@ impl StageIn {
                     return true;
                 } else {
                     let bytes = $batch.len();
-                    *c_guard = Some($batch);
+                    c_guard.batch = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
                     return true;
@@ -533,7 +550,7 @@ impl Backoff {
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
     s_out_r: RingBufferReader<WBatch, RBLEN>,
-    current: Arc<Mutex<Option<WBatch>>>,
+    current: Arc<Mutex<Current>>,
     backoff: Backoff,
 }
 
@@ -587,7 +604,8 @@ impl StageOutIn {
                 }
 
                 // An incomplete (non-empty) batch may be available in the state IN pipeline.
-                match g.take() {
+                g.reset_pending();
+                match g.batch.take() {
                     Some(batch) => {
                         return Pull::Some(batch);
                     }
@@ -634,14 +652,14 @@ impl StageOut {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<WBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
             batches.push(batch);
         }
         // Take the current batch
-        if let Some(batch) = guard.take() {
+        if let Some(batch) = guard.batch.take() {
             batches.push(batch);
         }
         batches
@@ -667,6 +685,12 @@ impl TransmissionPipeline {
         config: TransmissionPipelineConf,
         priority: &[TransportPriorityTx],
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
+        let status = Arc::new(TransmissionPipelineStatus {
+            disabled: AtomicBool::new(false),
+            congested: AtomicU8::new(0),
+            pending: AtomicU8::new(0),
+        });
+
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
@@ -703,7 +727,11 @@ impl TransmissionPipeline {
             // Create the refill ring buffer
             // This is a SPSC ring buffer
             let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
-            let current = Arc::new(Mutex::new(None));
+            let current = Arc::new(Mutex::new(Current {
+                batch: None,
+                status: status.clone(),
+                prioflag: 1 << (prio as u8),
+            }));
             let bytes = Arc::new(AtomicBackoff {
                 active: CachePadded::new(AtomicBool::new(false)),
                 bytes: CachePadded::new(AtomicBatchSize::new(0)),
@@ -744,20 +772,16 @@ impl TransmissionPipeline {
             });
         }
 
-        let active = Arc::new(TransmissionPipelineStatus {
-            disabled: AtomicBool::new(false),
-            congested: AtomicU8::new(0),
-        });
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
-            status: active.clone(),
+            status: status.clone(),
             wait_before_drop: config.wait_before_drop,
             wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
             n_out_r,
-            status: active,
+            status,
         };
 
         (producer, consumer)
@@ -769,6 +793,8 @@ struct TransmissionPipelineStatus {
     disabled: AtomicBool,
     // Bitflags to indicate the given priority queue is congested
     congested: AtomicU8,
+    // Bitflags to indicate the given priority queue has messages waiting to be sent
+    pending: AtomicU8,
 }
 
 impl TransmissionPipelineStatus {
@@ -792,6 +818,16 @@ impl TransmissionPipelineStatus {
     fn is_congested(&self, priority: Priority) -> bool {
         let prioflag = 1 << priority as u8;
         self.congested.load(Ordering::Relaxed) & prioflag != 0
+    }
+
+    fn get_pending(&self) -> Option<Priority> {
+        let pending = self.pending.load(Ordering::Relaxed);
+        let prio = pending.trailing_zeros();
+        // Don't use try_from directly because it unfortunately returns a costly error
+        if prio as usize >= Priority::NUM {
+            return None;
+        }
+        Some(Priority::try_from(prio as u8).unwrap())
     }
 }
 
@@ -900,7 +936,8 @@ impl TransmissionPipelineConsumer {
         while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
-            for (prio, queue) in self.stage_out.iter_mut().enumerate() {
+            while let Some(prio) = self.status.get_pending() {
+                let queue = &mut self.stage_out[prio as usize];
                 match queue.try_pull() {
                     Pull::Some(batch) => {
                         let prio = Priority::try_from(prio as u8).unwrap();
@@ -961,8 +998,7 @@ impl TransmissionPipelineConsumer {
             .iter()
             .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
-        let mut currents: Vec<MutexGuard<'_, Option<WBatch>>> =
-            locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
+        let mut currents: Vec<_> = locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
 
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
             let mut bs = s_out.drain(&mut currents[prio]);
