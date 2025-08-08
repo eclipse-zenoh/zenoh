@@ -212,7 +212,7 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
         // TODO(fuzzypixelz): refactor this function's interface to get access to the configuration
         // source, this we can support spec syntax in the lib search dir.
         let backend_search_dirs = match value.get("backend_search_dirs") {
-            Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.clone()]),
+            Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.as_str()]),
             Some(serde_json::Value::Array(paths)) => {
                 let mut specs = Vec::with_capacity(paths.len());
                 for path in paths {
