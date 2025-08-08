@@ -1,0 +1,57 @@
+#
+# Copyright (c) 2023 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+authors = { workspace = true }
+categories = { workspace = true }
+description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-pinned-deps-1-75"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+base64ct = "=1.6.0"
+home = "=0.5.9"
+jsonschema = { version = "=0.20.0", default-features = false }
+lz4_flex = "=0.11.3"
+pest = "=2.7.12"
+pest_derive = "=2.7.12"
+pest_generator = "=2.7.12"
+pest_meta = "=2.7.12"
+static_init = "=1.0.3"
+thiserror = "=1.0.69"
+twox-hash = "=1.6.3"
+url = "=2.5.2"
+
+[package.metadata.cargo-machete]
+ignored = [
+  "base64ct",
+  "home",
+  "jsonschema",
+  "lz4_flex",
+  "pest",
+  "pest_derive",
+  "pest_generator",
+  "pest_meta",
+  "static_init",
+  "thiserror",
+  "twox-hash",
+  "url",
+]
