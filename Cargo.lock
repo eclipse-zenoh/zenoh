@@ -5414,7 +5414,6 @@ dependencies = [
  "zenoh-config",
  "zenoh-link-commons",
  "zenoh-link-quic",
- "zenoh-link-quic_datagram",
  "zenoh-link-serial",
  "zenoh-link-tcp",
  "zenoh-link-tls",
@@ -5476,25 +5475,6 @@ dependencies = [
  "tracing",
  "webpki-roots",
  "zenoh-config",
- "zenoh-core",
- "zenoh-link-commons",
- "zenoh-protocol",
- "zenoh-result",
- "zenoh-util",
-]
-
-[[package]]
-name = "zenoh-link-quic_datagram"
-version = "1.5.0"
-dependencies = [
- "async-trait",
- "quinn",
- "rustls",
- "rustls-webpki",
- "time 0.3.36",
- "tokio",
- "tokio-util",
- "tracing",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
