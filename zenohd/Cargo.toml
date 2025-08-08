@@ -55,11 +55,11 @@ rustc_version = { workspace = true }
 [package.metadata.deb]
 assets = [
   # binary
-  ["/usr/bin/", "755", "target/release/zenohd"],
+  { source = "target/release/zenohd", dest = "/usr/bin/", mode = "755" },
   # config
-  [".service/zenohd.json5", "/etc/zenohd/", "644"],
+  { source = ".service/zenohd.json5", dest = "/etc/zenohd/", mode = "644" },
   # service
-  [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
+  { source = ".service/zenohd.service", dest = "/lib/systemd/system/zenohd.service", mode = "644" },
 ]
 copyright = "2024 ZettaScale Technology"
 depends = "$auto"
