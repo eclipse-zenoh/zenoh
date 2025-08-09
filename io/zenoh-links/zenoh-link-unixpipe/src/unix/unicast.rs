@@ -24,7 +24,6 @@ use std::{
 #[cfg(not(target_os = "macos"))]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use async_trait::async_trait;
-use filepath::FilePath;
 use nix::{libc, unistd::unlink};
 use rand::Rng;
 use tokio::{
@@ -98,13 +97,12 @@ impl Invitation {
 
 struct PipeR {
     pipe: AsyncFd<File>,
+    path: String,
 }
 
 impl Drop for PipeR {
     fn drop(&mut self) {
-        if let Ok(path) = self.pipe.get_ref().path() {
-            let _ = unlink(&path);
-        }
+        let _ = unlink(self.path.as_str());
     }
 }
 impl PipeR {
@@ -113,7 +111,10 @@ impl PipeR {
         let pipe_file = Self::create_and_open_unique_pipe_for_read(path, access_mode).await?;
         // create async_io wrapper for pipe's file descriptor
         let pipe = AsyncFd::new(pipe_file)?;
-        Ok(Self { pipe })
+        Ok(Self {
+            pipe,
+            path: path.into(),
+        })
     }
 
     async fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> ZResult<usize> {
