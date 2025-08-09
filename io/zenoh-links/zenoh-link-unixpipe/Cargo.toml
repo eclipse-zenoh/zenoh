@@ -41,7 +41,6 @@ zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-filepath = "0.1.2"
 nix = { workspace = true }
 unix-named-pipe = "0.2.0"
 
