@@ -22,11 +22,11 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::{
-    core::{endpoint::Address, Locator, Metadata, Reliability},
-    transport::BatchSize,
-};
+use zenoh_protocol::core::{endpoint::Address, Locator, Metadata, Reliability};
+#[cfg(target_family = "unix")]
+use zenoh_protocol::transport::BatchSize;
 use zenoh_result::ZResult;
+
 #[cfg(target_family = "unix")]
 mod unicast;
 #[cfg(target_family = "unix")]
