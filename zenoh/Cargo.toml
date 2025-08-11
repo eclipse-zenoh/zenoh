@@ -127,6 +127,9 @@ zenoh-task = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rtnetlink = { workspace = true }
+
 [dev-dependencies]
 libc = { workspace = true }
 tokio = { workspace = true }

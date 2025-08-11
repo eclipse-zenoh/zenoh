@@ -24,9 +24,10 @@ use crate::{
         builders::scouting::ScoutBuilder,
         handlers::{Callback, DefaultHandler},
     },
-    net::runtime::{orchestrator::Loop, Runtime},
+    net::runtime::{orchestrator::Loop, Runtime, Scouting},
     Config,
 };
+
 /// A scout that returns [`Hello`] messages through a callback.
 ///
 /// # Examples
@@ -172,7 +173,7 @@ pub(crate) fn _scout(
             let task = TerminatableTask::spawn(
                 zenoh_runtime::ZRuntime::Acceptor,
                 async move {
-                    let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
+                    let scout = Scouting::scout(&sockets, what, &addr, move |hello| {
                         let callback = callback.clone();
                         async move {
                             callback.call(hello.into());
