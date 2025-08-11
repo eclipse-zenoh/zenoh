@@ -30,11 +30,13 @@ maintenance = { status = "actively-developed" }
 base64ct = "=1.6.0"
 home = "=0.5.9"
 jsonschema = { version = "=0.20.0", default-features = false }
+librocksdb-sys = "=0.17.1"
 lz4_flex = "=0.11.3"
 pest = "=2.7.12"
 pest_derive = "=2.7.12"
 pest_generator = "=2.7.12"
 pest_meta = "=2.7.12"
+rocksdb = "=0.23.0"
 static_init = "=1.0.3"
 thiserror = "=1.0.69"
 twox-hash = "=1.6.3"
@@ -45,11 +47,13 @@ ignored = [
   "base64ct",
   "home",
   "jsonschema",
+  "librocksdb-sys",
   "lz4_flex",
   "pest",
   "pest_derive",
   "pest_generator",
   "pest_meta",
+  "rocksdb",
   "static_init",
   "thiserror",
   "twox-hash",
