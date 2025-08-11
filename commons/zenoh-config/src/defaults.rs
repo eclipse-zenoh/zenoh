@@ -55,6 +55,8 @@ pub mod listen {
 
     pub const timeout_ms: ModeDependentValue<i64> = ModeDependentValue::Unique(0);
     pub const exit_on_failure: ModeDependentValue<bool> = ModeDependentValue::Unique(true);
+
+    pub const endpoint_poll_interval_ms: Option<i64> = Some(10_000);
 }
 
 #[allow(non_upper_case_globals)]
@@ -180,6 +182,7 @@ impl Default for ListenConfig {
                 peer: Some(vec![]),
                 client: None,
             }),
+            endpoint_poll_interval_ms: Some(10_000),
             exit_on_failure: None,
             retry: None,
         }
