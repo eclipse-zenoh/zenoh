@@ -43,7 +43,6 @@ const UNIXSOCKSTREAM_MAX_MTU: BatchSize = BatchSize::MAX;
 
 pub const UNIXSOCKSTREAM_LOCATOR_PREFIX: &str = "unixsock-stream";
 
-#[cfg(target_family = "unix")]
 const IS_RELIABLE: bool = true;
 
 zconfigurable! {
