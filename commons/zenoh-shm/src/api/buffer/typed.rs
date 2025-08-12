@@ -21,11 +21,14 @@ use zenoh_core::bail;
 use zenoh_result::{IError, ZResult};
 
 use crate::{
-    api::{buffer::{
-        traits::{ResideInShm, ShmBuf, ShmBufMut, ShmBufUnsafeMut},
-        zshm::{zshm, ZShm},
-        zshmmut::{zshmmut, ZShmMut},
-    }, provider::memory_layout::BuildLayout},
+    api::{
+        buffer::{
+            traits::{ResideInShm, ShmBuf, ShmBufMut, ShmBufUnsafeMut},
+            zshm::{zshm, ZShm},
+            zshmmut::{zshmmut, ZShmMut},
+        },
+        provider::memory_layout::BuildLayout,
+    },
     ShmBufInner,
 };
 
@@ -252,18 +255,24 @@ impl<T: ResideInShm, Tbuf: ShmBufUnsafeMut<[u8]>> ShmBufUnsafeMut<T> for Typed<T
     }
 }
 
-fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()>
-{
+fn can_transmute<T: ResideInShm>(value: &ShmBufInner) -> ZResult<()> {
     let slice = value.as_ref();
 
     let layout = BuildLayout::for_type::<T>();
 
     if slice.len() != layout.layout().size().get() {
-        bail!("Slice length does not match type size: expected {}, got {}", layout.layout().size().get(), slice.len());
+        bail!(
+            "Slice length does not match type size: expected {}, got {}",
+            layout.layout().size().get(),
+            slice.len()
+        );
     }
 
     if (slice.as_ptr() as usize) % std::mem::align_of::<T>() != 0 {
-        bail!("Slice alignment does not match type alignment: expected {}", std::mem::align_of::<T>());
+        bail!(
+            "Slice alignment does not match type alignment: expected {}",
+            std::mem::align_of::<T>()
+        );
     }
 
     Ok(())
