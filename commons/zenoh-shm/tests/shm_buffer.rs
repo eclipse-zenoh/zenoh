@@ -19,7 +19,7 @@ use zenoh_shm::api::{
 };
 
 #[repr(C)]
-#[derive(zerocopy::IntoBytes, zerocopy::KnownLayout, zerocopy::FromBytes)]
+#[stabby::stabby]
 struct SharedByteData {
     data: [u8; 64],
 }

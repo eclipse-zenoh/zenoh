@@ -13,11 +13,13 @@
 //
 use std::num::NonZeroUsize;
 
+use stabby::{abi::typenum2::B0, IStable};
+
 use crate::api::provider::memory_layout::MemoryLayout;
 
-pub trait ResideInShm: Send + zerocopy::KnownLayout + zerocopy::FromBytes {}
+pub trait ResideInShm: Send + IStable<ContainsIndirections = B0> {}
 
-impl<T: Send + zerocopy::KnownLayout + zerocopy::FromBytes> ResideInShm for T {}
+impl<T: Send + stabby::IStable<ContainsIndirections = B0>> ResideInShm for T {}
 
 /// Errors for buffer relayouting operation.
 #[zenoh_macros::unstable_doc]

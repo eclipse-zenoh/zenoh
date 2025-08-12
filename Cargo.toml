@@ -237,7 +237,6 @@ zenoh-task = { version = "=1.5.0", path = "commons/zenoh-task" }
 zenoh-transport = { version = "=1.5.0", path = "io/zenoh-transport", default-features = false }
 zenoh-util = { version = "=1.5.0", path = "commons/zenoh-util" }
 zenoh_backend_traits = { version = "=1.5.0", path = "plugins/zenoh-backend-traits", default-features = false }
-zerocopy = "0.8.26"
 
 [profile.dev]
 debug = true

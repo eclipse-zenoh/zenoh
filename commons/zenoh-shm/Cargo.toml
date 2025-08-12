@@ -48,7 +48,6 @@ zenoh-buffers = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
-zerocopy = { workspace = true, features = ["derive"] }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }
