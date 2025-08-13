@@ -365,7 +365,7 @@
   //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
   //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //      /// If absent, the rules will be applied to both flows.
-  //      flow: ["ingress", "egress"],
+  //      flows: ["ingress", "egress"],
   //      /// List of message type on which downsampling will be applied. Must not be empty.
   //      messages: [
   //        /// Publication (Put and Delete)
@@ -503,7 +503,7 @@
   //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
   //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //      /// If absent, the filter will be applied to both flows.
-  //      flow: ["ingress", "egress"],
+  //      flows: ["ingress", "egress"],
   //      /// List of message type on which the filter will be applied. Must not be empty.
   //      messages: [
   //        "put",
