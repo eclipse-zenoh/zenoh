@@ -42,6 +42,7 @@ Unzip it where you want, and run the extracted `zenohd` binary.
 Add Eclipse Zenoh private repository to the sources list, and install the `zenoh` package:
 
 ```bash
+curl -L https://download.eclipse.org/zenoh/debian-repo/zenoh-public-key | sudo gpg --dearmor --yes --output /etc/apt/keyrings/zenoh-public-key.gpg
 echo "deb [trusted=yes] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee -a /etc/apt/sources.list.d/zenoh.list > /dev/null
 sudo apt update
 sudo apt install zenoh
