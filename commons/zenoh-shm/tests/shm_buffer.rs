@@ -14,11 +14,16 @@
 
 use zenoh_core::Wait;
 use zenoh_shm::api::{
-    buffer::{traits::ResideInShm, typed::Typed, zshmmut::ZShmMut},
+    buffer::{
+        traits::{ResideInShm, ShmBufUnsafeMut},
+        typed::Typed,
+        zshm::ZShm,
+        zshmmut::ZShmMut,
+    },
     provider::{memory_layout::BuildLayout, shm_provider::ShmProviderBuilder},
 };
 
-#[repr(C)]
+#[repr(C, align(1))]
 #[stabby::stabby]
 struct SharedByteData {
     data: [u8; 64],
@@ -55,6 +60,18 @@ fn validate_typed_buffer_consistency(buffer: &mut impl AsMut<SharedByteData>) {
     validate_shm_slice(&mut buffer.as_mut().data);
 }
 
+fn validate_typed_to_raw_buffer_consistency(buffer: &mut Typed<SharedByteData, ZShm>) {
+    let mut raw = buffer.inner().clone();
+
+    let raw_mut = unsafe { raw.as_mut_unchecked() };
+    for i in 0..10 {
+        raw_mut.fill(i);
+        for val in &buffer.data {
+            assert!(*val == i)
+        }
+    }
+}
+
 #[test]
 fn shm_buffer_alloc_typed() {
     let mut buffer = make_typed_shm_buffer::<SharedByteData>();
@@ -65,6 +82,14 @@ fn shm_buffer_alloc_typed() {
 
     let mut buffer: Typed<SharedByteData, _> = buffer.try_into().unwrap();
     validate_typed_buffer_consistency(&mut buffer);
+}
+
+#[test]
+fn typed_to_raw() {
+    let mut buffer = make_typed_shm_buffer::<SharedByteData>()
+        .try_into()
+        .unwrap();
+    validate_typed_to_raw_buffer_consistency(&mut buffer);
 }
 
 #[test]
