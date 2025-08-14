@@ -27,14 +27,6 @@ pub use zenoh_link_quic as quic;
 use zenoh_link_quic::{
     LinkManagerUnicastQuic, QuicConfigurator, QuicLocatorInspector, QUIC_LOCATOR_PREFIX,
 };
-#[cfg(feature = "transport_quic_datagram")]
-pub use zenoh_link_quic_datagram as quic_datagram;
-#[cfg(all(feature = "transport_quic_datagram", not(feature = "transport_quic")))]
-use zenoh_link_quic_datagram::QUIC_DATAGRAM_LOCATOR_PREFIX;
-#[cfg(feature = "transport_quic_datagram")]
-use zenoh_link_quic_datagram::{
-    LinkManagerUnicastQuicDatagram, QuicDatagramConfigurator, QuicDatagramLocatorInspector,
-};
 #[cfg(feature = "transport_serial")]
 pub use zenoh_link_serial as serial;
 #[cfg(feature = "transport_serial")]
@@ -84,7 +76,6 @@ use zenoh_result::{bail, ZResult};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LinkKind {
     Quic,
-    QuicDatagram,
     Serial,
     Tcp,
     Tls,
@@ -107,15 +98,8 @@ impl LinkKind {
                 UDP_LOCATOR_PREFIX => supported_links.push(LinkKind::Udp),
                 #[cfg(feature = "transport_tls")]
                 TLS_LOCATOR_PREFIX => supported_links.push(LinkKind::Tls),
-                #[cfg(all(feature = "transport_quic_datagram", not(feature = "transport_quic")))]
-                QUIC_DATAGRAM_LOCATOR_PREFIX => supported_links.push(LinkKind::QuicDatagram),
-                #[cfg(all(feature = "transport_quic", not(feature = "transport_quic_datagram")))]
-                QUIC_LOCATOR_PREFIX => supported_links.push(LinkKind::QuicDatagram),
-                #[cfg(all(feature = "transport_quic", feature = "transport_quic_datagram"))]
-                QUIC_LOCATOR_PREFIX => {
-                    supported_links.push(LinkKind::Quic);
-                    supported_links.push(LinkKind::QuicDatagram);
-                }
+                #[cfg(feature = "transport_quic")]
+                QUIC_LOCATOR_PREFIX => supported_links.push(LinkKind::Quic),
                 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
                 UNIXSOCKSTREAM_LOCATOR_PREFIX => supported_links.push(LinkKind::UnixsockStream),
                 #[cfg(feature = "transport_ws")]
@@ -146,30 +130,8 @@ impl TryFrom<&Locator> for LinkKind {
             UDP_LOCATOR_PREFIX => Ok(LinkKind::Udp),
             #[cfg(feature = "transport_tls")]
             TLS_LOCATOR_PREFIX => Ok(LinkKind::Tls),
-            #[cfg(all(feature = "transport_quic_datagram", not(feature = "transport_quic")))]
-            QUIC_DATAGRAM_LOCATOR_PREFIX => {
-                if !QuicDatagramLocatorInspector.is_reliable(locator)? {
-                    Ok(LinkKind::QuicDatagram)
-                } else {
-                    Err(zenoh_result::zerror!("Attempted to use a reliable QUIC link without enabling the transport_quic feature").into())
-                }
-            }
-            #[cfg(all(feature = "transport_quic", not(feature = "transport_quic_datagram")))]
-            QUIC_LOCATOR_PREFIX => {
-                if QuicLocatorInspector.is_reliable(locator)? {
-                    Ok(LinkKind::Quic)
-                } else {
-                    Err(zenoh_result::zerror!("Cannot use unreliable QUIC without enabling the transport_quic_datagram feature").into())
-                }
-            }
-            #[cfg(all(feature = "transport_quic", feature = "transport_quic_datagram"))]
-            QUIC_LOCATOR_PREFIX => {
-                if QuicLocatorInspector.is_reliable(locator)? {
-                    Ok(LinkKind::Quic)
-                } else {
-                    Ok(LinkKind::QuicDatagram)
-                }
-            }
+            #[cfg(feature = "transport_quic")]
+            QUIC_LOCATOR_PREFIX => Ok(LinkKind::Quic),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(LinkKind::UnixsockStream),
             #[cfg(feature = "transport_ws")]
@@ -199,8 +161,6 @@ impl TryFrom<&EndPoint> for LinkKind {
 pub const ALL_SUPPORTED_LINKS: &[LinkKind] = &[
     #[cfg(feature = "transport_quic")]
     LinkKind::Quic,
-    #[cfg(feature = "transport_quic_datagram")]
-    LinkKind::QuicDatagram,
     #[cfg(feature = "transport_tcp")]
     LinkKind::Tcp,
     #[cfg(feature = "transport_tls")]
@@ -223,8 +183,6 @@ pub const ALL_SUPPORTED_LINKS: &[LinkKind] = &[
 pub struct LocatorInspector {
     #[cfg(feature = "transport_quic")]
     quic_inspector: QuicLocatorInspector,
-    #[cfg(feature = "transport_quic_datagram")]
-    quic_datagram_inspector: QuicDatagramLocatorInspector,
     #[cfg(feature = "transport_tcp")]
     tcp_inspector: TcpLocatorInspector,
     #[cfg(feature = "transport_tls")]
@@ -255,8 +213,6 @@ impl LocatorInspector {
             LinkKind::Tls => self.tls_inspector.is_reliable(locator),
             #[cfg(feature = "transport_quic")]
             LinkKind::Quic => self.quic_inspector.is_reliable(locator),
-            #[cfg(feature = "transport_quic_datagram")]
-            LinkKind::QuicDatagram => self.quic_datagram_inspector.is_reliable(locator),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LinkKind::UnixsockStream => self.unixsock_stream_inspector.is_reliable(locator),
             #[cfg(feature = "transport_ws")]
@@ -284,8 +240,6 @@ impl LocatorInspector {
             LinkKind::Tls => self.tls_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_quic")]
             LinkKind::Quic => self.quic_inspector.is_multicast(locator).await,
-            #[cfg(feature = "transport_quic_datagram")]
-            LinkKind::QuicDatagram => self.quic_datagram_inspector.is_multicast(locator).await,
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             LinkKind::UnixsockStream => self.unixsock_stream_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_ws")]
@@ -305,8 +259,6 @@ impl LocatorInspector {
 pub struct LinkConfigurator {
     #[cfg(feature = "transport_tcp")]
     tcp_inspector: TcpConfigurator,
-    #[cfg(feature = "transport_quic_datagram")]
-    quic_datagram_inspector: QuicDatagramConfigurator,
     #[cfg(feature = "transport_quic")]
     quic_inspector: QuicConfigurator,
     #[cfg(feature = "transport_tls")]
@@ -337,13 +289,6 @@ impl LinkConfigurator {
         #[cfg(feature = "transport_tcp")]
         {
             insert_config(LinkKind::Tcp, self.tcp_inspector.inspect_config(config));
-        }
-        #[cfg(feature = "transport_quic_datagram")]
-        {
-            insert_config(
-                LinkKind::QuicDatagram,
-                self.quic_datagram_inspector.inspect_config(config),
-            );
         }
         #[cfg(feature = "transport_quic")]
         {
@@ -384,10 +329,6 @@ impl LinkManagerBuilderUnicast {
             LinkKind::Udp => Ok(std::sync::Arc::new(LinkManagerUnicastUdp::new(_manager))),
             #[cfg(feature = "transport_tls")]
             LinkKind::Tls => Ok(std::sync::Arc::new(LinkManagerUnicastTls::new(_manager))),
-            #[cfg(feature = "transport_quic_datagram")]
-            LinkKind::QuicDatagram => Ok(std::sync::Arc::new(LinkManagerUnicastQuicDatagram::new(
-                _manager,
-            ))),
             #[cfg(feature = "transport_quic")]
             LinkKind::Quic => Ok(std::sync::Arc::new(LinkManagerUnicastQuic::new(_manager))),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]

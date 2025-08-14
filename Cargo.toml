@@ -34,7 +34,6 @@ members = [
   "io/zenoh-link",
   "io/zenoh-link-commons",
   "io/zenoh-links/zenoh-link-quic/",
-  "io/zenoh-links/zenoh-link-quic_datagram/",
   "io/zenoh-links/zenoh-link-serial",
   "io/zenoh-links/zenoh-link-tcp/",
   "io/zenoh-links/zenoh-link-tls/",
@@ -218,7 +217,6 @@ zenoh-keyexpr = { version = "=1.5.0", path = "commons/zenoh-keyexpr", default-fe
 zenoh-link = { version = "=1.5.0", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "=1.5.0", path = "io/zenoh-link-commons" }
 zenoh-link-quic = { version = "=1.5.0", path = "io/zenoh-links/zenoh-link-quic" }
-zenoh-link-quic_datagram = { version = "=1.5.0", path = "io/zenoh-links/zenoh-link-quic_datagram" }
 zenoh-link-serial = { version = "=1.5.0", path = "io/zenoh-links/zenoh-link-serial" }
 zenoh-link-tcp = { version = "=1.5.0", path = "io/zenoh-links/zenoh-link-tcp" }
 zenoh-link-tls = { version = "=1.5.0", path = "io/zenoh-links/zenoh-link-tls" }
