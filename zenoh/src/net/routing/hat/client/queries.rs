@@ -32,16 +32,17 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, Hat};
+use super::Hat;
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
             face::FaceState,
-            resource::{NodeId, Resource, SessionContext},
+            resource::{FaceContext, NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
-        hat::{HatQueriesTrait, SendDeclare, Sources},
+        hat::{DeclarationContext, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
+        router::Direction,
         RoutingContext,
     },
 };
@@ -60,7 +61,7 @@ impl Hat {
         res: &Arc<Resource>,
         face: &Arc<FaceState>,
     ) -> QueryableInfoType {
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .fold(None, |accu, ctx| {
                 if ctx.face.id != face.id {
@@ -86,10 +87,10 @@ impl Hat {
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        let faces = tables.faces.values().cloned();
+        let faces = self.faces(tables).values().cloned();
         for mut dst_face in faces {
             let info = self.local_qabl_info(tables, res, &dst_face);
-            let current = face_hat!(dst_face).local_qabls.get(res);
+            let current = self.face_hat(&dst_face).local_qabls.get(res);
             if src_face
                 .as_ref()
                 .map(|src_face| dst_face.id != src_face.id)
@@ -102,10 +103,12 @@ impl Hat {
                     })
                     .unwrap_or(true)
             {
-                let id = current
-                    .map(|c| c.0)
-                    .unwrap_or(face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst));
-                face_hat_mut!(&mut dst_face)
+                let id = current.map(|c| c.0).unwrap_or(
+                    self.face_hat(&dst_face)
+                        .next_id
+                        .fetch_add(1, Ordering::SeqCst),
+                );
+                self.face_hat_mut(&mut dst_face)
                     .local_qabls
                     .insert(res.clone(), (id, info));
                 let key_expr = Resource::decl_key(res, &mut dst_face, true);
@@ -142,13 +145,13 @@ impl Hat {
         {
             let res = get_mut_unchecked(res);
             get_mut_unchecked(
-                res.session_ctxs
+                res.face_ctxs
                     .entry(face.id)
-                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
+                    .or_insert_with(|| Arc::new(FaceContext::new(face.clone()))),
             )
             .qabl = Some(*qabl_info);
         }
-        face_hat_mut!(face).remote_qabls.insert(id, res.clone());
+        self.face_hat_mut(face).remote_qabls.insert(id, res.clone());
     }
 
     fn declare_simple_queryable(
@@ -166,7 +169,7 @@ impl Hat {
 
     #[inline]
     fn simple_qabls(&self, res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .filter_map(|ctx| {
                 if ctx.qabl.is_some() {
@@ -184,8 +187,8 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables.faces.values_mut() {
-            if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+        for face in self.faces_mut(tables).values_mut() {
+            if let Some((id, _)) = self.face_hat_mut(face).local_qabls.remove(res) {
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -213,12 +216,13 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if !face_hat_mut!(face)
+        if !self
+            .face_hat_mut(face)
             .remote_qabls
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
                 get_mut_unchecked(ctx).qabl = None;
             }
 
@@ -230,7 +234,7 @@ impl Hat {
             }
             if simple_qabls.len() == 1 {
                 let face = &mut simple_qabls[0];
-                if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+                if let Some((id, _)) = self.face_hat_mut(face).local_qabls.remove(res) {
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -259,7 +263,7 @@ impl Hat {
         id: QueryableId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
+        if let Some(mut res) = self.face_hat_mut(face).remote_qabls.remove(&id) {
             self.undeclare_simple_queryable(tables, face, &mut res, send_declare);
             Some(res)
         } else {
@@ -273,13 +277,13 @@ impl Hat {
         _face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables
-            .faces
+        for face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
         {
-            for qabl in face_hat!(face).remote_qabls.values() {
+            for qabl in self.face_hat(&face).remote_qabls.values() {
                 self.propagate_simple_queryable(
                     tables,
                     qabl,
@@ -298,34 +302,38 @@ lazy_static::lazy_static! {
 impl HatQueriesTrait for Hat {
     fn declare_queryable(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
-        _node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        _profile: InterestProfile,
     ) {
-        self.declare_simple_queryable(tables, face, id, res, qabl_info, send_declare);
+        // FIXME(fuzzypixelz): InterestProfile is ignored
+        self.declare_simple_queryable(
+            ctx.tables,
+            ctx.src_face,
+            id,
+            res,
+            qabl_info,
+            ctx.send_declare,
+        );
     }
 
     fn undeclare_queryable(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: QueryableId,
         _res: Option<Arc<Resource>>,
-        _node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        self.forget_simple_queryable(tables, face, id, send_declare)
+        self.forget_simple_queryable(ctx.tables, ctx.src_face, id, ctx.send_declare)
     }
 
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
-        for src_face in tables.faces.values() {
-            for qabl in face_hat!(src_face).remote_qabls.values() {
+        for src_face in self.faces(tables).values() {
+            for qabl in self.face_hat(src_face).remote_qabls.values() {
                 // Insert the key in the list of known queryables
                 let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
                 // Append src_face as a queryable source in the proper list
@@ -341,8 +349,8 @@ impl HatQueriesTrait for Hat {
 
     fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
-        for face in tables.faces.values() {
-            for interest in face_hat!(face).remote_interests.values() {
+        for face in self.faces(tables).values() {
+            for interest in self.face_hat(face).remote_interests.values() {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
@@ -385,8 +393,8 @@ impl HatQueriesTrait for Hat {
         };
 
         if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
+            for face in self
+                .faces(tables)
                 .values()
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
@@ -398,15 +406,21 @@ impl HatQueriesTrait for Hat {
                             .as_ref()
                             .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
                             .unwrap_or(true)
-                }) || face_hat!(face)
+                }) || self
+                    .face_hat(face)
                     .remote_qabls
                     .values()
                     .any(|qbl| KeyExpr::keyexpr_intersect(qbl.expr(), expr.full_expr()))
                 {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.push(QueryTargetQabl {
-                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                        dir: Direction {
+                            dst_face: face.clone(),
+                            wire_expr: key_expr.to_owned(),
+                            node_id: NodeId::default(),
+                        },
                         info: None,
+                        bound: self.bound,
                     });
                 }
             }
@@ -415,22 +429,27 @@ impl HatQueriesTrait for Hat {
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
+            .and_then(|res| res.ctx.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for (sid, context) in &mres.session_ctxs {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                if let Some(qabl_info) = context.qabl.as_ref() {
+            for (fid, ctx) in &mres.face_ctxs {
+                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+                if let Some(qabl_info) = ctx.qabl.as_ref() {
                     route.push(QueryTargetQabl {
-                        direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
+                        dir: Direction {
+                            dst_face: ctx.face.clone(),
+                            wire_expr: key_expr.to_owned(),
+                            node_id: NodeId::default(),
+                        },
                         info: Some(QueryableInfoType {
                             complete: complete && qabl_info.complete,
                             distance: 1,
                         }),
+                        bound: self.bound,
                     });
                 }
             }
@@ -455,8 +474,8 @@ impl HatQueriesTrait for Hat {
             key_expr,
             complete
         );
-        for face in tables
-            .faces
+        for face in self
+            .faces(tables)
             .values()
             .filter(|f| f.whatami != WhatAmI::Client)
         {
@@ -468,14 +487,15 @@ impl HatQueriesTrait for Hat {
                         .as_ref()
                         .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
                         .unwrap_or(true)
-            }) && face_hat!(face)
+            }) && self
+                .face_hat(face)
                 .remote_qabls
                 .values()
                 .any(|qbl| match complete {
                     true => {
-                        qbl.session_ctxs
+                        qbl.face_ctxs
                             .get(&face.id)
-                            .and_then(|sc| sc.qabl)
+                            .and_then(|ctx| ctx.qabl)
                             .is_some_and(|q| q.complete)
                             && KeyExpr::keyexpr_include(qbl.expr(), key_expr)
                     }
@@ -489,7 +509,7 @@ impl HatQueriesTrait for Hat {
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
+            .and_then(|res| res.ctx.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
             .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
@@ -498,16 +518,16 @@ impl HatQueriesTrait for Hat {
             if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
                 continue;
             }
-            for (sid, context) in &mres.session_ctxs {
-                if context.face.whatami == WhatAmI::Client
+            for (sid, ctx) in &mres.face_ctxs {
+                if ctx.face.whatami == WhatAmI::Client
                     && match complete {
-                        true => context.qabl.is_some_and(|q| q.complete),
-                        false => context.qabl.is_some(),
+                        true => ctx.qabl.is_some_and(|q| q.complete),
+                        false => ctx.qabl.is_some(),
                     }
                 {
                     matching_queryables
                         .entry(*sid)
-                        .or_insert_with(|| context.face.clone());
+                        .or_insert_with(|| ctx.face.clone());
                 }
             }
         }

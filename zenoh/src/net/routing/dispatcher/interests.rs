@@ -32,14 +32,11 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
 
-use super::{
-    face::FaceState,
-    tables::{register_expr_interest, TablesLock},
-};
+use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
-    dispatcher::tables::Tables,
-    hat::SendDeclare,
-    router::{unregister_expr_interest, Resource},
+    dispatcher::{face::Face, tables::Tables},
+    hat::{DeclarationContext, SendDeclare},
+    router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,
 };
 
@@ -75,22 +72,6 @@ impl RemoteInterest {
     pub(crate) fn matches(&self, res: &Arc<Resource>) -> bool {
         self.res.as_ref().map(|r| r.matches(res)).unwrap_or(true)
     }
-}
-
-pub(crate) fn declare_final(
-    wtables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    send_declare: &mut SendDeclare,
-) {
-    if let Some(interest) = get_mut_unchecked(face)
-        .pending_current_interests
-        .remove(&id)
-    {
-        finalize_pending_interest(interest, send_declare);
-    }
-
-    wtables.hat.declare_final(&mut wtables.data, face, id);
 }
 
 pub(crate) fn finalize_pending_interests(
@@ -194,41 +175,41 @@ impl Timed for CurrentInterestCleanup {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn declare_interest(
-    tables_ref: &Arc<TablesLock>,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    expr: Option<&WireExpr>,
-    mode: InterestMode,
-    options: InterestOptions,
-    send_declare: &mut SendDeclare,
-) {
-    if options.keyexprs() && mode != InterestMode::Current {
-        register_expr_interest(tables_ref, face, id, expr);
-    }
-
-    if let Some(expr) = expr {
-        let rtables = zread!(tables_ref.tables);
-        match rtables
-            .data
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                tracing::debug!(
-                    "{} Declare interest {} ({}{})",
-                    face,
-                    id,
-                    prefix.expr(),
-                    expr.suffix
-                );
-                let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut tables_wguard) =
-                    if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+impl Face {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn declare_interest(
+        &self,
+        tables_ref: &Arc<TablesLock>,
+        node_id: NodeId,
+        id: InterestId,
+        expr: Option<&WireExpr>,
+        mode: InterestMode,
+        options: InterestOptions,
+        send_declare: &mut SendDeclare,
+    ) {
+        if options.keyexprs() && mode != InterestMode::Current {
+            register_expr_interest(tables_ref, &mut self.state.clone(), id, expr);
+        }
+        let (mut res, mut wtables) = if let Some(expr) = expr {
+            let rtables = zread!(tables_ref.tables);
+            match rtables
+                .data
+                .get_mapping(&self.state, &expr.scope, expr.mapping)
+                .cloned()
+            {
+                Some(mut prefix) => {
+                    tracing::debug!(
+                        "{} Declare interest {} ({}{})",
+                        &self.state,
+                        id,
+                        prefix.expr(),
+                        expr.suffix
+                    );
+                    let res = Resource::get_resource(&prefix, &expr.suffix);
+                    if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                         drop(rtables);
-                        let tables_guard = zwrite!(tables_ref.tables);
-                        (res.unwrap(), tables_guard)
+                        let wtables = zwrite!(tables_ref.tables);
+                        (Some(res.unwrap()), wtables)
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.suffix.as_ref());
@@ -236,54 +217,60 @@ pub(crate) fn declare_interest(
                             .map(|ke| Resource::get_matches(&rtables.data, ke))
                             .unwrap_or_default();
                         drop(rtables);
-                        let mut tables_wguard = zwrite!(tables_ref.tables);
-                        let tables = &mut *tables_wguard;
+                        let mut wtables = zwrite!(tables_ref.tables);
+                        let tables = &mut *wtables;
                         let mut res =
                             Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
                         matches.push(Arc::downgrade(&res));
                         Resource::match_resource(&tables.data, &mut res, matches);
-                        (res, tables_wguard)
-                    };
-
-                let tables = &mut *tables_wguard;
-                tables.hat.declare_interest(
-                    &mut tables.data,
-                    tables_ref,
-                    face,
-                    id,
-                    Some(&mut res),
-                    mode,
-                    options,
-                    send_declare,
-                );
+                        (Some(res), wtables)
+                    }
+                }
+                None => {
+                    tracing::error!(
+                        "{} Declare interest {} for unknown scope {}!",
+                        &self.state,
+                        id,
+                        expr.scope
+                    );
+                    return;
+                }
             }
-            None => tracing::error!(
-                "{} Declare interest {} for unknown scope {}!",
-                face,
-                id,
-                expr.scope
-            ),
-        }
-    } else {
-        let mut tables = zwrite!(tables_ref.tables);
-        let tables = &mut *tables;
-        tables.hat.declare_interest(
-            &mut tables.data,
-            tables_ref,
-            face,
-            id,
-            None,
-            mode,
-            options,
-            send_declare,
-        );
-    }
-}
+        } else {
+            (None, zwrite!(tables_ref.tables))
+        };
 
-pub(crate) fn undeclare_interest(tables: &TablesLock, face: &mut Arc<FaceState>, id: InterestId) {
-    tracing::debug!("{} Undeclare interest {}", face, id,);
-    unregister_expr_interest(tables, face, id);
-    let mut wtables = zwrite!(tables.tables);
-    let tables = &mut *wtables;
-    tables.hat.undeclare_interest(&mut tables.data, face, id);
+        let tables = &mut *wtables;
+
+        unimplemented!()
+    }
+
+    pub(crate) fn undeclare_interest(&self, tables: &TablesLock, node_id: NodeId, id: InterestId) {
+        tracing::debug!("{} Undeclare interest {}", &self.state, id);
+        unregister_expr_interest(tables, &mut self.state.clone(), id);
+
+        let mut wtables = zwrite!(tables.tables);
+        let tables = &mut *wtables;
+
+        unimplemented!()
+    }
+
+    pub(crate) fn declare_final(
+        &self,
+        wtables: &mut Tables,
+        node_id: NodeId,
+        id: InterestId,
+        send_declare: &mut SendDeclare,
+    ) {
+        if let Some(interest) = get_mut_unchecked(&mut self.state.clone())
+            .pending_current_interests
+            .remove(&id)
+        {
+            finalize_pending_interest(interest, send_declare);
+        }
+
+        let tables = &mut *wtables;
+
+        unimplemented!()
+    }
 }

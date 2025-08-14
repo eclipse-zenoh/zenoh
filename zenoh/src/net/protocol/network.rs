@@ -113,7 +113,7 @@ pub(crate) struct Changes {
     pub(crate) removed_nodes: Vec<(NodeIndex, Node)>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct Tree {
     pub(crate) parent: Option<NodeIndex>,
     pub(crate) children: Vec<NodeIndex>,

@@ -23,11 +23,11 @@ use zenoh_protocol::network::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, Hat};
+use super::Hat;
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::TablesData},
-    hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
-    router::{NodeId, Resource, SessionContext},
+    hat::{CurrentFutureTrait, DeclarationContext, HatTokenTrait, InterestProfile, SendDeclare},
+    router::{FaceContext, Resource},
     RoutingContext,
 };
 
@@ -35,18 +35,22 @@ impl Hat {
     #[inline]
     fn propagate_simple_token_to(
         &self,
-        _tables: &mut TablesData,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
         if (src_face.id != dst_face.id || dst_face.whatami == WhatAmI::Client)
-            && !face_hat!(dst_face).local_tokens.contains_key(res)
+            && !self.face_hat(dst_face).local_tokens.contains_key(res)
             && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
         {
-            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-            face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
+            let id = self
+                .face_hat(dst_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(dst_face)
+                .local_tokens
+                .insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst_face, true);
             send_declare(
                 &dst_face.primitives,
@@ -74,13 +78,13 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in tables
-            .faces
+        for mut dst_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
         {
-            self.propagate_simple_token_to(tables, &mut dst_face, res, src_face, send_declare);
+            self.propagate_simple_token_to(&mut dst_face, res, src_face, send_declare);
         }
     }
 
@@ -94,7 +98,7 @@ impl Hat {
         // Register liveliness
         {
             let res = get_mut_unchecked(res);
-            match res.session_ctxs.get_mut(&face.id) {
+            match res.face_ctxs.get_mut(&face.id) {
                 Some(ctx) => {
                     if !ctx.token {
                         get_mut_unchecked(ctx).token = true;
@@ -102,14 +106,16 @@ impl Hat {
                 }
                 None => {
                     let ctx = res
-                        .session_ctxs
+                        .face_ctxs
                         .entry(face.id)
-                        .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
+                        .or_insert_with(|| Arc::new(FaceContext::new(face.clone())));
                     get_mut_unchecked(ctx).token = true;
                 }
             }
         }
-        face_hat_mut!(face).remote_tokens.insert(id, res.clone());
+        self.face_hat_mut(face)
+            .remote_tokens
+            .insert(id, res.clone());
     }
 
     fn declare_simple_token(
@@ -162,7 +168,7 @@ impl Hat {
 
     #[inline]
     fn simple_tokens(&self, res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-        res.session_ctxs
+        res.face_ctxs
             .values()
             .filter_map(|ctx| {
                 if ctx.token {
@@ -180,8 +186,8 @@ impl Hat {
         res: &Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        for face in tables.faces.values_mut() {
-            if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
+        for face in self.faces_mut(tables).values_mut() {
+            if let Some(id) = self.face_hat_mut(face).local_tokens.remove(res) {
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -198,7 +204,8 @@ impl Hat {
                         res.expr().to_string(),
                     ),
                 );
-            } else if face_hat!(face)
+            } else if self
+                .face_hat(face)
                 .remote_interests
                 .values()
                 .any(|i| i.options.tokens() && i.matches(res))
@@ -214,7 +221,7 @@ impl Hat {
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareToken(UndeclareToken {
-                                id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
+                                id: self.face_hat(face).next_id.fetch_add(1, Ordering::SeqCst),
                                 ext_wire_expr: WireExprType {
                                     wire_expr: Resource::get_best_key(res, "", face.id),
                                 },
@@ -234,12 +241,13 @@ impl Hat {
         res: &mut Arc<Resource>,
         send_declare: &mut SendDeclare,
     ) {
-        if !face_hat_mut!(face)
+        if !self
+            .face_hat_mut(face)
             .remote_tokens
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
                 get_mut_unchecked(ctx).token = false;
             }
 
@@ -250,7 +258,7 @@ impl Hat {
             if simple_tokens.len() == 1 {
                 let face = &mut simple_tokens[0];
                 if face.whatami != WhatAmI::Client {
-                    if let Some(id) = face_hat_mut!(face).local_tokens.remove(res) {
+                    if let Some(id) = self.face_hat_mut(face).local_tokens.remove(res) {
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(
@@ -281,7 +289,7 @@ impl Hat {
         res: Option<Arc<Resource>>,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = face_hat_mut!(face).remote_tokens.remove(&id) {
+        if let Some(mut res) = self.face_hat_mut(face).remote_tokens.remove(&id) {
             self.undeclare_simple_token(tables, face, &mut res, send_declare);
             Some(res)
         } else if let Some(mut res) = res {
@@ -298,20 +306,14 @@ impl Hat {
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for src_face in tables
-            .faces
+        for src_face in self
+            .faces(tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
         {
-            for token in face_hat!(src_face).remote_tokens.values() {
-                self.propagate_simple_token_to(
-                    tables,
-                    face,
-                    token,
-                    &mut src_face.clone(),
-                    send_declare,
-                );
+            for token in self.face_hat(&src_face).remote_tokens.values() {
+                self.propagate_simple_token_to(face, token, &mut src_face.clone(), send_declare);
             }
         }
     }
@@ -324,11 +326,11 @@ impl Hat {
         mode: InterestMode,
     ) -> u32 {
         if mode.future() {
-            if let Some(id) = face_hat!(face).local_tokens.get(res) {
+            if let Some(id) = self.face_hat(face).local_tokens.get(res) {
                 *id
             } else {
-                let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-                face_hat_mut!(face).local_tokens.insert(res.clone(), id);
+                let id = self.face_hat(face).next_id.fetch_add(1, Ordering::SeqCst);
+                self.face_hat_mut(face).local_tokens.insert(res.clone(), id);
                 id
             }
         } else {
@@ -351,11 +353,11 @@ impl Hat {
             let interest_id = (!mode.future()).then_some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
-                    if tables.faces.values().any(|src_face| {
-                        face_hat!(src_face)
+                    if self.faces(tables).values().any(|src_face| {
+                        self.face_hat(src_face)
                             .remote_tokens
                             .values()
-                            .any(|token| token.context.is_some() && token.matches(res))
+                            .any(|token| token.ctx.is_some() && token.matches(res))
                     }) {
                         let id = self.make_token_id(res, face, mode);
                         let wire_expr = Resource::decl_key(res, face, true);
@@ -374,15 +376,15 @@ impl Hat {
                         );
                     }
                 } else {
-                    for src_face in tables
-                        .faces
+                    for src_face in self
+                        .faces(tables)
                         .values()
                         .filter(|f| f.whatami == WhatAmI::Client)
                         .cloned()
                         .collect::<Vec<Arc<FaceState>>>()
                     {
-                        for token in face_hat!(src_face).remote_tokens.values() {
-                            if token.context.is_some() && token.matches(res) {
+                        for token in self.face_hat(&src_face).remote_tokens.values() {
+                            if token.ctx.is_some() && token.matches(res) {
                                 let id = self.make_token_id(token, face, mode);
                                 let wire_expr = Resource::decl_key(token, face, true);
                                 send_declare(
@@ -406,14 +408,14 @@ impl Hat {
                     }
                 }
             } else {
-                for src_face in tables
-                    .faces
+                for src_face in self
+                    .faces(tables)
                     .values()
                     .filter(|f| f.whatami == WhatAmI::Client)
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
-                    for token in face_hat!(src_face).remote_tokens.values() {
+                    for token in self.face_hat(&src_face).remote_tokens.values() {
                         let id = self.make_token_id(token, face, mode);
                         let wire_expr = Resource::decl_key(token, face, true);
                         send_declare(
@@ -439,26 +441,30 @@ impl Hat {
 impl HatTokenTrait for Hat {
     fn declare_token(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: TokenId,
         res: &mut Arc<Resource>,
-        _node_id: NodeId,
         interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
+        _profile: InterestProfile,
     ) {
-        self.declare_simple_token(tables, face, id, res, interest_id, send_declare);
+        // FIXME(fuzzypixelz): InterestProfile is ignored
+        self.declare_simple_token(
+            ctx.tables,
+            ctx.src_face,
+            id,
+            res,
+            interest_id,
+            ctx.send_declare,
+        );
     }
 
     fn undeclare_token(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
-        _node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        self.forget_simple_token(tables, face, id, res, send_declare)
+        self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)
     }
 }

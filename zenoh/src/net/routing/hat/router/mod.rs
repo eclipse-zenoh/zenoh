@@ -20,6 +20,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
+    fmt::Debug,
     mem,
     sync::{atomic::AtomicU32, Arc},
 };
@@ -55,7 +56,7 @@ use crate::net::{
         ROUTERS_NET_NAME,
     },
     routing::{
-        dispatcher::{face::Face, interests::RemoteInterest},
+        dispatcher::{face::Face, gateway::Bound, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
     },
     runtime::Runtime,
@@ -66,56 +67,6 @@ mod pubsub;
 mod queries;
 mod token;
 
-macro_rules! hat_mut {
-    ($t:expr) => {
-        $t.hat
-            .as_any_mut()
-            .downcast_mut::<crate::net::routing::hat::router::Hat>()
-            .unwrap()
-    };
-}
-use hat_mut;
-
-macro_rules! res_hat {
-    ($r:expr) => {
-        $r.context()
-            .hat
-            .downcast_ref::<crate::net::routing::hat::router::HatContext>()
-            .unwrap()
-    };
-}
-use res_hat;
-
-macro_rules! res_hat_mut {
-    ($r:expr) => {
-        get_mut_unchecked($r)
-            .context_mut()
-            .hat
-            .downcast_mut::<crate::net::routing::hat::router::HatContext>()
-            .unwrap()
-    };
-}
-use res_hat_mut;
-
-macro_rules! face_hat {
-    ($f:expr) => {
-        $f.hat
-            .downcast_ref::<crate::net::routing::hat::router::HatFace>()
-            .unwrap()
-    };
-}
-use face_hat;
-
-macro_rules! face_hat_mut {
-    ($f:expr) => {
-        get_mut_unchecked($f)
-            .hat
-            .downcast_mut::<crate::net::routing::hat::router::HatFace>()
-            .unwrap()
-    };
-}
-use face_hat_mut;
-
 use crate::net::{common::AutoConnect, protocol::network::SuccessorEntry};
 
 struct TreesComputationWorker {
@@ -124,7 +75,7 @@ struct TreesComputationWorker {
 }
 
 impl TreesComputationWorker {
-    fn new() -> Self {
+    fn new(bound: Bound) -> Self {
         let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
         let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
             loop {
@@ -135,7 +86,10 @@ impl TreesComputationWorker {
                 if let Ok(tables_ref) = rx.recv_async().await {
                     let mut wtables = zwrite!(tables_ref.tables);
                     let tables = &mut *wtables;
-                    let hat = hat_mut!(tables);
+                    let hat = tables.hats[bound]
+                        .as_any_mut()
+                        .downcast_mut::<Hat>()
+                        .unwrap();
 
                     tracing::trace!("Compute trees");
                     let new_children = hat.routers_net.as_mut().unwrap().compute_trees();
@@ -144,7 +98,7 @@ impl TreesComputationWorker {
                     hat.pubsub_tree_change(&mut tables.data, &new_children);
                     hat.queries_tree_change(&mut tables.data, &new_children);
                     hat.token_tree_change(&mut tables.data, &new_children);
-                    tables.data.disable_all_routes();
+                    tables.data.hats[bound].disable_all_routes();
                     drop(wtables);
                 }
             }
@@ -154,6 +108,7 @@ impl TreesComputationWorker {
 }
 
 pub(crate) struct Hat {
+    bound: Bound,
     router_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
@@ -161,16 +116,83 @@ pub(crate) struct Hat {
     routers_trees_worker: TreesComputationWorker,
 }
 
+impl Debug for Hat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Hat")
+            .field("bound", &self.bound)
+            .field("subs", &self.router_subs)
+            .field("qabls", &self.router_qabls)
+            .field("tokens", &self.router_tokens)
+            .finish()
+    }
+}
+
 impl Hat {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(bound: Bound) -> Self {
         // FIXME(fuzzypixelz): peer failover brokering is currently scrapped
         Self {
+            bound,
             router_subs: HashSet::new(),
             router_qabls: HashSet::new(),
             router_tokens: HashSet::new(),
             routers_net: None,
-            routers_trees_worker: TreesComputationWorker::new(),
+            routers_trees_worker: TreesComputationWorker::new(bound),
         }
+    }
+
+    pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
+        res.context().hats[self.bound].ctx.downcast_ref().unwrap()
+    }
+
+    pub(self) fn res_hat_mut<'r>(&self, res: &'r mut Arc<Resource>) -> &'r mut HatContext {
+        get_mut_unchecked(res).context_mut().hats[self.bound]
+            .ctx
+            .downcast_mut()
+            .unwrap()
+    }
+
+    pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
+        face_state.hat[self.bound].downcast_ref().unwrap()
+    }
+
+    pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
+        get_mut_unchecked(face_state).hat[self.bound]
+            .downcast_mut()
+            .unwrap()
+    }
+
+    pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
+        &tables.hats[self.bound].faces
+    }
+
+    pub(crate) fn faces_mut<'t>(
+        &self,
+        tables: &'t mut TablesData,
+    ) -> &'t mut HashMap<usize, Arc<FaceState>> {
+        &mut tables.hats[self.bound].faces
+    }
+
+    pub(crate) fn mcast_groups<'t>(
+        &self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> {
+        tables.hats[self.bound].mcast_groups.iter()
+    }
+
+    pub(crate) fn face<'t>(
+        &self,
+        tables: &'t TablesData,
+        zid: &ZenohIdProto,
+    ) -> Option<&'t Arc<FaceState>> {
+        tables.hats[self.bound]
+            .faces
+            .values()
+            .find(|face| face.zid == *zid)
+    }
+
+    /// Returns `true` if `face` belongs to this [`Hat`]'s linkstate network.
+    pub(crate) fn owns(&self, face: &FaceState) -> bool {
+        self.bound == face.bound && face.whatami == WhatAmI::Router
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
@@ -183,7 +205,7 @@ impl Hat {
             .routers_net
             .as_ref()
             .unwrap()
-            .get_link(face_hat!(face).link_id)
+            .get_link(self.face_hat(face).link_id)
         {
             Some(link) => match link.get_zid(&(nodeid as u64)) {
                 Some(router) => Some(*router),
@@ -216,7 +238,7 @@ impl HatBaseTrait for Hat {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
         let config = &config_guard.0;
-        let whatami = tables.whatami;
+        let whatami = tables.hats[self.bound].whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
         let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
@@ -290,7 +312,7 @@ impl HatBaseTrait for Hat {
             0
         };
 
-        face_hat_mut!(&mut face.state).link_id = link_id;
+        self.face_hat_mut(&mut face.state).link_id = link_id;
 
         if face.state.whatami == WhatAmI::Router {
             self.schedule_compute_trees(tables_ref.clone())
@@ -307,7 +329,7 @@ impl HatBaseTrait for Hat {
     ) {
         let mut face_clone = face.clone();
         let face = get_mut_unchecked(face);
-        let hat_face = match face.hat.downcast_mut::<HatFace>() {
+        let hat_face = match face.hat[self.bound].downcast_mut::<HatFace>() {
             Some(hate_face) => hate_face,
             None => {
                 tracing::error!("Error downcasting face hat in close_face!");
@@ -321,78 +343,68 @@ impl HatBaseTrait for Hat {
         hat_face.local_tokens.clear();
 
         for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(res).face_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.remote_mappings.clear();
         for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(res).face_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
             self.undeclare_simple_subscription(tables, &mut face_clone, &mut res, send_declare);
 
-            if res.context.is_some() {
+            if res.ctx.is_some() {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
                             .disable_data_routes();
                         subs_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_data_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
                 subs_matches.push(res);
             }
         }
 
         let mut qabls_matches = vec![];
         for (_, mut res) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
             self.undeclare_simple_queryable(tables, &mut face_clone, &mut res, send_declare);
 
-            if res.context.is_some() {
+            if res.ctx.is_some() {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
                             .disable_query_routes();
                         qabls_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_query_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
                 qabls_matches.push(res);
             }
         }
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
             self.undeclare_simple_token(tables, &mut face_clone, &mut res, send_declare);
         }
 
         for mut res in subs_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_data_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
             Resource::clean(&mut res);
         }
         for mut res in qabls_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_query_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
             Resource::clean(&mut res);
         }
-        tables.faces.remove(&face.id);
+        self.faces_mut(tables).remove(&face.id);
 
         if face.whatami == WhatAmI::Router {
             for (_, removed_node) in self.routers_net.as_mut().unwrap().remove_link(&face.zid) {
@@ -459,11 +471,11 @@ impl HatBaseTrait for Hat {
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId {
-        if face.whatami == WhatAmI::Router {
+        if self.owns(face) {
             self.routers_net
                 .as_ref()
                 .unwrap()
-                .get_local_context(routing_context, face_hat!(face).link_id)
+                .get_local_context(routing_context, self.face_hat(face).link_id)
         } else {
             0
         }

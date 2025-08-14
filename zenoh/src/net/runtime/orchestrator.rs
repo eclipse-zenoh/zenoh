@@ -1231,13 +1231,19 @@ impl Runtime {
         let _ctrl_lock = zlock!(router.tables.ctrl_lock);
         let mut wtables = zwrite!(router.tables.tables);
         let tables = &mut *wtables;
-
-        tables.hat.update_from_config(&router.tables, self)
+        for hat in tables.hats.values_mut() {
+            hat.update_from_config(&router.tables, self);
+        }
+        Ok(())
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        tables.hat.links_info()
+        tables
+            .hats
+            .values()
+            .flat_map(|hat| hat.links_info().into_iter())
+            .collect()
     }
 }

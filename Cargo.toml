@@ -14,44 +14,44 @@
 [workspace]
 resolver = "2"
 members = [
-  "commons/zenoh-buffers",
-  "commons/zenoh-codec",
-  "commons/zenoh-collections",
-  "commons/zenoh-config",
-  "commons/zenoh-core",
-  "commons/zenoh-crypto",
-  "commons/zenoh-keyexpr",
-  "commons/zenoh-macros",
-  "commons/zenoh-protocol",
-  "commons/zenoh-result",
-  "commons/zenoh-shm",
-  "commons/zenoh-sync",
-  "commons/zenoh-task",
-  "commons/zenoh-util",
-  "commons/zenoh-runtime",
-  "examples",
-  "io/zenoh-link",
-  "io/zenoh-link-commons",
-  "io/zenoh-links/zenoh-link-quic/",
-  "io/zenoh-links/zenoh-link-serial",
-  "io/zenoh-links/zenoh-link-tcp/",
-  "io/zenoh-links/zenoh-link-tls/",
-  "io/zenoh-links/zenoh-link-udp/",
-  "io/zenoh-links/zenoh-link-unixsock_stream/",
-  "io/zenoh-links/zenoh-link-ws/",
-  "io/zenoh-links/zenoh-link-unixpipe/",
-  "io/zenoh-links/zenoh-link-vsock/",
-  "io/zenoh-transport",
-  "plugins/zenoh-backend-example",
-  "plugins/zenoh-plugin-example",
-  "plugins/zenoh-backend-traits",
-  "plugins/zenoh-plugin-rest",
-  "plugins/zenoh-plugin-storage-manager",
-  "plugins/zenoh-plugin-trait",
-  "zenoh",
-  "zenoh-ext",
-  "zenoh-ext/examples",
-  "zenohd",
+    "commons/zenoh-buffers",
+    "commons/zenoh-codec",
+    "commons/zenoh-collections",
+    "commons/zenoh-config",
+    "commons/zenoh-core",
+    "commons/zenoh-crypto",
+    "commons/zenoh-keyexpr",
+    "commons/zenoh-macros",
+    "commons/zenoh-protocol",
+    "commons/zenoh-result",
+    "commons/zenoh-shm",
+    "commons/zenoh-sync",
+    "commons/zenoh-task",
+    "commons/zenoh-util",
+    "commons/zenoh-runtime",
+    "examples",
+    "io/zenoh-link",
+    "io/zenoh-link-commons",
+    "io/zenoh-links/zenoh-link-quic/",
+    "io/zenoh-links/zenoh-link-serial",
+    "io/zenoh-links/zenoh-link-tcp/",
+    "io/zenoh-links/zenoh-link-tls/",
+    "io/zenoh-links/zenoh-link-udp/",
+    "io/zenoh-links/zenoh-link-unixsock_stream/",
+    "io/zenoh-links/zenoh-link-ws/",
+    "io/zenoh-links/zenoh-link-unixpipe/",
+    "io/zenoh-links/zenoh-link-vsock/",
+    "io/zenoh-transport",
+    "plugins/zenoh-backend-example",
+    "plugins/zenoh-plugin-example",
+    "plugins/zenoh-backend-traits",
+    "plugins/zenoh-plugin-rest",
+    "plugins/zenoh-plugin-storage-manager",
+    "plugins/zenoh-plugin-trait",
+    "zenoh",
+    "zenoh-ext",
+    "zenoh-ext/examples",
+    "zenohd",
 ]
 exclude = ["ci/nostd-check", "ci/valgrind-check"]
 
@@ -61,11 +61,11 @@ version = "1.4.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-  "kydos <angelo@icorsaro.net>",
-  "Julien Enoch <julien@enoch.fr>",
-  "Olivier Hécart <olivier.hecart@zettascale.tech>",
-  "Luca Cominardi <luca.cominardi@zettascale.tech>",
-  "Pierre Avital <pierre.avital@zettascale.tech>",
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@zettascale.tech>",
+    "Luca Cominardi <luca.cominardi@zettascale.tech>",
+    "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
 edition = "2021"
 license = "EPL-2.0 OR Apache-2.0"
@@ -88,6 +88,7 @@ async-trait = "0.1.82"
 base64 = "0.22.1"
 bincode = "1.3.3"
 bytes = "1.7.1"
+cfg-if = "1.0.1"
 clap = { version = "4.5.17", features = ["derive"] }
 console-subscriber = "0.4.0"
 const_format = "0.2.33"
@@ -147,9 +148,9 @@ ringbuffer-spsc = "0.1.9"
 rsa = "0.9"
 rustc_version = "0.4.1"
 rustls = { version = "0.23.13", default-features = false, features = [
-  "logging",
-  "tls12",
-  "ring",
+    "logging",
+    "tls12",
+    "ring",
 ] }
 rustls-native-certs = "0.8.0"
 rustls-pemfile = "2.1.3"
@@ -157,8 +158,9 @@ rustls-webpki = "0.102.8"
 rustls-pki-types = "1.8.0"
 schemars = { version = "0.8.21", features = ["either"] }
 secrecy = { version = "0.8.0", features = ["serde", "alloc"] }
+smallvec = "2.0.0-alpha.11"
 serde = { version = "1.0.210", default-features = false, features = [
-  "derive",
+    "derive",
 ] } # Default features are disabled due to usage in no_std crates
 serde_json = "1.0.128"
 serde_with = "3.12.0"
@@ -185,7 +187,7 @@ unzip-n = "0.1.2"
 url = "2.5.2"
 urlencoding = "2.1.3"
 uuid = { version = "1.10.0", default-features = false, features = [
-  "v4",
+    "v4",
 ] } # Default features are disabled due to usage in no_std crates
 validated_struct = "2.1.0"
 vec_map = "0.8.2"
@@ -197,7 +199,11 @@ z-serial = "0.3.1"
 either = "1.13.0"
 prost = "0.13.2"
 tls-listener = { version = "0.11.0", features = ["rustls-ring"] }
-windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_IO"] }
+windows-sys = { version = "0.59.0", features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinSock",
+    "Win32_System_IO",
+] }
 zenoh-ext = { version = "=1.4.0", path = "zenoh-ext", default-features = false }
 zenoh-shm = { version = "=1.4.0", path = "commons/zenoh-shm" }
 zenoh-result = { version = "=1.4.0", path = "commons/zenoh-result", default-features = false }

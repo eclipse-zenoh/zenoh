@@ -69,6 +69,7 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
+    net::routing::dispatcher::gateway::Bound,
     GIT_VERSION, LONG_VERSION,
 };
 
@@ -147,7 +148,7 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
+        let router = Arc::new(Router::new(zid, hlc.clone(), &config)?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -196,7 +197,7 @@ impl RuntimeBuilder {
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone())?;
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_hats(runtime.clone())?;
 
         // Admin space
         if start_admin_space {
@@ -387,13 +388,17 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
+
+                // FIXME(fuzzypixelz): implement manual gateway config and use it here
+                let bound = Bound::North;
+
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoint: std::sync::RwLock::new(None),
                     main_handler: runtime
                         .state
                         .router
-                        .new_transport_unicast(transport)
+                        .new_transport_unicast(transport, bound)
                         .unwrap(),
                     slave_handlers,
                 }))
@@ -413,10 +418,14 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
+
+                // FIXME(fuzzypixelz): implement manual gateway config and use it here
+                let bound = Bound::North;
+
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone())?;
+                    .new_transport_multicast(transport.clone(), bound)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -480,12 +489,16 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .iter()
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
+
+        // FIXME(fuzzypixelz): implement manual gateway config and use it here
+        let bound = Bound::North;
+
         Ok(Arc::new(RuntimeMulticastSession {
-            main_handler: self
-                .runtime
-                .state
-                .router
-                .new_peer_multicast(self.transport.clone(), peer)?,
+            main_handler: self.runtime.state.router.new_peer_multicast(
+                self.transport.clone(),
+                peer,
+                bound,
+            )?,
             slave_handlers,
         }))
     }
@@ -554,7 +567,9 @@ impl Closee for Arc<RuntimeState> {
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
         tables.data.root_res.close();
-        tables.data.faces.clear();
+        for hat in tables.data.hats.values_mut() {
+            hat.faces.clear();
+        }
     }
 }
 

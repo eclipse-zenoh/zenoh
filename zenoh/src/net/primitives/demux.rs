@@ -122,13 +122,15 @@ impl TransportPeerEventHandler for DeMux {
                     let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
                     let mut wtables = zwrite!(self.face.tables.tables);
                     let tables = &mut *wtables;
-                    tables.hat.handle_oam(
+
+                    tables.hats[self.face.state.bound].handle_oam(
                         &mut tables.data,
                         &self.face.tables,
                         m,
                         transport,
                         &mut |p, m| declares.push((p.clone(), m)),
                     )?;
+
                     drop(wtables);
                     drop(ctrl_lock);
                     for (p, m) in declares {

@@ -114,7 +114,7 @@ use crate::{
     net::{
         primitives::Primitives,
         routing::{
-            dispatcher::face::Face,
+            dispatcher::{face::Face, gateway::Bound},
             namespace::{ENamespace, Namespace},
         },
         runtime::{Runtime, RuntimeBuilder},
@@ -708,16 +708,17 @@ impl Session {
 
             let primitives: Arc<dyn Primitives> = match namespace {
                 Some(ns) => {
-                    let face = router.new_primitives(Arc::new(ENamespace::new(
-                        ns.clone(),
-                        Arc::new(session.downgrade()),
-                    )));
+                    let face = router.new_primitives(
+                        Arc::new(ENamespace::new(ns.clone(), Arc::new(session.downgrade()))),
+                        Bound::session(),
+                    );
                     #[cfg(feature = "unstable")]
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     Arc::new(Namespace::new(ns, face))
                 }
                 None => {
-                    let face = router.new_primitives(Arc::new(session.downgrade()));
+                    let face =
+                        router.new_primitives(Arc::new(session.downgrade()), Bound::session());
                     #[cfg(feature = "unstable")]
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     face
@@ -1975,12 +1976,12 @@ impl SessionInner {
 
         let matches = match matching_type {
             MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
+                crate::net::routing::dispatcher::pubsub::get_session_matching_subscriptions(
                     tables, key_expr,
                 )
             }
             MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
+                crate::net::routing::dispatcher::queries::get_session_matching_queryables(
                     tables, key_expr, complete,
                 )
             }

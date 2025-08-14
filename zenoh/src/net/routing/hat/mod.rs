@@ -45,6 +45,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::gateway::Bound,
     runtime::Runtime,
 };
 
@@ -69,6 +70,31 @@ impl Sources {
             routers: vec![],
             peers: vec![],
             clients: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum InterestProfile {
+    Push,
+    Pull,
+}
+
+impl InterestProfile {
+    pub(crate) fn is_push(&self) -> bool {
+        matches!(self, InterestProfile::Push)
+    }
+
+    pub(crate) fn is_pull(&self) -> bool {
+        matches!(self, InterestProfile::Pull)
+    }
+
+    /// Computes [`InterestProfile`] from source and destination [`Bound`]s for a given entity.
+    pub(crate) fn with_bound_flow((src, dst): (&Bound, &Bound)) -> Self {
+        if src.is_north() && !dst.is_north() {
+            Self::Pull
+        } else {
+            Self::Push
         }
     }
 }
@@ -168,48 +194,53 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
+pub(crate) struct DeclarationContext<'ctx> {
+    pub(crate) tables: &'ctx mut TablesData,
+    pub(crate) src_face: &'ctx mut Arc<FaceState>,
+    pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
+    pub(crate) node_id: NodeId,
+}
+
 pub(crate) trait HatInterestTrait {
-    #[allow(clippy::too_many_arguments)]
     fn declare_interest(
         &self,
-        tables: &mut TablesData,
+        ctx: DeclarationContext,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         options: InterestOptions,
-        send_declare: &mut SendDeclare,
     );
-    fn undeclare_interest(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-    );
-    fn declare_final(&self, tables: &mut TablesData, face: &mut Arc<FaceState>, id: InterestId);
+
+    fn undeclare_interest(&self, ctx: DeclarationContext, id: InterestId);
+
+    fn declare_final(&self, ctx: DeclarationContext, id: InterestId);
 }
 
 pub(crate) trait HatPubSubTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles subscriber declaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_subscription(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     );
+
+    /// Handles subscriber undeclaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_subscription(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: SubscriberId,
-        res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        res: Option<Arc<Resource>>, // FIXME(fuzzypixelz): can this be a borrow
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
@@ -233,25 +264,29 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles queryable declaration.
+    ///
+    /// The declaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_queryable(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     );
+
+    /// Handles queryable undeclaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_queryable(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
@@ -275,35 +310,42 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, _config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(
+    whatami: WhatAmI,
+    _config: &Config,
+    bound: Bound,
+) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::Hat::new()),
-        WhatAmI::Peer => Box::new(p2p_peer::Hat::new()),
-        WhatAmI::Router => Box::new(router::Hat::new()),
+        WhatAmI::Client => Box::new(client::Hat::new(bound)),
+        WhatAmI::Peer => Box::new(p2p_peer::Hat::new(bound)),
+        WhatAmI::Router => Box::new(router::Hat::new(bound)),
     }
 }
 
 pub(crate) trait HatTokenTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles token declaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_token(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: TokenId,
         res: &mut Arc<Resource>,
-        node_id: NodeId,
         interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     );
 
+    /// Handles token undeclaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_token(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: DeclarationContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 }
 

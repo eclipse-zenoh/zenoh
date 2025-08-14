@@ -14,7 +14,7 @@
 use std::{
     any::Any,
     collections::HashMap,
-    fmt,
+    fmt::{self, Debug},
     ops::Not,
     sync::{Arc, Weak},
     time::Duration,
@@ -37,16 +37,14 @@ use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
 
-use super::{
-    super::router::*,
-    interests::{declare_final, declare_interest, undeclare_interest, PendingCurrentInterest},
-    resource::*,
-    tables::TablesLock,
-};
+use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
 use crate::net::{
-    primitives::{McastMux, Mux, Primitives},
+    primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
-        dispatcher::interests::finalize_pending_interests,
+        dispatcher::{
+            gateway::{Bound, BoundMap},
+            interests::finalize_pending_interests,
+        },
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -60,10 +58,13 @@ pub(crate) struct InterestState {
     pub(crate) finalized: bool,
 }
 
+pub(crate) type FaceId = usize;
+
 pub struct FaceState {
-    pub(crate) id: usize,
+    pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) bound: Bound,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -76,30 +77,27 @@ pub struct FaceState {
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
+    /// Downcasts to `HatFace`.
+    pub(crate) hat: BoundMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
 }
 
-impl FaceState {
-    #[allow(clippy::too_many_arguments)] // @TODO fix warning
+pub(crate) struct FaceStateBuilder(FaceState);
+
+impl FaceStateBuilder {
     pub(crate) fn new(
         id: usize,
         zid: ZenohIdProto,
-        whatami: WhatAmI,
-        #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
-        primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
-        mcast_group: Option<TransportMulticast>,
-        in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
-        hat: Box<dyn Any + Send + Sync>,
-        is_local: bool,
-    ) -> Arc<FaceState> {
-        Arc::new(FaceState {
+        bound: Bound,
+        primitives: Arc<dyn EPrimitives + Send + Sync>,
+        hat: BoundMap<Box<dyn Any + Send + Sync>>,
+    ) -> Self {
+        FaceStateBuilder(FaceState {
             id,
             zid,
-            whatami,
-            #[cfg(feature = "stats")]
-            stats,
+            whatami: WhatAmI::default(),
+            bound,
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
@@ -108,14 +106,51 @@ impl FaceState {
             remote_mappings: ahash::HashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
-            mcast_group,
-            in_interceptors,
+            mcast_group: None,
+            in_interceptors: None,
             hat,
             task_controller: TaskController::default(),
-            is_local,
+            is_local: false,
+            #[cfg(feature = "stats")]
+            stats: None,
         })
     }
 
+    pub(crate) fn whatami(mut self, whatami: WhatAmI) -> Self {
+        self.0.whatami = whatami;
+        self
+    }
+
+    pub(crate) fn ingress_interceptors(
+        mut self,
+        in_interceptors: Arc<ArcSwap<InterceptorsChain>>,
+    ) -> Self {
+        self.0.in_interceptors = Some(in_interceptors);
+        self
+    }
+
+    pub(crate) fn multicast_groups(mut self, mcast_group: TransportMulticast) -> Self {
+        self.0.mcast_group = Some(mcast_group);
+        self
+    }
+
+    pub(crate) fn local(mut self, is_local: bool) -> Self {
+        self.0.is_local = is_local;
+        self
+    }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn stats(mut self, stats: Arc<TransportStats>) -> Self {
+        self.0.stats = Some(stats);
+        self
+    }
+
+    pub(crate) fn build(self) -> FaceState {
+        self.0
+    }
+}
+
+impl FaceState {
     #[inline]
     pub(crate) fn get_mapping(
         &self,
@@ -157,13 +192,8 @@ impl FaceState {
         {
             if let Some(expr) = res.keyexpr() {
                 let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
+                    .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
 
@@ -176,13 +206,8 @@ impl FaceState {
         {
             if let Some(expr) = res.keyexpr() {
                 let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
+                    .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
 
@@ -195,13 +220,8 @@ impl FaceState {
         {
             if let Some(expr) = res.keyexpr() {
                 let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
+                    .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
             }
         }
     }
@@ -257,6 +277,20 @@ impl fmt::Display for FaceState {
     }
 }
 
+impl fmt::Debug for FaceState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const MAX_ZID_LEN: usize = 8;
+        let zid = self.zid.into_keyexpr();
+        write!(
+            f,
+            "{}/{}/{}",
+            self.id,
+            &zid[..usize::min(MAX_ZID_LEN, zid.len())],
+            self.whatami
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct WeakFace {
     pub(crate) tables: Weak<TablesLock>,
@@ -278,6 +312,18 @@ pub struct Face {
     pub(crate) state: Arc<FaceState>,
 }
 
+impl fmt::Debug for Face {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.state, f)
+    }
+}
+
+impl fmt::Display for Face {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.state, f)
+    }
+}
+
 impl Face {
     pub fn downgrade(&self) -> WeakFace {
         WeakFace {
@@ -294,13 +340,14 @@ impl Face {
 }
 
 impl Primitives for Face {
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
-            declare_interest(
+            self.declare_interest(
                 &self.tables,
-                &mut self.state.clone(),
+                msg.ext_nodeid.node_id,
                 msg.id,
                 msg.wire_expr.as_ref(),
                 msg.mode,
@@ -312,10 +359,11 @@ impl Primitives for Face {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            undeclare_interest(&self.tables, &mut self.state.clone(), msg.id);
+            self.undeclare_interest(&self.tables, msg.ext_nodeid.node_id, msg.id);
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
@@ -327,9 +375,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 let mut declares = vec![];
-                declare_subscription(
-                    &self.tables,
-                    &mut self.state.clone(),
+                self.declare_subscription(
                     m.id,
                     &m.wire_expr,
                     &SubscriberInfo,
@@ -343,9 +389,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 let mut declares = vec![];
-                undeclare_subscription(
-                    &self.tables,
-                    &mut self.state.clone(),
+                self.undeclare_subscription(
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -358,9 +402,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 let mut declares = vec![];
-                declare_queryable(
+                self.declare_queryable(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.wire_expr,
                     &m.ext_info,
@@ -374,9 +417,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 let mut declares = vec![];
-                undeclare_queryable(
+                self.undeclare_queryable(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -389,9 +431,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut declares = vec![];
-                declare_token(
+                self.declare_token(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -405,9 +446,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 let mut declares = vec![];
-                undeclare_token(
+                self.undeclare_token(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.ext_wire_expr,
                     msg.ext_nodeid.node_id,
@@ -427,11 +467,13 @@ impl Primitives for Face {
 
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
-                    declare_final(&mut wtables, &mut self.state.clone(), id, &mut |p, m| {
+                    self.declare_final(&mut wtables, msg.ext_nodeid.node_id, id, &mut |p, m| {
                         declares.push((p.clone(), m))
                     });
 
-                    wtables.data.disable_all_routes();
+                    for hat in wtables.data.hats.values_mut() {
+                        hat.disable_all_routes();
+                    }
 
                     drop(wtables);
                     drop(ctrl_lock);
@@ -444,10 +486,12 @@ impl Primitives for Face {
     }
 
     #[inline]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         route_data(&self.tables, &self.state, msg, reliability);
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -456,14 +500,17 @@ impl Primitives for Face {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
     fn send_close(&self) {
         tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
@@ -476,7 +523,7 @@ impl Primitives for Face {
         });
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
-        tables.hat.close_face(
+        tables.hats[self.state.bound].close_face(
             &mut tables.data,
             &self.tables.clone(),
             &mut state,
@@ -491,11 +538,5 @@ impl Primitives for Face {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-impl fmt::Display for Face {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.state.fmt(f)
     }
 }

@@ -13,6 +13,7 @@
 //
 use std::{
     collections::HashMap,
+    fmt::Debug,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
@@ -32,6 +33,7 @@ use super::face::FaceState;
 pub use super::resource::*;
 use crate::net::{
     routing::{
+        dispatcher::{face::FaceId, gateway::BoundMap},
         hat::HatTrait,
         interceptor::{interceptor_factories, InterceptorFactory},
     },
@@ -42,6 +44,12 @@ pub(crate) struct RoutingExpr<'a> {
     pub(crate) prefix: &'a Arc<Resource>,
     pub(crate) suffix: &'a str,
     full: Option<String>,
+}
+
+impl Debug for RoutingExpr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}{}", self.prefix, self.suffix)
+    }
 }
 
 impl<'a> RoutingExpr<'a> {
@@ -63,31 +71,62 @@ impl<'a> RoutingExpr<'a> {
     }
 }
 
-pub struct TablesData {
+pub(crate) struct TablesData {
     pub(crate) zid: ZenohIdProto,
-    pub(crate) whatami: WhatAmI,
     pub(crate) runtime: Option<WeakRuntime>,
-    pub(crate) face_counter: usize,
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
+
     pub(crate) drop_future_timestamp: bool,
     pub(crate) queries_default_timeout: Duration,
     pub(crate) interests_timeout: Duration,
+
     pub(crate) root_res: Arc<Resource>,
-    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+
+    pub(crate) face_counter: FaceId,
+
+    pub(crate) next_interceptor_version: AtomicUsize,
+    pub(crate) interceptors: Vec<InterceptorFactory>,
+
+    pub(crate) hats: BoundMap<HatTablesData>,
+}
+
+impl Debug for TablesData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TablesData").finish()
+    }
+}
+
+pub(crate) struct HatTablesData {
+    pub(crate) whatami: WhatAmI,
+    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
-    pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) routes_version: RoutesVersion,
-    pub(crate) next_interceptor_version: AtomicUsize,
+}
+
+impl HatTablesData {
+    pub(crate) fn new(whatami: WhatAmI) -> Self {
+        HatTablesData {
+            whatami,
+            faces: HashMap::new(),
+            mcast_groups: vec![],
+            mcast_faces: vec![],
+            routes_version: 0,
+        }
+    }
+
+    pub(crate) fn disable_all_routes(&mut self) {
+        self.routes_version = self.routes_version.saturating_add(1);
+    }
 }
 
 impl TablesData {
     pub fn new(
         zid: ZenohIdProto,
-        whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
+        hat: BoundMap<HatTablesData>,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -97,20 +136,16 @@ impl TablesData {
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
         Ok(TablesData {
             zid,
-            whatami,
             runtime: None,
-            face_counter: 0,
             hlc,
             drop_future_timestamp,
             queries_default_timeout,
             interests_timeout,
             root_res: Resource::root(),
-            faces: HashMap::new(),
-            mcast_groups: vec![],
-            mcast_faces: vec![],
             interceptors: interceptor_factories(config)?,
-            routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
+            hats: hat,
+            face_counter: 0,
         })
     }
 
@@ -149,15 +184,6 @@ impl TablesData {
             expr_id => face.get_sent_mapping(expr_id, mapping),
         }
     }
-
-    #[inline]
-    pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
-        self.faces.values().find(|face| face.zid == *zid)
-    }
-
-    pub(crate) fn disable_all_routes(&mut self) {
-        self.routes_version = self.routes_version.saturating_add(1);
-    }
 }
 
 pub struct TablesLock {
@@ -168,7 +194,13 @@ pub struct TablesLock {
 
 pub struct Tables {
     pub data: TablesData,
-    pub hat: Box<dyn HatTrait + Send + Sync>,
+    pub hats: BoundMap<Box<dyn HatTrait + Send + Sync>>,
+}
+
+impl Debug for Tables {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tables").finish()
+    }
 }
 
 impl TablesLock {
@@ -182,9 +214,15 @@ impl TablesLock {
             .data
             .next_interceptor_version
             .fetch_add(1, Ordering::SeqCst);
-        tables.data.faces.values().for_each(|face| {
-            face.set_interceptors_from_factories(&tables.data.interceptors, version + 1);
-        });
+
+        for face in tables
+            .data
+            .hats
+            .iter()
+            .flat_map(|(_, hat)| hat.faces.values())
+        {
+            face.set_interceptors_from_factories(&tables.data.interceptors, version + 1)
+        }
         Ok(())
     }
 }
