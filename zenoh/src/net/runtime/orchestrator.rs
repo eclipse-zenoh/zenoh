@@ -1227,17 +1227,22 @@ impl Runtime {
 
     #[allow(dead_code)]
     pub(crate) fn update_network(&self) -> ZResult<()> {
-        let router = self.router();
-        let _ctrl_lock = zlock!(router.tables.ctrl_lock);
-        let mut wtables = zwrite!(router.tables.tables);
-        let tables = &mut *wtables;
+        // FIXME(fuzzypixelz): uncomment this
+        // let router = self.router();
+        // let _ctrl_lock = zlock!(router.tables.ctrl_lock);
+        // let mut wtables = zwrite!(router.tables.tables);
+        // let tables = &mut *wtables;
+        // tables.hats.update_from_config(&router.tables, self)
 
-        tables.hat.update_from_config(&router.tables, self)
+        Ok(())
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
-        let router = self.router();
-        let tables = zread!(router.tables.tables);
-        tables.hat.links_info()
+        // FIXME(fuzzypixelz): uncomment this
+        // let router = self.router();
+        // let tables = zread!(router.tables.tables);
+        // tables.hats.links_info()
+
+        HashMap::new()
     }
 }

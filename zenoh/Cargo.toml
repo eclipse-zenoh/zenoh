@@ -32,29 +32,29 @@ maintenance = { status = "actively-developed" }
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 default = [
-  "auth_pubkey",
-  "auth_usrpwd",
-  "transport_multilink",
-  "transport_compression",
-  "transport_quic",
-  "transport_tcp",
-  "transport_tls",
-  "transport_udp",
-  "transport_unixsock-stream",
-  "transport_ws",
+    "auth_pubkey",
+    "auth_usrpwd",
+    "transport_multilink",
+    "transport_compression",
+    "transport_quic",
+    "transport_tcp",
+    "transport_tls",
+    "transport_udp",
+    "transport_unixsock-stream",
+    "transport_ws",
 ]
 internal = [
-  "zenoh-keyexpr/internal",
-  "zenoh-config/internal",
-  "zenoh-protocol/internal",
+    "zenoh-keyexpr/internal",
+    "zenoh-config/internal",
+    "zenoh-protocol/internal",
 ]
 plugins = []
 runtime_plugins = ["plugins"]
 shared-memory = [
-  "zenoh-shm",
-  "zenoh-protocol/shared-memory",
-  "zenoh-transport/shared-memory",
-  "zenoh-buffers/shared-memory",
+    "zenoh-shm",
+    "zenoh-protocol/shared-memory",
+    "zenoh-transport/shared-memory",
+    "zenoh-buffers/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
@@ -69,15 +69,15 @@ transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 unstable = [
-  "internal_config",
-  "zenoh-keyexpr/unstable",
-  "zenoh-config/unstable",
-  "zenoh-protocol/unstable",
+    "internal_config",
+    "zenoh-keyexpr/unstable",
+    "zenoh-config/unstable",
+    "zenoh-protocol/unstable",
 ]
 internal_config = []
 tracing-instrument = [
-  "zenoh-task/tracing-instrument",
-  "zenoh-runtime/tracing-instrument",
+    "zenoh-task/tracing-instrument",
+    "zenoh-runtime/tracing-instrument",
 ]
 
 [dependencies]
@@ -100,11 +100,13 @@ petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ref-cast = { workspace = true }
+smallvec = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
+cfg-if = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
 zenoh-codec = { workspace = true }
 zenoh-collections = { workspace = true, features = ["std"] }

@@ -45,6 +45,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::gateway::Bound,
     runtime::Runtime,
 };
 
@@ -70,6 +71,22 @@ impl Sources {
             peers: vec![],
             clients: vec![],
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum InterestProfile {
+    Push,
+    Pull,
+}
+
+impl InterestProfile {
+    pub(crate) fn is_push(&self) -> bool {
+        matches!(self, InterestProfile::Push)
+    }
+
+    pub(crate) fn is_pull(&self) -> bool {
+        matches!(self, InterestProfile::Pull)
     }
 }
 
@@ -192,22 +209,37 @@ pub(crate) trait HatInterestTrait {
 
 pub(crate) trait HatPubSubTrait {
     #[allow(clippy::too_many_arguments)]
-    fn declare_subscription(
+    // REVIEW(fuzzypixelz): naming
+    fn handle_shared_subscription(
         &mut self,
         tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        src: &mut Arc<FaceState>,
+        id: SubscriberId,
+        res: &mut Arc<Resource>,
+        sub_info: &SubscriberInfo,
+        profile: InterestProfile,
+        send_declare: &mut SendDeclare,
+    );
+
+    #[allow(clippy::too_many_arguments)]
+    // REVIEW(fuzzypixelz): naming
+    fn handle_owned_subscription(
+        &mut self,
+        tables: &mut TablesData,
+        src: &mut Arc<FaceState>,
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     );
+
     fn undeclare_subscription(
         &mut self,
         tables: &mut TablesData,
         face: &mut Arc<FaceState>,
         id: SubscriberId,
-        res: Option<Arc<Resource>>,
+        res: Option<Arc<Resource>>, // FIXME(fuzzypixelz): can this be a borrow
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
@@ -275,11 +307,15 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, _config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(
+    whatami: WhatAmI,
+    _config: &Config,
+    bound: Bound,
+) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::Hat::new()),
-        WhatAmI::Peer => Box::new(p2p_peer::Hat::new()),
-        WhatAmI::Router => Box::new(router::Hat::new()),
+        WhatAmI::Client => Box::new(client::Hat::new(bound)),
+        WhatAmI::Peer => Box::new(p2p_peer::Hat::new(bound)),
+        WhatAmI::Router => Box::new(router::Hat::new(bound)),
     }
 }
 

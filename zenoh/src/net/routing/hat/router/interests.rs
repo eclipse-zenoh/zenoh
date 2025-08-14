@@ -21,9 +21,8 @@ use zenoh_protocol::{
         Declare, DeclareBody, DeclareFinal,
     },
 };
-use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat_mut, Hat};
+use super::Hat;
 use crate::net::routing::{
     dispatcher::{
         face::FaceState,
@@ -88,7 +87,7 @@ impl HatInterestTrait for Hat {
             )
         }
         if mode.future() {
-            face_hat_mut!(face).remote_interests.insert(
+            self.face_hat_mut(face).remote_interests.insert(
                 id,
                 RemoteInterest {
                     res: res.cloned(),
@@ -117,7 +116,7 @@ impl HatInterestTrait for Hat {
         face: &mut Arc<FaceState>,
         id: InterestId,
     ) {
-        face_hat_mut!(face).remote_interests.remove(&id);
+        self.face_hat_mut(face).remote_interests.remove(&id);
     }
 
     fn declare_final(&self, _tables: &mut TablesData, _face: &mut Arc<FaceState>, _id: InterestId) {

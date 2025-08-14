@@ -23,7 +23,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, initial_interest, Hat, INITIAL_INTEREST_ID};
+use super::{initial_interest, Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
@@ -40,17 +40,12 @@ use crate::net::routing::{
 impl Hat {
     pub(super) fn interests_new_face(&self, tables: &mut TablesData, face: &mut Arc<FaceState>) {
         if face.whatami != WhatAmI::Client {
-            for mut src_face in tables
-                .faces
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
+            for mut src_face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
                 if face.whatami == WhatAmI::Router {
                     for RemoteInterest { res, options, .. } in
-                        face_hat_mut!(&mut src_face).remote_interests.values()
+                        self.face_hat_mut(&mut src_face).remote_interests.values()
                     {
-                        let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                        let id = self.face_hat(&face).next_id.fetch_add(1, Ordering::SeqCst);
                         get_mut_unchecked(face).local_interests.insert(
                             id,
                             InterestState {
@@ -60,7 +55,12 @@ impl Hat {
                             },
                         );
                         let wire_expr = res.as_ref().map(|res| {
-                            Resource::decl_key(res, face, super::push_declaration_profile(face))
+                            Resource::decl_key(
+                                tables,
+                                res,
+                                face,
+                                super::push_declaration_profile(face),
+                            )
                         });
                         face.primitives.send_interest(RoutingContext::with_expr(
                             &mut Interest {
@@ -128,7 +128,7 @@ impl HatInterestTrait for Hat {
                 send_declare,
             )
         }
-        face_hat_mut!(face).remote_interests.insert(
+        self.face_hat_mut(face).remote_interests.insert(
             id,
             RemoteInterest {
                 res: res.as_ref().map(|res| (*res).clone()),
@@ -149,15 +149,25 @@ impl HatInterestTrait for Hat {
             } else {
                 mode
             };
-            for dst_face in tables.faces.values_mut().filter(|f| {
-                f.whatami == WhatAmI::Router
-                    || (f.whatami == WhatAmI::Peer
-                        && options.tokens()
-                        && mode == InterestMode::Current
-                        && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
-            }) {
-                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                get_mut_unchecked(dst_face).local_interests.insert(
+            let interests_timeout = tables.interests_timeout;
+            for mut dst_face in self
+                .faces_mut(tables)
+                .values()
+                .filter(|f| {
+                    f.whatami == WhatAmI::Router
+                        || (f.whatami == WhatAmI::Peer
+                            && options.tokens()
+                            && mode == InterestMode::Current
+                            && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+            {
+                let id = self
+                    .face_hat(&dst_face)
+                    .next_id
+                    .fetch_add(1, Ordering::SeqCst);
+                get_mut_unchecked(&mut dst_face).local_interests.insert(
                     id,
                     InterestState {
                         options,
@@ -166,7 +176,7 @@ impl HatInterestTrait for Hat {
                     },
                 );
                 if mode.current() {
-                    let dst_face_mut = get_mut_unchecked(dst_face);
+                    let dst_face_mut = get_mut_unchecked(&mut dst_face);
                     let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
                     let rejection_token = dst_face_mut.task_controller.get_cancellation_token();
                     dst_face_mut.pending_current_interests.insert(
@@ -178,14 +188,15 @@ impl HatInterestTrait for Hat {
                         },
                     );
                     CurrentInterestCleanup::spawn_interest_clean_up_task(
-                        dst_face,
+                        &dst_face,
                         tables_ref,
                         id,
-                        tables.interests_timeout,
+                        interests_timeout,
                     );
                 }
                 let wire_expr = res.as_ref().map(|res| {
-                    Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face))
+                    let push = super::push_declaration_profile(&dst_face);
+                    Resource::decl_key(tables, res, &mut dst_face, push)
                 });
                 dst_face.primitives.send_interest(RoutingContext::with_expr(
                     &mut Interest {
@@ -231,16 +242,17 @@ impl HatInterestTrait for Hat {
         face: &mut Arc<FaceState>,
         id: InterestId,
     ) {
-        if let Some(interest) = face_hat_mut!(face).remote_interests.remove(&id) {
-            if !tables.faces.values().any(|f| {
+        if let Some(interest) = self.face_hat_mut(face).remote_interests.remove(&id) {
+            if !self.faces(tables).values().any(|f| {
                 f.whatami == WhatAmI::Client
-                    && face_hat!(f)
+                    && self
+                        .face_hat(f)
                         .remote_interests
                         .values()
                         .any(|i| *i == interest)
             }) {
-                for dst_face in tables
-                    .faces
+                for dst_face in self
+                    .faces_mut(tables)
                     .values_mut()
                     .filter(|f| f.whatami == WhatAmI::Router)
                 {
