@@ -140,7 +140,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let mut guard = zasynclock!(self.send);
         let msg = buffer.into();
 
@@ -150,14 +150,6 @@ impl LinkUnicastTrait for LinkUnicastWs {
             e
         })?;
 
-        Ok(buffer.len())
-    }
-
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut written: usize = 0;
-        while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
-        }
         Ok(())
     }
 
