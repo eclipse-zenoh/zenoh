@@ -62,7 +62,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 
     #[inline]
-    pub fn iter(&self) -> Iter<K, V> {
+    pub fn iter(&self) -> Iter<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => Iter::Vec(vec.iter()),
             Self::Map(map) => Iter::Map(map.iter()),
@@ -70,7 +70,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 
     #[inline]
-    pub fn values(&self) -> Values<K, V> {
+    pub fn values(&self) -> Values<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => Values::Vec(vec.iter()),
             Self::Map(map) => Values::Map(map.values()),
@@ -78,7 +78,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 
     #[inline]
-    pub fn values_mut(&mut self) -> ValuesMut<K, V> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => ValuesMut::Vec(vec.iter_mut()),
             Self::Map(map) => ValuesMut::Map(map.values_mut()),
@@ -165,7 +165,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
         }
     }
 
-    pub fn entry(&mut self, key: K) -> Entry<K, V> {
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
         self.resize(key);
         match self {
             Self::Vec { vec, items } => Entry::Vec {

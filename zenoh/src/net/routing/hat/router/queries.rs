@@ -1497,21 +1497,10 @@ impl HatQueriesTrait for HatCode {
             }
 
             if master || source_type == WhatAmI::Router {
-                for (sid, context) in &mres.session_ctxs {
-                    if context.face.whatami != WhatAmI::Router {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        if let Some(qabl_info) = context.qabl.as_ref() {
-                            route.push(QueryTargetQabl {
-                                direction: (
-                                    context.face.clone(),
-                                    key_expr.to_owned(),
-                                    NodeId::default(),
-                                ),
-                                info: Some(QueryableInfoType {
-                                    complete: complete && qabl_info.complete,
-                                    distance: 1,
-                                }),
-                            });
+                for face_ctx @ (_, ctx) in &mres.session_ctxs {
+                    if ctx.face.whatami != WhatAmI::Router {
+                        if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
+                            route.push(qabl);
                         }
                     }
                 }

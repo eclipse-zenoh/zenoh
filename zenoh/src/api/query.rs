@@ -185,7 +185,7 @@ pub(crate) struct QueryState {
 }
 
 impl QueryState {
-    pub(crate) fn selector(&self) -> Selector {
+    pub(crate) fn selector(&self) -> Selector<'_> {
         Selector::borrowed(&self.key_expr, &self.parameters)
     }
 }
