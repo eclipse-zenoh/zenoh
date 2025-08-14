@@ -968,7 +968,7 @@ where
 {
     /// Rich interface for making allocations
     #[zenoh_macros::unstable_doc]
-    pub fn alloc<What>(&self, what: What) -> AllocBuilder<Backend, What> {
+    pub fn alloc<'a, What>(&'a self, what: What) -> AllocBuilder<'a, Backend, What> {
         AllocBuilder::new(self, what)
     }
 
