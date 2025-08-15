@@ -39,11 +39,7 @@ async fn run() -> zenoh::Result<()> {
         {
             // Create specific backed
             // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-            let comprehensive = PosixShmProviderBackend::builder()
-                .with_size(65536)
-                // this is also possible:
-                // .with_layout_args(65536, AllocAlignment::default())
-                .wait()?;
+            let comprehensive = PosixShmProviderBackend::builder(65536).wait()?;
 
             // ...and an SHM provider with specified backend
             ShmProviderBuilder::backend(comprehensive).wait()
@@ -63,8 +59,7 @@ async fn run() -> zenoh::Result<()> {
 
         // Option 2: Allocation with custom alignment
         let _shm_buf = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2)?)
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
             .wait()?;
     };
 
@@ -77,8 +72,7 @@ async fn run() -> zenoh::Result<()> {
 
         // Option 2: Comprehensive configuration:
         let comprehensive_layout = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2)?)
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
             .into_layout()?;
         let _shm_buf = comprehensive_layout.alloc().wait()?;
     };
