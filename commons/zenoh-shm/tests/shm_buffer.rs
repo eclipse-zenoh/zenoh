@@ -86,9 +86,7 @@ fn shm_buffer_alloc_typed() {
 
 #[test]
 fn typed_to_raw() {
-    let mut buffer = make_typed_shm_buffer::<SharedByteData>()
-        .try_into()
-        .unwrap();
+    let mut buffer = make_typed_shm_buffer::<SharedByteData>().into();
     validate_typed_to_raw_buffer_consistency(&mut buffer);
 }
 

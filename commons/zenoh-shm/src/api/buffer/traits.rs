@@ -20,7 +20,7 @@ use crate::api::provider::memory_layout::MemoryLayout;
 /// # Safety
 /// This trait is unsafe because it allows types to be used in shared memory.
 /// It is the responsibility of the implementer to ensure that the type is safe to use in shared memory.
-/// There are some safe blanket implemetations below
+/// There are some safe blanket implementations below
 pub unsafe trait ResideInShm: Send {}
 
 unsafe impl<T: Send + IStable<ContainsIndirections = B0>> ResideInShm for T {}
