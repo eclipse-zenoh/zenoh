@@ -197,7 +197,13 @@ impl<T> StaticLayout<T> {
 }
 impl<T> From<&StaticLayout<T>> for MemoryLayout {
     fn from(value: &StaticLayout<T>) -> Self {
-        // SAFETY: this is safe as LayoutForType always gives correct layout arguments
+        // SAFETY: this is safe as StaticLayout always gives correct layout arguments
+        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
+    }
+}
+impl<T> From<StaticLayout<T>> for MemoryLayout {
+    fn from(value: StaticLayout<T>) -> Self {
+        // SAFETY: this is safe as StaticLayout always gives correct layout arguments
         unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
     }
 }

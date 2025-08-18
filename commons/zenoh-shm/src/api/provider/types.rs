@@ -200,7 +200,6 @@ pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
 
 /// SHM buffer allocation result
 #[zenoh_macros::unstable_doc]
-#[allow(type_alias_bounds)]
 pub type TypedBufAllocResult<T> = Result<Typed<T, ZShmMut>, ZAllocError>;
 
 /// Layout or allocation error.
@@ -240,5 +239,4 @@ pub type BufLayoutAllocResult = Result<ZShmMut, ZLayoutAllocError>;
 
 /// Typed SHM buffer layouting and allocation result
 #[zenoh_macros::unstable_doc]
-#[allow(type_alias_bounds)]
 pub type TypedBufLayoutAllocResult<T> = Result<Typed<T, ZShmMut>, ZLayoutAllocError>;

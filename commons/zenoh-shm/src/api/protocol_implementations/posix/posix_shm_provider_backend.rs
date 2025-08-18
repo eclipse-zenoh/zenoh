@@ -34,7 +34,7 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
-        memory_layout::{IntoMemoryLayout, LayoutForType, MemoryLayout},
+        memory_layout::{IntoMemoryLayout, MemoryLayout, StaticLayout},
         shm_provider_backend::ShmProviderBackend,
         types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
@@ -66,19 +66,19 @@ impl PartialEq for Chunk {
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBuilder<What> {
-    what: What,
+pub struct PosixShmProviderBackendBuilder<Layout> {
+    layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<What: IntoMemoryLayout> Resolvable for PosixShmProviderBackendBuilder<What> {
+impl<Layout: IntoMemoryLayout> Resolvable for PosixShmProviderBackendBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackend>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<What: IntoMemoryLayout> Wait for PosixShmProviderBackendBuilder<What> {
+impl<Layout: IntoMemoryLayout> Wait for PosixShmProviderBackendBuilder<Layout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        let layout: MemoryLayout = self.what.try_into()?;
+        let layout: MemoryLayout = self.layout.try_into()?;
         PosixShmProviderBackend::new(&layout)
     }
 }
@@ -91,19 +91,19 @@ impl Resolvable for PosixShmProviderBackendBuilder<&MemoryLayout> {
 #[zenoh_macros::unstable_doc]
 impl Wait for PosixShmProviderBackendBuilder<&MemoryLayout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackend::new(self.what)
+        PosixShmProviderBackend::new(self.layout)
     }
 }
 
 #[zenoh_macros::unstable_doc]
-impl<T> Resolvable for PosixShmProviderBackendBuilder<&LayoutForType<T>> {
+impl<T> Resolvable for PosixShmProviderBackendBuilder<&StaticLayout<T>> {
     type To = ZResult<PosixShmProviderBackend>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<T> Wait for PosixShmProviderBackendBuilder<&LayoutForType<T>> {
+impl<T> Wait for PosixShmProviderBackendBuilder<&StaticLayout<T>> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackend::new(&self.what.into())
+        PosixShmProviderBackend::new(&self.layout.into())
     }
 }
 
@@ -120,8 +120,8 @@ pub struct PosixShmProviderBackend {
 impl PosixShmProviderBackend {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder<What>(what: What) -> PosixShmProviderBackendBuilder<What> {
-        PosixShmProviderBackendBuilder { what }
+    pub fn builder<Layout>(layout: Layout) -> PosixShmProviderBackendBuilder<Layout> {
+        PosixShmProviderBackendBuilder { layout }
     }
 
     fn new(layout: &MemoryLayout) -> ZResult<Self> {
