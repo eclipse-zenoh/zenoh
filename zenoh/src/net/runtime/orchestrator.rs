@@ -18,34 +18,22 @@ use std::{
     time::Duration,
 };
 
-use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use tokio::{
     net::UdpSocket,
     sync::{futures::Notified, Mutex, Notify},
 };
-use zenoh_buffers::{
-    reader::{DidntRead, HasReader},
-    writer::HasWriter,
-};
-use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{
     get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default, ModeDependent,
 };
 use zenoh_link::{Locator, LocatorInspector};
-use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
-    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
+use zenoh_protocol::core::{
+    whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
-use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo};
-
-const RCV_BUF_SIZE: usize = u16::MAX as usize;
-const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
-const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
-const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
+use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo, runtime::scouting::Scouting};
 
 pub enum Loop {
     Continue,
@@ -276,42 +264,19 @@ impl Runtime {
             let config = &config_guard.0;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
-        let ifaces = Runtime::get_interfaces(&ifaces);
-        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
-        if !ifaces.is_empty() {
-            let sockets: Vec<UdpSocket> = ifaces
-                .into_iter()
-                .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                .collect();
-            if !sockets.is_empty() {
-                let this = self.clone();
-                match (listen, autoconnect.is_enabled()) {
-                    (true, true) => {
-                        self.spawn_abortable(async move {
-                            tokio::select! {
-                                _ = this.responder(&mcast_socket, &sockets) => {},
-                                _ = this.autoconnect_all(
-                                    &sockets,
-                                    autoconnect,
-                                    &addr
-                                ) => {},
-                            }
-                        });
-                    }
-                    (true, false) => {
-                        self.spawn_abortable(async move {
-                            this.responder(&mcast_socket, &sockets).await;
-                        });
-                    }
-                    (false, true) => {
-                        self.spawn_abortable(async move {
-                            this.autoconnect_all(&sockets, autoconnect, &addr).await
-                        });
-                    }
-                    _ => {}
-                }
-            }
-        }
+
+        let scouting = Scouting::new(
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+            multicast_ttl,
+            self.clone(),
+        )
+        .await?;
+        scouting.start().await?;
+        *self.state.scouting.lock().await = Some(scouting.clone());
+
         Ok(())
     }
 
@@ -537,7 +502,7 @@ impl Runtime {
                 self.spawn_add_listener(endpoint, retry_config).await
             }
         }
-        self.print_locators();
+        self.update_locators();
         Ok(())
     }
 
@@ -549,7 +514,7 @@ impl Runtime {
         let this = self.clone();
         self.spawn(async move {
             this.add_listener_retry(listener, retry_config).await;
-            this.print_locators();
+            this.update_locators();
         });
     }
 
@@ -579,12 +544,22 @@ impl Runtime {
         Ok(())
     }
 
-    fn print_locators(&self) {
+    pub fn update_locators(&self) {
         let mut locators = self.state.locators.write().unwrap();
-        *locators = self.manager().get_locators();
-        for locator in &*locators {
-            tracing::info!("Zenoh can be reached at: {}", locator);
+        let new_locators = self.manager().get_locators();
+        if tracing::enabled!(tracing::Level::INFO) {
+            for locator in &new_locators {
+                if !locators.contains(locator) {
+                    tracing::info!("Zenoh can be reached at: {}", locator);
+                }
+            }
+            for old_locator in &*locators {
+                if !new_locators.contains(old_locator) {
+                    tracing::info!("Zenoh can no longer be reached at: {}", old_locator);
+                }
+            }
         }
+        *locators = new_locators;
     }
 
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
@@ -821,102 +796,6 @@ impl Runtime {
         }
     }
 
-    pub async fn scout<Fut, F>(
-        sockets: &[UdpSocket],
-        matcher: WhatAmIMatcher,
-        mcast_addr: &SocketAddr,
-        f: F,
-    ) where
-        F: Fn(HelloProto) -> Fut + std::marker::Send + std::marker::Sync + Clone,
-        Fut: Future<Output = Loop> + std::marker::Send,
-        Self: Sized,
-    {
-        let send = async {
-            let mut delay = SCOUT_INITIAL_PERIOD;
-
-            let scout: ScoutingMessage = Scout {
-                version: zenoh_protocol::VERSION,
-                what: matcher,
-                zid: None,
-            }
-            .into();
-            let mut wbuf = vec![];
-            let mut writer = wbuf.writer();
-            let codec = Zenoh080::new();
-            codec.write(&mut writer, &scout).unwrap();
-
-            loop {
-                for socket in sockets {
-                    tracing::trace!(
-                        "Send {:?} to {} on interface {}",
-                        scout.body,
-                        mcast_addr,
-                        socket
-                            .local_addr()
-                            .map_or("unknown".to_string(), |addr| addr.ip().to_string())
-                    );
-                    if let Err(err) = socket
-                        .send_to(wbuf.as_slice(), mcast_addr.to_string())
-                        .await
-                    {
-                        tracing::debug!(
-                            "Unable to send {:?} to {} on interface {}: {}",
-                            scout.body,
-                            mcast_addr,
-                            socket
-                                .local_addr()
-                                .map_or("unknown".to_string(), |addr| addr.ip().to_string()),
-                            err
-                        );
-                    }
-                }
-                tokio::time::sleep(delay).await;
-                if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
-                    delay *= SCOUT_PERIOD_INCREASE_FACTOR;
-                }
-            }
-        };
-        let recvs = futures::future::select_all(sockets.iter().map(move |socket| {
-            let f = f.clone();
-            async move {
-                let mut buf = vec![0; RCV_BUF_SIZE];
-                loop {
-                    match socket.recv_from(&mut buf).await {
-                        Ok((n, peer)) => {
-                            let mut reader = buf.as_slice()[..n].reader();
-                            let codec = Zenoh080::new();
-                            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-                            if let Ok(msg) = res {
-                                tracing::trace!("Received {:?} from {}", msg.body, peer);
-                                if let ScoutingBody::Hello(hello) = &msg.body {
-                                    if matcher.matches(hello.whatami) {
-                                        if let Loop::Break = f(hello.clone()).await {
-                                            break;
-                                        }
-                                    } else {
-                                        tracing::warn!("Received unexpected Hello: {:?}", msg.body);
-                                    }
-                                }
-                            } else {
-                                tracing::trace!(
-                                    "Received unexpected UDP datagram from {}: {:?}",
-                                    peer,
-                                    &buf.as_slice()[..n]
-                                );
-                            }
-                        }
-                        Err(e) => tracing::debug!("Error receiving UDP datagram: {}", e),
-                    }
-                }
-            }
-            .boxed()
-        }));
-        tokio::select! {
-            _ = send => {},
-            _ = recvs => {},
-        }
-    }
-
     /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
@@ -1063,7 +942,7 @@ impl Runtime {
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            Runtime::scout(sockets, what, addr, move |hello| async move {
+            Scouting::scout(sockets, what, addr, move |hello| async move {
                 tracing::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
                     if self.connect(&hello.zid, &hello.locators).await {
@@ -1084,110 +963,6 @@ impl Runtime {
         tokio::select! {
             res = scout => { res },
             res = timeout => { res }
-        }
-    }
-
-    async fn autoconnect_all(
-        &self,
-        ucast_sockets: &[UdpSocket],
-        autoconnect: AutoConnect,
-        addr: &SocketAddr,
-    ) {
-        Runtime::scout(
-            ucast_sockets,
-            autoconnect.matcher(),
-            addr,
-            move |hello| async move {
-                if hello.locators.is_empty() {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
-                } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
-                    self.connect_peer(&hello.zid, &hello.locators).await;
-                }
-                Loop::Continue
-            },
-        )
-        .await
-    }
-
-    async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[UdpSocket]) {
-        fn get_best_match<'a>(addr: &IpAddr, sockets: &'a [UdpSocket]) -> Option<&'a UdpSocket> {
-            fn octets(addr: &IpAddr) -> Vec<u8> {
-                match addr {
-                    IpAddr::V4(addr) => addr.octets().to_vec(),
-                    IpAddr::V6(addr) => addr.octets().to_vec(),
-                }
-            }
-            fn matching_octets(addr: &IpAddr, sock: &UdpSocket) -> usize {
-                octets(addr)
-                    .iter()
-                    .zip(octets(&sock.local_addr().unwrap().ip()))
-                    .map(|(x, y)| x.cmp(&y))
-                    .position(|ord| ord != std::cmp::Ordering::Equal)
-                    .unwrap_or_else(|| octets(addr).len())
-            }
-            sockets
-                .iter()
-                .filter(|sock| sock.local_addr().is_ok())
-                .max_by(|sock1, sock2| {
-                    matching_octets(addr, sock1).cmp(&matching_octets(addr, sock2))
-                })
-        }
-
-        let mut buf = vec![0; RCV_BUF_SIZE];
-        let local_addrs: Vec<SocketAddr> = ucast_sockets
-            .iter()
-            .filter_map(|sock| sock.local_addr().ok())
-            .collect();
-        tracing::debug!("Waiting for UDP datagram...");
-        loop {
-            let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
-            if local_addrs.contains(&peer) {
-                tracing::trace!("Ignore UDP datagram from own socket");
-                continue;
-            }
-
-            let mut reader = buf.as_slice()[..n].reader();
-            let codec = Zenoh080::new();
-            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-            if let Ok(msg) = res {
-                tracing::trace!("Received {:?} from {}", msg.body, peer);
-                if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
-                    if what.matches(self.whatami()) {
-                        let mut wbuf = vec![];
-                        let mut writer = wbuf.writer();
-                        let codec = Zenoh080::new();
-
-                        let zid = self.manager().zid();
-                        let hello: ScoutingMessage = HelloProto {
-                            version: zenoh_protocol::VERSION,
-                            whatami: self.whatami(),
-                            zid,
-                            locators: self.get_locators(),
-                        }
-                        .into();
-                        let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
-                        tracing::trace!(
-                            "Send {:?} to {} on interface {}",
-                            hello.body,
-                            peer,
-                            socket
-                                .local_addr()
-                                .map_or("unknown".to_string(), |addr| addr.ip().to_string())
-                        );
-                        codec.write(&mut writer, &hello).unwrap();
-
-                        if let Err(err) = socket.send_to(wbuf.as_slice(), peer).await {
-                            tracing::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
-                        }
-                    }
-                }
-            } else {
-                tracing::trace!(
-                    "Received unexpected UDP datagram from {}: {:?}",
-                    peer,
-                    &buf.as_slice()[..n]
-                );
-            }
         }
     }
 
