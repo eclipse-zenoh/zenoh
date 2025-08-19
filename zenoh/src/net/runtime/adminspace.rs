@@ -416,6 +416,14 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
+                        if !key.starts_with("plugins/") {
+                            error!(
+                                "Error inserting conf value {} : updating config is only \
+                                 supported for keys starting with `plugins/`",
+                                msg.wire_expr
+                            );
+                            return;
+                        }
                         if let Err(e) = self.context.runtime.state.config.insert_json5(key, json) {
                             error!(
                                 "Error inserting conf value @/{}/{}/config/{} : {} - {}",
