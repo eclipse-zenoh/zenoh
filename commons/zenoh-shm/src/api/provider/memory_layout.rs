@@ -157,7 +157,11 @@ impl BuildLayout {
     }
 }
 
-/// A generic descriptor for type and it's layout
+/// A statically-known layout with type information.
+///
+/// Used in context of typed operations.
+///
+/// Statically-known layouts are always correct, zero-sized & zero-cost.
 #[zenoh_macros::unstable_doc]
 pub struct LayoutForType<T> {
     inner: StaticLayout<T>,
@@ -181,6 +185,9 @@ impl<T> From<LayoutForType<T>> for MemoryLayout {
     }
 }
 
+/// A statically-known layout WITHOUT type information.
+///
+/// Statically-known layouts are always correct, zero-sized & zero-cost.
 pub struct StaticLayout<T> {
     _phantom: PhantomData<T>,
 }
