@@ -215,12 +215,8 @@ impl DownsamplingInterceptor {
     }
     fn compute_id(&self, key_expr: &keyexpr) -> Option<usize> {
         let ke_id = zlock!(self.ke_id);
-        if let Some(node) = ke_id.intersecting_keys(key_expr).next() {
-            if let Some(id) = ke_id.weight_at(&node) {
-                return Some(*id);
-            }
-        }
-        None
+        let node = ke_id.intersecting_keys(key_expr).next()?;
+        ke_id.weight_at(&node).copied()
     }
 }
 
