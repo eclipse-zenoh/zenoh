@@ -163,7 +163,7 @@ impl<T> SingleOrVec<T> {
             SingleOrVecInner::Vec(v) => v.last_mut(),
         }
     }
-    pub fn drain<Range: RangeBounds<usize>>(&mut self, range: Range) -> Drain<T> {
+    pub fn drain<Range: RangeBounds<usize>>(&mut self, range: Range) -> Drain<'_, T> {
         match &mut self.0 {
             this @ SingleOrVecInner::Single(_) if range.contains(&0) => Drain {
                 inner: DrainInner::Single(this),

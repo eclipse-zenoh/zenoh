@@ -27,16 +27,16 @@ use core::{
 
 use zenoh_result::{bail, Error as ZError, ZResult};
 
-use super::{canon::Canonize, OwnedKeyExpr, OwnedNonWildKeyExpr, FORBIDDEN_CHARS};
+use super::{canon::Canonize, OwnedKeyExpr, OwnedNonWildKeyExpr};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
 /// The exact key expression specification can be found [here](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md). Here are the major lines:
 /// * Key expressions are conceptually a `/`-separated list of UTF-8 string typed chunks. These chunks are not allowed to be empty.
-/// * Key expressions must be valid UTF-8 strings.  
+/// * Key expressions must be valid UTF-8 strings.
 ///   Be aware that Zenoh does not perform UTF normalization for you, so get familiar with that concept if your key expression contains glyphs that may have several unicode representation, such as accented characters.
 /// * Key expressions may never start or end with `'/'`, nor contain `"//"` or any of the following characters: `#$?`
-/// * Key expression must be in canon-form (this ensure that key expressions representing the same set are always the same string).  
+/// * Key expression must be in canon-form (this ensure that key expressions representing the same set are always the same string).
 ///   Note that safe constructors will perform canonization for you if this can be done without extraneous allocations.
 ///
 /// Since Key Expressions define sets of keys, you may want to be aware of the hierarchy of [relations](keyexpr::relation_to) between such sets:
@@ -183,12 +183,12 @@ impl keyexpr {
     }
 
     /// Remove the specified `prefix` from `self`.
-    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the beginning of the `self` key expression.  
-    /// For instance, if `self` is `"a/**/c/*" and `prefix` is `a/b/c` then:  
+    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the beginning of the `self` key expression.
+    /// For instance, if `self` is `"a/**/c/*" and `prefix` is `a/b/c` then:
     ///   - the `prefix` matches `"a/**/c"` leading to a result of `"*"` when stripped from `self`
     ///   - the `prefix` matches `"a/**"` leading to a result of `"**/c/*"` when stripped from `self`
     ///
-    /// So the result is `["*", "**/c/*"]`.  
+    /// So the result is `["*", "**/c/*"]`.
     /// If `prefix` cannot match the beginning of `self`, an empty list is reuturned.
     ///
     /// See below more examples.
@@ -435,10 +435,10 @@ impl keyexpr {
 
     #[cfg(feature = "internal")]
     #[doc(hidden)]
-    pub const fn chunks(&self) -> Chunks {
+    pub const fn chunks(&self) -> Chunks<'_> {
         self.chunks_impl()
     }
-    pub(crate) const fn chunks_impl(&self) -> Chunks {
+    pub(crate) const fn chunks_impl(&self) -> Chunks<'_> {
         Chunks {
             inner: self.as_str(),
         }
@@ -454,13 +454,13 @@ impl keyexpr {
     pub(crate) fn first_byte(&self) -> u8 {
         unsafe { *self.as_bytes().get_unchecked(0) }
     }
-    pub(crate) fn iter_splits_ltr(&self) -> SplitsLeftToRight {
+    pub(crate) fn iter_splits_ltr(&self) -> SplitsLeftToRight<'_> {
         SplitsLeftToRight {
             inner: self,
             index: 0,
         }
     }
-    pub(crate) fn iter_splits_rtl(&self) -> SplitsRightToLeft {
+    pub(crate) fn iter_splits_rtl(&self) -> SplitsRightToLeft<'_> {
         SplitsRightToLeft {
             inner: self,
             index: self.len(),
@@ -767,47 +767,55 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             }
             if chunk == "**" {
                 in_big_wild = true;
-            } else {
-                in_big_wild = false;
-                if chunk != "*" {
-                    let mut split = chunk.split('*');
-                    split.next_back();
-                    if split.any(|s| !s.ends_with('$')) {
-                        bail!((KeyExprConstructionError::StarsInChunk)
-                            "Invalid Key Expr `{}`: `*` and `**` may only be preceded an followed by `/`",
+                continue;
+            }
+            in_big_wild = false;
+            if chunk == "*" {
+                continue;
+            }
+
+            // Perform character-level validation for the chunk
+            let chunk_bytes = chunk.as_bytes();
+            let mut i = 0;
+            while i < chunk_bytes.len() {
+                let byte = chunk_bytes[i];
+                match byte {
+                    b'#' | b'?' => {
+                        bail!((KeyExprConstructionError::ContainsSharpOrQMark)
+                            "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
                             value
-                        )
+                        );
                     }
+                    b'$' => {
+                        if chunk_bytes.get(i + 1) == Some(&b'*') {
+                            if chunk_bytes.get(i + 2) == Some(&b'$') {
+                                bail!((KeyExprConstructionError::DollarAfterDollarOrStar)
+                                    "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
+                                    value
+                                )
+                            }
+                        } else {
+                            bail!((KeyExprConstructionError::ContainsUnboundDollar)
+                                "Invalid Key Expr `{}`: `$` is only allowed in `$*`",
+                                value
+                            );
+                        }
+                        // A valid `$*` was found, skip the next character in the check.
+                        i += 2;
+                    }
+                    b'*' => {
+                        // A bare `*` is not allowed inside a chunk. It must be part of `$*`.
+                        // If we are here, it means it wasn't preceded by a `$`.
+                        bail!((KeyExprConstructionError::StarsInChunk)
+                            "Invalid Key Expr `{}`: `*` may only be preceded by `/` or `$`",
+                            value
+                        );
+                    }
+                    _ => i += 1, // Move to the next character
                 }
             }
         }
 
-        for (index, forbidden) in value.bytes().enumerate().filter_map(|(i, c)| {
-            if FORBIDDEN_CHARS.contains(&c) {
-                Some((i, c))
-            } else {
-                None
-            }
-        }) {
-            let bytes = value.as_bytes();
-            if forbidden == b'$' {
-                if let Some(b'*') = bytes.get(index + 1) {
-                    if let Some(b'$') = bytes.get(index + 2) {
-                        bail!((KeyExprConstructionError::DollarAfterDollarOrStar)
-                            "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
-                            value
-                        )
-                    }
-                } else {
-                    bail!((KeyExprConstructionError::ContainsUnboundDollar)"Invalid Key Expr `{}`: `$` is only allowed in `$*`", value)
-                }
-            } else {
-                bail!((KeyExprConstructionError::ContainsSharpOrQMark)
-                    "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
-                    value
-                )
-            }
-        }
         Ok(unsafe { keyexpr::from_str_unchecked(value) })
     }
 }
@@ -1049,5 +1057,32 @@ fn test_keyexpr_strip_nonwild_prefix() {
     for ((ke, prefix), expected) in expectations {
         dbg!(ke, prefix);
         assert_eq!(ke.strip_nonwild_prefix(prefix), expected)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use test_case::test_case;
+
+    use crate::keyexpr;
+
+    #[test_case("demo/example/test", true; "Normal key_expr")]
+    #[test_case("demo/*/*/test", true; "Single star after single star")]
+    #[test_case("demo/*/**/test", true; "Single star after double star")]
+    #[test_case("demo/example$*/test", true; "Dollar with star")]
+    #[test_case("demo/example$*-$*/test", true; "Multiple dollar with star")]
+    #[test_case("/demo/example/test", false; "Leading /")]
+    #[test_case("demo/$*/test", false; "Lone $*")]
+    #[test_case("demo/**/*/test", false; "Double star after single star")]
+    #[test_case("demo/**/**/test", false; "Double star after double star")]
+    #[test_case("demo//test", false; "Empty Chunk")]
+    #[test_case("demo/exam*ple/test", false; "Stars in chunk")]
+    #[test_case("demo/example$*$*/test", false; "Dollar after dollar or star")]
+    #[test_case("demo/example#/test", false; "Contain sharp")]
+    #[test_case("demo/example?/test", false; "Contain mark")]
+    #[test_case("demo/$/test", false; "Contain unbounded dollar")]
+    fn test_str_to_keyexpr(key_str: &str, valid: bool) {
+        let key = keyexpr::new(key_str);
+        assert!(key.is_ok() == valid);
     }
 }

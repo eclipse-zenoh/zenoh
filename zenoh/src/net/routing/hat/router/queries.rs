@@ -1363,31 +1363,36 @@ impl HatQueriesTrait for HatCode {
             .router_qabls
             .iter()
             .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those queryables
+                let routers = Vec::from_iter(res_hat!(s).router_qabls.keys().cloned());
+                let mut peers = if hat!(tables).full_net(WhatAmI::Peer) {
+                    Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned())
+                } else {
+                    vec![]
+                };
+                let mut clients = vec![];
+                for ctx in s
+                    .session_ctxs
+                    .values()
+                    .filter(|ctx| ctx.qabl.is_some() && !ctx.face.is_local)
+                {
+                    match ctx.face.whatami {
+                        WhatAmI::Router => (),
+                        WhatAmI::Peer => {
+                            if !hat!(tables).full_net(WhatAmI::Peer) {
+                                peers.push(ctx.face.zid);
+                            }
+                        }
+                        WhatAmI::Client => clients.push(ctx.face.zid),
+                    }
+                }
                 (
                     s.clone(),
-                    // Compute the list of routers, peers and clients that are known
-                    // sources of those queryables
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_qabls.keys().cloned()),
-                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
-                            Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned())
-                        } else {
-                            s.session_ctxs
-                                .values()
-                                .filter_map(|f| {
-                                    (f.face.whatami == WhatAmI::Peer && f.qabl.is_some())
-                                        .then_some(f.face.zid)
-                                })
-                                .collect()
-                        },
-                        clients: s
-                            .session_ctxs
-                            .values()
-                            .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
-                                    .then_some(f.face.zid)
-                            })
-                            .collect(),
+                        routers,
+                        peers,
+                        clients,
                     },
                 )
             })
@@ -1401,7 +1406,12 @@ impl HatQueriesTrait for HatCode {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
@@ -1487,21 +1497,10 @@ impl HatQueriesTrait for HatCode {
             }
 
             if master || source_type == WhatAmI::Router {
-                for (sid, context) in &mres.session_ctxs {
-                    if context.face.whatami != WhatAmI::Router {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        if let Some(qabl_info) = context.qabl.as_ref() {
-                            route.push(QueryTargetQabl {
-                                direction: (
-                                    context.face.clone(),
-                                    key_expr.to_owned(),
-                                    NodeId::default(),
-                                ),
-                                info: Some(QueryableInfoType {
-                                    complete: complete && qabl_info.complete,
-                                    distance: 1,
-                                }),
-                            });
+                for face_ctx @ (_, ctx) in &mres.session_ctxs {
+                    if ctx.face.whatami != WhatAmI::Router {
+                        if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
+                            route.push(qabl);
                         }
                     }
                 }

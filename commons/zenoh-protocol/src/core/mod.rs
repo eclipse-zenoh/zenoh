@@ -540,9 +540,9 @@ impl FromStr for Reliability {
         } else if desc == Reliability::Reliable as u8 {
             Ok(Reliability::Reliable)
         } else {
-            return Err(InvalidReliability {
+            Err(InvalidReliability {
                 found: s.to_string(),
-            });
+            })
         }
     }
 }
@@ -561,7 +561,7 @@ impl Channel {
 }
 
 /// Congestion control strategy.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]

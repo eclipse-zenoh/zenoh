@@ -91,7 +91,7 @@ pub(crate) trait InterceptorContext {
     fn face(&self) -> Option<Face>;
     fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str>;
     #[inline]
-    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr> {
+    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
         let full_expr = self.full_expr(msg)?;
         KeyExpr::new(full_expr).ok()
     }
@@ -200,7 +200,7 @@ impl InterceptorContext for ChainContext<'_> {
         self.ctx.full_expr(msg)
     }
 
-    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr> {
+    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
         self.ctx.full_keyexpr(msg)
     }
 
