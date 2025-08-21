@@ -229,49 +229,49 @@ impl InterceptorTrait for DownsamplingInterceptor {
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        let id = ctx
+        if !self.is_msg_filtered(msg) {
+            return true;
+        }
+        let Some(id) = ctx
             .get_cache(msg)
             .and_then(|c| c.downcast_ref::<Option<usize>>())
             .cloned()
-            .unwrap_or_else(|| self.compute_id(&ctx.full_keyexpr(msg)?));
+            .unwrap_or_else(|| self.compute_id(&ctx.full_keyexpr(msg)?))
+        else {
+            return true;
+        };
 
-        if self.is_msg_filtered(msg) {
-            if let Some(id) = &id {
-                let mut ke_state = zlock!(self.ke_state);
-                if let Some(state) = ke_state.get_mut(id) {
-                    let timestamp = tokio::time::Instant::now();
-
-                    if timestamp - state.latest_message_timestamp >= state.threshold {
-                        state.latest_message_timestamp = timestamp;
-                        return true;
-                    } else {
-                        if !INFO_FLAG.swap(true, Ordering::Relaxed) {
-                            tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
-                        }
-                        tracing::trace!(
-                            "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
-                            msg,
-                            ctx.full_expr(msg).unwrap_or_default(),
-                            ctx.face().map(|f| f.to_string()).unwrap_or_default(),
-                            ctx.face().map(|f| f.to_string()).unwrap_or_default(),
-                        );
-                        #[cfg(feature = "stats")]
-                        match self.flow {
-                            InterceptorFlow::Egress => {
-                                self.stats.inc_tx_downsampler_dropped_msgs(1);
-                            }
-                            InterceptorFlow::Ingress => {
-                                self.stats.inc_rx_downsampler_dropped_msgs(1);
-                            }
-                        }
-                        return false;
-                    }
-                } else {
-                    tracing::debug!("unexpected cache ID {}", id);
+        let mut ke_state = zlock!(self.ke_state);
+        let Some(state) = ke_state.get_mut(&id) else {
+            tracing::debug!("unexpected cache ID {}", id);
+            return true;
+        };
+        let timestamp = tokio::time::Instant::now();
+        if timestamp - state.latest_message_timestamp >= state.threshold {
+            state.latest_message_timestamp = timestamp;
+            true
+        } else {
+            if !INFO_FLAG.swap(true, Ordering::Relaxed) {
+                tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
+            }
+            tracing::trace!(
+                "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
+                msg,
+                ctx.full_expr(msg).unwrap_or_default(),
+                ctx.face().map(|f| f.to_string()).unwrap_or_default(),
+                ctx.face().map(|f| f.to_string()).unwrap_or_default(),
+            );
+            #[cfg(feature = "stats")]
+            match self.flow {
+                InterceptorFlow::Egress => {
+                    self.stats.inc_tx_downsampler_dropped_msgs(1);
+                }
+                InterceptorFlow::Ingress => {
+                    self.stats.inc_rx_downsampler_dropped_msgs(1);
                 }
             }
+            false
         }
-        true
     }
 }
 
