@@ -233,7 +233,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
             .get_cache(msg)
             .and_then(|c| c.downcast_ref::<Option<usize>>())
             .cloned()
-            .unwrap_or_else(|| ctx.full_keyexpr(msg).and_then(|k| self.compute_id(&k)));
+            .unwrap_or_else(|| self.compute_id(&ctx.full_keyexpr(msg)?));
 
         if self.is_msg_filtered(msg) {
             if let Some(id) = &id {
