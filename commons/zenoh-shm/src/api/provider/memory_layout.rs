@@ -169,9 +169,7 @@ pub struct LayoutForType<T> {
 
 impl<T> Clone for LayoutForType<T> {
     fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
+        *self
     }
 }
 
@@ -179,7 +177,7 @@ impl<T> Copy for LayoutForType<T> {}
 
 impl<T> LayoutForType<T> {
     pub fn layout(&self) -> StaticLayout<T> {
-        self.inner.clone()
+        self.inner
     }
 }
 
@@ -199,9 +197,7 @@ pub struct StaticLayout<T> {
 
 impl<T> Clone for StaticLayout<T> {
     fn clone(&self) -> Self {
-        Self {
-            _phantom: self._phantom.clone(),
-        }
+        *self
     }
 }
 
