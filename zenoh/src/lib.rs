@@ -550,7 +550,7 @@ pub mod shm {
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
-            memory_layout::{BuildLayout, IntoMemoryLayout, LayoutForType, MemoryLayout},
+            memory_layout::{BuildLayout, LayoutForType, MemoryLayout, TryIntoMemoryLayout},
             shm_provider::{
                 AllocBuilder, AllocLayout, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
                 DeallocOptimal, DeallocYoungest, Deallocate, Defragment, ForceDeallocPolicy,

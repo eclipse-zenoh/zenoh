@@ -39,7 +39,7 @@ use crate::{
             PosixShmProviderBackend, PosixShmProviderBackendBuilder,
         },
         provider::{
-            memory_layout::{IntoMemoryLayout, LayoutForType, MemoryLayout},
+            memory_layout::{LayoutForType, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
             types::{TypedBufAllocResult, TypedBufLayoutAllocResult},
         },
     },
@@ -103,12 +103,23 @@ where
 impl<'a, Backend, What> AllocBuilder<'a, Backend, What>
 where
     Backend: ShmProviderBackend,
-    What: IntoMemoryLayout,
+    What: TryIntoMemoryLayout,
 {
     /// Try to build an allocation layout
     #[zenoh_macros::unstable_doc]
     pub fn into_layout(self) -> Result<AllocLayout<'a, Backend, What>, ZLayoutError> {
         AllocLayout::new(self.0.provider, self.0.what.try_into()?)
+    }
+}
+
+impl<'a, Backend> AllocBuilder<'a, Backend, MemoryLayout>
+where
+    Backend: ShmProviderBackend,
+{
+    /// Try to build an allocation layout
+    #[zenoh_macros::unstable_doc]
+    pub fn into_layout(self) -> Result<AllocLayout<'a, Backend, MemoryLayout>, ZLayoutError> {
+        AllocLayout::new(self.0.provider, self.0.what)
     }
 }
 
@@ -552,7 +563,7 @@ where
 impl<'a, Backend, What, Policy> Resolvable for ProviderAllocBuilder<'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
-    What: IntoMemoryLayout,
+    What: TryIntoMemoryLayout,
 {
     type To = BufLayoutAllocResult;
 }
@@ -561,7 +572,7 @@ where
 impl<'a, Backend, What, Policy> Wait for ProviderAllocBuilder<'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
-    What: IntoMemoryLayout,
+    What: TryIntoMemoryLayout,
     Policy: AllocPolicy,
 {
     fn wait(self) -> <Self as Resolvable>::To {
@@ -577,7 +588,7 @@ where
 impl<'a, Backend, What, Policy> IntoFuture for ProviderAllocBuilder<'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend + Sync,
-    What: IntoMemoryLayout + Send + Sync + 'a,
+    What: TryIntoMemoryLayout + Send + Sync + 'a,
     Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
@@ -633,6 +644,55 @@ where
         Box::pin(
             async move {
                 AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, self.data.what)?
+                    .alloc()
+                    .with_policy::<Policy>()
+                    .await
+                    .map_err(|e| e.into())
+            }
+            .into_future(),
+        )
+    }
+}
+
+// Untyped allocation API for StaticLayout
+impl<'a, Backend, Policy, T> Resolvable
+    for ProviderAllocBuilder<'a, Backend, StaticLayout<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+{
+    type To = BufLayoutAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, Backend, Policy, T> Wait for ProviderAllocBuilder<'a, Backend, StaticLayout<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+    Policy: AllocPolicy,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, self.data.what.into())?
+            .alloc()
+            .with_policy::<Policy>()
+            .wait()
+            .map_err(|e| e.into())
+    }
+}
+
+// Async alloc policy
+impl<'a, Backend, Policy, T> IntoFuture
+    for ProviderAllocBuilder<'a, Backend, StaticLayout<T>, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    Policy: AsyncAllocPolicy,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        let layout = self.data.what.into();
+        Box::pin(
+            async move {
+                AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, layout)?
                     .alloc()
                     .with_policy::<Policy>()
                     .await
@@ -729,7 +789,7 @@ impl<'b, 'a: 'b, Backend, What, Policy> Resolvable
     for LayoutAllocBuilder<'b, 'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
-    What: IntoMemoryLayout,
+    What: TryIntoMemoryLayout,
 {
     type To = BufAllocResult;
 }
@@ -738,7 +798,7 @@ where
 impl<'b, 'a: 'b, Backend, What, Policy> Wait for LayoutAllocBuilder<'b, 'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend,
-    What: IntoMemoryLayout,
+    What: TryIntoMemoryLayout,
     Policy: AllocPolicy,
     Self: Resolvable<To = BufAllocResult>,
 {
@@ -753,7 +813,7 @@ where
 impl<'a, Backend, What, Policy> IntoFuture for LayoutAllocBuilder<'a, 'a, Backend, What, Policy>
 where
     Backend: ShmProviderBackend + Sync,
-    What: IntoMemoryLayout + Send + Sync + 'a,
+    What: TryIntoMemoryLayout + Send + Sync + 'a,
     Policy: AsyncAllocPolicy,
     LayoutAllocBuilder<'a, 'a, Backend, What, Policy>: Resolvable<To = BufAllocResult>,
 {

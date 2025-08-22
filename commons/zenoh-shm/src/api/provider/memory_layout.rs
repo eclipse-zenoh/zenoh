@@ -17,8 +17,8 @@ use std::{fmt::Display, marker::PhantomData, num::NonZeroUsize};
 use crate::api::provider::types::{AllocAlignment, ZLayoutError};
 
 #[zenoh_macros::unstable_doc]
-pub trait IntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
-impl<T> IntoMemoryLayout for T where T: TryInto<MemoryLayout, Error = ZLayoutError> {}
+pub trait TryIntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
+impl<T> TryIntoMemoryLayout for T where T: TryInto<MemoryLayout, Error = ZLayoutError> {}
 
 /// Memory layout representation: alignment and size aligned for this alignment
 #[zenoh_macros::unstable_doc]
@@ -167,15 +167,19 @@ pub struct LayoutForType<T> {
     inner: StaticLayout<T>,
 }
 
-impl<T> LayoutForType<T> {
-    pub fn layout(&self) -> &StaticLayout<T> {
-        &self.inner
+impl<T> Clone for LayoutForType<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
 
-impl<T> From<&LayoutForType<T>> for MemoryLayout {
-    fn from(value: &LayoutForType<T>) -> Self {
-        value.layout().into()
+impl<T> Copy for LayoutForType<T> {}
+
+impl<T> LayoutForType<T> {
+    pub fn layout(&self) -> StaticLayout<T> {
+        self.inner.clone()
     }
 }
 
@@ -188,9 +192,20 @@ impl<T> From<LayoutForType<T>> for MemoryLayout {
 /// A statically-known layout WITHOUT type information.
 ///
 /// Statically-known layouts are always correct, zero-sized & zero-cost.
+#[zenoh_macros::unstable_doc]
 pub struct StaticLayout<T> {
     _phantom: PhantomData<T>,
 }
+
+impl<T> Clone for StaticLayout<T> {
+    fn clone(&self) -> Self {
+        Self {
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
+
+impl<T> Copy for StaticLayout<T> {}
 
 impl<T> StaticLayout<T> {
     pub const fn size(&self) -> NonZeroUsize {
@@ -200,12 +215,6 @@ impl<T> StaticLayout<T> {
 
     pub const fn alignment(&self) -> AllocAlignment {
         AllocAlignment::for_type::<T>()
-    }
-}
-impl<T> From<&StaticLayout<T>> for MemoryLayout {
-    fn from(value: &StaticLayout<T>) -> Self {
-        // SAFETY: this is safe as StaticLayout always gives correct layout arguments
-        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
     }
 }
 impl<T> From<StaticLayout<T>> for MemoryLayout {
