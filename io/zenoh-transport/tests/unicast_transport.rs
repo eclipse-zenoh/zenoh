@@ -65,11 +65,7 @@ use zenoh_transport::{
 // will validate the key and certificate brought in by the server in front of the client.
 //
 #[cfg(all(
-    any(
-        feature = "transport_tls",
-        feature = "transport_quic",
-        feature = "transport_quic_datagram"
-    ),
+    any(feature = "transport_tls", feature = "transport_quic",),
     target_family = "unix"
 ))]
 const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
@@ -101,11 +97,7 @@ F6/CuIw9EsAq6qIB8O88FXQqald+BZOx6AzB8Oedsz/WtMmIEmr/+Q==
 -----END RSA PRIVATE KEY-----";
 
 #[cfg(all(
-    any(
-        feature = "transport_tls",
-        feature = "transport_quic",
-        feature = "transport_quic_datagram"
-    ),
+    any(feature = "transport_tls", feature = "transport_quic",),
     target_family = "unix"
 ))]
 const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
@@ -130,11 +122,7 @@ abY=
 -----END CERTIFICATE-----";
 
 #[cfg(all(
-    any(
-        feature = "transport_tls",
-        feature = "transport_quic",
-        feature = "transport_quic_datagram"
-    ),
+    any(feature = "transport_tls", feature = "transport_quic",),
     target_family = "unix"
 ))]
 const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
@@ -158,11 +146,7 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-#[cfg(any(
-    feature = "transport_tls",
-    feature = "transport_quic",
-    feature = "transport_quic_datagram"
-))]
+#[cfg(any(feature = "transport_tls", feature = "transport_quic",))]
 const SERVER_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEAmDCySqKHPmEZShDH3ldPaV/Zsh9+HlHFLk9H10vJZj5WfzVu
 5puZQ8GvBFIOtVrl0L9qLkA6bZiHHXm/8OEVvd135ZMp4NV23fdTsEASXfvGVQY8
@@ -191,11 +175,7 @@ H7HZKUCly2lCIizZdDVBkz4AWvaJlRc/3lE2Hd3Es6E52kTvROVKhdz06xuS8t5j
 ESElGO6qXEA821RpQp+2+uhL90+iC294cPqlS5LDmvTMypVDHzrxPQ==
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(any(
-    feature = "transport_tls",
-    feature = "transport_quic",
-    feature = "transport_quic_datagram"
-))]
+#[cfg(any(feature = "transport_tls", feature = "transport_quic",))]
 const SERVER_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLjCCAhagAwIBAgIIW1mAtJWJAJYwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgNGRjYzJmMCAXDTIzMDMwNjE2NDEwNloYDzIxMjMw
@@ -217,11 +197,7 @@ C1LSpiiQUaRSglOvYf/Zx6r+4BOS4OaaArwHkecZQqBSCcBLEAyb/FaaXdBowI0U
 PQ4=
 -----END CERTIFICATE-----";
 
-#[cfg(any(
-    feature = "transport_tls",
-    feature = "transport_quic",
-    feature = "transport_quic_datagram"
-))]
+#[cfg(any(feature = "transport_tls", feature = "transport_quic",))]
 const SERVER_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIITcwv1N10nqEwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgNGRjYzJmMCAXDTIzMDMwNjE2NDEwNloYDzIxMjMw
@@ -252,7 +228,6 @@ const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
-    feature = "transport_quic_datagram",
     feature = "transport_unixsock-stream",
 ))]
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
@@ -1583,7 +1558,7 @@ fn transport_unicast_qos_and_lowlatency_failure() {
     assert!(good_manager2.is_ok());
 }
 
-#[cfg(all(feature = "transport_quic_datagram", target_family = "unix"))]
+#[cfg(all(feature = "transport_quic", target_family = "unix"))]
 #[test]
 fn transport_unicast_quic_datagram_only_mutual_wrong_client_certs_failure() {
     use zenoh_link_commons::tls::config::*;
@@ -1654,7 +1629,7 @@ fn transport_unicast_quic_datagram_only_mutual_wrong_client_certs_failure() {
     assert!(result.is_err());
 }
 
-#[cfg(all(feature = "transport_quic_datagram", target_family = "unix"))]
+#[cfg(all(feature = "transport_quic", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_quic_datagram_only_mutual_no_client_certs_failure() {
     use std::vec;
@@ -1720,7 +1695,7 @@ async fn transport_unicast_quic_datagram_only_mutual_no_client_certs_failure() {
     assert!(result.is_err());
 }
 
-#[cfg(all(feature = "transport_quic_datagram", target_family = "unix"))]
+#[cfg(all(feature = "transport_quic", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_quic_datagram_only_mutual_success() {
     use zenoh_link_commons::tls::config::*;
@@ -1783,7 +1758,7 @@ async fn transport_unicast_quic_datagram_only_mutual_success() {
     .await;
 }
 
-#[cfg(feature = "transport_quic_datagram")]
+#[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_quic_datagram_only_server() {
     use zenoh_link_commons::tls::config::*;
