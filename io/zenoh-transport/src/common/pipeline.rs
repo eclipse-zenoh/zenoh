@@ -652,7 +652,7 @@ impl StageOut {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<WBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<Box<WBatch>> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
