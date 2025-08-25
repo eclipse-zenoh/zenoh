@@ -28,7 +28,11 @@ pub use zenoh_protocol::network::request::ext::QueryTarget;
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 
 use crate::api::{
-    bytes::ZBytes, encoding::Encoding, handlers::Callback, key_expr::KeyExpr, sample::Sample,
+    bytes::ZBytes,
+    encoding::Encoding,
+    handlers::{Callback, CallbackParameter},
+    key_expr::KeyExpr,
+    sample::Sample,
     selector::Selector,
 };
 
@@ -162,6 +166,14 @@ impl Reply {
             #[cfg(feature = "unstable")]
             replier_id: None,
         }
+    }
+}
+
+impl CallbackParameter for Reply {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
     }
 }
 

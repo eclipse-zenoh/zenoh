@@ -87,6 +87,7 @@ impl KeyExpr<'static> {
     }
 }
 
+#[zenoh_macros::internal]
 static KEYEXPR_DUMMY: &keyexpr = unsafe { keyexpr::from_str_unchecked("dummy") };
 
 impl<'a> KeyExpr<'a> {
@@ -108,11 +109,6 @@ impl<'a> KeyExpr<'a> {
     /// but may be used in language bindings (zenoh-c)
     #[zenoh_macros::internal]
     pub fn dummy() -> Self {
-        Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
-    }
-
-    #[cfg(not(feature = "internal"))]
-    pub(crate) fn dummy() -> Self {
         Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
     }
 
