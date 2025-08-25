@@ -25,7 +25,7 @@ use core::{
     ops::{Deref, Div},
 };
 
-use zenoh_result::{bail, Error as ZError, ZResult};
+use zenoh_result::{anyhow, bail, zerror, Error as ZError, ZResult};
 
 use super::{canon::Canonize, OwnedKeyExpr, OwnedNonWildKeyExpr};
 
@@ -705,6 +705,7 @@ pub enum SetIntersectionLevel {
     Equals,
 }
 
+#[cfg(feature = "unstable")]
 #[test]
 fn intersection_level_cmp() {
     use SetIntersectionLevel::*;
@@ -726,96 +727,131 @@ impl fmt::Display for keyexpr {
 }
 
 #[repr(i8)]
-enum KeyExprConstructionError {
+enum KeyExprError {
     LoneDollarStar = -1,
     SingleStarAfterDoubleStar = -2,
     DoubleStarAfterDoubleStar = -3,
     EmptyChunk = -4,
-    StarsInChunk = -5,
-    DollarAfterDollarOrStar = -6,
-    ContainsSharpOrQMark = -7,
-    ContainsUnboundDollar = -8,
+    StarInChunk = -5,
+    DollarAfterDollar = -6,
+    SharpOrQMark = -7,
+    UnboundDollar = -8,
+}
+
+impl KeyExprError {
+    #[cold]
+    fn into_err(self, s: &str) -> ZError {
+        let error = match &self {
+            Self::LoneDollarStar => anyhow!("Invalid Key Expr `{s}`: empty chunks are forbidden, as well as leading and trailing slashes"),
+            Self::SingleStarAfterDoubleStar => anyhow!("Invalid Key Expr `{s}`: `**/*` must be replaced by `*/**` to reach canon-form"),
+            Self::DoubleStarAfterDoubleStar => anyhow!("Invalid Key Expr `{s}`: `**/**` must be replaced by `**` to reach canon-form"),
+            Self::EmptyChunk => anyhow!("Invalid Key Expr `{s}`: empty chunks are forbidden, as well as leading and trailing slashes"),
+            Self::StarInChunk => anyhow!("Invalid Key Expr `{s}`: `*` may only be preceded by `/` or `$`"),
+            Self::DollarAfterDollar => anyhow!("Invalid Key Expr `{s}`: `$` is not allowed after `$*`"),
+            Self::SharpOrQMark => anyhow!("Invalid Key Expr `{s}`: `#` and `?` are forbidden characters"),
+            Self::UnboundDollar => anyhow!("Invalid Key Expr `{s}`: `$` is only allowed in `$*`")
+        };
+        zerror!((self) error).into()
+    }
 }
 
 impl<'a> TryFrom<&'a str> for &'a keyexpr {
     type Error = ZError;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        let mut in_big_wild = false;
-        for chunk in value.split('/') {
-            if chunk.is_empty() {
-                bail!((KeyExprConstructionError::EmptyChunk) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
-            }
-            if chunk == "$*" {
-                bail!((KeyExprConstructionError::LoneDollarStar)
-                    "Invalid Key Expr `{}`: lone `$*`s must be replaced by `*` to reach canon-form",
-                    value
-                )
-            }
-            if in_big_wild {
-                match chunk {
-                    "**" => bail!((KeyExprConstructionError::DoubleStarAfterDoubleStar)
-                        "Invalid Key Expr `{}`: `**/**` must be replaced by `**` to reach canon-form",
-                        value
-                    ),
-                    "*" => bail!((KeyExprConstructionError::SingleStarAfterDoubleStar)
-                        "Invalid Key Expr `{}`: `**/*` must be replaced by `*/**` to reach canon-form",
-                        value
-                    ),
-                    _ => {}
+        use KeyExprError::*;
+        // Check for emptiness or trailing slash, as they are not caught after.
+        if value.is_empty() || value.ends_with('/') {
+            return Err(EmptyChunk.into_err(value));
+        }
+        let bytes = value.as_bytes();
+        // The start of the chunk, i.e. the index of the char after the '/'.
+        let mut chunk_start = 0;
+        // Use a while loop to scan the string because it requires to advance the iteration
+        // manually for some characters, e.g. '$'.
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                // In UTF-8, all keyexpr special characters are lesser or equal to '/', except '?'
+                // This shortcut greatly reduce the number of operations for alphanumeric
+                // characters, which are the most common in keyexprs.
+                c if c > b'/' && c != b'?' => i += 1,
+                // A chunk cannot start with '/'
+                b'/' if i == chunk_start => return Err(EmptyChunk.into_err(value)),
+                // `chunk_start` is updated when starting a new chunk.
+                b'/' => {
+                    i += 1;
+                    chunk_start = i;
                 }
-            }
-            if chunk == "**" {
-                in_big_wild = true;
-                continue;
-            }
-            in_big_wild = false;
-            if chunk == "*" {
-                continue;
-            }
-
-            // Perform character-level validation for the chunk
-            let chunk_bytes = chunk.as_bytes();
-            let mut i = 0;
-            while i < chunk_bytes.len() {
-                let byte = chunk_bytes[i];
-                match byte {
-                    b'#' | b'?' => {
-                        bail!((KeyExprConstructionError::ContainsSharpOrQMark)
-                            "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
-                            value
-                        );
-                    }
-                    b'$' => {
-                        if chunk_bytes.get(i + 1) == Some(&b'*') {
-                            if chunk_bytes.get(i + 2) == Some(&b'$') {
-                                bail!((KeyExprConstructionError::DollarAfterDollarOrStar)
-                                    "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
-                                    value
-                                )
-                            }
-                        } else {
-                            bail!((KeyExprConstructionError::ContainsUnboundDollar)
-                                "Invalid Key Expr `{}`: `$` is only allowed in `$*`",
-                                value
-                            );
-                        }
-                        // A valid `$*` was found, skip the next character in the check.
+                // The first encountered '*' must be at the beginning of a chunk
+                b'*' if i != chunk_start => return Err(StarInChunk.into_err(value)),
+                // When a '*' is match, it means this is a wildcard chunk, possibly with two "**",
+                // which must be followed by a '/' or the end of the string.
+                // So the next character is checked, and the cursor
+                b'*' => match bytes.get(i + 1) {
+                    // Break if end of string is reached.
+                    None => break,
+                    // If a '/' is found, start a new chunk, and advance the cursor to take in
+                    // previous check.
+                    Some(&b'/') => {
                         i += 2;
+                        chunk_start = i;
                     }
-                    b'*' => {
-                        // A bare `*` is not allowed inside a chunk. It must be part of `$*`.
-                        // If we are here, it means it wasn't preceded by a `$`.
-                        bail!((KeyExprConstructionError::StarsInChunk)
-                            "Invalid Key Expr `{}`: `*` may only be preceded by `/` or `$`",
-                            value
-                        );
-                    }
-                    _ => i += 1, // Move to the next character
+                    // If a second '*' is found, the next character must be a slash.
+                    Some(&b'*') => match bytes.get(i + 2) {
+                        // Break if end of string is reached.
+                        None => break,
+                        // Because a "**" chunk cannot be followed by "*" or "**", the next char is
+                        // checked to not be a '*'.
+                        Some(&b'/') if matches!(bytes.get(i + 3), Some(b'*')) => {
+                            // If there are two consecutive wildcard chunks, raise the appropriate
+                            // error.
+                            #[cold]
+                            fn double_star_err(value: &str, i: usize) -> ZError {
+                                match (value.as_bytes().get(i + 4), value.as_bytes().get(i + 5)) {
+                                    (None | Some(&b'/'), _) => SingleStarAfterDoubleStar,
+                                    (Some(&b'*'), None | Some(&b'/')) => DoubleStarAfterDoubleStar,
+                                    _ => StarInChunk,
+                                }
+                                .into_err(value)
+                            }
+                            return Err(double_star_err(value, i));
+                        }
+                        // If a '/' is found, start a new chunk, and advance the cursor to take in
+                        // previous checks.
+                        Some(&b'/') => {
+                            i += 3;
+                            chunk_start = i;
+                        }
+                        // This is not a "**" chunk, raise an error.
+                        _ => return Err(StarInChunk.into_err(value)),
+                    },
+                    // This is not a "*" chunk, raise an error.
+                    _ => return Err(StarInChunk.into_err(value)),
+                },
+                // A '$' must be followed by '*'.
+                b'$' if bytes.get(i + 1) != Some(&b'*') => {
+                    return Err(UnboundDollar.into_err(value))
                 }
+                // "$*" has some additional rules to check.
+                b'$' => match bytes.get(i + 2) {
+                    // "$*" cannot be followed by '$'.
+                    Some(&b'$') => return Err(DollarAfterDollar.into_err(value)),
+                    // "$*" cannot be alone in a chunk
+                    Some(&b'/') | None if i == chunk_start => {
+                        return Err(LoneDollarStar.into_err(value))
+                    }
+                    // Break if end of string is reached.
+                    None => break,
+                    // Everything is fine, advance the cursor taking the '*' check in account.
+                    _ => i += 2,
+                },
+                // '#' and '?' are forbidden.
+                b'#' | b'?' => return Err(SharpOrQMark.into_err(value)),
+                // Fallback for unmatched characters
+                _ => i += 1,
             }
         }
-
         Ok(unsafe { keyexpr::from_str_unchecked(value) })
     }
 }
@@ -955,6 +991,7 @@ impl ToOwned for nonwild_keyexpr {
     }
 }
 
+#[cfg(feature = "internal")]
 #[test]
 fn test_keyexpr_strip_prefix() {
     let expectations = [
@@ -996,6 +1033,7 @@ fn test_keyexpr_strip_prefix() {
     }
 }
 
+#[cfg(feature = "internal")]
 #[test]
 fn test_keyexpr_strip_nonwild_prefix() {
     let expectations = [
@@ -1063,26 +1101,44 @@ fn test_keyexpr_strip_nonwild_prefix() {
 #[cfg(test)]
 mod tests {
     use test_case::test_case;
+    use zenoh_result::ErrNo;
 
-    use crate::keyexpr;
+    use crate::{
+        key_expr::borrowed::{KeyExprError, KeyExprError::*},
+        keyexpr,
+    };
 
-    #[test_case("demo/example/test", true; "Normal key_expr")]
-    #[test_case("demo/*/*/test", true; "Single star after single star")]
-    #[test_case("demo/*/**/test", true; "Single star after double star")]
-    #[test_case("demo/example$*/test", true; "Dollar with star")]
-    #[test_case("demo/example$*-$*/test", true; "Multiple dollar with star")]
-    #[test_case("/demo/example/test", false; "Leading /")]
-    #[test_case("demo/$*/test", false; "Lone $*")]
-    #[test_case("demo/**/*/test", false; "Double star after single star")]
-    #[test_case("demo/**/**/test", false; "Double star after double star")]
-    #[test_case("demo//test", false; "Empty Chunk")]
-    #[test_case("demo/exam*ple/test", false; "Stars in chunk")]
-    #[test_case("demo/example$*$*/test", false; "Dollar after dollar or star")]
-    #[test_case("demo/example#/test", false; "Contain sharp")]
-    #[test_case("demo/example?/test", false; "Contain mark")]
-    #[test_case("demo/$/test", false; "Contain unbounded dollar")]
-    fn test_str_to_keyexpr(key_str: &str, valid: bool) {
-        let key = keyexpr::new(key_str);
-        assert!(key.is_ok() == valid);
+    #[test_case("", EmptyChunk; "Empty")]
+    #[test_case("demo/example/test", None; "Normal key_expr")]
+    #[test_case("demo/*", None; "Single star at the end")]
+    #[test_case("demo/**", None; "Double star at the end")]
+    #[test_case("demo/*/*/test", None; "Single star after single star")]
+    #[test_case("demo/*/**/test", None; "Double star after single star")]
+    #[test_case("demo/example$*/test", None; "Dollar with star")]
+    #[test_case("demo/example$*-$*/test", None; "Multiple dollar with star")]
+    #[test_case("/demo/example/test", EmptyChunk; "Leading /")]
+    #[test_case("demo/example/test/", EmptyChunk; "Trailing /")]
+    #[test_case("demo/$*/test", LoneDollarStar; "Lone $*")]
+    #[test_case("demo/$*", LoneDollarStar; "Lone $* at the end")]
+    #[test_case("demo/example$*", None; "Trailing lone $*")]
+    #[test_case("demo/**/*/test", SingleStarAfterDoubleStar; "Single star after double star")]
+    #[test_case("demo/**/**/test", DoubleStarAfterDoubleStar; "Double star after double star")]
+    #[test_case("demo//test", EmptyChunk; "Empty Chunk")]
+    #[test_case("demo/exam*ple/test", StarInChunk; "Star in chunk")]
+    #[test_case("demo/example$*$/test", DollarAfterDollar; "Dollar after dollar or star")]
+    #[test_case("demo/example$*$*/test", DollarAfterDollar; "Dollar star after dollar or star")]
+    #[test_case("demo/example#/test", SharpOrQMark; "Contain sharp")]
+    #[test_case("demo/example?/test", SharpOrQMark; "Contain mark")]
+    #[test_case("demo/$/test", UnboundDollar; "Contain unbounded dollar")]
+    fn test_keyexpr_new(key_str: &str, error: impl Into<Option<KeyExprError>>) {
+        assert_eq!(
+            keyexpr::new(key_str).err().map(|err| {
+                err.downcast_ref::<zenoh_result::ZError>()
+                    .unwrap()
+                    .errno()
+                    .get()
+            }),
+            error.into().map(|err| err as i8)
+        );
     }
 }
