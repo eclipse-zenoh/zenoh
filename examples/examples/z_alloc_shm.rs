@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::atomic::AtomicUsize;
+
 use zenoh::{
     shm::{
-        AllocAlignment, BlockOn, Deallocate, Defragment, GarbageCollect, PosixShmProviderBackend,
-        ShmProviderBuilder,
+        AllocAlignment, BlockOn, BuildLayout, Deallocate, Defragment, GarbageCollect,
+        PosixShmProviderBackend, ResideInShm, ShmProviderBuilder,
     },
     Config, Wait,
 };
@@ -39,11 +41,8 @@ async fn run() -> zenoh::Result<()> {
         {
             // Create specific backed
             // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-            let comprehensive = PosixShmProviderBackend::builder()
-                .with_size(65536)
-                // this is also possible:
-                // .with_layout_args(65536, AllocAlignment::default())
-                .wait()?;
+            let comprehensive =
+                PosixShmProviderBackend::builder((65536, AllocAlignment::ALIGN_8_BYTES)).wait()?;
 
             // ...and an SHM provider with specified backend
             ShmProviderBuilder::backend(comprehensive).wait()
@@ -63,8 +62,7 @@ async fn run() -> zenoh::Result<()> {
 
         // Option 2: Allocation with custom alignment
         let _shm_buf = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2)?)
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
             .wait()?;
     };
 
@@ -77,11 +75,32 @@ async fn run() -> zenoh::Result<()> {
 
         // Option 2: Comprehensive configuration:
         let comprehensive_layout = provider
-            .alloc(512)
-            .with_alignment(AllocAlignment::new(2)?)
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
             .into_layout()?;
         let _shm_buf = comprehensive_layout.alloc().wait()?;
     };
+
+    // Typed allocation
+    {
+        // Shared data
+        #[repr(C)]
+        pub struct SharedData {
+            pub len: AtomicUsize,
+            pub data: [u8; 1024],
+        }
+
+        // #SAFETY: this is safe because SharedData is safe to be shared
+        unsafe impl ResideInShm for SharedData {}
+
+        // typed layout
+        let typed_layout = BuildLayout::for_type::<SharedData>();
+
+        // allocate **typed** SHM buffer
+        let _typed_buf = provider.alloc(typed_layout).wait().unwrap();
+
+        // allocate **untyped** SHM buffer
+        let _untyped_buf = provider.alloc(typed_layout.layout()).wait().unwrap();
+    }
 
     // Allocation policies
     // Policy is a generics-based API to describe necessary allocation behaviour to be optimized at compile-time.

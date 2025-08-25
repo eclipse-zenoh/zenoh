@@ -168,8 +168,7 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
         tokio::time::sleep(SLEEP).await;
 
         // create SHM backend...
-        let backend = PosixShmProviderBackend::builder()
-            .with_size(size * MSG_COUNT / 10)
+        let backend = PosixShmProviderBackend::builder(size * MSG_COUNT / 10)
             .wait()
             .unwrap();
         // ...and SHM provider

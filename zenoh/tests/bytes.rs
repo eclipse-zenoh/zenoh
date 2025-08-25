@@ -21,10 +21,7 @@ use zenoh::{
 #[test]
 fn shm_bytes_single_buf() {
     // create an SHM backend...
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(4096)
-        .wait()
-        .unwrap();
+    let backend = PosixShmProviderBackend::builder(4096).wait().unwrap();
     // ...and an SHM provider
     let provider = ShmProviderBuilder::backend(backend).wait();
 
