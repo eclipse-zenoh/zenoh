@@ -125,6 +125,7 @@ impl fmt::Debug for MatchingListenerState {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MatchingListenerInner {
     pub(crate) session: WeakSession,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
@@ -156,6 +157,7 @@ pub(crate) struct MatchingListenerInner {
 /// }
 /// # }
 /// ```
+#[derive(Debug)]
 pub struct MatchingListener<Handler> {
     pub(crate) inner: MatchingListenerInner,
     pub(crate) handler: Handler,
@@ -190,6 +192,20 @@ impl<Handler> MatchingListener<Handler> {
         self.inner
             .session
             .undeclare_matches_listener_inner(self.inner.id)
+    }
+
+    /// Returns a reference to this matching listener's handler.
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this matching listener's handler.
+    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// The default handler is [`crate::handlers::DefaultHandler`].
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
     }
 
     #[zenoh_macros::internal]

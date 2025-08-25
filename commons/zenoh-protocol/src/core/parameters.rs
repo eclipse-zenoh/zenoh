@@ -306,7 +306,7 @@ impl<'s> Parameters<'s> {
         item
     }
 
-    /// Removes a key from the map, returning the value at the key if the key was previously in the parameters.    
+    /// Removes a key from the map, returning the value at the key if the key was previously in the parameters.
     pub fn remove<K>(&mut self, k: K) -> Option<String>
     where
         K: Borrow<str>,

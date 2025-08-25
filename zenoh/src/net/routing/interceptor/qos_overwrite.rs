@@ -260,11 +260,12 @@ impl QosInterceptor {
     fn is_ke_affected_from_cache_or_ctx(
         &self,
         cache: Option<&Cache>,
-        ctx: &RoutingContext<NetworkMessageMut<'_>>,
+        msg: &mut NetworkMessageMut,
+        ctx: &dyn InterceptorContext,
     ) -> bool {
         self.keys.is_none()
             || cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-                ctx.full_keyexpr()
+                ctx.full_keyexpr(msg)
                     .as_ref()
                     .map(|ke| self.is_ke_affected(ke))
                     .unwrap_or(false)
@@ -280,33 +281,36 @@ impl InterceptorTrait for QosInterceptor {
         Some(Box::new(cache))
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
-        cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
-        let cache = cache.and_then(|i| match i.downcast_ref::<Cache>() {
-            Some(c) => Some(c),
-            None => {
-                tracing::debug!("Cache content type is incorrect");
-                None
-            }
-        });
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let cache = self
+            .keys
+            .is_some()
+            .then(|| {
+                ctx.get_cache(msg)
+                    .and_then(|i| match i.downcast_ref::<Cache>() {
+                        Some(c) => Some(c),
+                        None => {
+                            tracing::debug!("Cache content type is incorrect");
+                            None
+                        }
+                    })
+            })
+            .flatten();
 
-        let mut should_overwrite = match &ctx.msg.body {
+        let mut should_overwrite = match &msg.body {
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ..
-            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, ctx),
+            }) => self.filter.put && self.is_ke_affected_from_cache_or_ctx(cache, msg, ctx),
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Del(_),
                 ..
-            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, ctx),
+            }) => self.filter.delete && self.is_ke_affected_from_cache_or_ctx(cache, msg, ctx),
             NetworkBodyMut::Request(_) => {
-                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, ctx)
+                self.filter.query && self.is_ke_affected_from_cache_or_ctx(cache, msg, ctx)
             }
             NetworkBodyMut::Response(_) => {
-                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, ctx)
+                self.filter.reply && self.is_ke_affected_from_cache_or_ctx(cache, msg, ctx)
             }
             NetworkBodyMut::ResponseFinal(_) => false,
             NetworkBodyMut::Interest(_) => false,
@@ -315,28 +319,28 @@ impl InterceptorTrait for QosInterceptor {
         };
         if let Some(qos) = self.filter.qos.as_ref() {
             if let Some(prio) = qos.priority.as_ref() {
-                if !ctx.msg.priority().eq(&((*prio).into())) {
+                if !msg.priority().eq(&((*prio).into())) {
                     should_overwrite = false;
                 }
             }
             if let Some(cc) = qos.congestion_control.as_ref() {
-                if !ctx.msg.congestion_control().eq(&((*cc).into())) {
+                if !msg.congestion_control().eq(&((*cc).into())) {
                     should_overwrite = false;
                 }
             }
             if let Some(express) = qos.express.as_ref() {
-                if ctx.msg.is_express() != *express {
+                if msg.is_express() != *express {
                     should_overwrite = false;
                 }
             }
             if let Some(reliability) = qos.reliability.as_ref() {
-                if ctx.msg.reliability() != (*reliability).into() {
+                if msg.reliability() != (*reliability).into() {
                     should_overwrite = false;
                 }
             }
         }
         if let Some(payload_size_range) = self.filter.payload_size.as_ref() {
-            let msg_payload_size = match &ctx.msg.body {
+            let msg_payload_size = match &msg.body {
                 NetworkBodyMut::Push(Push {
                     payload: PushBody::Put(put),
                     ..
@@ -371,7 +375,7 @@ impl InterceptorTrait for QosInterceptor {
             return true;
         }
 
-        match &mut ctx.msg.body {
+        match &mut msg.body {
             NetworkBodyMut::Request(Request { ext_qos, .. }) => {
                 self.overwrite_qos(QosOverwriteMessage::Query, ext_qos);
             }

@@ -1,3 +1,16 @@
+//
+// Copyright (c) 2025 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use std::{collections::hash_map, hash::Hash, mem, slice};
 
 /// Decides to fall back to a hashmap if the load factor is below 75%.
@@ -16,12 +29,12 @@ fn fallback_to_hashmap(key: usize, len: usize) -> bool {
 /// too low, then the storage falls back to a regular hashmap.
 /// The whole API is fully compatible with `HashMap` one.
 #[derive(Debug)]
-pub enum IntHashMap<K: Copy + Into<usize> + TryFrom<usize>, V> {
+pub enum IntHashMap<K: Copy + Into<usize>, V> {
     // Because maps can have holes, the value is optional in the vector. The key is also stored,
     // in order to provide a compatible iteration API
     Vec {
-        vec: Vec<(K, Option<V>)>,
-        len: usize,
+        vec: Vec<Option<(K, V)>>,
+        items: usize,
     },
     Map(ahash::HashMap<K, V>),
 }
@@ -31,14 +44,14 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     pub fn new() -> Self {
         Self::Vec {
             vec: Vec::new(),
-            len: 0,
+            items: 0,
         }
     }
 
     #[inline]
     pub fn len(&self) -> usize {
         match self {
-            Self::Vec { len, .. } => *len,
+            Self::Vec { items, .. } => *items,
             Self::Map(map) => map.len(),
         }
     }
@@ -49,7 +62,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 
     #[inline]
-    pub fn iter(&self) -> Iter<K, V> {
+    pub fn iter(&self) -> Iter<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => Iter::Vec(vec.iter()),
             Self::Map(map) => Iter::Map(map.iter()),
@@ -57,7 +70,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 
     #[inline]
-    pub fn values(&self) -> Values<K, V> {
+    pub fn values(&self) -> Values<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => Values::Vec(vec.iter()),
             Self::Map(map) => Values::Map(map.values()),
@@ -65,7 +78,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 
     #[inline]
-    pub fn values_mut(&mut self) -> ValuesMut<K, V> {
+    pub fn values_mut(&mut self) -> ValuesMut<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => ValuesMut::Vec(vec.iter_mut()),
             Self::Map(map) => ValuesMut::Map(map.values_mut()),
@@ -77,7 +90,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     #[inline]
     pub fn get(&self, k: &K) -> Option<&V> {
         match self {
-            Self::Vec { vec, .. } => vec.get((*k).into())?.1.as_ref(),
+            Self::Vec { vec, .. } => Some(&vec.get((*k).into())?.as_ref()?.1),
             Self::Map(map) => map.get(k),
         }
     }
@@ -85,7 +98,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     #[inline]
     pub fn get_mut(&mut self, k: &K) -> Option<&mut V> {
         match self {
-            Self::Vec { vec, .. } => vec.get_mut((*k).into())?.1.as_mut(),
+            Self::Vec { vec, .. } => Some(&mut vec.get_mut((*k).into())?.as_mut()?.1),
             Self::Map(map) => map.get_mut(k),
         }
     }
@@ -93,7 +106,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     #[inline]
     pub fn contains_key(&self, k: &K) -> bool {
         match self {
-            Self::Vec { vec, .. } => vec.get((*k).into()).is_some(),
+            Self::Vec { vec, .. } => vec.get((*k).into()).is_some_and(|kv| kv.is_some()),
             Self::Map(map) => map.contains_key(k),
         }
     }
@@ -105,17 +118,12 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     /// If the load factor becomes too low, then the vector is collected into and replaced by a
     /// hashmap.
     fn resize(&mut self, k: K) {
-        if let Self::Vec { vec, len } = self {
-            if fallback_to_hashmap(k.into(), *len) {
-                let map = mem::take(vec)
-                    .into_iter()
-                    .filter_map(|(k, v)| Some((k, v?)))
-                    .collect();
+        if let Self::Vec { vec, items } = self {
+            if fallback_to_hashmap(k.into(), *items) {
+                let map = mem::take(vec).into_iter().flatten().collect();
                 *self = Self::Map(map);
-            } else {
-                for i in vec.len()..=k.into() {
-                    vec.push((i.try_into().unwrap_or_else(|_| unreachable!()), None));
-                }
+            } else if k.into() >= vec.len() {
+                vec.resize_with(k.into() + 1, || None);
             }
         }
     }
@@ -124,12 +132,12 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     pub fn insert(&mut self, k: K, value: V) -> Option<V> {
         self.resize(k);
         match self {
-            Self::Vec { vec, len } => {
-                let v = &mut vec[k.into()].1;
-                if v.is_none() {
-                    *len += 1;
+            Self::Vec { vec, items } => {
+                let kv = &mut vec[k.into()];
+                if kv.is_none() {
+                    *items += 1;
                 }
-                v.replace(value)
+                Some(kv.replace((k, value))?.1)
             }
             Self::Map(map) => map.insert(k, value),
         }
@@ -138,12 +146,12 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     #[inline]
     pub fn remove(&mut self, k: &K) -> Option<V> {
         match self {
-            Self::Vec { vec, len } => {
-                let value = &mut vec.get_mut((*k).into())?.1;
-                if value.is_some() {
-                    *len -= 1;
+            Self::Vec { vec, items } => {
+                let kv = &mut vec.get_mut((*k).into())?;
+                if kv.is_some() {
+                    *items -= 1;
                 }
-                value.take()
+                Some(kv.take()?.1)
             }
             Self::Map(map) => map.remove(k),
         }
@@ -157,14 +165,15 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
         }
     }
 
-    pub fn entry(&mut self, k: K) -> Entry<K, V> {
-        self.resize(k);
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+        self.resize(key);
         match self {
-            Self::Vec { vec, len } => Entry::Vec {
-                value: &mut vec[k.into()].1,
-                len,
+            Self::Vec { vec, items } => Entry::Vec {
+                key,
+                entry: &mut vec[key.into()],
+                items,
             },
-            Self::Map(map) => Entry::Map(map.entry(k)),
+            Self::Map(map) => Entry::Map(map.entry(key)),
         }
     }
 }
@@ -178,8 +187,9 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> Default for IntHashMap<K, V> {
 
 pub enum Entry<'a, K, V> {
     Vec {
-        value: &'a mut Option<V>,
-        len: &'a mut usize,
+        key: K,
+        entry: &'a mut Option<(K, V)>,
+        items: &'a mut usize,
     },
     Map(hash_map::Entry<'a, K, V>),
 }
@@ -187,11 +197,11 @@ pub enum Entry<'a, K, V> {
 impl<'a, K, V> Entry<'a, K, V> {
     pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V {
         match self {
-            Entry::Vec { value, len } => {
-                if value.is_none() {
-                    *len += 1
+            Entry::Vec { key, entry, items } => {
+                if entry.is_none() {
+                    *items += 1
                 };
-                value.get_or_insert_with(default)
+                &mut entry.get_or_insert_with(|| (key, default())).1
             }
             Entry::Map(entry) => entry.or_insert_with(default),
         }
@@ -199,7 +209,7 @@ impl<'a, K, V> Entry<'a, K, V> {
 }
 
 pub enum Iter<'a, K, V> {
-    Vec(slice::Iter<'a, (K, Option<V>)>),
+    Vec(slice::Iter<'a, Option<(K, V)>>),
     Map(hash_map::Iter<'a, K, V>),
 }
 
@@ -209,17 +219,14 @@ impl<'a, K: Copy + TryFrom<usize>, V> Iterator for Iter<'a, K, V> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Vec(iter) => iter
-                .by_ref()
-                .filter_map(|(k, v)| Some((k, v.as_ref()?)))
-                .next(),
+            Self::Vec(iter) => iter.by_ref().flatten().map(|(k, v)| (k, v)).next(),
             Self::Map(iter) => iter.next(),
         }
     }
 }
 
 pub enum Values<'a, K, V> {
-    Vec(slice::Iter<'a, (K, Option<V>)>),
+    Vec(slice::Iter<'a, Option<(K, V)>>),
     Map(hash_map::Values<'a, K, V>),
 }
 impl<'a, K, V> Iterator for Values<'a, K, V> {
@@ -228,14 +235,14 @@ impl<'a, K, V> Iterator for Values<'a, K, V> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Vec(iter) => iter.by_ref().filter_map(|(_, v)| v.as_ref()).next(),
+            Self::Vec(iter) => iter.by_ref().flatten().map(|(_, v)| v).next(),
             Self::Map(iter) => iter.next(),
         }
     }
 }
 
 pub enum ValuesMut<'a, K, V> {
-    Vec(slice::IterMut<'a, (K, Option<V>)>),
+    Vec(slice::IterMut<'a, Option<(K, V)>>),
     Map(hash_map::ValuesMut<'a, K, V>),
 }
 impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
@@ -244,7 +251,7 @@ impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Self::Vec(iter) => iter.by_ref().filter_map(|(_, v)| v.as_mut()).next(),
+            Self::Vec(iter) => iter.by_ref().flatten().map(|(_, v)| v).next(),
             Self::Map(iter) => iter.next(),
         }
     }

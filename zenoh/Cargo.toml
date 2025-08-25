@@ -12,17 +12,17 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh"
 readme = "../README.md"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [badges]
@@ -34,9 +34,10 @@ auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 default = [
   "auth_pubkey",
   "auth_usrpwd",
-  "transport_multilink",
   "transport_compression",
+  "transport_multilink",
   "transport_quic",
+  "transport_quic_datagram",
   "transport_tcp",
   "transport_tls",
   "transport_udp",
@@ -44,45 +45,44 @@ default = [
   "transport_ws",
 ]
 internal = [
-  "zenoh-keyexpr/internal",
   "zenoh-config/internal",
+  "zenoh-keyexpr/internal",
   "zenoh-protocol/internal",
 ]
+internal_config = []
 plugins = []
 runtime_plugins = ["plugins"]
 shared-memory = [
-  "zenoh-shm",
-  "zenoh-protocol/shared-memory",
-  "zenoh-transport/shared-memory",
   "zenoh-buffers/shared-memory",
+  "zenoh-protocol/shared-memory",
+  "zenoh-shm",
+  "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
-transport_multilink = ["zenoh-transport/transport_multilink"]
+tracing-instrument = [
+  "zenoh-runtime/tracing-instrument",
+  "zenoh-task/tracing-instrument",
+]
 transport_compression = ["zenoh-transport/transport_compression"]
+transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_quic = ["zenoh-transport/transport_quic"]
+transport_quic_datagram = ["zenoh-transport/transport_quic_datagram"]
 transport_serial = ["zenoh-transport/transport_serial"]
-transport_unixpipe = ["zenoh-transport/transport_unixpipe"]
-transport_tcp = ["zenoh-transport/transport_tcp", "zenoh-config/transport_tcp"]
+transport_tcp = ["zenoh-config/transport_tcp", "zenoh-transport/transport_tcp"]
 transport_tls = ["zenoh-transport/transport_tls"]
 transport_udp = ["zenoh-transport/transport_udp"]
+transport_unixpipe = ["zenoh-transport/transport_unixpipe"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
-transport_ws = ["zenoh-transport/transport_ws"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
+transport_ws = ["zenoh-transport/transport_ws"]
 unstable = [
   "internal_config",
-  "zenoh-keyexpr/unstable",
   "zenoh-config/unstable",
+  "zenoh-keyexpr/unstable",
   "zenoh-protocol/unstable",
-]
-internal_config = []
-tracing-instrument = [
-  "zenoh-task/tracing-instrument",
-  "zenoh-runtime/tracing-instrument",
 ]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt", "macros", "time"] }
-tokio-util = { workspace = true }
 ahash = { workspace = true, default-features = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
@@ -92,9 +92,9 @@ futures = { workspace = true }
 git-version = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
-nonempty-collections = { workspace = true }
 lazy_static = { workspace = true }
-tracing = { workspace = true }
+nonempty-collections = { workspace = true }
+once_cell = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
@@ -103,6 +103,9 @@ ref-cast = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
@@ -112,17 +115,17 @@ zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-keyexpr = { workspace = true, features = ["internal"] }
 zenoh-link = { workspace = true }
+zenoh-link-commons = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["std"] }
 zenoh-result = { workspace = true }
+zenoh-runtime = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
+zenoh-task = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-runtime = { workspace = true }
-zenoh-task = { workspace = true }
-once_cell = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
@@ -138,18 +141,18 @@ name = "zenoh"
 # For doc generation on docs.rs, activate the "unstable" and "shared-memory" feature to generate their documentation
 # NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
 [package.metadata.docs.rs]
-features = ["unstable", "shared-memory"]
+features = ["shared-memory", "unstable"]
 rustdoc-args = ["--cfg", "doc_auto_cfg"]
 
 [package.metadata.deb]
-name = "zenoh"
-maintainer = "zenoh-dev@eclipse.org"
+assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
 copyright = "2024 ZettaScale Technology"
-section = "net"
+depends = "zenohd (=1.5.0), zenoh-plugin-rest (=1.5.0), zenoh-plugin-storage-manager (=1.5.0)"
 license-file = ["../LICENSE", "0"]
-depends = "zenohd (=1.4.0), zenoh-plugin-rest (=1.4.0), zenoh-plugin-storage-manager (=1.4.0)"
+maintainer = "zenoh-dev@eclipse.org"
 maintainer-scripts = ".deb"
-assets = [["../README.md", "README.md", "644"]]
+name = "zenoh"
+section = "net"
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(doc_auto_cfg)'] }

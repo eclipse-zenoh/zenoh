@@ -1152,31 +1152,36 @@ impl HatPubSubTrait for HatCode {
             .router_subs
             .iter()
             .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those subscriptions
+                let routers = Vec::from_iter(res_hat!(s).router_subs.iter().cloned());
+                let mut peers = if hat!(tables).full_net(WhatAmI::Peer) {
+                    Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned())
+                } else {
+                    vec![]
+                };
+                let mut clients = vec![];
+                for ctx in s
+                    .session_ctxs
+                    .values()
+                    .filter(|ctx| ctx.subs.is_some() && !ctx.face.is_local)
+                {
+                    match ctx.face.whatami {
+                        WhatAmI::Router => (),
+                        WhatAmI::Peer => {
+                            if !hat!(tables).full_net(WhatAmI::Peer) {
+                                peers.push(ctx.face.zid);
+                            }
+                        }
+                        WhatAmI::Client => clients.push(ctx.face.zid),
+                    }
+                }
                 (
                     s.clone(),
-                    // Compute the list of routers, peers and clients that are known
-                    // sources of those subscriptions
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
-                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
-                            Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned())
-                        } else {
-                            s.session_ctxs
-                                .values()
-                                .filter_map(|f| {
-                                    (f.face.whatami == WhatAmI::Peer && f.subs.is_some())
-                                        .then_some(f.face.zid)
-                                })
-                                .collect()
-                        },
-                        clients: s
-                            .session_ctxs
-                            .values()
-                            .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.subs.is_some())
-                                    .then_some(f.face.zid)
-                            })
-                            .collect(),
+                        routers,
+                        peers,
+                        clients,
                     },
                 )
             })
@@ -1190,7 +1195,12 @@ impl HatPubSubTrait for HatCode {
                 if interest.options.subscribers() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),

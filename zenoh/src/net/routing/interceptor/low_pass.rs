@@ -41,8 +41,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 use super::{
     authorization::SubjectProperty, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait, InterfaceEnabled,
-    RoutingContext,
 };
+use crate::net::routing::interceptor::InterceptorContext;
 
 pub(crate) fn low_pass_interceptor_factories(
     config: &Vec<LowPassFilterConf>,
@@ -247,15 +247,14 @@ impl LowPassInterceptor {
 
     fn message_passes_filters(
         &self,
-        ctx: &RoutingContext<NetworkMessageMut>,
+        msg: &mut NetworkMessageMut,
+        ctx: &dyn InterceptorContext,
         cache: Option<&Cache>,
     ) -> Result<(), usize> {
         let payload_size: usize;
         let attachment_size: usize;
         let message_type: LowPassFilterMessage;
         let max_allowed_size: Option<usize>;
-
-        let msg = &ctx.msg;
 
         match &msg.body {
             NetworkBodyMut::Request(Request {
@@ -351,7 +350,7 @@ impl LowPassInterceptor {
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
-            None => match ctx.full_keyexpr() {
+            None => match ctx.full_keyexpr(msg).as_ref() {
                 Some(ke) => self.get_max_allowed_message_size(message_type, ke),
                 None => 0,
             },
@@ -409,14 +408,10 @@ impl InterceptorTrait for LowPassInterceptor {
         }))
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
-        cache: Option<&Box<dyn std::any::Any + Send + Sync>>,
-    ) -> bool {
-        let cache = cache.and_then(|i| i.downcast_ref::<Cache>());
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let cache = ctx.get_cache(msg).and_then(|i| i.downcast_ref::<Cache>());
 
-        match self.message_passes_filters(ctx, cache) {
+        match self.message_passes_filters(msg, ctx, cache) {
             Ok(_) => true,
             #[allow(unused_variables)] // only used for stats
             Err(msg_size) => {

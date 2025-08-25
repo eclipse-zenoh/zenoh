@@ -72,6 +72,7 @@ static KE_STARSTAR: &keyexpr = ke!("**");
 
 static KE_SESSION: &keyexpr = ke!("session");
 static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
+static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
 
 pub(crate) fn init(session: WeakSession) {
@@ -101,14 +102,25 @@ pub(crate) fn init(session: WeakSession) {
 }
 
 pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Query) {
-    fn reply_peer(prefix: &keyexpr, own_zid: &keyexpr, query: &Query, peer: TransportPeer) {
+    fn reply_peer(
+        prefix: &keyexpr,
+        own_zid: &keyexpr,
+        query: &Query,
+        peer: TransportPeer,
+        multicast: bool,
+    ) {
         let zid = peer.zid.to_string();
+        let transport = if multicast {
+            KE_TRANSPORT_MULTICAST
+        } else {
+            KE_TRANSPORT_UNICAST
+        };
         if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = prefix / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
+            let key_expr = prefix / own_zid / KE_SESSION / transport / zid;
             if query.key_expr().intersects(&key_expr) {
                 match serde_json::to_vec(&peer) {
                     Ok(bytes) => {
-                        let reply_expr = KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
+                        let reply_expr = KE_AT / own_zid / KE_SESSION / transport / zid;
                         let _ = query
                             .reply(reply_expr, bytes)
                             .encoding(Encoding::APPLICATION_JSON)
@@ -122,18 +134,12 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
                 let mut s = DefaultHasher::new();
                 link.hash(&mut s);
                 if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr =
-                        prefix / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid / KE_LINK / lid;
+                    let key_expr = prefix / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
                     if query.key_expr().intersects(&key_expr) {
                         match serde_json::to_vec(&link) {
                             Ok(bytes) => {
-                                let reply_expr = KE_AT
-                                    / own_zid
-                                    / KE_SESSION
-                                    / KE_TRANSPORT_UNICAST
-                                    / zid
-                                    / KE_LINK
-                                    / lid;
+                                let reply_expr =
+                                    KE_AT / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
                                 let _ = query
                                     .reply(reply_expr, bytes)
                                     .encoding(Encoding::APPLICATION_JSON)
@@ -152,14 +158,14 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
             .block_in_place(session.runtime.manager().get_transports_unicast())
         {
             if let Ok(peer) = transport.get_peer() {
-                reply_peer(prefix, own_zid, &query, peer);
+                reply_peer(prefix, own_zid, &query, peer, false);
             }
         }
         for transport in zenoh_runtime::ZRuntime::Net
             .block_in_place(session.runtime.manager().get_transports_multicast())
         {
             for peer in transport.get_peers().unwrap_or_default() {
-                reply_peer(prefix, own_zid, &query, peer);
+                reply_peer(prefix, own_zid, &query, peer, true);
             }
         }
     }
@@ -182,7 +188,7 @@ impl TransportEventHandler for Handler {
         peer: zenoh_transport::TransportPeer,
         _transport: zenoh_transport::unicast::TransportUnicast,
     ) -> ZResult<Arc<dyn zenoh_transport::TransportPeerEventHandler>> {
-        self.new_peer(peer)
+        self.new_peer(peer, false)
     }
 
     fn new_multicast(
@@ -193,15 +199,21 @@ impl TransportEventHandler for Handler {
     }
 }
 
-impl TransportMulticastEventHandler for Handler {
+impl Handler {
     fn new_peer(
         &self,
         peer: zenoh_transport::TransportPeer,
+        multicast: bool,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        let transport = if multicast {
+            KE_TRANSPORT_MULTICAST
+        } else {
+            KE_TRANSPORT_UNICAST
+        };
         if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
             if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
-                let expr = KE_AT / own_zid / KE_SESSION / KE_TRANSPORT_UNICAST / zid;
-                let wire_expr = WireExpr::from(&expr).to_owned();
+                let wire_expr =
+                    WireExpr::from(&(KE_AT / own_zid / KE_SESSION / transport / zid)).to_owned();
                 let mut body = None;
                 self.session.execute_subscriber_callbacks(
                     true,
@@ -228,6 +240,15 @@ impl TransportMulticastEventHandler for Handler {
         } else {
             bail!("Unable to build keyexpr from zid")
         }
+    }
+}
+
+impl TransportMulticastEventHandler for Handler {
+    fn new_peer(
+        &self,
+        peer: zenoh_transport::TransportPeer,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        self.new_peer(peer, true)
     }
 
     fn closed(&self) {}

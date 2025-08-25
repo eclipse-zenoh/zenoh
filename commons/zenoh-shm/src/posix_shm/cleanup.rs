@@ -28,8 +28,9 @@ mod platform {
     use crate::shm;
 
     pub(crate) fn cleanup_orphaned_segments() {
-        if let Err(e) = cleanup_orphaned_segments_inner() {
-            tracing::error!("Error performing orphaned SHM segments cleanup: {e}")
+        if let Err(_e) = cleanup_orphaned_segments_inner() {
+            // TODO: we cannot use our logger inside of atexit() callstack!
+            //tracing::error!("Error performing orphaned SHM segments cleanup: {e}")
         }
     }
 

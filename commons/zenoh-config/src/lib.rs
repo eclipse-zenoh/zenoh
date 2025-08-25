@@ -99,7 +99,7 @@ pub struct TransportWeight {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum InterceptorFlow {
     Egress,
     Ingress,
@@ -181,6 +181,7 @@ pub struct AclConfigSubjects {
     pub cert_common_names: Option<NEVec<CertCommonName>>,
     pub usernames: Option<NEVec<Username>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
+    pub zids: Option<NEVec<ZenohId>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -364,7 +365,7 @@ pub enum AclMessage {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Permission {
     Allow,
     Deny,
@@ -1173,7 +1174,7 @@ impl Config {
     pub fn get(
         &self,
         key: &str,
-    ) -> Result<<Self as ValidatedMapAssociatedTypes>::Accessor, GetError> {
+    ) -> Result<<Self as ValidatedMapAssociatedTypes<'_>>::Accessor, GetError> {
         <Self as ValidatedMap>::get(self, key)
     }
 
