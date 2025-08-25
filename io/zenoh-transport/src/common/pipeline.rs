@@ -634,6 +634,7 @@ impl StageOut {
         self.s_ref.refill(batch);
     }
 
+    #[allow(clippy::vec_box)]
     fn drain(&mut self, guard: &mut MutexGuard<'_, Option<Box<WBatch>>>) -> Vec<Box<WBatch>> {
         let mut batches = vec![];
         // Empty the ring buffer
