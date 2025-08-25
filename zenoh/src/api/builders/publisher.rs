@@ -429,7 +429,6 @@ impl PublisherBuilder<'_, '_> {
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
     /// that have the given [`crate::sample::Locality`].
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
@@ -477,7 +476,6 @@ impl Wait for PublisherBuilder<'_, '_> {
             destination: self.destination,
             #[cfg(feature = "unstable")]
             reliability: self.reliability,
-            #[cfg(feature = "unstable")]
             matching_listeners: Default::default(),
             undeclare_on_drop: true,
         })

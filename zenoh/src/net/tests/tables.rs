@@ -17,16 +17,14 @@ use std::{
 };
 
 use uhlc::HLC;
-use zenoh_buffers::ZBuf;
 use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto,
-        EMPTY_EXPR_ID,
+        key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
     },
     network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
-    zenoh::{PushBody, Put},
+    zenoh::Put,
 };
 
 use crate::{
@@ -508,7 +506,7 @@ impl ClientPrimitives {
     }
 
     #[allow(dead_code)]
-    fn get_last_key(&self) -> Option<WireExpr> {
+    fn get_last_key(&self) -> Option<WireExpr<'_>> {
         self.data.lock().unwrap().as_ref().cloned()
     }
 }
@@ -739,19 +737,7 @@ fn client_test() {
             &face.upgrade().unwrap(),
             &mut Push {
                 wire_expr,
-                ext_qos: ext::QoSType::DEFAULT,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType { node_id: 0 },
-                payload: PushBody::Put(Put {
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_unknown: vec![],
-                    payload: ZBuf::empty(),
-                    ext_attachment: None,
-                }),
+                ..Put::default().into()
             },
             Reliability::Reliable,
         );

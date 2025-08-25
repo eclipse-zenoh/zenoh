@@ -142,7 +142,7 @@ impl ZSlice {
     // so it should stay in the same module.
     // See https://github.com/eclipse-zenoh/zenoh/pull/1289#discussion_r1701796640
     #[inline]
-    pub(crate) fn writer(&mut self) -> Option<ZSliceWriter> {
+    pub(crate) fn writer(&mut self) -> Option<ZSliceWriter<'_>> {
         let vec = Arc::get_mut(&mut self.buf)?
             .as_any_mut()
             .downcast_mut::<Vec<u8>>()?;

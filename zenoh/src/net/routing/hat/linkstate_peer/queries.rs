@@ -40,19 +40,20 @@ use super::{
     face_hat, face_hat_mut, get_peer, hat, hat_mut, push_declaration_profile, res_hat, res_hat_mut,
     HatCode, HatContext, HatFace, HatTables,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::network::Network,
-    routing::{
-        dispatcher::{
-            face::FaceState,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::network::Network,
+        routing::{
+            dispatcher::{
+                face::FaceState,
+                resource::{NodeId, Resource, SessionContext},
+                tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
+            },
+            hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+            router::disable_matches_query_routes,
+            RoutingContext,
         },
-        hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-        router::disable_matches_query_routes,
-        RoutingContext,
     },
 };
 
@@ -914,21 +915,38 @@ impl HatQueriesTrait for HatCode {
             .linkstatepeer_qabls
             .iter()
             .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those queryables
+                let mut routers = vec![];
+                let mut peers = vec![];
+                let mut clients = vec![];
+                for q in res_hat!(s).linkstatepeer_qabls.keys() {
+                    if let Some(whatami) = hat!(tables)
+                        .linkstatepeers_net
+                        .as_ref()
+                        .and_then(|net| net.get_node(q))
+                        .and_then(|n| n.whatami)
+                    {
+                        match whatami {
+                            WhatAmI::Router => routers.push(*q),
+                            WhatAmI::Peer => peers.push(*q),
+                            WhatAmI::Client => clients.push(*q),
+                        }
+                    } else {
+                        peers.push(*q);
+                    }
+                }
+                for ctx in s.session_ctxs.values().filter(|ctx| {
+                    !ctx.face.is_local && ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some()
+                }) {
+                    clients.push(ctx.face.zid);
+                }
                 (
                     s.clone(),
-                    // Compute the list of routers, peers and clients that are known
-                    // sources of those queryables
                     Sources {
-                        routers: vec![],
-                        peers: Vec::from_iter(res_hat!(s).linkstatepeer_qabls.keys().cloned()),
-                        clients: s
-                            .session_ctxs
-                            .values()
-                            .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.qabl.is_some())
-                                    .then_some(f.face.zid)
-                            })
-                            .collect(),
+                        routers,
+                        peers,
+                        clients,
                     },
                 )
             })
@@ -942,7 +960,12 @@ impl HatQueriesTrait for HatCode {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
@@ -1005,21 +1028,10 @@ impl HatQueriesTrait for HatCode {
                 complete,
             );
 
-            for (sid, context) in &mres.session_ctxs {
-                if source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                    if let Some(qabl_info) = context.qabl.as_ref() {
-                        route.push(QueryTargetQabl {
-                            direction: (
-                                context.face.clone(),
-                                key_expr.to_owned(),
-                                NodeId::default(),
-                            ),
-                            info: Some(QueryableInfoType {
-                                complete: complete && qabl_info.complete,
-                                distance: 1,
-                            }),
-                        });
+            for face_ctx @ (_, ctx) in &mres.session_ctxs {
+                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
+                        route.push(qabl);
                     }
                 }
             }
@@ -1028,7 +1040,6 @@ impl HatQueriesTrait for HatCode {
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &Tables,
@@ -1082,7 +1093,6 @@ impl HatQueriesTrait for HatCode {
     }
 }
 
-#[cfg(feature = "unstable")]
 #[inline]
 fn insert_faces_for_qbls(
     route: &mut HashMap<usize, Arc<FaceState>>,

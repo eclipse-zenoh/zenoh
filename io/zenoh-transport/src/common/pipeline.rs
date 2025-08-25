@@ -1023,17 +1023,13 @@ mod tests {
     };
 
     use tokio::{task, time::timeout};
-    use zenoh_buffers::{
-        reader::{DidntRead, HasReader},
-        ZBuf,
-    };
+    use zenoh_buffers::reader::{DidntRead, HasReader};
     use zenoh_codec::{network::NetworkMessageIter, RCodec, Zenoh080};
     use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
-        core::{Bits, CongestionControl, Encoding, Priority, Reliability},
+        core::{Bits, CongestionControl, Priority, Reliability},
         network::{ext, NetworkMessage, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
-        zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
 
@@ -1081,25 +1077,12 @@ mod tests {
         fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; payload_size]);
 
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                payload: PushBody::Put(Put {
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                    payload,
-                }),
-            }
-            .into();
+                ..Push::from(vec![0_u8; payload_size])
+            });
 
             println!(
                 "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
@@ -1211,25 +1194,12 @@ mod tests {
 
             // Send reliable messages
             let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; payload_size]);
 
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                payload: PushBody::Put(Put {
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                    payload,
-                }),
-            }
-            .into();
+                ..Push::from(vec![0_u8; payload_size])
+            });
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
@@ -1325,29 +1295,16 @@ mod tests {
 
                     // Send reliable messages
                     let key = "pipeline/thr".into();
-                    let payload = ZBuf::from(vec![0_u8; *size]);
 
-                    let message: NetworkMessage = Push {
+                    let message = NetworkMessage::from(Push {
                         wire_expr: key,
                         ext_qos: ext::QoSType::new(
                             Priority::Control,
                             CongestionControl::Block,
                             false,
                         ),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        payload: PushBody::Put(Put {
-                            timestamp: None,
-                            encoding: Encoding::empty(),
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment: None,
-                            ext_unknown: vec![],
-                            payload,
-                        }),
-                    }
-                    .into();
+                        ..Push::from(vec![0_u8; *size])
+                    });
 
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
@@ -1390,23 +1347,11 @@ mod tests {
         // Drop consumer to close the pipeline
         drop(consumer);
 
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, true),
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-                payload: vec![42u8].into(),
-            }),
-        }
-        .into();
+            ..Push::from(vec![42u8])
+        });
         // First message should not be rejected as the is one batch available in the queue
         assert!(producer.push_network_message(message.as_ref()).is_ok());
         // Second message should be rejected

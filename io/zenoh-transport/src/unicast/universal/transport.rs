@@ -407,7 +407,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_auth_ids(&self) -> TransportAuthId {
-        let mut transport_auth_id = TransportAuthId::default();
+        let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
         zread!(self.links)
             .iter()

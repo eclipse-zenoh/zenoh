@@ -207,7 +207,7 @@ impl StructVersion for VolumeInstance {
 }
 
 impl PluginControl for VolumeInstance {
-    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
         Vec::new()
     }
 }

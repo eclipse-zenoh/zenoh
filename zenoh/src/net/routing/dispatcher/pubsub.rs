@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[zenoh_macros::unstable]
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
@@ -29,11 +27,12 @@ use super::{
     resource::{Direction, Resource},
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
-#[zenoh_macros::unstable]
-use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::get_or_set_route,
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        hat::{HatTrait, SendDeclare},
+        router::get_or_set_route,
+    },
 };
 
 #[derive(Copy, Clone)]
@@ -238,7 +237,6 @@ fn get_data_route(
     compute_route()
 }
 
-#[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_matching_subscriptions(
     hat_code: &(dyn HatTrait + Send + Sync),
@@ -330,7 +328,7 @@ pub fn route_data(
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
-                        let (outface, key_expr, context) = route.values().next().unwrap();
+                        let (outface, key_expr, context) = route.iter().next().unwrap();
                         if tables_ref
                             .hat_code
                             .egress_filter(&tables, face, outface, &mut expr)
@@ -348,7 +346,7 @@ pub fn route_data(
                         }
                     } else {
                         let route = route
-                            .values()
+                            .iter()
                             .filter(|(outface, _key_expr, _context)| {
                                 tables_ref
                                     .hat_code

@@ -26,14 +26,30 @@ version = { workspace = true }
 
 [features]
 compression = []
+quic = [
+  "dep:base64",
+  "dep:quinn",
+  "dep:rustls-pemfile",
+  "dep:rustls-pki-types",
+  "dep:secrecy",
+  "dep:webpki-roots",
+  "dep:x509-parser",
+  "dep:zenoh-config",
+  "tls",
+]
 tls = ["dep:rustls", "dep:rustls-webpki"]
 
 [dependencies]
 async-trait = { workspace = true }
+base64 = { workspace = true, optional = true }
 flume = { workspace = true }
 futures = { workspace = true }
+quinn = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
+rustls-pemfile = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
 rustls-webpki = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
 socket2 = { workspace = true }
 time = { workspace = true }
@@ -46,8 +62,11 @@ tokio = { workspace = true, features = [
 ] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
+webpki-roots = { workspace = true, optional = true }
+x509-parser = { workspace = true, optional = true }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }
+zenoh-config = { workspace = true, optional = true }
 zenoh-core = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }

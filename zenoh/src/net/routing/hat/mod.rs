@@ -39,11 +39,12 @@ use super::{
     },
     RoutingContext,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-    runtime::Runtime,
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+        runtime::Runtime,
+    },
 };
 
 mod client;
@@ -219,7 +220,6 @@ pub(crate) trait HatPubSubTrait {
         source_type: WhatAmI,
     ) -> Arc<Route>;
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,
@@ -261,7 +261,6 @@ pub(crate) trait HatQueriesTrait {
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
 
-    #[zenoh_macros::unstable]
     fn get_matching_queryables(
         &self,
         tables: &Tables,
