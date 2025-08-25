@@ -12,17 +12,17 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenohd"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenohd"
 readme = "README.md"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -31,20 +31,20 @@ shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
-zenoh-util = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 zenoh = { workspace = true, default-features = false, features = [
-  "unstable",
   "internal",
+  "internal_config",
   "plugins",
   "runtime_plugins",
-  "internal_config",
+  "unstable",
 ] }
 zenoh-config = { workspace = true }
+zenoh-util = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -53,18 +53,18 @@ rand = { workspace = true, features = ["default"] }
 rustc_version = { workspace = true }
 
 [package.metadata.deb]
-name = "zenohd"
-maintainer = "zenoh-dev@eclipse.org"
-copyright = "2024 ZettaScale Technology"
-section = "net"
-license-file = ["../LICENSE", "0"]
-depends = "$auto"
-maintainer-scripts = ".deb"
 assets = [
   # binary
-  ["target/release/zenohd", "/usr/bin/", "755"],
+  { source = "target/release/zenohd", dest = "/usr/bin/", mode = "755" },
   # config
-  [".service/zenohd.json5", "/etc/zenohd/", "644"],
+  { source = ".service/zenohd.json5", dest = "/etc/zenohd/", mode = "644" },
   # service
-  [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
+  { source = ".service/zenohd.service", dest = "/lib/systemd/system/zenohd.service", mode = "644" },
 ]
+copyright = "2024 ZettaScale Technology"
+depends = "$auto"
+license-file = ["../LICENSE", "0"]
+maintainer = "zenoh-dev@eclipse.org"
+maintainer-scripts = ".deb"
+name = "zenohd"
+section = "net"

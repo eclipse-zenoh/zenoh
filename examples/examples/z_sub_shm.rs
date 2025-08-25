@@ -65,7 +65,7 @@ fn parse_args() -> (Config, KeyExpr<'static>) {
     (args.common.into(), args.key)
 }
 
-fn handle_bytes(bytes: &mut ZBytes) -> (&str, Cow<str>) {
+fn handle_bytes(bytes: &mut ZBytes) -> (&str, Cow<'_, str>) {
     // Determine buffer type for indication purpose
     let bytes_type = {
         // if Zenoh is built without SHM support, the only buffer type it can receive is RAW

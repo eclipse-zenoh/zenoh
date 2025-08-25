@@ -12,31 +12,37 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-link-unixsock_stream"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = [
-  "kydos <angelo@icorsaro.net>",
+  "Gabriele Baldoni <gabriele.baldoni@zettascale.tech>",
   "Julien Enoch <julien@enoch.fr>",
-  "Olivier Hécart <olivier.hecart@zettascale.tech>",
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Olivier Hécart <olivier.hecart@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
-  "Gabriele Baldoni <gabriele.baldoni@zettascale.tech>"
+  "kydos <angelo@icorsaro.net>",
 ]
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-link-unixsock_stream"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = { workspace = true }
-tracing = {workspace = true}
 nix = { workspace = true }
-tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = [
+  "io-std",
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "time",
+] }
 tokio-util = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
 uuid = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }

@@ -18,18 +18,44 @@ description = "Internal crate for zenoh."
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-name = "zenoh-buffers"
+name = "zenoh-pinned-deps-1-75"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[features]
-default = ["std"]
-shared-memory = []
-std = []
-test = ["rand"]
+[badges]
+maintenance = { status = "actively-developed" }
 
 [dependencies]
-rand = { workspace = true, optional = true }
-zenoh-collections = { workspace = true, default-features = false }
+base64ct = "=1.6.0"
+home = "=0.5.9"
+jsonschema = { version = "=0.20.0", default-features = false }
+librocksdb-sys = "=0.17.1"
+lz4_flex = "=0.11.3"
+pest = "=2.7.12"
+pest_derive = "=2.7.12"
+pest_generator = "=2.7.12"
+pest_meta = "=2.7.12"
+rocksdb = "=0.23.0"
+static_init = "=1.0.3"
+thiserror = "=1.0.69"
+twox-hash = "=1.6.3"
+url = "=2.5.2"
+
+[package.metadata.cargo-machete]
+ignored = [
+  "base64ct",
+  "home",
+  "jsonschema",
+  "librocksdb-sys",
+  "lz4_flex",
+  "pest",
+  "pest_derive",
+  "pest_generator",
+  "pest_meta",
+  "rocksdb",
+  "static_init",
+  "thiserror",
+  "twox-hash",
+  "url",
+]

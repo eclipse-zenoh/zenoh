@@ -91,7 +91,7 @@ pub(crate) trait InterceptorContext {
     fn face(&self) -> Option<Face>;
     fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str>;
     #[inline]
-    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr> {
+    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
         let full_expr = self.full_expr(msg)?;
         KeyExpr::new(full_expr).ok()
     }
@@ -200,7 +200,7 @@ impl InterceptorContext for ChainContext<'_> {
         self.ctx.full_expr(msg)
     }
 
-    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr> {
+    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
         self.ctx.full_keyexpr(msg)
     }
 
@@ -208,38 +208,6 @@ impl InterceptorContext for ChainContext<'_> {
         let caches = self.ctx.get_cache(msg)?;
         let caches = caches.downcast_ref::<Vec<Option<Box<dyn Any + Send + Sync>>>>()?;
         caches[self.index].as_ref()
-    }
-}
-
-pub(crate) enum ComputedOnMiss<'a> {
-    Hit(Option<&'a Box<dyn Any + Send + Sync>>),
-    Computed(Option<Box<dyn Any + Send + Sync>>),
-}
-
-impl ComputedOnMiss<'_> {
-    fn as_ref(&self) -> Option<&Box<dyn Any + Send + Sync>> {
-        match self {
-            ComputedOnMiss::Hit(cache) => *cache,
-            ComputedOnMiss::Computed(cache) => cache.as_ref(),
-        }
-    }
-}
-
-impl<'a> ComputedOnMiss<'a> {
-    pub(crate) fn new(
-        interceptor: &dyn InterceptorTrait,
-        msg: &mut NetworkMessageMut,
-        ctx: &'a mut dyn InterceptorContext,
-    ) -> Self {
-        match ctx.get_cache(msg) {
-            Some(cache) => ComputedOnMiss::Hit(Some(cache)),
-            None => {
-                let cache = ctx
-                    .full_keyexpr(msg)
-                    .and_then(|key_expr| interceptor.compute_keyexpr_cache(&key_expr));
-                ComputedOnMiss::Computed(cache)
-            }
-        }
     }
 }
 

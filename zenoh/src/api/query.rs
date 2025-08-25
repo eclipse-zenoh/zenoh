@@ -28,7 +28,11 @@ pub use zenoh_protocol::network::request::ext::QueryTarget;
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;
 
 use crate::api::{
-    bytes::ZBytes, encoding::Encoding, handlers::Callback, key_expr::KeyExpr, sample::Sample,
+    bytes::ZBytes,
+    encoding::Encoding,
+    handlers::{Callback, CallbackParameter},
+    key_expr::KeyExpr,
+    sample::Sample,
     selector::Selector,
 };
 
@@ -165,6 +169,14 @@ impl Reply {
     }
 }
 
+impl CallbackParameter for Reply {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
+
 impl From<Reply> for Result<Sample, ReplyError> {
     fn from(value: Reply) -> Self {
         value.into_result()
@@ -185,7 +197,7 @@ pub(crate) struct QueryState {
 }
 
 impl QueryState {
-    pub(crate) fn selector(&self) -> Selector {
+    pub(crate) fn selector(&self) -> Selector<'_> {
         Selector::borrowed(&self.key_expr, &self.parameters)
     }
 }
