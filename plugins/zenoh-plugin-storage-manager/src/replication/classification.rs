@@ -414,7 +414,7 @@ impl SubInterval {
     /// `Older` is returned.
     ///
     /// If this SubInterval contains no Event with the same key expression, `NotFound` is returned.
-    pub(crate) fn lookup(&self, event_to_lookup: &EventMetadata) -> EventLookup {
+    pub(crate) fn lookup(&self, event_to_lookup: &EventMetadata) -> EventLookup<'_> {
         match self.events.get(&event_to_lookup.log_key()) {
             Some(event) => {
                 if event.timestamp >= event_to_lookup.timestamp {

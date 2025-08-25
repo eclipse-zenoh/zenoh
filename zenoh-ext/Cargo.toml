@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-ext"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
-authors = ["kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>"]
-edition = { workspace = true }
-license = { workspace = true }
+authors = ["Julien Enoch <julien@enoch.fr>", "kydos <angelo@icorsaro.net>"]
 categories = { workspace = true }
 description = "Zenoh: extensions to the client API."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-ext"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [badges]
 maintenance = { status = "actively-developed" }
@@ -29,31 +29,31 @@ maintenance = { status = "actively-developed" }
 [features]
 default = ["zenoh/default"]
 internal = []
-unstable = ["zenoh/unstable", "zenoh/internal"]
+unstable = ["zenoh/internal", "zenoh/unstable"]
 
 [dependencies]
+async-trait = { workspace = true }
+bincode = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+leb128 = { workspace = true }
+serde = { workspace = true, features = ["default"] }
 tokio = { workspace = true, features = [
+  "io-std",
+  "macros",
   "rt",
   "sync",
   "time",
-  "macros",
-  "io-std",
 ] }
-async-trait = { workspace = true }
-bincode = { workspace = true }
-zenoh-util = { workspace = true }
-flume = { workspace = true }
-futures = { workspace = true }
 tracing = { workspace = true }
-serde = { workspace = true, features = ["default"] }
-leb128 = { workspace = true }
 uhlc = { workspace = true }
 zenoh = { workspace = true, default-features = false }
 zenoh-macros = { workspace = true }
+zenoh-util = { workspace = true }
 
 [dev-dependencies]
-zenoh-config = { workspace = true }
 rand = { workspace = true }
+zenoh-config = { workspace = true }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

@@ -33,10 +33,10 @@ use super::{canon::Canonize, OwnedKeyExpr, OwnedNonWildKeyExpr};
 ///
 /// The exact key expression specification can be found [here](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md). Here are the major lines:
 /// * Key expressions are conceptually a `/`-separated list of UTF-8 string typed chunks. These chunks are not allowed to be empty.
-/// * Key expressions must be valid UTF-8 strings.  
+/// * Key expressions must be valid UTF-8 strings.
 ///   Be aware that Zenoh does not perform UTF normalization for you, so get familiar with that concept if your key expression contains glyphs that may have several unicode representation, such as accented characters.
 /// * Key expressions may never start or end with `'/'`, nor contain `"//"` or any of the following characters: `#$?`
-/// * Key expression must be in canon-form (this ensure that key expressions representing the same set are always the same string).  
+/// * Key expression must be in canon-form (this ensure that key expressions representing the same set are always the same string).
 ///   Note that safe constructors will perform canonization for you if this can be done without extraneous allocations.
 ///
 /// Since Key Expressions define sets of keys, you may want to be aware of the hierarchy of [relations](keyexpr::relation_to) between such sets:
@@ -435,10 +435,10 @@ impl keyexpr {
 
     #[cfg(feature = "internal")]
     #[doc(hidden)]
-    pub const fn chunks(&self) -> Chunks {
+    pub const fn chunks(&self) -> Chunks<'_> {
         self.chunks_impl()
     }
-    pub(crate) const fn chunks_impl(&self) -> Chunks {
+    pub(crate) const fn chunks_impl(&self) -> Chunks<'_> {
         Chunks {
             inner: self.as_str(),
         }
@@ -454,13 +454,13 @@ impl keyexpr {
     pub(crate) fn first_byte(&self) -> u8 {
         unsafe { *self.as_bytes().get_unchecked(0) }
     }
-    pub(crate) fn iter_splits_ltr(&self) -> SplitsLeftToRight {
+    pub(crate) fn iter_splits_ltr(&self) -> SplitsLeftToRight<'_> {
         SplitsLeftToRight {
             inner: self,
             index: 0,
         }
     }
-    pub(crate) fn iter_splits_rtl(&self) -> SplitsRightToLeft {
+    pub(crate) fn iter_splits_rtl(&self) -> SplitsRightToLeft<'_> {
         SplitsRightToLeft {
             inner: self,
             index: self.len(),
