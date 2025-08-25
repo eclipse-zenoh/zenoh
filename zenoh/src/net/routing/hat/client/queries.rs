@@ -407,16 +407,9 @@ impl HatQueriesTrait for HatCode {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for (sid, context) in &mres.session_ctxs {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                if let Some(qabl_info) = context.qabl.as_ref() {
-                    route.push(QueryTargetQabl {
-                        direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
-                        info: Some(QueryableInfoType {
-                            complete: complete && qabl_info.complete,
-                            distance: 1,
-                        }),
-                    });
+            for face_ctx in &mres.session_ctxs {
+                if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
+                    route.push(qabl);
                 }
             }
         }

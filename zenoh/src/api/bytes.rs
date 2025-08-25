@@ -113,7 +113,7 @@ impl ZBytes {
     /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
     /// will be done, that's why the method returns a [`Cow`].
     /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy.
-    pub fn to_bytes(&self) -> Cow<[u8]> {
+    pub fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.0.contiguous()
     }
 
@@ -123,7 +123,7 @@ impl ZBytes {
     /// will be done, that's why the method returns a [`Cow`].
     /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy, but then the UTF8
     /// check has to be done manually.
-    pub fn try_to_string(&self) -> Result<Cow<str>, Utf8Error> {
+    pub fn try_to_string(&self) -> Result<Cow<'_, str>, Utf8Error> {
         Ok(match self.to_bytes() {
             Cow::Borrowed(s) => std::str::from_utf8(s)?.into(),
             Cow::Owned(v) => String::from_utf8(v).map_err(|err| err.utf8_error())?.into(),
@@ -186,7 +186,7 @@ impl ZBytes {
     /// let out: Vec<u8> = zbytes.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
     /// // The previous line is the equivalent of
     /// // let out: Vec<u8> = zbs.into();
-    /// assert_eq!(buf, out);    
+    /// assert_eq!(buf, out);
     /// ```
     ///
     /// The example below shows how the [`ZBytesWriter::append`] simply appends the slices of one [`ZBytes`]
@@ -346,7 +346,7 @@ impl std::io::Write for ZBytesWriter {
 /// let out: Vec<u8> = zbytes.slices().fold(Vec::new(), |mut b, x| { b.extend_from_slice(x); b });
 /// // The previous line is the equivalent of
 /// // let out: Vec<u8> = zbs.into();
-/// assert_eq!(buf, out);    
+/// assert_eq!(buf, out);
 /// ```
 #[derive(Debug)]
 pub struct ZBytesSliceIterator<'a>(ZBytesSliceIteratorInner<'a>);

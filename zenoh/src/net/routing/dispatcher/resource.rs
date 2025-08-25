@@ -39,7 +39,10 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::{
+        face::{Face, FaceId},
+        tables::RoutingExpr,
+    },
     hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
@@ -55,6 +58,26 @@ pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
     pub(crate) info: Option<QueryableInfoType>,
 }
+
+impl QueryTargetQabl {
+    pub(crate) fn new(
+        (fid, ctx): (&FaceId, &Arc<SessionContext>),
+        expr: &mut RoutingExpr,
+        complete: bool,
+    ) -> Option<Self> {
+        let qabl = ctx.qabl?;
+        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+        Some(Self {
+            direction: (ctx.face.clone(), key_expr.to_owned(), NodeId::default()),
+            info: Some(QueryableInfoType {
+                complete: complete && qabl.complete,
+                // NOTE: local client faces are nearer than remote client faces
+                distance: if ctx.face.is_local { 0 } else { 1 },
+            }),
+        })
+    }
+}
+
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
 /// Helper struct to build route, handling face deduplication.

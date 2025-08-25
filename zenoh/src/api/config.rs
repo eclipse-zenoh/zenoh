@@ -222,18 +222,18 @@ impl Notifier<Config> {
         }
     }
 
-    pub fn lock(&self) -> MutexGuard<Config> {
+    pub fn lock(&self) -> MutexGuard<'_, Config> {
         self.lock_config()
     }
 
-    fn lock_subscribers(&self) -> MutexGuard<Vec<flume::Sender<Notification>>> {
+    fn lock_subscribers(&self) -> MutexGuard<'_, Vec<flume::Sender<Notification>>> {
         self.inner
             .subscribers
             .lock()
             .expect("acquiring Notifier's subscribers Mutex should not fail")
     }
 
-    fn lock_config(&self) -> MutexGuard<Config> {
+    fn lock_config(&self) -> MutexGuard<'_, Config> {
         self.inner
             .inner
             .lock()

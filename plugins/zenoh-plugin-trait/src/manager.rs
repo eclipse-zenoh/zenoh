@@ -313,7 +313,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
 impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> PluginControl
     for PluginsManager<StartArgs, Instance>
 {
-    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
         tracing::debug!(
             "Plugin manager with prefix `{}` : requested plugins_status {:?}",
             self.default_lib_prefix,

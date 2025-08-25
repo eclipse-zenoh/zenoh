@@ -122,7 +122,7 @@ pub struct NetworkMessageMut<'a> {
 
 pub trait NetworkMessageExt {
     #[doc(hidden)]
-    fn body(&self) -> NetworkBodyRef;
+    fn body(&self) -> NetworkBodyRef<'_>;
 
     #[doc(hidden)]
     fn reliability(&self) -> Reliability;
@@ -177,7 +177,7 @@ pub trait NetworkMessageExt {
     }
 
     #[inline]
-    fn wire_expr(&self) -> Option<&WireExpr> {
+    fn wire_expr(&self) -> Option<&WireExpr<'_>> {
         match &self.body() {
             NetworkBodyRef::Push(m) => Some(&m.wire_expr),
             NetworkBodyRef::Request(m) => Some(&m.wire_expr),
@@ -200,7 +200,7 @@ pub trait NetworkMessageExt {
     }
 
     #[inline]
-    fn as_ref(&self) -> NetworkMessageRef {
+    fn as_ref(&self) -> NetworkMessageRef<'_> {
         NetworkMessageRef {
             body: self.body(),
             reliability: self.reliability(),
@@ -225,7 +225,7 @@ pub trait NetworkMessageExt {
 }
 
 impl NetworkMessageExt for NetworkMessage {
-    fn body(&self) -> NetworkBodyRef {
+    fn body(&self) -> NetworkBodyRef<'_> {
         match &self.body {
             NetworkBody::Push(body) => NetworkBodyRef::Push(body),
             NetworkBody::Request(body) => NetworkBodyRef::Request(body),
@@ -243,7 +243,7 @@ impl NetworkMessageExt for NetworkMessage {
 }
 
 impl NetworkMessageExt for NetworkMessageRef<'_> {
-    fn body(&self) -> NetworkBodyRef {
+    fn body(&self) -> NetworkBodyRef<'_> {
         self.body
     }
 
@@ -253,7 +253,7 @@ impl NetworkMessageExt for NetworkMessageRef<'_> {
 }
 
 impl NetworkMessageExt for NetworkMessageMut<'_> {
-    fn body(&self) -> NetworkBodyRef {
+    fn body(&self) -> NetworkBodyRef<'_> {
         match &self.body {
             NetworkBodyMut::Push(body) => NetworkBodyRef::Push(body),
             NetworkBodyMut::Request(body) => NetworkBodyRef::Request(body),
@@ -291,7 +291,7 @@ impl NetworkMessage {
     }
 
     #[inline]
-    pub fn as_mut(&mut self) -> NetworkMessageMut {
+    pub fn as_mut(&mut self) -> NetworkMessageMut<'_> {
         let body = match &mut self.body {
             NetworkBody::Push(body) => NetworkBodyMut::Push(body),
             NetworkBody::Request(body) => NetworkBodyMut::Request(body),
@@ -310,7 +310,7 @@ impl NetworkMessage {
 
 impl NetworkMessageMut<'_> {
     #[inline]
-    pub fn as_mut(&mut self) -> NetworkMessageMut {
+    pub fn as_mut(&mut self) -> NetworkMessageMut<'_> {
         let body = match &mut self.body {
             NetworkBodyMut::Push(body) => NetworkBodyMut::Push(body),
             NetworkBodyMut::Request(body) => NetworkBodyMut::Request(body),

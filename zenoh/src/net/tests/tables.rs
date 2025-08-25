@@ -506,7 +506,7 @@ impl ClientPrimitives {
     }
 
     #[allow(dead_code)]
-    fn get_last_key(&self) -> Option<WireExpr> {
+    fn get_last_key(&self) -> Option<WireExpr<'_>> {
         self.data.lock().unwrap().as_ref().cloned()
     }
 }

@@ -12,23 +12,23 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-keyexpr"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-keyexpr"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["zenoh-result/std", "dep:schemars"]
 internal = []
-unstable = []
 js = ["getrandom/js"]
+std = ["dep:schemars", "zenoh-result/std"]
+unstable = []
 
 [dependencies]
 keyed-set = { workspace = true }
@@ -53,8 +53,8 @@ rand = { workspace = true, features = ["default"] }
 test-case = { workspace = true }
 
 [[bench]]
-name = "keyexpr_tree"
 harness = false
+name = "keyexpr_tree"
 
 # NOTE: for the above reason, we need to explicitly ignore getrandom in the CI because it's an indirect dependency which is not used directly by zenoh.
 [package.metadata.cargo-machete]

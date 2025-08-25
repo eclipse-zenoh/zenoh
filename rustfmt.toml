@@ -1,6 +1,6 @@
 edition = "2021"
-use_try_shorthand = true
 use_field_init_shorthand = true
+use_try_shorthand = true
 
 # Unstable features below
 # unstable_features = true

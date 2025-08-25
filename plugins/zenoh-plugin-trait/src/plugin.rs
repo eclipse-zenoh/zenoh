@@ -169,7 +169,7 @@ pub trait PluginControl {
     }
     /// Collects information of sub-plugins matching the `_names` key expression. The information is richer than the one returned by `report()`: it contains external information about the running plugin, such as its name, path on disk, load status, etc.
     /// Returns an empty list by default.
-    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
         Vec::new()
     }
 }

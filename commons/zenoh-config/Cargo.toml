@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-config"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-config"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 internal = []
@@ -29,23 +29,23 @@ transport_tcp = []
 unstable = ["zenoh-protocol/unstable"]
 
 [dependencies]
-tracing = { workspace = true }
 json5 = { workspace = true }
+nonempty-collections = { workspace = true }
 num_cpus = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 serde_yaml = { workspace = true }
+tracing = { workspace = true }
+uhlc = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
-nonempty-collections = {workspace = true }
 zenoh-core = { workspace = true }
 zenoh-keyexpr = { workspace = true }
+zenoh-macros = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-macros = { workspace = true }
-secrecy = { workspace = true }
-uhlc = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["tracing"]

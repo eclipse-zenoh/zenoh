@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-link-unixpipe"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-link-unixpipe"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -29,21 +29,21 @@ transport_unixpipe = []
 
 [dependencies]
 async-trait = { workspace = true }
-tracing = {workspace = true}
 rand = { workspace = true, features = ["default"] }
-zenoh-core = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "sync"] }
+tokio-util = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
 zenoh-config = { workspace = true }
+zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
-tokio = { workspace = true, features = ["sync", "fs", "io-util", "macros"] }
-tokio-util = { workspace = true, features = ["rt"] }
 
 [target.'cfg(unix)'.dependencies]
-unix-named-pipe = "0.2.0"
-nix = { workspace = true }
 filepath = "0.1.2"
+nix = { workspace = true }
+unix-named-pipe = "0.2.0"
 
 [target.'cfg(all(not(target_os="macos"), unix))'.dependencies]
 advisory-lock = { workspace = true }

@@ -540,9 +540,9 @@ impl FromStr for Reliability {
         } else if desc == Reliability::Reliable as u8 {
             Ok(Reliability::Reliable)
         } else {
-            return Err(InvalidReliability {
+            Err(InvalidReliability {
                 found: s.to_string(),
-            });
+            })
         }
     }
 }

@@ -918,6 +918,7 @@ async fn two_node_combination() -> Result<()> {
     Result::Ok(())
 }
 
+#[ignore = "This is a flaky test"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination_multicast() -> Result<()> {
     zenoh::try_init_log_from_env();

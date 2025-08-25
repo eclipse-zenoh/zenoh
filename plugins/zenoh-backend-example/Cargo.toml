@@ -12,12 +12,12 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-backend-example"
-version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+name = "zenoh-backend-example"
 publish = false
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 default = ["dynamic_plugin", "zenoh/default"]

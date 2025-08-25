@@ -79,7 +79,7 @@ impl ZBuf {
     }
 
     #[inline]
-    fn opt_zslice_writer(&mut self) -> Option<ZSliceWriter> {
+    fn opt_zslice_writer(&mut self) -> Option<ZSliceWriter<'_>> {
         self.slices.last_mut().and_then(|s| s.writer())
     }
 }

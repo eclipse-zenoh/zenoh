@@ -12,17 +12,17 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-name = "valgrind-check"
-version = "0.1.0"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-license = "EPL-2.0 OR Apache-2.0"
-edition = "2021"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
+edition = "2021"
+homepage = "http://zenoh.io"
+license = "EPL-2.0 OR Apache-2.0"
+name = "valgrind-check"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+version = "0.1.0"
 
 [dependencies]
-tokio = { version = "1.35.1", features = ["rt-multi-thread", "time", "io-std"] }
+tokio = { version = "1.35.1", features = ["io-std", "rt-multi-thread", "time"] }
 zenoh = { path = "../../zenoh/" }
 zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
 zenoh-util = { path = "../../commons/zenoh-util/", features = ["test"] }
@@ -36,4 +36,4 @@ name = "queryable_get"
 path = "src/queryable_get/bin/z_queryable_get.rs"
 
 [package.metadata.cargo-machete]
-ignored = ["base64ct", "zerofrom", "litemap"]
+ignored = ["base64ct", "litemap", "zerofrom"]
