@@ -25,7 +25,10 @@ use super::{
     zshm::{zshm, ZShm},
 };
 use crate::{
-    api::{buffer::traits::ShmBufUnsafeMut, provider::memory_layout::MemoryLayout},
+    api::{
+        buffer::traits::{ShmBufIntoImmut, ShmBufUnsafeMut},
+        provider::memory_layout::MemoryLayout,
+    },
     ShmBufInner,
 };
 
@@ -46,6 +49,14 @@ impl ShmBuf<[u8]> for ZShmMut {
 impl ShmBufUnsafeMut<[u8]> for ZShmMut {
     unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
         self.inner.as_mut_slice_inner()
+    }
+}
+
+impl ShmBufIntoImmut<[u8]> for ZShmMut {
+    type ImmutBuf = ZShm;
+
+    fn into_immut(self) -> Self::ImmutBuf {
+        self.into()
     }
 }
 
@@ -177,6 +188,22 @@ impl ShmBuf<[u8]> for &mut zshmmut {
 impl ShmBufUnsafeMut<[u8]> for &mut zshmmut {
     unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
         self.inner.as_mut_slice_inner()
+    }
+}
+
+impl<'a> ShmBufIntoImmut<[u8]> for &'a zshmmut {
+    type ImmutBuf = &'a zshm;
+
+    fn into_immut(self) -> Self::ImmutBuf {
+        self.into()
+    }
+}
+
+impl<'a> ShmBufIntoImmut<[u8]> for &'a mut zshmmut {
+    type ImmutBuf = &'a mut zshm;
+
+    fn into_immut(self) -> Self::ImmutBuf {
+        self.into()
     }
 }
 

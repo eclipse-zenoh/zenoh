@@ -16,6 +16,20 @@ use std::{fmt::Display, marker::PhantomData, num::NonZeroUsize};
 
 use crate::api::provider::types::{AllocAlignment, ZLayoutError};
 
+/// A trait for types that can represent an allocation layout to be used for buffer allocation requests.
+#[zenoh_macros::unstable_doc]
+pub trait BufferLayout {}
+impl<T: MemLayout> BufferLayout for T {}
+impl<T> BufferLayout for LayoutForType<T> {}
+
+/// A trait for types that can represent a memory layout.
+#[zenoh_macros::unstable_doc]
+pub trait MemLayout {}
+impl<T: TryIntoMemoryLayout> MemLayout for T {}
+impl MemLayout for MemoryLayout {}
+impl MemLayout for &MemoryLayout {}
+impl<T> MemLayout for StaticLayout<T> {}
+
 #[zenoh_macros::unstable_doc]
 pub trait TryIntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
 impl<T> TryIntoMemoryLayout for T where T: TryInto<MemoryLayout, Error = ZLayoutError> {}

@@ -39,7 +39,10 @@ use crate::{
             PosixShmProviderBackend, PosixShmProviderBackendBuilder,
         },
         provider::{
-            memory_layout::{LayoutForType, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
+            memory_layout::{
+                BufferLayout, LayoutForType, MemLayout, MemoryLayout, StaticLayout,
+                TryIntoMemoryLayout,
+            },
             types::{TypedBufAllocResult, TypedBufLayoutAllocResult},
         },
     },
@@ -952,7 +955,9 @@ impl ShmProviderBuilder {
 
     /// Set the default backend
     #[zenoh_macros::unstable_doc]
-    pub fn default_backend<What>(what: What) -> ShmProviderBuilderWithDefaultBackend<What> {
+    pub fn default_backend<What: MemLayout>(
+        what: What,
+    ) -> ShmProviderBuilderWithDefaultBackend<What> {
         ShmProviderBuilderWithDefaultBackend { what }
     }
 }
@@ -984,17 +989,17 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct ShmProviderBuilderWithDefaultBackend<What> {
+pub struct ShmProviderBuilderWithDefaultBackend<What: MemLayout> {
     what: What,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<What> Resolvable for ShmProviderBuilderWithDefaultBackend<What> {
+impl<What: MemLayout> Resolvable for ShmProviderBuilderWithDefaultBackend<What> {
     type To = ZResult<ShmProvider<PosixShmProviderBackend>>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<What> Wait for ShmProviderBuilderWithDefaultBackend<What>
+impl<What: MemLayout> Wait for ShmProviderBuilderWithDefaultBackend<What>
 where
     PosixShmProviderBackendBuilder<What>: Resolvable<To = ZResult<PosixShmProviderBackend>> + Wait,
 {
@@ -1028,7 +1033,7 @@ where
 {
     /// Rich interface for making allocations
     #[zenoh_macros::unstable_doc]
-    pub fn alloc<'a, What>(&'a self, what: What) -> AllocBuilder<'a, Backend, What> {
+    pub fn alloc<'a, What: BufferLayout>(&'a self, what: What) -> AllocBuilder<'a, Backend, What> {
         AllocBuilder::new(self, what)
     }
 

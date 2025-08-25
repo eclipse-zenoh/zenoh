@@ -67,3 +67,11 @@ pub trait OwnedShmBuf<T: ?Sized>: ShmBuf<T> {
     #[zenoh_macros::unstable_doc]
     fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError>;
 }
+
+#[zenoh_macros::unstable_doc]
+pub trait ShmBufIntoImmut<T: ?Sized>: ShmBuf<T> {
+    type ImmutBuf: ShmBuf<T>;
+
+    #[zenoh_macros::unstable_doc]
+    fn into_immut(self) -> Self::ImmutBuf;
+}

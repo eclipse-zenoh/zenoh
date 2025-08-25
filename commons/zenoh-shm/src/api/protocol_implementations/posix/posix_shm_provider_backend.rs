@@ -34,7 +34,7 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
-        memory_layout::{MemoryLayout, StaticLayout, TryIntoMemoryLayout},
+        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
         shm_provider_backend::ShmProviderBackend,
         types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
@@ -66,7 +66,7 @@ impl PartialEq for Chunk {
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBuilder<Layout> {
+pub struct PosixShmProviderBackendBuilder<Layout: MemLayout> {
     layout: Layout,
 }
 
@@ -120,7 +120,7 @@ pub struct PosixShmProviderBackend {
 impl PosixShmProviderBackend {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder<Layout>(layout: Layout) -> PosixShmProviderBackendBuilder<Layout> {
+    pub fn builder<Layout: MemLayout>(layout: Layout) -> PosixShmProviderBackendBuilder<Layout> {
         PosixShmProviderBackendBuilder { layout }
     }
 

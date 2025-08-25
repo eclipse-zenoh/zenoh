@@ -23,7 +23,7 @@ use zenoh_result::{IError, ZResult};
 use crate::{
     api::{
         buffer::{
-            traits::{ResideInShm, ShmBuf, ShmBufMut, ShmBufUnsafeMut},
+            traits::{ResideInShm, ShmBuf, ShmBufIntoImmut, ShmBufMut, ShmBufUnsafeMut},
             zshm::{zshm, ZShm},
             zshmmut::{zshmmut, ZShmMut},
         },
@@ -252,6 +252,17 @@ impl<T: ResideInShm, Tbuf: ShmBufMut<[u8]>> ShmBufMut<T> for Typed<T, Tbuf> {}
 impl<T: ResideInShm, Tbuf: ShmBufUnsafeMut<[u8]>> ShmBufUnsafeMut<T> for Typed<T, Tbuf> {
     unsafe fn as_mut_unchecked(&mut self) -> &mut T {
         &mut *(self.buf.as_mut_unchecked().as_mut_ptr() as *mut T)
+    }
+}
+
+impl<T: ResideInShm, Tbuf: ShmBufIntoImmut<[u8]>> ShmBufIntoImmut<T> for Typed<T, Tbuf> {
+    type ImmutBuf = Typed<T, Tbuf::ImmutBuf>;
+
+    fn into_immut(self) -> Self::ImmutBuf {
+        Typed {
+            buf: self.buf.into_immut(),
+            _phantom: PhantomData,
+        }
     }
 }
 
