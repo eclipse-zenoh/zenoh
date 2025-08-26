@@ -850,6 +850,7 @@ fn get_best_key_test() {
         Resource::get_resource(&root, resource)
             .unwrap()
             .get_best_key(suffix, face.state.id)
+            .0
     };
 
     register_expr(&face1, 1, "a");
