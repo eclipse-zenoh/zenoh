@@ -224,14 +224,24 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
+      - name: Run tests stable (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo cargo nextest run -p zenoh -F internal_config
+
       - name: Run tests stable
+        if: ${{ matrix.os != 'macos-latest' }}
         run: cargo nextest run -p zenoh -F internal_config
 
+      - name: Run tests with unstable (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
       - name: Run tests with unstable
+        if: ${{ matrix.os != 'macos-latest' }}
         run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
+        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
