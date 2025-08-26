@@ -26,7 +26,7 @@ use api::{
         zshmmut::{zshmmut, ZShmMut},
     },
     common::types::ProtocolID,
-    provider::types::MemoryLayout,
+    provider::memory_layout::MemoryLayout,
 };
 use metadata::descriptor::MetadataDescriptor;
 use watchdog::confirmator::ConfirmedDescriptor;
@@ -280,15 +280,21 @@ impl ZSliceBuffer for ShmBufInner {
     }
 }
 
+impl ZShm {
+    pub(crate) fn new(inner: ShmBufInner) -> Self {
+        Self { inner }
+    }
+}
+
 impl From<ShmBufInner> for ZShm {
     fn from(value: ShmBufInner) -> Self {
-        Self(value)
+        Self::new(value)
     }
 }
 
 impl ZShmMut {
-    pub(crate) unsafe fn new_unchecked(data: ShmBufInner) -> Self {
-        Self(data)
+    pub(crate) unsafe fn new_unchecked(inner: ShmBufInner) -> Self {
+        Self { inner }
     }
 }
 
@@ -297,7 +303,8 @@ impl TryFrom<ShmBufInner> for ZShmMut {
 
     fn try_from(value: ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
-            true => Ok(Self(value)),
+            // SAFETY: we checked above
+            true => Ok(unsafe { Self::new_unchecked(value) }),
             false => Err(value),
         }
     }
@@ -320,7 +327,7 @@ impl From<&ShmBufInner> for &zshm {
     fn from(value: &ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to ShmBufInner type, so it is safe to transmute them in any direction
-        unsafe { core::mem::transmute(value) }
+        unsafe { core::mem::transmute::<&ShmBufInner, &zshm>(value) }
     }
 }
 
@@ -328,6 +335,6 @@ impl From<&mut ShmBufInner> for &mut zshm {
     fn from(value: &mut ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
         // to ShmBufInner type, so it is safe to transmute them in any direction
-        unsafe { core::mem::transmute(value) }
+        unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshm>(value) }
     }
 }

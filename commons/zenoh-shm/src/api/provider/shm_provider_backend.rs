@@ -13,9 +13,9 @@
 //
 use super::{
     chunk::ChunkDescriptor,
-    types::{ChunkAllocResult, MemoryLayout, ZLayoutError},
+    types::{ChunkAllocResult, ZLayoutError},
 };
-use crate::api::common::with_id::WithProtocolID;
+use crate::api::{common::with_id::WithProtocolID, provider::memory_layout::MemoryLayout};
 
 /// The provider backend trait
 /// Implement this interface to create a Zenoh-compatible shared memory provider
