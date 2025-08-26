@@ -115,7 +115,7 @@ lazy_static = "1.5.0"
 leb128 = "0.2.5"
 libc = "0.2.172"
 libloading = "0.8.8"
-lz4_flex = "0.11.5"
+lz4_flex = "0.11.3"
 nix = { version = "0.30.1", features = ["fs"] }
 nonempty-collections = { version = "0.3.0", features = ["serde"] }
 num-traits = { version = "0.2.19", default-features = false }
