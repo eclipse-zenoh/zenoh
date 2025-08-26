@@ -644,9 +644,10 @@ impl HatQueriesTrait for HatCode {
                     .values()
                     .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
                 {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    let (wire_expr, full_expr, cache) =
+                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.push(QueryTargetQabl {
-                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                        direction: (face.clone(), wire_expr, full_expr, cache, NodeId::default()),
                         info: None,
                     });
                 }
@@ -656,9 +657,10 @@ impl HatQueriesTrait for HatCode {
                 f.whatami == WhatAmI::Peer
                     && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                let (wire_expr, full_expr, cache) =
+                    Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                 route.push(QueryTargetQabl {
-                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
+                    direction: (face.clone(), wire_expr, full_expr, cache, NodeId::default()),
                     info: None,
                 });
             }

@@ -448,7 +448,7 @@ fn propagate_forget_simple_token(
                         body: DeclareBody::UndeclareToken(UndeclareToken {
                             id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
                             ext_wire_expr: WireExprType {
-                                wire_expr: Resource::get_best_key(res, "", face.id),
+                                wire_expr: Resource::get_best_key(res, "", face.id).0,
                             },
                         }),
                     },
@@ -510,7 +510,7 @@ fn propagate_forget_simple_token(
                                 body: DeclareBody::UndeclareToken(UndeclareToken {
                                     id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
                                     ext_wire_expr: WireExprType {
-                                        wire_expr: Resource::get_best_key(&res, "", face.id),
+                                        wire_expr: Resource::get_best_key(&res, "", face.id).0,
                                     },
                                 }),
                             },
@@ -918,7 +918,7 @@ pub(super) fn token_linkstate_change(
                 .collect::<Vec<Arc<Resource>>>();
             for res in to_forget {
                 if let Some(id) = face_hat_mut!(&mut src_face).local_tokens.remove(&res) {
-                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                    let (wire_expr, _, _) = Resource::get_best_key(&res, "", src_face.id);
                     send_declare(
                         &src_face.primitives,
                         RoutingContext::with_expr(
