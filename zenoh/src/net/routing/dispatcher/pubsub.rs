@@ -358,13 +358,13 @@ impl InterceptorContext for PushOutContext<'_> {
     }
 
     fn full_expr(&self, _msg: &NetworkMessageMut) -> Option<&str> {
-        Some(&self.expr)
+        Some(self.expr)
     }
 
     fn get_cache(&self, _msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
         if self.cache.get().is_none() {
             let key_expr =
-                (!self.expr.is_empty()).then(|| unsafe { keyexpr::from_str_unchecked(&self.expr) });
+                (!self.expr.is_empty()).then(|| unsafe { keyexpr::from_str_unchecked(self.expr) });
             self.cache
                 .set(self.interceptor_cache?.value(self.interceptor, key_expr)?)
                 .ok();
@@ -411,7 +411,7 @@ pub fn route_data(
     intercept_in: bool,
 ) {
     let tables = zread!(tables_ref.tables);
-    match tables.get_mapping(&face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
+    match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::trace!(
                 "{} Route data for res {}{}",
@@ -419,10 +419,10 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-            if intercept_in && !in_intercept(face, msg, &mut reliability, &prefix) {
+            if intercept_in && !in_intercept(face, msg, &mut reliability, prefix) {
                 return;
             }
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            let mut expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
             let admin = expr.full_expr().starts_with("@/");
@@ -434,7 +434,7 @@ pub fn route_data(
             }
 
             if tables_ref.hat_code.ingress_filter(&tables, face, &mut expr) {
-                let res = Resource::get_resource(&prefix, expr.suffix);
+                let res = Resource::get_resource(prefix, expr.suffix);
 
                 let route = get_data_route(
                     tables_ref.hat_code.as_ref(),
@@ -498,9 +498,7 @@ pub fn route_data(
                                 wire_expr: wire_expr.clone(),
                                 ext_qos: msg.ext_qos,
                                 ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType {
-                                    node_id: context.clone(),
-                                },
+                                ext_nodeid: ext::NodeIdType { node_id: *context },
                                 payload: msg.payload.clone(),
                             };
                             if out_intercept(
