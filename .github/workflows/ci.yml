@@ -224,21 +224,44 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
+      - name: Run tests stable (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo cargo nextest run -p zenoh -F internal_config
+
       - name: Run tests stable
+        if: ${{ matrix.os != 'macos-latest' }}
         run: cargo nextest run -p zenoh -F internal_config
 
+      - name: Run tests with unstable (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
       - name: Run tests with unstable
+        if: ${{ matrix.os != 'macos-latest' }}
         run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Rename junit test report (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
+
       - name: Rename junit test report
+        if: ${{ matrix.os != 'macos-latest' }}
         run: mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
 
+      - name: Run tests with SHM (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
       - name: Run tests with SHM
-        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
+        if: ${{ matrix.os == 'windows-latest' }}
         run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Rename junit test report (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
+
       - name: Rename junit test report
-        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'windows-latest' }}
+        if: ${{ matrix.os == 'windows-latest' }}
         run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
 
       - name: Run tests with SHM + unixpipe
