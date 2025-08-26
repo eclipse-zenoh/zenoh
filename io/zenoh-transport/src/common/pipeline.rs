@@ -49,12 +49,16 @@ use super::{
 };
 use crate::common::batch::BatchConfig;
 
+// Batches are moved all over the pipeline and are quite big (56B+), so they are boxed to optimize
+// the moves. They are always reused, so there is no allocation performance penalty.
+type BoxedWBatch = Box<WBatch>;
+
 const RBLEN: usize = QueueSizeConf::MAX;
 
 // Inner structure to reuse serialization batches
 struct StageInRefill {
     n_ref_r: Waiter,
-    s_ref_r: RingBufferReader<WBatch, RBLEN>,
+    s_ref_r: RingBufferReader<BoxedWBatch, RBLEN>,
     batch_config: (usize, BatchConfig),
     batch_allocs: usize,
 }
@@ -69,12 +73,12 @@ impl fmt::Display for TransportClosed {
 impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
-    fn pull(&mut self) -> Option<WBatch> {
+    fn pull(&mut self) -> Option<BoxedWBatch> {
         match self.s_ref_r.pull() {
             Some(b) => Some(b),
             None if self.batch_allocs < self.batch_config.0 => {
                 self.batch_allocs += 1;
-                Some(WBatch::new(self.batch_config.1))
+                Some(Box::new(WBatch::new(self.batch_config.1)))
             }
             None => None,
         }
@@ -109,7 +113,7 @@ struct AtomicBackoff {
 // Inner structure to link the initial stage with the final stage of the pipeline
 struct StageInOut {
     n_out_w: Notifier,
-    s_out_w: RingBufferWriter<WBatch, RBLEN>,
+    s_out_w: RingBufferWriter<BoxedWBatch, RBLEN>,
     atomic_backoff: Arc<AtomicBackoff>,
 }
 
@@ -123,7 +127,7 @@ impl StageInOut {
     }
 
     #[inline]
-    fn move_batch(&mut self, batch: WBatch) {
+    fn move_batch(&mut self, batch: BoxedWBatch) {
         let _ = self.s_out_w.push(batch);
         self.atomic_backoff.bytes.store(0, Ordering::Relaxed);
         let _ = self.n_out_w.notify();
@@ -131,7 +135,7 @@ impl StageInOut {
 }
 
 struct Current {
-    batch: Option<WBatch>,
+    batch: Option<BoxedWBatch>,
     status: Arc<TransmissionPipelineStatus>,
     prioflag: u8,
 }
@@ -414,7 +418,7 @@ impl StageIn {
                     tch.sn.set(sn).unwrap()
                 // Otherwise, an ephemeral batch is created to send the stop fragment
                 } else {
-                    let mut batch = WBatch::new_ephemeral(self.batch_config);
+                    let mut batch = Box::new(WBatch::new_ephemeral(self.batch_config));
                     self.fragbuf.clear();
                     fragment.ext_drop = Some(fragment::ext::Drop::new());
                     let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
@@ -522,7 +526,7 @@ impl StageIn {
 
 // The result of the pull operation
 enum Pull {
-    Some(WBatch),
+    Some(BoxedWBatch),
     None,
     Backoff(MicroSeconds),
 }
@@ -549,7 +553,7 @@ impl Backoff {
 
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
-    s_out_r: RingBufferReader<WBatch, RBLEN>,
+    s_out_r: RingBufferReader<BoxedWBatch, RBLEN>,
     current: Arc<Mutex<Current>>,
     backoff: Backoff,
 }
@@ -626,11 +630,11 @@ impl StageOutIn {
 
 struct StageOutRefill {
     n_ref_w: Notifier,
-    s_ref_w: RingBufferWriter<WBatch, RBLEN>,
+    s_ref_w: RingBufferWriter<BoxedWBatch, RBLEN>,
 }
 
 impl StageOutRefill {
-    fn refill(&mut self, batch: WBatch) {
+    fn refill(&mut self, batch: BoxedWBatch) {
         assert!(self.s_ref_w.push(batch).is_none());
         let _ = self.n_ref_w.notify();
     }
@@ -648,11 +652,11 @@ impl StageOut {
     }
 
     #[inline]
-    fn refill(&mut self, batch: WBatch) {
+    fn refill(&mut self, batch: BoxedWBatch) {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<WBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<BoxedWBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
@@ -710,12 +714,12 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
+            let (mut s_ref_w, s_ref_r) = RingBuffer::<BoxedWBatch, RBLEN>::init();
             let mut batch_allocs = 0;
             if *config.queue_alloc.mode() == QueueAllocMode::Init {
                 // Fill the refill ring buffer with batches
                 for _ in 0..*num {
-                    let batch = WBatch::new(config.batch);
+                    let batch = Box::new(WBatch::new(config.batch));
                     batch_allocs += 1;
                     assert!(s_ref_w.push(batch).is_none());
                 }
@@ -726,7 +730,7 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
+            let (s_out_w, s_out_r) = RingBuffer::<BoxedWBatch, RBLEN>::init();
             let current = Arc::new(Mutex::new(Current {
                 batch: None,
                 status: status.clone(),
@@ -932,7 +936,7 @@ pub(crate) struct TransmissionPipelineConsumer {
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
+    pub(crate) async fn pull(&mut self) -> Option<(BoxedWBatch, Priority)> {
         while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
@@ -980,14 +984,14 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
+    pub(crate) fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
         if !batch.is_ephemeral() {
             self.stage_out[priority as usize].refill(batch);
             self.status.set_congested(priority, false);
         }
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
+    pub(crate) fn drain(&mut self) -> Vec<(BoxedWBatch, usize)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
