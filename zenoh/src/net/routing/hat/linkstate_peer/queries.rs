@@ -715,10 +715,16 @@ fn insert_target_for_qabls(
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 if net.distances.len() > qabl_idx.index() {
-                                    let key_expr =
+                                    let (wire_expr, full_expr, cache) =
                                         Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                                     route.push(QueryTargetQabl {
-                                        direction: (face.clone(), key_expr.to_owned(), source),
+                                        direction: (
+                                            face.clone(),
+                                            wire_expr,
+                                            full_expr,
+                                            cache,
+                                            source,
+                                        ),
                                         info: Some(QueryableInfoType {
                                             complete: complete && qabl_info.complete,
                                             distance: net.distances[qabl_idx.index()] as u16,

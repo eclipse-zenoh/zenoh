@@ -653,9 +653,10 @@ impl HatPubSubTrait for HatCode {
                     .values()
                     .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
                 {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    let (wire_expr, full_expr, cache) =
+                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                     route.insert(face.id, || {
-                        (face.clone(), key_expr.to_owned(), NodeId::default())
+                        (face.clone(), wire_expr, full_expr, cache, NodeId::default())
                     });
                 }
             }
@@ -665,8 +666,9 @@ impl HatPubSubTrait for HatCode {
                     && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
             }) {
                 route.insert(face.id, || {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    (face.clone(), key_expr.to_owned(), NodeId::default())
+                    let (wire_expr, full_expr, cache) =
+                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    (face.clone(), wire_expr, full_expr, cache, NodeId::default())
                 });
             }
         }
@@ -686,17 +688,27 @@ impl HatPubSubTrait for HatCode {
                     && (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client)
                 {
                     route.insert(*sid, || {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                        let (wire_expr, full_expr, cache) =
+                            Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                        (
+                            context.face.clone(),
+                            wire_expr,
+                            full_expr,
+                            cache,
+                            NodeId::default(),
+                        )
                     });
                 }
             }
         }
         for mcast_group in &tables.mcast_groups {
             route.insert(mcast_group.id, || {
+                let full_expr = expr.full_expr().to_string();
                 (
                     mcast_group.clone(),
-                    expr.full_expr().to_string().into(),
+                    full_expr.clone().into(),
+                    full_expr,
+                    None,
                     NodeId::default(),
                 )
             });

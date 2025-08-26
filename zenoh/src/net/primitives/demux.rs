@@ -24,7 +24,7 @@ use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 
 use super::Primitives;
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::face::{Face, FaceState},
     interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     router::{InterceptorCacheValueType, Resource},
     RoutingContext,
@@ -72,8 +72,8 @@ impl DeMuxContext<'_> {
 }
 
 impl InterceptorContext for DeMuxContext<'_> {
-    fn face(&self) -> Option<Face> {
-        Some(self.demux.face.clone())
+    fn face(&self) -> Option<Arc<FaceState>> {
+        Some(self.demux.face.state.clone())
     }
 
     fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
@@ -92,7 +92,7 @@ impl InterceptorContext for DeMuxContext<'_> {
         if self.cache.get().is_none() && msg.wire_expr().is_some_and(|we| !we.has_suffix()) {
             if let Some(prefix) = self.prefix(msg) {
                 if let Some(cache) =
-                    prefix.get_ingress_cache(&self.demux.face, &self.demux.interceptor.load())
+                    prefix.get_ingress_cache(&self.demux.face.state, &self.demux.interceptor.load())
                 {
                     self.cache.set(cache).ok();
                 }
@@ -114,6 +114,7 @@ impl TransportPeerEventHandler for DeMux {
             };
 
             match &msg.body {
+                NetworkBodyMut::Push(_) => {}
                 NetworkBodyMut::Request(request) => {
                     let request_id = request.id;
                     if !interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext) {
@@ -154,7 +155,7 @@ impl TransportPeerEventHandler for DeMux {
         }
 
         match msg.body {
-            NetworkBodyMut::Push(m) => self.face.send_push(m, msg.reliability),
+            NetworkBodyMut::Push(m) => self.face.send_push_intercept(m, msg.reliability),
             NetworkBodyMut::Declare(m) => self.face.send_declare(m),
             NetworkBodyMut::Interest(m) => self.face.send_interest(m),
             NetworkBodyMut::Request(m) => self.face.send_request(m),

@@ -529,7 +529,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             ext_tstamp: None,
                         });
                 } else {
-                    for ((outface, key_expr, context), outqid) in route {
+                    for ((outface, wire_expr, _, _, context), outqid) in route {
                         QueryCleanup::spawn_query_clean_up_task(
                             &outface, tables_ref, outqid, timeout,
                         );
@@ -549,7 +549,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         );
                         outface.primitives.send_request(&mut Request {
                             id: outqid,
-                            wire_expr: key_expr,
+                            wire_expr,
                             ext_qos: msg.ext_qos,
                             ext_tstamp: msg.ext_tstamp,
                             ext_nodeid: ext::NodeIdType { node_id: context },

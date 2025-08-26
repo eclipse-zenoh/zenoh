@@ -12,12 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::Arc};
+use std::{any::Any, cell::OnceCell, collections::HashMap, sync::Arc};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WireExpr},
-    network::{declare::SubscriberId, push::ext, Push},
+    network::{
+        declare::SubscriberId, push::ext, NetworkBodyMut, NetworkMessageExt, NetworkMessageMut,
+        Push,
+    },
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
@@ -31,7 +34,8 @@ use crate::{
     key_expr::KeyExpr,
     net::routing::{
         hat::{HatTrait, SendDeclare},
-        router::get_or_set_route,
+        interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
+        router::{get_or_set_route, InterceptorCache, InterceptorCacheValueType},
     },
 };
 
@@ -280,17 +284,134 @@ macro_rules! inc_stats {
     };
 }
 
+struct PushInContext<'a> {
+    face: &'a Arc<FaceState>,
+    interceptor: &'a InterceptorsChain,
+    prefix: &'a Resource,
+    expr: OnceCell<String>,
+    cache: OnceCell<InterceptorCacheValueType>,
+}
+
+impl InterceptorContext for PushInContext<'_> {
+    fn face(&self) -> Option<Arc<FaceState>> {
+        Some(self.face.clone())
+    }
+
+    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
+        if self.expr.get().is_none() {
+            let full_expr = [self.prefix.expr(), &msg.wire_expr()?.suffix].concat();
+            self.expr.set(full_expr).ok();
+        }
+        self.expr.get().map(String::as_str)
+    }
+
+    fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
+        if self.cache.get().is_none() && msg.wire_expr().is_some_and(|we| !we.has_suffix()) {
+            self.cache
+                .set(self.prefix.get_ingress_cache(self.face, self.interceptor)?)
+                .ok();
+        }
+        self.cache.get().and_then(|c| c.get_ref().as_ref())
+    }
+}
+
+fn in_intercept(
+    face: &Arc<FaceState>,
+    msg: &mut Push,
+    reliability: &mut Reliability,
+    prefix: &Resource,
+) -> bool {
+    let Some(interceptor) = &face.in_interceptors else {
+        return true;
+    };
+    let interceptor = interceptor.load();
+    if interceptor.is_empty() {
+        return true;
+    }
+    let mut msg = NetworkMessageMut {
+        body: NetworkBodyMut::Push(msg),
+        reliability: *reliability,
+    };
+    let mut ctx = PushInContext {
+        face,
+        interceptor: &interceptor,
+        prefix,
+        expr: OnceCell::new(),
+        cache: OnceCell::new(),
+    };
+    let res = interceptor.intercept(&mut msg, &mut ctx);
+    *reliability = msg.reliability;
+    res
+}
+
+struct PushOutContext<'a> {
+    face: &'a Arc<FaceState>,
+    interceptor: &'a InterceptorsChain,
+    expr: &'a str,
+    interceptor_cache: Option<&'a InterceptorCache>,
+    cache: OnceCell<InterceptorCacheValueType>,
+}
+
+impl InterceptorContext for PushOutContext<'_> {
+    fn face(&self) -> Option<Arc<FaceState>> {
+        Some(self.face.clone())
+    }
+
+    fn full_expr(&self, _msg: &NetworkMessageMut) -> Option<&str> {
+        Some(self.expr)
+    }
+
+    fn get_cache(&self, _msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
+        if self.cache.get().is_none() {
+            let key_expr =
+                (!self.expr.is_empty()).then(|| unsafe { keyexpr::from_str_unchecked(self.expr) });
+            self.cache
+                .set(self.interceptor_cache?.value(self.interceptor, key_expr)?)
+                .ok();
+        }
+        self.cache.get().and_then(|c| c.get_ref().as_ref())
+    }
+}
+
+fn out_intercept(
+    face: &Arc<FaceState>,
+    msg: &mut Push,
+    reliability: &mut Reliability,
+    expr: &str,
+    interceptor_cache: Option<&InterceptorCache>,
+) -> bool {
+    let Some(interceptor) = &face.e_interceptors else {
+        return true;
+    };
+    let interceptor = interceptor.load();
+    if interceptor.is_empty() {
+        return true;
+    }
+    let mut msg = NetworkMessageMut {
+        body: NetworkBodyMut::Push(msg),
+        reliability: *reliability,
+    };
+    let mut ctx = PushOutContext {
+        face,
+        interceptor: &interceptor,
+        expr,
+        interceptor_cache,
+        cache: OnceCell::new(),
+    };
+    let res = interceptor.intercept(&mut msg, &mut ctx);
+    *reliability = msg.reliability;
+    res
+}
+
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
-    face: &FaceState,
+    face: &Arc<FaceState>,
     msg: &mut Push,
-    reliability: Reliability,
+    mut reliability: Reliability,
+    intercept_in: bool,
 ) {
     let tables = zread!(tables_ref.tables);
-    match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        .cloned()
-    {
+    match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::trace!(
                 "{} Route data for res {}{}",
@@ -298,7 +419,10 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            if intercept_in && !in_intercept(face, msg, &mut reliability, prefix) {
+                return;
+            }
+            let mut expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
             let admin = expr.full_expr().starts_with("@/");
@@ -310,7 +434,7 @@ pub fn route_data(
             }
 
             if tables_ref.hat_code.ingress_filter(&tables, face, &mut expr) {
-                let res = Resource::get_resource(&prefix, expr.suffix);
+                let res = Resource::get_resource(prefix, expr.suffix);
 
                 let route = get_data_route(
                     tables_ref.hat_code.as_ref(),
@@ -325,7 +449,8 @@ pub fn route_data(
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
-                        let (outface, key_expr, context) = route.iter().next().unwrap();
+                        let (outface, wire_expr, full_expr, cache, context) =
+                            route.iter().next().unwrap();
                         if tables_ref
                             .hat_code
                             .egress_filter(&tables, face, outface, &mut expr)
@@ -337,25 +462,31 @@ pub fn route_data(
                             } else {
                                 inc_stats!(outface, tx, admin, msg.payload);
                             }
-                            msg.wire_expr = key_expr.into();
+                            msg.wire_expr = wire_expr.clone();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            outface.primitives.send_push(msg, reliability);
-                            // Reset the wire_expr to indicate the message has been consumed
-                            msg.wire_expr = WireExpr::empty();
+                            if out_intercept(
+                                outface,
+                                msg,
+                                &mut reliability,
+                                full_expr,
+                                cache.as_ref(),
+                            ) {
+                                outface.primitives.send_push(msg, reliability);
+                                msg.wire_expr = WireExpr::empty();
+                            }
                         }
                     } else {
                         let route = route
                             .iter()
-                            .filter(|(outface, _key_expr, _context)| {
+                            .filter(|(outface, _wire_expr, _full_expr, _cache, _context)| {
                                 tables_ref
                                     .hat_code
                                     .egress_filter(&tables, face, outface, &mut expr)
                             })
-                            .cloned()
-                            .collect::<Vec<Direction>>();
+                            .collect::<Vec<&Direction>>();
 
                         drop(tables);
-                        for (outface, key_expr, context) in route {
+                        for (outface, wire_expr, full_expr, cache, context) in route {
                             #[cfg(feature = "stats")]
                             if !admin {
                                 inc_stats!(outface, tx, user, msg.payload)
@@ -363,16 +494,22 @@ pub fn route_data(
                                 inc_stats!(outface, tx, admin, msg.payload)
                             }
 
-                            outface.primitives.send_push(
-                                &mut Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
-                                },
-                                reliability,
-                            )
+                            let msg = &mut Push {
+                                wire_expr: wire_expr.clone(),
+                                ext_qos: msg.ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: *context },
+                                payload: msg.payload.clone(),
+                            };
+                            if out_intercept(
+                                outface,
+                                msg,
+                                &mut reliability,
+                                full_expr,
+                                cache.as_ref(),
+                            ) {
+                                outface.primitives.send_push(msg, reliability)
+                            }
                         }
                     }
                 }

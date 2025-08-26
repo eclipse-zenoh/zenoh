@@ -975,7 +975,7 @@ pub(super) fn queries_linkstate_change(
                 .collect::<Vec<Arc<Resource>>>();
             for res in to_forget {
                 if let Some((id, _)) = face_hat_mut!(&mut src_face).local_qabls.remove(&res) {
-                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                    let (wire_expr, _, _) = Resource::get_best_key(&res, "", src_face.id);
                     send_declare(
                         &src_face.primitives,
                         RoutingContext::with_expr(
@@ -1098,10 +1098,16 @@ fn insert_target_for_qabls(
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 if net.distances.len() > qabl_idx.index() {
-                                    let key_expr =
+                                    let (wire_expr, full_expr, cache) =
                                         Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                                     route.push(QueryTargetQabl {
-                                        direction: (face.clone(), key_expr.to_owned(), source),
+                                        direction: (
+                                            face.clone(),
+                                            wire_expr,
+                                            full_expr,
+                                            cache,
+                                            source,
+                                        ),
                                         info: Some(QueryableInfoType {
                                             complete: complete && qabl_info.complete,
                                             distance: net.distances[qabl_idx.index()] as u16,
