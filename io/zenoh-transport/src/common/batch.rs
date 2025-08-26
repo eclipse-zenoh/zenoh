@@ -171,22 +171,6 @@ pub enum Finalize {
     Buffer,
 }
 
-#[derive(Debug, Clone)]
-struct WBatchInner {
-    // The buffer to perform the batching on
-    buffer: BBuf,
-    // The batch codec
-    codec: Zenoh080Batch,
-    // It contains 1 byte as additional header, e.g. to signal the batch is compressed
-    config: BatchConfig,
-    // Statistics related to this batch
-    #[cfg(feature = "stats")]
-    stats: WBatchStats,
-    // an ephemeral batch will not be recycled in the pipeline
-    // it can be used to push a stop fragment when no batch are available
-    ephemeral: bool,
-}
-
 /// Write Batch
 ///
 /// A [`WBatch`] is a non-expandable and contiguous region of memory
@@ -207,19 +191,32 @@ struct WBatchInner {
 /// | Keep Alive | Frame Reliable\<Zenoh Message, Zenoh Message\> | Frame Best Effort\<Zenoh Message Fragment\> |
 ///
 /// [`NetworkMessage`]: zenoh_protocol::network::NetworkMessage
-#[derive(Debug, Clone)]
-pub struct WBatch(Box<WBatchInner>);
+#[derive(Clone, Debug)]
+pub struct WBatch {
+    // The buffer to perform the batching on
+    pub buffer: BBuf,
+    // The batch codec
+    pub codec: Zenoh080Batch,
+    // It contains 1 byte as additional header, e.g. to signal the batch is compressed
+    pub config: BatchConfig,
+    // Statistics related to this batch
+    #[cfg(feature = "stats")]
+    pub stats: WBatchStats,
+    // an ephemeral batch will not be recycled in the pipeline
+    // it can be used to push a stop fragment when no batch are available
+    pub ephemeral: bool,
+}
 
 impl WBatch {
     pub fn new(config: BatchConfig) -> Self {
-        let mut batch = Self(Box::new(WBatchInner {
+        let mut batch = Self {
             buffer: BBuf::with_capacity(config.mtu as usize),
             codec: Zenoh080Batch::new(),
             config,
             ephemeral: false,
             #[cfg(feature = "stats")]
             stats: WBatchStats::default(),
-        }));
+        };
 
         // Bring the batch in a clear state
         batch.clear();
@@ -228,22 +225,14 @@ impl WBatch {
     }
 
     pub fn new_ephemeral(config: BatchConfig) -> Self {
-        let mut batch = Self::new(config);
-        batch.0.ephemeral = true;
-        batch
+        Self {
+            ephemeral: true,
+            ..Self::new(config)
+        }
     }
 
     pub fn is_ephemeral(&self) -> bool {
-        self.0.ephemeral
-    }
-
-    pub fn codec(&self) -> &Zenoh080Batch {
-        &self.0.codec
-    }
-
-    #[cfg(feature = "stats")]
-    pub fn stats(&self) -> &WBatchStats {
-        &self.0.stats
+        self.ephemeral
     }
 
     /// Verify that the [`WBatch`] has no serialized bytes.
@@ -255,26 +244,26 @@ impl WBatch {
     /// Get the total number of bytes that have been serialized on the [`WBatch`].
     #[inline(always)]
     pub fn len(&self) -> BatchSize {
-        let (_l, _h, p) = Self::split(self.0.buffer.as_slice(), &self.0.config);
+        let (_l, _h, p) = Self::split(self.buffer.as_slice(), &self.config);
         p.len() as BatchSize
     }
 
     /// Clear the [`WBatch`] memory buffer and related internal state.
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.0.buffer.clear();
-        self.0.codec.clear();
+        self.buffer.clear();
+        self.codec.clear();
         #[cfg(feature = "stats")]
         {
-            self.0.stats.clear();
+            self.stats.clear();
         }
-        Self::init(&mut self.0.buffer, &self.0.config);
+        Self::init(&mut self.buffer, &self.config);
     }
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
     #[inline(always)]
     pub fn as_slice(&self) -> &[u8] {
-        self.0.buffer.as_slice()
+        self.buffer.as_slice()
     }
 
     fn init(buffer: &mut BBuf, config: &BatchConfig) {
@@ -307,7 +296,7 @@ impl WBatch {
         let mut res = Finalize::Batch;
 
         #[cfg(feature = "transport_compression")]
-        if let Some(h) = self.0.config.header() {
+        if let Some(h) = self.config.header() {
             if h.is_compression() {
                 let buffer = buffer
                     .as_mut()
@@ -316,15 +305,15 @@ impl WBatch {
             }
         }
 
-        if self.0.config.is_streamed {
+        if self.config.is_streamed {
             let buff = match res {
-                Finalize::Batch => self.0.buffer.as_mut_slice(),
+                Finalize::Batch => self.buffer.as_mut_slice(),
                 Finalize::Buffer => buffer
                     .as_mut()
                     .ok_or_else(|| zerror!("Support buffer not provided"))?
                     .as_mut_slice(),
             };
-            let (length, header, payload) = Self::split_mut(buff, &self.0.config);
+            let (length, header, payload) = Self::split_mut(buff, &self.config);
             let len: BatchSize = (header.len() as BatchSize) + (payload.len() as BatchSize);
             length.copy_from_slice(&len.to_le_bytes());
         }
@@ -336,10 +325,10 @@ impl WBatch {
     fn compress(&mut self, support: &mut BBuf) -> ZResult<Finalize> {
         // Write the initial bytes for the batch
         support.clear();
-        Self::init(support, &self.0.config);
+        Self::init(support, &self.config);
 
         // Compress the actual content
-        let (_length, _header, payload) = Self::split(self.0.buffer.as_slice(), &self.0.config);
+        let (_length, _header, payload) = Self::split(self.buffer.as_slice(), &self.config);
         let mut writer = support.writer();
         // SAFETY: assertion ensures `with_slot` precondition
         unsafe {
@@ -352,11 +341,11 @@ impl WBatch {
         .map_err(|_| zerror!("Compression error"))?;
 
         // Verify whether the resulting compressed data is smaller than the initial input
-        if support.len() < self.0.buffer.len() {
+        if support.len() < self.buffer.len() {
             Ok(Finalize::Buffer)
         } else {
             // Keep the original uncompressed buffer and unset the compression flag from the header
-            let (_l, h, _p) = Self::split_mut(self.0.buffer.as_mut_slice(), &self.0.config);
+            let (_l, h, _p) = Self::split_mut(self.buffer.as_mut_slice(), &self.config);
             let h = h.first_mut().ok_or_else(|| zerror!("Empty BatchHeader"))?;
             *h &= !BatchHeader::COMPRESSION;
             Ok(Finalize::Batch)
@@ -374,12 +363,12 @@ impl Encode<&TransportMessage> for &mut WBatch {
     type Output = Result<(), DidntWrite>;
 
     fn encode(self, x: &TransportMessage) -> Self::Output {
-        let mut writer = self.0.buffer.writer();
-        let res = self.0.codec.write(&mut writer, x);
+        let mut writer = self.buffer.writer();
+        let res = self.codec.write(&mut writer, x);
         #[cfg(feature = "stats")]
         {
             if res.is_ok() {
-                self.0.stats.t_msgs += 1;
+                self.stats.t_msgs += 1;
             }
         }
         res
@@ -390,8 +379,8 @@ impl Encode<NetworkMessageRef<'_>> for &mut WBatch {
     type Output = Result<(), BatchError>;
 
     fn encode(self, x: NetworkMessageRef) -> Self::Output {
-        let mut writer = self.0.buffer.writer();
-        self.0.codec.write(&mut writer, x)
+        let mut writer = self.buffer.writer();
+        self.codec.write(&mut writer, x)
     }
 }
 
@@ -399,12 +388,12 @@ impl Encode<(NetworkMessageRef<'_>, &FrameHeader)> for &mut WBatch {
     type Output = Result<(), BatchError>;
 
     fn encode(self, x: (NetworkMessageRef, &FrameHeader)) -> Self::Output {
-        let mut writer = self.0.buffer.writer();
-        let res = self.0.codec.write(&mut writer, x);
+        let mut writer = self.buffer.writer();
+        let res = self.codec.write(&mut writer, x);
         #[cfg(feature = "stats")]
         {
             if res.is_ok() {
-                self.0.stats.t_msgs += 1;
+                self.stats.t_msgs += 1;
             }
         }
         res
@@ -415,12 +404,12 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
     type Output = Result<NonZeroUsize, DidntWrite>;
 
     fn encode(self, x: (&mut ZBufReader<'_>, &mut FragmentHeader)) -> Self::Output {
-        let mut writer = self.0.buffer.writer();
-        let res = self.0.codec.write(&mut writer, x);
+        let mut writer = self.buffer.writer();
+        let res = self.codec.write(&mut writer, x);
         #[cfg(feature = "stats")]
         {
             if res.is_ok() {
-                self.0.stats.t_msgs += 1;
+                self.stats.t_msgs += 1;
             }
         }
         res

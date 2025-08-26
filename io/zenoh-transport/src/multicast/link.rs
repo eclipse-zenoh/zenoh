@@ -433,15 +433,15 @@ async fn tx_task(
                         // Send the buffer on the link
                         link.send_batch(&mut batch).await?;
                         // Keep track of next SNs
-                        if let Some(sn) = batch.codec().latest_sn.reliable {
+                        if let Some(sn) = batch.codec.latest_sn.reliable {
                             last_sns[priority as usize].reliable = sn;
                         }
-                        if let Some(sn) = batch.codec().latest_sn.best_effort {
+                        if let Some(sn) = batch.codec.latest_sn.best_effort {
                             last_sns[priority as usize].best_effort = sn;
                         }
                         #[cfg(feature = "stats")]
                         {
-                            stats.inc_tx_t_msgs(batch.stats().t_msgs);
+                            stats.inc_tx_t_msgs(batch.stats.t_msgs);
                             stats.inc_tx_bytes(batch.len() as usize);
                         }
                         // Reinsert the batch into the queue
@@ -463,7 +463,7 @@ async fn tx_task(
 
                             #[cfg(feature = "stats")]
                             {
-                                stats.inc_tx_t_msgs(b.stats().t_msgs);
+                                stats.inc_tx_t_msgs(b.stats.t_msgs);
                                 stats.inc_tx_bytes(b.len() as usize);
                             }
                         }
