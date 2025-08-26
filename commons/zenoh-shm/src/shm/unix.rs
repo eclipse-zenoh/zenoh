@@ -209,11 +209,11 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let flags = OFlag::O_RDWR;
             let mode = Mode::S_IRUSR | Mode::S_IWUSR;
             // TODO: we cannot use our logger inside of atexit() callstack!
-                //tracing::trace!(
-                //"open(name={:?}, flag={:?}, mode={:?})",
-                //lockpath,
-                //flags,
-                //mode
+            //tracing::trace!(
+            //"open(name={:?}, flag={:?}, mode={:?})",
+            //lockpath,
+            //flags,
+            //mode
             //);
             match open(&lockpath, flags, mode) {
                 Ok(val) => val,
