@@ -563,6 +563,7 @@ pub(crate) async fn open_link(
 ) -> ZResult<TransportUnicast> {
     let direction = TransportLinkUnicastDirection::Outbound;
     let is_streamed = link.is_streamed();
+    let is_vectored = link.is_write_vectored();
     let config = TransportLinkUnicastConfig {
         direction,
         batch: BatchConfig {
@@ -570,6 +571,7 @@ pub(crate) async fn open_link(
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: false, // Perform the exchange Init/Open exchange with no compression
+            is_vectored,
         },
         priorities: None,
         reliability: None,
@@ -699,6 +701,7 @@ pub(crate) async fn open_link(
             is_streamed,
             #[cfg(feature = "transport_compression")]
             is_compression: state.link.ext_compression.is_compression(),
+            is_vectored,
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
