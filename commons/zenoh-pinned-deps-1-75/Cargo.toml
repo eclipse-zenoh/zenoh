@@ -62,4 +62,8 @@ ignored = [
   "thiserror",
   "twox-hash",
   "url",
+  "cargo-platform",
+  "cargo_metadata",
+  "safe_arch",
+  "wide"
 ]
