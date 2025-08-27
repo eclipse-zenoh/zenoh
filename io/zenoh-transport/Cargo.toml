@@ -93,6 +93,5 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
-futures-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 zenoh-util = { workspace = true }

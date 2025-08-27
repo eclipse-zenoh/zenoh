@@ -76,19 +76,10 @@ impl TransportUnicastUniversal {
         let Some(pipeline) =
             self.links
                 .get_pipeline(msg.is_reliable().into(), msg.priority(), |links| {
-                    Self::select(
-                        links.iter().map(|tl| {
-                            (
-                                tl.link
-                                    .config
-                                    .reliability
-                                    .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
-                                tl.link.config.priorities.clone(),
-                            )
-                        }),
-                        Reliability::from(msg.is_reliable()),
-                        msg.priority(),
-                    )
+                    let link_props = links
+                        .iter()
+                        .map(|tl| (tl.link.reliability(), tl.link.config.priorities.clone()));
+                    Self::select(link_props, msg.is_reliable().into(), msg.priority())
                 })
         else {
             // No Link found
