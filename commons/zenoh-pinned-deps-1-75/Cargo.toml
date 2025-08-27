@@ -39,6 +39,10 @@ static_init = "=1.0.3"
 thiserror = "=1.0.69"
 twox-hash = "=1.6.3"
 url = "=2.5.2"
+cargo_metadata = "=0.19.0"
+cargo-platform = "=0.1.8"
+safe_arch = "=0.7.4"
+wide = "=0.7.33"
 
 [package.metadata.cargo-machete]
 ignored = [
