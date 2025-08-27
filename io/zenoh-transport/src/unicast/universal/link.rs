@@ -16,10 +16,7 @@ use std::{sync::Arc, time::Duration};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
-use zenoh_protocol::{
-    core::Reliability,
-    transport::{KeepAlive, TransportMessage},
-};
+use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 
