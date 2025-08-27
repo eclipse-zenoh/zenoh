@@ -1,4 +1,3 @@
-use std::sync::Arc;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -12,7 +11,7 @@ use std::sync::Arc;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::ZSliceBuffer;
