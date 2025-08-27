@@ -58,13 +58,29 @@ pub(crate) fn enable_pktinfo(socket: &UdpSocket) -> io::Result<PktInfoRetrievalD
     let local_src_addr = socket.local_addr()?;
     match local_src_addr.is_ipv6() {
         false => unsafe {
+            #[cfg(not(target_os = "freebsd"))]
             setsockopt(socket.as_raw_fd(), libc::IPPROTO_IP, libc::IP_PKTINFO, 1)?;
+            #[cfg(target_os = "freebsd")]
+            setsockopt(
+                socket.as_raw_fd(),
+                libc::IPPROTO_IP,
+                libc::IP_RECVDSTADDR,
+                1,
+            )?;
         },
         true => unsafe {
+            #[cfg(not(target_os = "freebsd"))]
             setsockopt(
                 socket.as_raw_fd(),
                 libc::IPPROTO_IPV6,
                 libc::IPV6_RECVPKTINFO,
+                1,
+            )?;
+            #[cfg(target_os = "freebsd")]
+            setsockopt(
+                socket.as_raw_fd(),
+                libc::IPPROTO_IPV6,
+                libc::IPV6_PKTINFO,
                 1,
             )?;
         },
@@ -83,7 +99,7 @@ fn recv_with_dst_inner(
     let mut msg_iov = IoSliceMut::new(buf);
     let mut cmsg = {
         let space = unsafe {
-            libc::CMSG_SPACE(mem::size_of::<libc::in_pktinfo>() as libc::c_uint) as usize
+            libc::CMSG_SPACE(mem::size_of::<libc::in6_pktinfo>() as libc::c_uint) as usize
         };
         Vec::<u8>::with_capacity(space)
     };
@@ -135,6 +151,7 @@ fn recv_with_dst_inner(
         let p = unsafe { libc::CMSG_DATA(h) };
 
         match (h.cmsg_level, h.cmsg_type) {
+            #[cfg(not(target_os = "freebsd"))]
             (libc::IPPROTO_IP, libc::IP_PKTINFO) => {
                 let pktinfo = unsafe { ptr::read_unaligned(p as *const libc::in_pktinfo) };
                 addr_dst = Some(SocketAddr::new(
@@ -142,6 +159,23 @@ fn recv_with_dst_inner(
                     local_port,
                 ));
             }
+            #[cfg(target_os = "freebsd")]
+            (libc::IPPROTO_IP, libc::IP_RECVDSTADDR) => {
+                let addr = unsafe { ptr::read_unaligned(p as *const libc::in_addr) };
+                addr_dst = Some(SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::from(u32::from_be(addr.s_addr))),
+                    local_port,
+                ));
+            }
+            #[cfg(not(target_os = "freebsd"))]
+            (libc::IPPROTO_IPV6, libc::IPV6_RECVPKTINFO) => {
+                let pktinfo = unsafe { ptr::read_unaligned(p as *const libc::in6_pktinfo) };
+                addr_dst = Some(SocketAddr::new(
+                    IpAddr::V6(Ipv6Addr::from(pktinfo.ipi6_addr.s6_addr)),
+                    local_port,
+                ));
+            }
+            #[cfg(target_os = "freebsd")]
             (libc::IPPROTO_IPV6, libc::IPV6_PKTINFO) => {
                 let pktinfo = unsafe { ptr::read_unaligned(p as *const libc::in6_pktinfo) };
                 addr_dst = Some(SocketAddr::new(
