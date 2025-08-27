@@ -28,6 +28,8 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 base64ct = "=1.6.0"
+cargo-platform = "=0.1.8"
+cargo_metadata = "=0.19.0"
 home = "=0.5.9"
 jsonschema = { version = "=0.20.0", default-features = false }
 librocksdb-sys = "=0.17.1"
@@ -37,18 +39,18 @@ pest_derive = "=2.7.12"
 pest_generator = "=2.7.12"
 pest_meta = "=2.7.12"
 rocksdb = "=0.23.0"
+safe_arch = "=0.7.4"
 static_init = "=1.0.3"
 thiserror = "=1.0.69"
 twox-hash = "=1.6.3"
 url = "=2.5.2"
-cargo_metadata = "=0.19.0"
-cargo-platform = "=0.1.8"
-safe_arch = "=0.7.4"
 wide = "=0.7.33"
 
 [package.metadata.cargo-machete]
 ignored = [
   "base64ct",
+  "cargo-platform",
+  "cargo_metadata",
   "home",
   "jsonschema",
   "librocksdb-sys",
@@ -58,12 +60,10 @@ ignored = [
   "pest_generator",
   "pest_meta",
   "rocksdb",
+  "safe_arch",
   "static_init",
   "thiserror",
   "twox-hash",
   "url",
-  "cargo-platform",
-  "cargo_metadata",
-  "safe_arch",
-  "wide"
+  "wide",
 ]
