@@ -37,7 +37,6 @@ default = [
   "transport_compression",
   "transport_multilink",
   "transport_quic",
-  "transport_quic_datagram",
   "transport_tcp",
   "transport_tls",
   "transport_udp",
@@ -66,7 +65,6 @@ tracing-instrument = [
 transport_compression = ["zenoh-transport/transport_compression"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_quic = ["zenoh-transport/transport_quic"]
-transport_quic_datagram = ["zenoh-transport/transport_quic_datagram"]
 transport_serial = ["zenoh-transport/transport_serial"]
 transport_tcp = ["zenoh-config/transport_tcp", "zenoh-transport/transport_tcp"]
 transport_tls = ["zenoh-transport/transport_tls"]
