@@ -99,7 +99,7 @@ impl Debug for TablesData {
 
 pub(crate) struct HatTablesData {
     pub(crate) whatami: WhatAmI,
-    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
+    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>, // REVIEW(regions): move under TablesData?
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) routes_version: RoutesVersion,
@@ -114,10 +114,6 @@ impl HatTablesData {
             mcast_faces: vec![],
             routes_version: 0,
         }
-    }
-
-    pub(crate) fn disable_all_routes(&mut self) {
-        self.routes_version = self.routes_version.saturating_add(1);
     }
 }
 
@@ -182,6 +178,13 @@ impl TablesData {
         match expr_id {
             0 => Some(&self.root_res),
             expr_id => face.get_sent_mapping(expr_id, mapping),
+        }
+    }
+
+    pub(crate) fn disable_all_routes(&mut self) {
+        // REVIEW(regions): should hats invalidate each other's routes?
+        for hat in self.hats.values_mut() {
+            hat.routes_version = hat.routes_version.saturating_add(1);
         }
     }
 }

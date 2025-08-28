@@ -26,7 +26,7 @@ use zenoh_protocol::{
         WhatAmI,
     },
     network::declare::{
-        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
+        self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare, DeclareBody,
         DeclareQueryable, QueryableId, UndeclareQueryable,
     },
 };
@@ -41,7 +41,7 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
-        hat::{DeclarationContext, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
+        hat::{BaseContext, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
         router::Direction,
         RoutingContext,
     },
@@ -117,9 +117,9 @@ impl Hat {
                     RoutingContext::with_expr(
                         Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id,
                                 wire_expr: key_expr,
@@ -194,9 +194,9 @@ impl Hat {
                     RoutingContext::with_expr(
                         Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id,
                                 ext_wire_expr: WireExprType::null(),
@@ -209,40 +209,34 @@ impl Hat {
         }
     }
 
-    pub(super) fn undeclare_simple_queryable(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
-        send_declare: &mut SendDeclare,
-    ) {
+    pub(super) fn undeclare_simple_queryable(&self, ctx: BaseContext, res: &mut Arc<Resource>) {
         if !self
-            .face_hat_mut(face)
+            .face_hat_mut(ctx.src_face)
             .remote_qabls
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&ctx.src_face.id) {
                 get_mut_unchecked(ctx).qabl = None;
             }
 
             let mut simple_qabls = self.simple_qabls(res);
             if simple_qabls.is_empty() {
-                self.propagate_forget_simple_queryable(tables, res, send_declare);
+                self.propagate_forget_simple_queryable(ctx.tables, res, ctx.send_declare);
             } else {
-                self.propagate_simple_queryable(tables, res, None, send_declare);
+                self.propagate_simple_queryable(ctx.tables, res, None, ctx.send_declare);
             }
             if simple_qabls.len() == 1 {
                 let face = &mut simple_qabls[0];
                 if let Some((id, _)) = self.face_hat_mut(face).local_qabls.remove(res) {
-                    send_declare(
+                    (ctx.send_declare)(
                         &face.primitives,
                         RoutingContext::with_expr(
                             Declare {
                                 interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
+                                ext_qos: declare::ext::QoSType::DECLARE,
                                 ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                     id,
                                     ext_wire_expr: WireExprType::null(),
@@ -256,15 +250,9 @@ impl Hat {
         }
     }
 
-    fn forget_simple_queryable(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        id: QueryableId,
-        send_declare: &mut SendDeclare,
-    ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = self.face_hat_mut(face).remote_qabls.remove(&id) {
-            self.undeclare_simple_queryable(tables, face, &mut res, send_declare);
+    fn forget_simple_queryable(&self, ctx: BaseContext, id: QueryableId) -> Option<Arc<Resource>> {
+        if let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) {
+            self.undeclare_simple_queryable(ctx, &mut res);
             Some(res)
         } else {
             None
@@ -302,9 +290,10 @@ lazy_static::lazy_static! {
 impl HatQueriesTrait for Hat {
     fn declare_queryable(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
+        _node_id: NodeId,
         qabl_info: &QueryableInfoType,
         _profile: InterestProfile,
     ) {
@@ -321,12 +310,13 @@ impl HatQueriesTrait for Hat {
 
     fn undeclare_queryable(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: QueryableId,
         _res: Option<Arc<Resource>>,
+        _node_id: NodeId,
         _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        self.forget_simple_queryable(ctx.tables, ctx.src_face, id, ctx.send_declare)
+        self.forget_simple_queryable(ctx, id)
     }
 
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {

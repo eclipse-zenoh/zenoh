@@ -1,19 +1,26 @@
 use std::{
-    collections::HashMap,
     fmt::Debug,
     ops::{Index, IndexMut},
+    sync::Arc,
 };
+
+use tokio_util::sync::CancellationToken;
+use zenoh_protocol::{
+    core::ZenohIdProto,
+    network::interest::{InterestId, InterestMode},
+};
+
+use crate::net::routing::dispatcher::face::FaceState;
 
 /// Region identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Bound {
-    /// The gateway exit point; there is only one such bound.
+    /// The region entry/exit point; there is only one such bound.
     North,
-    /// A sub-region within the south-bound region; there is zero or
-    /// more such bound.
+    /// A sub-region within the south region; there is zero or more such bound.
     South { index: usize },
-    /// A special bound for faces that neither belong to the south-bound nor the
-    /// north-bound regions; there is zero or more such bound.
+    /// A special bound for faces that neither belong to the south region nor the
+    /// north region; there is zero or more such bound.
     Eastwest { index: usize },
 }
 
@@ -46,9 +53,13 @@ impl Bound {
 
 // TODO(regions): optimization
 #[derive(Debug)]
-pub(crate) struct BoundMap<D>(HashMap<Bound, D>);
+pub(crate) struct BoundMap<D>(hashbrown::HashMap<Bound, D>);
 
 impl<D> BoundMap<D> {
+    pub(crate) fn get_many_mut<const N: usize>(&mut self, ks: [&Bound; N]) -> Option<[&mut D; N]> {
+        self.0.get_many_mut(ks)
+    }
+
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&Bound, &D)> {
         self.0.iter()
     }
@@ -59,6 +70,13 @@ impl<D> BoundMap<D> {
 
     pub(crate) fn north(&self) -> &D {
         let mut iter = self.iter().filter(|(b, _)| b.is_north());
+        let (_, north) = iter.next().unwrap();
+        assert!(iter.next().is_none());
+        north
+    }
+
+    pub(crate) fn north_mut(&mut self) -> &mut D {
+        let mut iter = self.iter_mut().filter(|(b, _)| b.is_north());
         let (_, north) = iter.next().unwrap();
         assert!(iter.next().is_none());
         north
@@ -126,4 +144,17 @@ impl<D> IndexMut<Bound> for BoundMap<D> {
     fn index_mut(&mut self, bound: Bound) -> &mut Self::Output {
         self.index_mut(&bound)
     }
+}
+
+/// An interest of mode [`InterestMode::Current`] or [`InterestMode::CurrentFuture`]
+/// sent to the upstream region's gateway.
+pub(crate) struct GatewayPendingCurrentInterest {
+    pub(crate) src_face: Arc<FaceState>,
+    pub(crate) src_interest_id: InterestId,
+    /// Source of the interest in the downstream region.
+    /// Only necessary for router hats to enable point-to-point communication.
+    pub(crate) src_zid: ZenohIdProto,
+    pub(crate) mode: InterestMode,
+    pub(crate) cancellation_token: CancellationToken,
+    pub(crate) rejection_token: CancellationToken,
 }

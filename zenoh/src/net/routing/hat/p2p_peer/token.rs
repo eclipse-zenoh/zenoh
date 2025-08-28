@@ -26,8 +26,8 @@ use zenoh_sync::get_mut_unchecked;
 use super::{Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{face::FaceState, interests::RemoteInterest, tables::TablesData},
-    hat::{CurrentFutureTrait, DeclarationContext, HatTokenTrait, InterestProfile, SendDeclare},
-    router::{FaceContext, Resource},
+    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, InterestProfile, SendDeclare},
+    router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
 
@@ -53,20 +53,20 @@ impl Hat {
     #[allow(clippy::too_many_arguments)]
     fn propagate_simple_token_to(
         &self,
-        tables: &mut TablesData,
+        ctx: BaseContext,
+        src_face: &mut Arc<FaceState>,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
-        src_face: &mut Arc<FaceState>,
         src_interest_id: Option<InterestId>,
         dst_interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
-        if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
+        if (src_face.id != dst_face.id || dst_face.zid == ctx.tables.zid)
             && !self.face_hat(dst_face).local_tokens.contains_key(res)
             && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
-            && self.new_token(tables, res, src_face, dst_face)
+            && self.new_token(ctx.tables, res, src_face, dst_face)
         {
-            if dst_face.whatami != WhatAmI::Client {
+            if dst_face.whatami != WhatAmI::Client && profile.is_push() {
                 let id = self
                     .face_hat(dst_face)
                     .next_id
@@ -76,7 +76,7 @@ impl Hat {
                     .insert(res.clone(), id);
                 let key_expr =
                     Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
-                send_declare(
+                (ctx.send_declare)(
                     &dst_face.primitives,
                     RoutingContext::with_expr(
                         Declare {
@@ -129,7 +129,7 @@ impl Hat {
                             dst_face,
                             super::push_declaration_profile(dst_face),
                         );
-                        send_declare(
+                        (ctx.send_declare)(
                             &dst_face.primitives,
                             RoutingContext::with_expr(
                                 Declare {
@@ -153,41 +153,35 @@ impl Hat {
 
     fn propagate_simple_token(
         &self,
-        tables: &mut TablesData,
+        mut ctx: BaseContext,
         res: &Arc<Resource>,
-        src_face: &mut Arc<FaceState>,
         interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         for mut dst_face in self
-            .faces(tables)
+            .faces(ctx.tables)
             .values()
             .cloned()
             .collect::<Vec<Arc<FaceState>>>()
         {
+            let src_face = &mut ctx.src_face.clone();
             self.propagate_simple_token_to(
-                tables,
+                ctx.reborrow(),
+                src_face,
                 &mut dst_face,
                 res,
-                src_face,
                 interest_id,
                 None,
-                send_declare,
+                profile,
             );
         }
     }
 
-    fn register_simple_token(
-        &self,
-        _tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        id: TokenId,
-        res: &mut Arc<Resource>,
-    ) {
+    fn register_simple_token(&self, ctx: BaseContext, id: TokenId, res: &mut Arc<Resource>) {
         // Register liveliness
         {
             let res = get_mut_unchecked(res);
-            match res.face_ctxs.get_mut(&face.id) {
+            match res.face_ctxs.get_mut(&ctx.src_face.id) {
                 Some(ctx) => {
                     if !ctx.token {
                         get_mut_unchecked(ctx).token = true;
@@ -196,38 +190,39 @@ impl Hat {
                 None => {
                     let ctx = res
                         .face_ctxs
-                        .entry(face.id)
-                        .or_insert_with(|| Arc::new(FaceContext::new(face.clone())));
+                        .entry(ctx.src_face.id)
+                        .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
                     get_mut_unchecked(ctx).token = true;
                 }
             }
         }
-        self.face_hat_mut(face)
+        self.face_hat_mut(ctx.src_face)
             .remote_tokens
             .insert(id, res.clone());
     }
 
     fn declare_simple_token(
         &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        mut ctx: BaseContext,
         id: TokenId,
         res: &mut Arc<Resource>,
         interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         if let Some(interest_id) = interest_id {
-            if let Some(interest) = face
+            if let Some(interest) = ctx
+                .src_face
+                .clone()
                 .pending_current_interests
                 .get(&interest_id)
                 .map(|p| &p.interest)
             {
                 if interest.mode == InterestMode::CurrentFuture {
-                    self.register_simple_token(tables, &mut face.clone(), id, res);
+                    self.register_simple_token(ctx.reborrow(), id, res);
                 }
                 let id = self.make_token_id(res, &mut interest.src_face.clone(), interest.mode);
                 let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
-                send_declare(
+                (ctx.send_declare)(
                     &interest.src_face.primitives,
                     RoutingContext::with_expr(
                         Declare {
@@ -241,18 +236,18 @@ impl Hat {
                     ),
                 );
                 return;
-            } else if !face.local_interests.contains_key(&interest_id) {
-                println!(
+            } else if !ctx.src_face.local_interests.contains_key(&interest_id) {
+                tracing::error!(
                     "Received DeclareToken for {} from {} with unknown interest_id {}. Ignore.",
                     res.expr(),
-                    face,
+                    ctx.src_face,
                     interest_id,
                 );
                 return;
             }
         }
-        self.register_simple_token(tables, face, id, res);
-        self.propagate_simple_token(tables, res, face, interest_id, send_declare);
+        self.register_simple_token(ctx.reborrow(), id, res);
+        self.propagate_simple_token(ctx, res, interest_id, profile);
     }
 
     #[inline]
@@ -497,28 +492,24 @@ impl Hat {
         }
     }
 
-    pub(super) fn token_new_face(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    ) {
-        if face.whatami != WhatAmI::Client {
-            for mut src_face in self
-                .faces(tables)
+    pub(super) fn token_new_face(&self, mut ctx: BaseContext, profile: InterestProfile) {
+        if ctx.src_face.whatami != WhatAmI::Client {
+            for mut face in self
+                .faces(ctx.tables)
                 .values()
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
-                for token in self.face_hat(&src_face.clone()).remote_tokens.values() {
+                for token in self.face_hat(&face.clone()).remote_tokens.values() {
+                    let dst_face = &mut ctx.src_face.clone();
                     self.propagate_simple_token_to(
-                        tables,
-                        face,
+                        ctx.reborrow(),
+                        &mut face,
+                        dst_face,
                         token,
-                        &mut src_face,
                         None,
                         Some(INITIAL_INTEREST_ID),
-                        send_declare,
+                        profile,
                     );
                 }
             }
@@ -654,29 +645,23 @@ impl Hat {
 impl HatTokenTrait for Hat {
     fn declare_token(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: TokenId,
         res: &mut Arc<Resource>,
+        _node_id: NodeId,
         interest_id: Option<InterestId>,
-        _profile: InterestProfile,
+        profile: InterestProfile,
     ) {
-        // FIXME(regions): InterestProfile is ignored
         // TODO(regions2): clients of this peer are handled as if they were bound to a future broker south hat
-        self.declare_simple_token(
-            ctx.tables,
-            ctx.src_face,
-            id,
-            res,
-            interest_id,
-            ctx.send_declare,
-        );
+        self.declare_simple_token(ctx, id, res, interest_id, profile);
     }
 
     fn undeclare_token(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
+        _node_id: NodeId,
         _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)

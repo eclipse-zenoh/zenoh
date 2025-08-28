@@ -44,7 +44,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{face::Face, gateway::Bound, tables::Tables},
-    hat::{DeclarationContext, InterestProfile, SendDeclare},
+    hat::{BaseContext, InterestProfile, SendDeclare},
     router::{get_or_set_route, QueryDirection, RouteBuilder},
 };
 
@@ -117,14 +117,15 @@ impl Face {
 
                 for (bound, hat) in tables.hats.iter_mut() {
                     hat.declare_queryable(
-                        DeclarationContext {
+                        BaseContext {
+                            tables_lock: &self.tables,
                             tables: &mut tables.data,
                             src_face: &mut self.state.clone(),
                             send_declare,
-                            node_id,
                         },
                         id,
                         &mut res,
+                        node_id,
                         qabl_info,
                         InterestProfile::with_bound_flow((&self.state.bound, bound)),
                     );
@@ -195,14 +196,15 @@ impl Face {
 
         let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
             let res = hat.undeclare_queryable(
-                DeclarationContext {
+                BaseContext {
+                    tables_lock: &self.tables,
                     tables: &mut tables.data,
                     src_face: &mut self.state.clone(),
                     send_declare,
-                    node_id,
                 },
                 id,
                 res.clone(),
+                node_id,
                 InterestProfile::with_bound_flow((&self.state.bound, bound)),
             );
 

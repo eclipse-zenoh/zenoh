@@ -97,7 +97,7 @@ impl StartConditions {
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.terminated = true;
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
@@ -112,7 +112,7 @@ impl StartConditions {
                 terminated: true,
             })
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }

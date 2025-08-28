@@ -601,6 +601,11 @@ impl CongestionControl {
     pub(crate) const DEFAULT_DECLARE: Self = Self::Block;
 
     #[cfg(feature = "internal")]
+    pub const DEFAULT_INTEREST: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_INTEREST: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
     pub const DEFAULT_OAM: Self = Self::Block;
     #[cfg(not(feature = "internal"))]
     pub(crate) const DEFAULT_OAM: Self = Self::Block;

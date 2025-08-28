@@ -20,7 +20,7 @@ use std::{
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, WhatAmI},
     network::declare::{
-        common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+        self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
         UndeclareSubscriber,
     },
 };
@@ -36,7 +36,7 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
-        hat::{DeclarationContext, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
+        hat::{BaseContext, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
         router::{Direction, RouteBuilder},
         RoutingContext,
     },
@@ -70,9 +70,9 @@ impl Hat {
                 RoutingContext::with_expr(
                     Declare {
                         interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
+                        ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                             id,
                             wire_expr: key_expr,
@@ -179,9 +179,9 @@ impl Hat {
                     RoutingContext::with_expr(
                         Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                 id,
                                 ext_wire_expr: WireExprType::null(),
@@ -194,38 +194,32 @@ impl Hat {
         }
     }
 
-    pub(super) fn undeclare_simple_subscription(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
-        send_declare: &mut SendDeclare,
-    ) {
+    pub(super) fn undeclare_simple_subscription(&self, ctx: BaseContext, res: &mut Arc<Resource>) {
         if !self
-            .face_hat_mut(face)
+            .face_hat_mut(ctx.src_face)
             .remote_subs
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&ctx.src_face.id) {
                 get_mut_unchecked(ctx).subs = None;
             }
 
             let mut simple_subs = self.simple_subs(res);
             if simple_subs.is_empty() {
-                self.propagate_forget_simple_subscription(tables, res, send_declare);
+                self.propagate_forget_simple_subscription(ctx.tables, res, ctx.send_declare);
             }
             if simple_subs.len() == 1 {
                 let face = &mut simple_subs[0];
                 if let Some(id) = self.face_hat_mut(face).local_subs.remove(res) {
-                    send_declare(
+                    (ctx.send_declare)(
                         &face.primitives,
                         RoutingContext::with_expr(
                             Declare {
                                 interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
+                                ext_qos: declare::ext::QoSType::DECLARE,
                                 ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                     id,
                                     ext_wire_expr: WireExprType::null(),
@@ -241,13 +235,11 @@ impl Hat {
 
     fn forget_simple_subscription(
         &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: BaseContext,
         id: SubscriberId,
-        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = self.face_hat_mut(face).remote_subs.remove(&id) {
-            self.undeclare_simple_subscription(tables, face, &mut res, send_declare);
+        if let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) {
+            self.undeclare_simple_subscription(ctx, &mut res);
             Some(res)
         } else {
             None
@@ -284,9 +276,10 @@ impl Hat {
 impl HatPubSubTrait for Hat {
     fn declare_subscription(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: SubscriberId,
         res: &mut Arc<Resource>,
+        _node_id: NodeId,
         sub_info: &SubscriberInfo,
         _profile: InterestProfile,
     ) {
@@ -303,12 +296,13 @@ impl HatPubSubTrait for Hat {
 
     fn undeclare_subscription(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: SubscriberId,
-        _res: Option<Arc<Resource>>, // FIXME(fuzzypixelz): can this be a borrow
+        _res: Option<Arc<Resource>>,
+        _node_id: NodeId,
         _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        self.forget_simple_subscription(ctx.tables, ctx.src_face, id, ctx.send_declare)
+        self.forget_simple_subscription(ctx, id)
     }
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {

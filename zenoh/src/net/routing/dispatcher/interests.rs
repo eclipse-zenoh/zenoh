@@ -21,22 +21,19 @@ use std::{
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::{
-    core::WireExpr,
-    network::{
-        declare::ext,
-        interest::{InterestId, InterestMode, InterestOptions},
-        Declare, DeclareBody, DeclareFinal,
-    },
+use zenoh_protocol::network::{
+    declare::{self},
+    interest::{InterestId, InterestMode, InterestOptions},
+    Declare, DeclareBody, DeclareFinal, Interest,
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
 
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
-    dispatcher::{face::Face, tables::Tables},
-    hat::SendDeclare,
-    router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
+    dispatcher::{face::Face, gateway::Bound, tables::Tables},
+    hat::{BaseContext, SendDeclare},
+    router::{register_expr_interest, unregister_expr_interest, Resource},
     RoutingContext,
 };
 
@@ -100,9 +97,9 @@ pub(crate) fn finalize_pending_interest(
             &interest.src_face.primitives,
             RoutingContext::new(Declare {
                 interest_id: Some(interest.src_interest_id),
-                ext_qos: ext::QoSType::DECLARE,
+                ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareFinal(DeclareFinal),
             }),
         );
@@ -179,19 +176,36 @@ impl Face {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_interest(
         &self,
-        tables_ref: &Arc<TablesLock>,
-        node_id: NodeId,
-        id: InterestId,
-        expr: Option<&WireExpr>,
-        mode: InterestMode,
-        options: InterestOptions,
+        tables_lock: &Arc<TablesLock>,
+        msg: &mut Interest,
         send_declare: &mut SendDeclare,
     ) {
-        if options.keyexprs() && mode != InterestMode::Current {
-            register_expr_interest(tables_ref, &mut self.state.clone(), id, expr);
+        if self.state.bound.is_north() {
+            tracing::error!(
+                src_face = ?self.state,
+                "Received interest from north-bound face. \
+                Interests should only flow upstream"
+            );
+            return;
         }
-        let (mut res, mut wtables) = if let Some(expr) = expr {
-            let rtables = zread!(tables_ref.tables);
+
+        let Interest {
+            id,
+            mode,
+            options,
+            wire_expr,
+            ..
+        } = msg;
+        if options.keyexprs() && mode != &InterestMode::Current {
+            register_expr_interest(
+                tables_lock,
+                &mut self.state.clone(),
+                *id,
+                wire_expr.as_ref(),
+            );
+        }
+        let (mut res, mut wtables) = if let Some(expr) = wire_expr {
+            let rtables = zread!(tables_lock.tables);
             match rtables
                 .data
                 .get_mapping(&self.state, &expr.scope, expr.mapping)
@@ -208,7 +222,7 @@ impl Face {
                     let res = Resource::get_resource(&prefix, &expr.suffix);
                     if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                         drop(rtables);
-                        let wtables = zwrite!(tables_ref.tables);
+                        let wtables = zwrite!(tables_lock.tables);
                         (Some(res.unwrap()), wtables)
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
@@ -217,7 +231,7 @@ impl Face {
                             .map(|ke| Resource::get_matches(&rtables.data, ke))
                             .unwrap_or_default();
                         drop(rtables);
-                        let mut wtables = zwrite!(tables_ref.tables);
+                        let mut wtables = zwrite!(tables_lock.tables);
                         let tables = &mut *wtables;
                         let mut res =
                             Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
@@ -237,40 +251,91 @@ impl Face {
                 }
             }
         } else {
-            (None, zwrite!(tables_ref.tables))
+            (None, zwrite!(tables_lock.tables))
         };
 
         let tables = &mut *wtables;
 
-        unimplemented!()
+        let [upstream_hat, downstream_hat] = tables
+            .hats
+            .get_many_mut([&Bound::North, &self.state.bound])
+            .unwrap();
+
+        let mut ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
+
+        downstream_hat.propagate_declarations(
+            ctx.reborrow(),
+            msg,
+            res.as_mut(),
+            &mut **upstream_hat,
+        );
     }
 
-    pub(crate) fn undeclare_interest(&self, tables: &TablesLock, node_id: NodeId, id: InterestId) {
-        tracing::debug!("{} Undeclare interest {}", &self.state, id);
-        unregister_expr_interest(tables, &mut self.state.clone(), id);
+    pub(crate) fn undeclare_interest(&self, tables: &TablesLock, msg: &Interest) {
+        if self.state.bound.is_north() {
+            tracing::error!(
+                src_face = ?self.state,
+                "Received interest finalization from north-bound face. \
+                This message should only flow downstream"
+            );
+            return;
+        }
 
-        let mut wtables = zwrite!(tables.tables);
+        tracing::debug!("{} Undeclare interest {}", &self.state, msg.id);
+        unregister_expr_interest(tables, &mut self.state.clone(), msg.id);
+
+        let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        unimplemented!()
+        let [upstream_hat, downstream_hat] = tables
+            .hats
+            .get_many_mut([&Bound::North, &self.state.bound])
+            .unwrap();
+
+        let ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare: &mut |_, _| unreachable!(),
+        };
+
+        downstream_hat.unregister_interest(ctx, msg, &mut **upstream_hat);
     }
 
     pub(crate) fn declare_final(
         &self,
         wtables: &mut Tables,
-        node_id: NodeId,
         id: InterestId,
         send_declare: &mut SendDeclare,
     ) {
-        if let Some(interest) = get_mut_unchecked(&mut self.state.clone())
-            .pending_current_interests
-            .remove(&id)
-        {
-            finalize_pending_interest(interest, send_declare);
+        if !self.state.bound.is_north() {
+            tracing::error!(
+                src_face = ?self.state,
+                "Received current interest finalization from south/eastwest-bound face. \
+                This message should only flow downstream"
+            );
+            return;
         }
 
         let tables = &mut *wtables;
 
-        unimplemented!()
+        let [upstream_hat, downstream_hat] = tables
+            .hats
+            .get_many_mut([&Bound::North, &self.state.bound])
+            .unwrap();
+
+        let ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
+
+        upstream_hat.unregister_current_interest(ctx, id, &mut **downstream_hat);
     }
 }

@@ -35,10 +35,13 @@ use super::{
 };
 use crate::net::{
     primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
-    routing::dispatcher::{
-        face::FaceStateBuilder,
-        gateway::Bound,
-        tables::{self, Tables},
+    routing::{
+        dispatcher::{
+            face::FaceStateBuilder,
+            gateway::Bound,
+            tables::{self, Tables},
+        },
+        hat::BaseContext,
     },
 };
 
@@ -130,9 +133,15 @@ impl Router {
         };
         let mut declares = vec![];
         tables.hats[bound]
-            .new_local_face(&mut tables.data, &self.tables, &mut face, &mut |p, m| {
-                declares.push((p.clone(), m))
-            })
+            .new_local_face(
+                BaseContext {
+                    tables_lock: &face.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut face.state,
+                    send_declare: &mut |p, m| declares.push((p.clone(), m)),
+                },
+                &self.tables,
+            )
             .unwrap();
         drop(wtables);
         drop(ctrl_lock);
@@ -196,11 +205,14 @@ impl Router {
 
         let mut declares = vec![];
         tables.hats[bound].new_transport_unicast_face(
-            &mut tables.data,
+            BaseContext {
+                tables_lock: &face.tables,
+                tables: &mut tables.data,
+                src_face: &mut face.state,
+                send_declare: &mut |p, m| declares.push((p.clone(), m)),
+            },
             &self.tables,
-            &mut face,
             &transport,
-            &mut |p, m| declares.push((p.clone(), m)),
         )?;
         drop(wtables);
         drop(ctrl_lock);
@@ -244,7 +256,7 @@ impl Router {
         });
         tables.data.hats[bound].mcast_groups.push(face);
 
-        tables.data.hats[bound].disable_all_routes();
+        tables.data.disable_all_routes();
         Ok(())
     }
 
@@ -286,7 +298,7 @@ impl Router {
         );
         tables.data.hats[bound].mcast_faces.push(face_state.clone());
 
-        tables.data.hats[bound].disable_all_routes();
+        tables.data.disable_all_routes();
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

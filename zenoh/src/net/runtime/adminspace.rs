@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use std::{
     collections::HashMap,
-    convert::{TryFrom, TryInto},
+    convert::TryInto,
     mem,
     sync::{Arc, Mutex},
 };
@@ -23,7 +23,6 @@ use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
-use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use zenoh_plugin_trait::PluginDiff;
@@ -762,7 +761,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
         "@/{}/{}/plugins",
         &context.runtime.state.zid, context.runtime.state.whatami
     );
-    let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
+    let root_key = unsafe { zenoh_keyexpr::keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
     if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
         let statuses = guard.plugins_status(names);

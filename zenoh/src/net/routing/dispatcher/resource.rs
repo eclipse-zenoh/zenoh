@@ -27,7 +27,8 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
+        self,
+        declare::{self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
         interest::InterestId,
         Mapping, RequestId,
     },
@@ -51,6 +52,9 @@ use crate::net::routing::{
 };
 
 pub(crate) type NodeId = u16;
+
+/// [`NodeId`] value of [`network::ext::NodeIdType::DEFAULT`].
+pub(crate) const DEFAULT_NODE_ID: NodeId = network::ext::NodeIdType::<0>::DEFAULT.node_id;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Direction {
@@ -516,7 +520,7 @@ impl Resource {
         r.face_ctxs.clear();
     }
 
-    // #[cfg(test)]
+    #[cfg(test)]
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr().to_string();
         result.push('\n');
@@ -643,9 +647,9 @@ impl Resource {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         &mut Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
                                 wire_expr: nonwild_prefix.expr().to_string().into(),

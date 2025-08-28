@@ -24,8 +24,8 @@ use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-        interest::{InterestId, InterestMode, InterestOptions},
-        Declare, Oam,
+        interest::{InterestId, InterestMode},
+        Declare, Interest, Oam,
     },
 };
 use zenoh_result::ZResult;
@@ -33,7 +33,7 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use super::{
     dispatcher::{
-        face::{Face, FaceState},
+        face::FaceState,
         pubsub::SubscriberInfo,
         tables::{
             NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, TablesData, TablesLock,
@@ -45,7 +45,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-    routing::dispatcher::gateway::Bound,
+    routing::dispatcher::{gateway::Bound, interests::RemoteInterest},
     runtime::Runtime,
 };
 
@@ -107,6 +107,25 @@ pub(crate) trait HatTrait:
 {
 }
 
+pub(crate) struct BaseContext<'ctx> {
+    pub(crate) tables_lock: &'ctx Arc<TablesLock>,
+    pub(crate) tables: &'ctx mut TablesData,
+    pub(crate) src_face: &'ctx mut Arc<FaceState>,
+    pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
+}
+
+impl<'ctx> BaseContext<'ctx> {
+    /// Reborrows [`BaseContext`] to avoid moving it.
+    pub(crate) fn reborrow(&mut self) -> BaseContext<'_> {
+        BaseContext {
+            tables_lock: &*self.tables_lock,
+            tables: &mut *self.tables,
+            src_face: &mut *self.src_face,
+            send_declare: &mut *self.send_declare,
+        }
+    }
+}
+
 pub(crate) trait HatBaseTrait: Any {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;
 
@@ -114,21 +133,13 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
-    fn new_local_face(
-        &mut self,
-        tables: &mut TablesData,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
-        send_declare: &mut SendDeclare,
-    ) -> ZResult<()>;
+    fn new_local_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>) -> ZResult<()>;
 
     fn new_transport_unicast_face(
         &mut self,
-        tables: &mut TablesData,
+        ctx: BaseContext,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
         transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn handle_oam(
@@ -147,6 +158,11 @@ pub(crate) trait HatBaseTrait: Any {
         routing_context: NodeId,
     ) -> NodeId;
 
+    fn node_id_to_zid(&self, face: &FaceState, _node_id: NodeId) -> Option<ZenohIdProto> {
+        // FIXME(regions): remove default impl
+        Some(face.zid.clone())
+    }
+
     fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &mut RoutingExpr)
         -> bool;
 
@@ -160,13 +176,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn info(&self, kind: WhatAmI) -> String;
 
-    fn close_face(
-        &mut self,
-        tables: &mut TablesData,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    );
+    fn close_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>);
 
     fn update_from_config(
         &mut self,
@@ -194,27 +204,86 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-pub(crate) struct DeclarationContext<'ctx> {
-    pub(crate) tables: &'ctx mut TablesData,
-    pub(crate) src_face: &'ctx mut Arc<FaceState>,
-    pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
-    pub(crate) node_id: NodeId,
-}
-
 pub(crate) trait HatInterestTrait {
-    fn declare_interest(
-        &self,
-        ctx: DeclarationContext,
-        tables_ref: &Arc<TablesLock>,
-        id: InterestId,
+    /// Handles interest originating downstream where this hat is the subregion gateway
+    /// so we should send all known declarations in the immediate upstream region
+    /// to the source.
+    fn propagate_declarations(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        options: InterestOptions,
+        upstream_hat: &mut dyn HatTrait,
     );
 
-    fn undeclare_interest(&self, ctx: DeclarationContext, id: InterestId);
+    /// Handles interest messages for north-bound hats.
+    ///
+    /// Will use the dowstream hat reference to call
+    /// [`HatInterestTrait::finalize_current_interest`].
+    ///
+    /// There can be one of two behaviors depending on the bound of the source
+    /// face:
+    ///
+    /// # Relay
+    /// Interest originates upstream and we are not the subregion's gateway
+    /// so we should forward it point-to-point to the gateway; this is only
+    /// relevant for router hats.
+    ///
+    /// # Exit relay
+    /// Interest originates downstream and we are this gateway's exit point
+    /// so we should propagate it upstream to the next gateway.
+    fn propagate_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<&mut Arc<Resource>>,
+        zid: &ZenohIdProto,
+    ) -> bool;
 
-    fn declare_final(&self, ctx: DeclarationContext, id: InterestId);
+    /// Handles interest finalization where this hat is the exit relay.
+    ///
+    /// Will use the downstream hat reference to call
+    /// [`HatInterestTrait::finalize_current_interest`].
+    fn unregister_current_interest(
+        &mut self,
+        ctx: BaseContext,
+        id: InterestId,
+        downstream_hat: &mut dyn HatTrait,
+    );
+
+    /// Informs the interest source that all declarations have been transmitted.
+    fn finalize_current_interest(&mut self, ctx: BaseContext, id: InterestId, zid: &ZenohIdProto);
+
+    /// Handles interest finalization where this hat is the subregion gateway.
+    ///
+    /// Will use the upstream hat reference to call
+    /// [`HatInterestTrait::finalize_interest`].
+    fn unregister_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        upstream_hat: &mut dyn HatTrait,
+    );
+
+    /// Handles interest finalization messages for north-bound hats.
+    ///
+    /// There can be one of two behaviors depending on the bound of the source
+    /// face:
+    ///
+    /// # Relay
+    /// Interest originates upstream and we are not the subregion's gateway
+    /// so we should forward it point-to-point to the gateway; this is only
+    /// relevant for router hats.
+    ///
+    /// # Exit relay
+    /// Interest originates downstream and we are this gateway's exit point
+    /// so we should propagate it upstream to the next gateway.
+    fn finalize_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        inbound_interest: RemoteInterest,
+    );
 }
 
 pub(crate) trait HatPubSubTrait {
@@ -224,9 +293,10 @@ pub(crate) trait HatPubSubTrait {
     /// or if `profile` is [`InterestProfile::Push`].
     fn declare_subscription(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: SubscriberId,
         res: &mut Arc<Resource>,
+        node_id: NodeId,
         sub_info: &SubscriberInfo,
         profile: InterestProfile,
     );
@@ -237,9 +307,10 @@ pub(crate) trait HatPubSubTrait {
     /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_subscription(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: SubscriberId,
-        res: Option<Arc<Resource>>, // FIXME(fuzzypixelz): can this be a borrow
+        res: Option<Arc<Resource>>,
+        node_id: NodeId,
         profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
@@ -269,9 +340,10 @@ pub(crate) trait HatQueriesTrait {
     /// or if `profile` is [`InterestProfile::Push`].
     fn declare_queryable(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
+        node_id: NodeId,
         qabl_info: &QueryableInfoType,
         profile: InterestProfile,
     );
@@ -282,9 +354,10 @@ pub(crate) trait HatQueriesTrait {
     /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_queryable(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
+        node_id: NodeId,
         profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
@@ -327,9 +400,10 @@ pub(crate) trait HatTokenTrait {
     /// or if `profile` is [`InterestProfile::Push`].
     fn declare_token(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: TokenId,
         res: &mut Arc<Resource>,
+        node_id: NodeId,
         interest_id: Option<InterestId>,
         profile: InterestProfile,
     );
@@ -340,9 +414,10 @@ pub(crate) trait HatTokenTrait {
     /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_token(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
+        node_id: NodeId,
         profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 }

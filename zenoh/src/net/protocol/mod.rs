@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub(crate) mod gossip;
 pub(crate) mod linkstate;
 pub(crate) mod network;
 

@@ -26,8 +26,8 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::TablesData},
-    hat::{CurrentFutureTrait, DeclarationContext, HatTokenTrait, InterestProfile, SendDeclare},
-    router::{FaceContext, Resource},
+    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, InterestProfile, SendDeclare},
+    router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
 
@@ -234,32 +234,26 @@ impl Hat {
         }
     }
 
-    pub(super) fn undeclare_simple_token(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
-        send_declare: &mut SendDeclare,
-    ) {
+    pub(super) fn undeclare_simple_token(&self, ctx: BaseContext, res: &mut Arc<Resource>) {
         if !self
-            .face_hat_mut(face)
+            .face_hat_mut(ctx.src_face)
             .remote_tokens
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&ctx.src_face.id) {
                 get_mut_unchecked(ctx).token = false;
             }
 
             let mut simple_tokens = self.simple_tokens(res);
             if simple_tokens.is_empty() {
-                self.propagate_forget_simple_token(tables, res, send_declare);
+                self.propagate_forget_simple_token(ctx.tables, res, ctx.send_declare);
             }
             if simple_tokens.len() == 1 {
                 let face = &mut simple_tokens[0];
                 if face.whatami != WhatAmI::Client {
                     if let Some(id) = self.face_hat_mut(face).local_tokens.remove(res) {
-                        send_declare(
+                        (ctx.send_declare)(
                             &face.primitives,
                             RoutingContext::with_expr(
                                 Declare {
@@ -283,17 +277,15 @@ impl Hat {
 
     fn forget_simple_token(
         &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
-        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = self.face_hat_mut(face).remote_tokens.remove(&id) {
-            self.undeclare_simple_token(tables, face, &mut res, send_declare);
+        if let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_tokens.remove(&id) {
+            self.undeclare_simple_token(ctx, &mut res);
             Some(res)
         } else if let Some(mut res) = res {
-            self.undeclare_simple_token(tables, face, &mut res, send_declare);
+            self.undeclare_simple_token(ctx, &mut res);
             Some(res)
         } else {
             None
@@ -441,9 +433,10 @@ impl Hat {
 impl HatTokenTrait for Hat {
     fn declare_token(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: TokenId,
         res: &mut Arc<Resource>,
+        _node_id: NodeId,
         interest_id: Option<InterestId>,
         _profile: InterestProfile,
     ) {
@@ -460,11 +453,12 @@ impl HatTokenTrait for Hat {
 
     fn undeclare_token(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
+        _node_id: NodeId,
         _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)
+        self.forget_simple_token(ctx, id, res)
     }
 }

@@ -31,7 +31,7 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
     dispatcher::{face::Face, gateway::Bound},
-    hat::{DeclarationContext, InterestProfile, SendDeclare},
+    hat::{BaseContext, InterestProfile, SendDeclare},
     router::{get_or_set_route, Direction, RouteBuilder},
 };
 
@@ -92,14 +92,15 @@ impl Face {
 
                 for (bound, hat) in tables.hats.iter_mut() {
                     hat.declare_subscription(
-                        DeclarationContext {
+                        BaseContext {
+                            tables_lock: &self.tables,
                             tables: &mut tables.data,
                             src_face: &mut self.state.clone(),
                             send_declare,
-                            node_id,
                         },
                         id,
                         &mut res,
+                        node_id,
                         sub_info,
                         InterestProfile::with_bound_flow((&self.state.bound, bound)),
                     );
@@ -130,7 +131,6 @@ impl Face {
             None
         } else {
             let rtables = zread!(self.tables.tables);
-            tracing::trace!(tree = Resource::print_tree(&rtables.data.root_res));
             match rtables
                 .data
                 .get_mapping(&self.state, &expr.scope, expr.mapping)
@@ -157,19 +157,20 @@ impl Face {
                 }
             }
         };
-        let mut tables_wguard = zwrite!(self.tables.tables);
-        let tables = &mut *tables_wguard;
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
 
         let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
             let res = hat.undeclare_subscription(
-                DeclarationContext {
+                BaseContext {
+                    tables_lock: &self.tables,
                     tables: &mut tables.data,
                     src_face: &mut self.state.clone(),
                     send_declare,
-                    node_id,
                 },
                 id,
                 res.clone(),
+                node_id,
                 InterestProfile::with_bound_flow((&self.state.bound, bound)),
             );
 

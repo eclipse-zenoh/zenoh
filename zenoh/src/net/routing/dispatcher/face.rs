@@ -45,6 +45,7 @@ use crate::net::{
             gateway::{Bound, BoundMap},
             interests::finalize_pending_interests,
         },
+        hat::BaseContext,
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -78,7 +79,7 @@ pub struct FaceState {
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
     /// Downcasts to `HatFace`.
-    pub(crate) hat: BoundMap<Box<dyn Any + Send + Sync>>,
+    pub(crate) hats: BoundMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
 }
@@ -91,7 +92,7 @@ impl FaceStateBuilder {
         zid: ZenohIdProto,
         bound: Bound,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
-        hat: BoundMap<Box<dyn Any + Send + Sync>>,
+        hats: BoundMap<Box<dyn Any + Send + Sync>>,
     ) -> Self {
         FaceStateBuilder(FaceState {
             id,
@@ -108,7 +109,7 @@ impl FaceStateBuilder {
             pending_queries: HashMap::new(),
             mcast_group: None,
             in_interceptors: None,
-            hat,
+            hats,
             task_controller: TaskController::default(),
             is_local: false,
             #[cfg(feature = "stats")]
@@ -336,6 +337,8 @@ impl Face {
         if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
             interest.rejection_token.cancel();
         }
+
+        // FIXME(regions): reject sourced interests
     }
 }
 
@@ -345,21 +348,13 @@ impl Primitives for Face {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
-            self.declare_interest(
-                &self.tables,
-                msg.ext_nodeid.node_id,
-                msg.id,
-                msg.wire_expr.as_ref(),
-                msg.mode,
-                msg.options,
-                &mut |p, m| declares.push((p.clone(), m)),
-            );
+            self.declare_interest(&self.tables, msg, &mut |p, m| declares.push((p.clone(), m)));
             drop(ctrl_lock);
             for (p, m) in declares {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            self.undeclare_interest(&self.tables, msg.ext_nodeid.node_id, msg.id);
+            self.undeclare_interest(&self.tables, msg);
         }
     }
 
@@ -467,13 +462,9 @@ impl Primitives for Face {
 
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
-                    self.declare_final(&mut wtables, msg.ext_nodeid.node_id, id, &mut |p, m| {
-                        declares.push((p.clone(), m))
-                    });
+                    self.declare_final(&mut wtables, id, &mut |p, m| declares.push((p.clone(), m)));
 
-                    for hat in wtables.data.hats.values_mut() {
-                        hat.disable_all_routes();
-                    }
+                    wtables.data.disable_all_routes();
 
                     drop(wtables);
                     drop(ctrl_lock);
@@ -524,10 +515,13 @@ impl Primitives for Face {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
         tables.hats[self.state.bound].close_face(
-            &mut tables.data,
+            BaseContext {
+                tables_lock: &self.tables,
+                tables: &mut tables.data,
+                src_face: &mut state,
+                send_declare: &mut |p, m| declares.push((p.clone(), m)),
+            },
             &self.tables.clone(),
-            &mut state,
-            &mut |p, m| declares.push((p.clone(), m)),
         );
         drop(wtables);
         drop(ctrl_lock);

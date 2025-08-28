@@ -38,7 +38,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
-use zenoh_task::TerminatableTask;
+use zenoh_task::{TaskController, TerminatableTask};
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{
@@ -56,8 +56,12 @@ use crate::net::{
         ROUTERS_NET_NAME,
     },
     routing::{
-        dispatcher::{face::Face, gateway::Bound, interests::RemoteInterest},
-        hat::TREES_COMPUTATION_DELAY_MS,
+        dispatcher::{
+            face::InterestState,
+            gateway::{Bound, GatewayPendingCurrentInterest},
+            interests::RemoteInterest,
+        },
+        hat::{BaseContext, InterestProfile, TREES_COMPUTATION_DELAY_MS},
     },
     runtime::Runtime,
 };
@@ -98,7 +102,7 @@ impl TreesComputationWorker {
                     hat.pubsub_tree_change(&mut tables.data, &new_children);
                     hat.queries_tree_change(&mut tables.data, &new_children);
                     hat.token_tree_change(&mut tables.data, &new_children);
-                    tables.data.hats[bound].disable_all_routes();
+                    tables.data.disable_all_routes();
                     drop(wtables);
                 }
             }
@@ -112,6 +116,11 @@ pub(crate) struct Hat {
     router_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
+    gateway_next_interest_id: InterestId,
+    gateway_local_interests: HashMap<InterestId, InterestState>,
+    gateway_pending_current_interests: HashMap<InterestId, GatewayPendingCurrentInterest>,
+    router_remote_interests: HashMap<(ZenohIdProto, InterestId), RemoteInterest>,
+    task_controller: TaskController,
     routers_net: Option<Network>, // TODO(regions): remove Option?
     routers_trees_worker: TreesComputationWorker,
 }
@@ -137,7 +146,16 @@ impl Hat {
             router_tokens: HashSet::new(),
             routers_net: None,
             routers_trees_worker: TreesComputationWorker::new(bound),
+            gateway_local_interests: HashMap::new(),
+            gateway_pending_current_interests: HashMap::new(),
+            router_remote_interests: HashMap::new(),
+            gateway_next_interest_id: 0,
+            task_controller: TaskController::default(),
         }
+    }
+
+    pub(crate) fn net(&self) -> &Network {
+        self.routers_net.as_ref().unwrap()
     }
 
     pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
@@ -152,11 +170,11 @@ impl Hat {
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
-        face_state.hat[self.bound].downcast_ref().unwrap()
+        face_state.hats[self.bound].downcast_ref().unwrap()
     }
 
     pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
-        get_mut_unchecked(face_state).hat[self.bound]
+        get_mut_unchecked(face_state).hats[self.bound]
             .downcast_mut()
             .unwrap()
     }
@@ -190,9 +208,28 @@ impl Hat {
             .find(|face| face.zid == *zid)
     }
 
+    pub(crate) fn face_mut<'t>(
+        &self,
+        tables: &'t mut TablesData,
+        zid: &ZenohIdProto,
+    ) -> Option<&'t mut Arc<FaceState>> {
+        tables.hats[self.bound]
+            .faces
+            .values_mut()
+            .find(|face| face.zid == *zid)
+    }
+
     /// Returns `true` if `face` belongs to this [`Hat`]'s linkstate network.
-    pub(crate) fn owns(&self, face: &FaceState) -> bool {
+    pub(crate) fn owns_router(&self, face: &FaceState) -> bool {
+        // TODO(regions): move `face.whatami == WhatAmI::Router` out of here
+        // TODO(regions): move this method to a Hat trait
         self.bound == face.bound && face.whatami == WhatAmI::Router
+    }
+
+    /// Returns `true` if `face` belongs to this [`Hat`].
+    pub(crate) fn owns(&self, face: &FaceState) -> bool {
+        // TODO(regions): move this method to a Hat trait
+        self.bound == face.bound
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
@@ -229,8 +266,7 @@ impl Hat {
 
     #[inline]
     pub(super) fn push_declaration_profile(&self, face: &FaceState) -> bool {
-        // REVIEW(regions): this is from commit 1d8c0c0, but I believe it should be `face.whatami != WhatAmI::Router
-        face.whatami == WhatAmI::Peer
+        face.whatami == WhatAmI::Router
     }
 }
 
@@ -265,13 +301,13 @@ impl HatBaseTrait for Hat {
             ROUTERS_NET_NAME.to_string(),
             tables.zid,
             runtime.clone(),
-            true,
             router_peers_failover_brokering,
             gossip,
             gossip_multihop,
             gossip_target,
             autoconnect,
             link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
+            &self.bound,
         ));
         Ok(())
     }
@@ -284,26 +320,18 @@ impl HatBaseTrait for Hat {
         Box::new(HatContext::new())
     }
 
-    fn new_local_face(
-        &mut self,
-        _tables: &mut TablesData,
-        _tables_ref: &Arc<TablesLock>,
-        _face: &mut Face,
-        _send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
+    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
         // Nothing to do
         Ok(())
     }
 
     fn new_transport_unicast_face(
         &mut self,
-        _tables: &mut TablesData,
+        ctx: BaseContext,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
         transport: &TransportUnicast,
-        _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        let link_id = if face.state.whatami == WhatAmI::Router {
+        let link_id = if ctx.src_face.whatami == WhatAmI::Router {
             self.routers_net
                 .as_mut()
                 .unwrap()
@@ -312,24 +340,20 @@ impl HatBaseTrait for Hat {
             0
         };
 
-        self.face_hat_mut(&mut face.state).link_id = link_id;
+        self.face_hat_mut(ctx.src_face).link_id = link_id;
 
-        if face.state.whatami == WhatAmI::Router {
+        if ctx.src_face.whatami == WhatAmI::Router {
             self.schedule_compute_trees(tables_ref.clone())
         }
         Ok(())
     }
 
-    fn close_face(
-        &mut self,
-        tables: &mut TablesData,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    ) {
-        let mut face_clone = face.clone();
-        let face = get_mut_unchecked(face);
-        let hat_face = match face.hat[self.bound].downcast_mut::<HatFace>() {
+    fn close_face(&mut self, mut ctx: BaseContext, tables_ref: &Arc<TablesLock>) {
+        let profile = InterestProfile::with_bound_flow((&ctx.src_face.bound, &self.bound));
+
+        let mut face_clone = ctx.src_face.clone();
+        let face = get_mut_unchecked(&mut face_clone);
+        let hat_face = match face.hats[self.bound].downcast_mut::<HatFace>() {
             Some(hate_face) => hate_face,
             None => {
                 tracing::error!("Error downcasting face hat in close_face!");
@@ -356,7 +380,7 @@ impl HatBaseTrait for Hat {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(tables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_subscription(ctx.reborrow(), &mut res, profile);
 
             if res.ctx.is_some() {
                 for match_ in &res.context().matches {
@@ -375,7 +399,7 @@ impl HatBaseTrait for Hat {
         let mut qabls_matches = vec![];
         for (_, mut res) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(tables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_queryable(ctx.reborrow(), &mut res, profile);
 
             if res.ctx.is_some() {
                 for match_ in &res.context().matches {
@@ -393,7 +417,7 @@ impl HatBaseTrait for Hat {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_token(tables, &mut face_clone, &mut res, send_declare);
+            self.undeclare_simple_token(ctx.reborrow(), &mut res, profile);
         }
 
         for mut res in subs_matches {
@@ -404,13 +428,13 @@ impl HatBaseTrait for Hat {
             get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
             Resource::clean(&mut res);
         }
-        self.faces_mut(tables).remove(&face.id);
+        self.faces_mut(ctx.tables).remove(&face.id);
 
         if face.whatami == WhatAmI::Router {
             for (_, removed_node) in self.routers_net.as_mut().unwrap().remove_link(&face.zid) {
-                self.pubsub_remove_node(tables, &removed_node.zid, send_declare);
-                self.queries_remove_node(tables, &removed_node.zid, send_declare);
-                self.token_remove_node(tables, &removed_node.zid, send_declare);
+                self.pubsub_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
+                self.queries_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
+                self.token_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
             }
 
             self.schedule_compute_trees(tables_ref.clone());
@@ -439,13 +463,12 @@ impl HatBaseTrait for Hat {
                     let whatami = transport.get_whatami()?;
                     match whatami {
                         WhatAmI::Router => {
-                            for (_, removed_node) in self
+                            let changes = self
                                 .routers_net
                                 .as_mut()
                                 .unwrap()
-                                .link_states(list.link_states, zid)
-                                .removed_nodes
-                            {
+                                .link_states(list.link_states, zid);
+                            for (_, removed_node) in &changes.removed_nodes {
                                 self.pubsub_remove_node(tables, &removed_node.zid, send_declare);
                                 self.queries_remove_node(tables, &removed_node.zid, send_declare);
                                 self.token_remove_node(tables, &removed_node.zid, send_declare);
@@ -471,13 +494,25 @@ impl HatBaseTrait for Hat {
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId {
-        if self.owns(face) {
+        if self.owns_router(face) {
             self.routers_net
                 .as_ref()
                 .unwrap()
                 .get_local_context(routing_context, self.face_hat(face).link_id)
         } else {
             0
+        }
+    }
+
+    fn node_id_to_zid(&self, face: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+        if self.owns_router(face) {
+            let link_id = self.face_hat(face).link_id;
+            self.net()
+                .get_link(link_id)
+                .and_then(|link| link.get_zid(&(node_id as u64)))
+                .cloned()
+        } else {
+            Some(face.zid)
         }
     }
 

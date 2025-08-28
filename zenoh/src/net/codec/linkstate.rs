@@ -130,6 +130,8 @@ where
             None
         };
 
+        let is_gateway = imsg::has_option(options, linkstate::GWY);
+
         Ok(LinkState {
             psid,
             sn,
@@ -138,6 +140,7 @@ where
             locators,
             links,
             link_weights,
+            is_gateway,
         })
     }
 }

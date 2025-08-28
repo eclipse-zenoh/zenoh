@@ -28,7 +28,7 @@ use zenoh_protocol::{
     },
     network::{
         declare::{
-            common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
+            self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
         },
         interest::{InterestId, InterestMode},
@@ -48,10 +48,9 @@ use crate::net::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{
-            CurrentFutureTrait, DeclarationContext, HatQueriesTrait, InterestProfile, SendDeclare,
-            Sources,
+            BaseContext, CurrentFutureTrait, HatQueriesTrait, InterestProfile, SendDeclare, Sources,
         },
-        router::{disable_matches_query_routes, Direction},
+        router::{disable_matches_query_routes, Direction, DEFAULT_NODE_ID},
         RoutingContext,
     },
 };
@@ -155,9 +154,9 @@ impl Hat {
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType {
+                                    ext_nodeid: declare::ext::NodeIdType {
                                         node_id: routing_context,
                                     },
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -222,9 +221,9 @@ impl Hat {
                     RoutingContext::with_expr(
                         Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id,
                                 wire_expr: key_expr,
@@ -284,6 +283,7 @@ impl Hat {
         qabl_info: &QueryableInfoType,
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         let current_info = self.res_hat(res).router_qabls.get(&router);
         if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -295,8 +295,26 @@ impl Hat {
                 self.router_qabls.insert(res.clone());
             }
 
-            // Propagate queryable to routers
-            self.propagate_sourced_queryable(tables, res, qabl_info, face.as_deref_mut(), &router);
+            if profile.is_push()
+                || self.router_remote_interests.values().any(|interest| {
+                    interest.options.queryables()
+                        && interest
+                            .res
+                            .as_ref()
+                            .map(|r| r.matches(&res))
+                            .unwrap_or(true)
+                })
+                || router != tables.zid
+            {
+                // Propagate queryable to routers
+                self.propagate_sourced_queryable(
+                    tables,
+                    res,
+                    qabl_info,
+                    face.as_deref_mut(),
+                    &router,
+                );
+            }
         }
 
         // Propagate queryable to clients
@@ -311,8 +329,17 @@ impl Hat {
         qabl_info: &QueryableInfoType,
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
-        self.register_router_queryable(tables, Some(face), res, qabl_info, router, send_declare);
+        self.register_router_queryable(
+            tables,
+            Some(face),
+            res,
+            qabl_info,
+            router,
+            send_declare,
+            profile,
+        );
     }
 
     fn register_simple_queryable(
@@ -344,11 +371,20 @@ impl Hat {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         self.register_simple_queryable(tables, face, id, res, qabl_info);
         let local_details = self.local_router_qabl_info(tables, res);
         let zid = tables.zid;
-        self.register_router_queryable(tables, Some(face), res, &local_details, zid, send_declare);
+        self.register_router_queryable(
+            tables,
+            Some(face),
+            res,
+            &local_details,
+            zid,
+            send_declare,
+            profile,
+        );
     }
 
     #[inline]
@@ -407,9 +443,9 @@ impl Hat {
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType {
+                                    ext_nodeid: declare::ext::NodeIdType {
                                         node_id: routing_context,
                                     },
                                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -442,9 +478,9 @@ impl Hat {
                     RoutingContext::with_expr(
                         Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id,
                                 ext_wire_expr: WireExprType::null(),
@@ -474,9 +510,9 @@ impl Hat {
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                         id,
                                         ext_wire_expr: WireExprType::null(),
@@ -515,9 +551,9 @@ impl Hat {
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                         id,
                                         ext_wire_expr: WireExprType::null(),
@@ -593,10 +629,23 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         if self.res_hat(res).router_qabls.contains_key(router) {
             self.unregister_router_queryable(tables, res, router, send_declare);
-            self.propagate_forget_sourced_queryable(tables, res, face, router);
+            if profile.is_push()
+                || self.router_remote_interests.values().any(|interest| {
+                    interest.options.queryables()
+                        && interest
+                            .res
+                            .as_ref()
+                            .map(|r| r.matches(&res))
+                            .unwrap_or(true)
+                })
+                || router != &tables.zid
+            {
+                self.propagate_forget_sourced_queryable(tables, res, face, router);
+            }
         }
     }
 
@@ -607,62 +656,64 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
-        self.undeclare_router_queryable(tables, Some(face), res, router, send_declare);
+        self.undeclare_router_queryable(tables, Some(face), res, router, send_declare, profile);
     }
 
     pub(super) fn undeclare_simple_queryable(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: BaseContext,
         res: &mut Arc<Resource>,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         if !self
-            .face_hat_mut(face)
+            .face_hat_mut(ctx.src_face)
             .remote_qabls
             .values()
             .any(|s| *s == *res)
         {
-            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&ctx.src_face.id) {
                 get_mut_unchecked(ctx).qabl = None;
             }
 
             let mut simple_qabls = self.simple_qabls(res);
-            let router_qabls = self.remote_router_qabls(tables, res);
+            let router_qabls = self.remote_router_qabls(ctx.tables, res);
 
             if simple_qabls.is_empty() {
                 self.undeclare_router_queryable(
-                    tables,
+                    ctx.tables,
                     None,
                     res,
-                    &tables.zid.clone(),
-                    send_declare,
+                    &ctx.tables.zid.clone(),
+                    ctx.send_declare,
+                    profile,
                 );
             } else {
-                let local_info = self.local_router_qabl_info(tables, res);
+                let local_info = self.local_router_qabl_info(ctx.tables, res);
                 self.register_router_queryable(
-                    tables,
+                    ctx.tables,
                     None,
                     res,
                     &local_info,
-                    tables.zid,
-                    send_declare,
+                    ctx.tables.zid,
+                    ctx.send_declare,
+                    profile,
                 );
-                self.propagate_forget_simple_queryable_to_peers(tables, res, send_declare);
+                self.propagate_forget_simple_queryable_to_peers(ctx.tables, res, ctx.send_declare);
             }
 
             if simple_qabls.len() == 1 && !router_qabls {
                 let face = &mut simple_qabls[0];
                 if let Some((id, _)) = self.face_hat_mut(face).local_qabls.remove(res) {
-                    send_declare(
+                    (ctx.send_declare)(
                         &face.primitives,
                         RoutingContext::with_expr(
                             Declare {
                                 interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
+                                ext_qos: declare::ext::QoSType::DECLARE,
                                 ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                     id,
                                     ext_wire_expr: WireExprType::null(),
@@ -683,18 +734,18 @@ impl Hat {
                         m.upgrade().is_some_and(|m| {
                             m.ctx.is_some()
                                 && (self.remote_simple_qabls(&m, face)
-                                    || self.remote_router_qabls(tables, &m))
+                                    || self.remote_router_qabls(ctx.tables, &m))
                         })
                     }) {
                         if let Some((id, _)) = self.face_hat_mut(face).local_qabls.remove(&res) {
-                            send_declare(
+                            (ctx.send_declare)(
                                 &face.primitives,
                                 RoutingContext::with_expr(
                                     Declare {
                                         interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_qos: declare::ext::QoSType::DECLARE,
                                         ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                             id,
                                             ext_wire_expr: WireExprType::null(),
@@ -712,13 +763,12 @@ impl Hat {
 
     fn forget_simple_queryable(
         &mut self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
+        ctx: BaseContext,
         id: QueryableId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        if let Some(mut res) = self.face_hat_mut(face).remote_qabls.remove(&id) {
-            self.undeclare_simple_queryable(tables, face, &mut res, send_declare);
+        if let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) {
+            self.undeclare_simple_queryable(ctx, &mut res, profile);
             Some(res)
         } else {
             None
@@ -867,6 +917,30 @@ impl Hat {
         aggregate: bool,
         send_declare: &mut SendDeclare,
     ) {
+        self.declare_qabl_interest_with_source(
+            tables,
+            face,
+            id,
+            res,
+            mode,
+            aggregate,
+            DEFAULT_NODE_ID,
+            send_declare,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn declare_qabl_interest_with_source(
+        &self,
+        tables: &mut TablesData,
+        face: &mut Arc<FaceState>,
+        id: InterestId,
+        res: Option<&mut Arc<Resource>>,
+        mode: InterestMode,
+        aggregate: bool,
+        source: NodeId,
+        send_declare: &mut SendDeclare,
+    ) {
         if mode.current() {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
@@ -895,9 +969,9 @@ impl Hat {
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id,
-                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    ext_nodeid: declare::ext::NodeIdType { node_id: source },
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                         id,
                                         wire_expr,
@@ -932,9 +1006,9 @@ impl Hat {
                                 RoutingContext::with_expr(
                                     Declare {
                                         interest_id,
-                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_qos: declare::ext::QoSType::DECLARE,
                                         ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        ext_nodeid: declare::ext::NodeIdType { node_id: source },
                                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                             id,
                                             wire_expr: key_expr,
@@ -962,9 +1036,9 @@ impl Hat {
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id,
-                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    ext_nodeid: declare::ext::NodeIdType { node_id: source },
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                         id,
                                         wire_expr: key_expr,
@@ -1017,15 +1091,17 @@ impl Hat {
 impl HatQueriesTrait for Hat {
     fn declare_queryable(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
+        node_id: NodeId,
+
         qabl_info: &QueryableInfoType,
-        _profile: InterestProfile,
+        profile: InterestProfile,
     ) {
-        let router = if self.owns(ctx.src_face) {
-            let Some(router) = self.get_router(ctx.src_face, ctx.node_id) else {
-                tracing::error!(%ctx.node_id, "Queryable from unknown router");
+        let router = if self.owns_router(ctx.src_face) {
+            let Some(router) = self.get_router(ctx.src_face, node_id) else {
+                tracing::error!(%node_id, "Queryable from unknown router");
                 return;
             };
 
@@ -1044,6 +1120,7 @@ impl HatQueriesTrait for Hat {
                     qabl_info,
                     router,
                     ctx.send_declare,
+                    profile,
                 );
             }
             WhatAmI::Peer | WhatAmI::Client => {
@@ -1056,6 +1133,7 @@ impl HatQueriesTrait for Hat {
                     res,
                     qabl_info,
                     ctx.send_declare,
+                    profile,
                 );
             }
         }
@@ -1063,14 +1141,16 @@ impl HatQueriesTrait for Hat {
 
     fn undeclare_queryable(
         &mut self,
-        ctx: DeclarationContext,
+        ctx: BaseContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
-        _profile: InterestProfile,
+        node_id: NodeId,
+
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        let router = if self.owns(ctx.src_face) {
-            let Some(router) = self.get_router(ctx.src_face, ctx.node_id) else {
-                tracing::error!(%ctx.node_id, "Queryable from unknown router");
+        let router = if self.owns_router(ctx.src_face) {
+            let Some(router) = self.get_router(ctx.src_face, node_id) else {
+                tracing::error!(%node_id, "Queryable from unknown router");
                 return None;
             };
 
@@ -1089,12 +1169,11 @@ impl HatQueriesTrait for Hat {
                     &mut res,
                     &router,
                     ctx.send_declare,
+                    profile,
                 );
                 Some(res)
             }
-            WhatAmI::Peer | WhatAmI::Client => {
-                self.forget_simple_queryable(ctx.tables, ctx.src_face, id, ctx.send_declare)
-            }
+            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_queryable(ctx, id, profile),
         }
     }
 
