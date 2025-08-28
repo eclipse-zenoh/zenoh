@@ -5859,6 +5859,7 @@ dependencies = [
 name = "zenoh-transport"
 version = "1.5.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "crossbeam-utils",
  "flume",

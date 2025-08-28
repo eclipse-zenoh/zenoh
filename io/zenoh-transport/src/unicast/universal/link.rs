@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::ZSliceBuffer;
@@ -19,10 +19,10 @@ use zenoh_link::Link;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
-#[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
 
 use super::transport::TransportUnicastUniversal;
+#[cfg(feature = "stats")]
+use crate::common::stats::TransportStats;
 use crate::{
     common::{
         batch::{BatchConfig, RBatch},
@@ -40,7 +40,7 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The underlying link
     pub(super) link: TransportLinkUnicast,
     // The transmission pipeline
-    pub(super) pipeline: TransmissionPipelineProducer,
+    pub(super) pipeline: Arc<TransmissionPipelineProducer>,
     // The task handling substruct
     tracker: TaskTracker,
     token: CancellationToken,
@@ -76,7 +76,7 @@ impl TransportLinkUnicastUniversal {
 
         let result = Self {
             link,
-            pipeline: producer,
+            pipeline: Arc::new(producer),
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
             #[cfg(feature = "stats")]

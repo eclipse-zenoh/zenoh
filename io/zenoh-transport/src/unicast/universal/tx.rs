@@ -73,24 +73,16 @@ impl TransportUnicastUniversal {
     }
 
     fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<()> {
-        let transport_links = self
-            .links
-            .read()
-            .expect("reading `TransportUnicastUniversal::links` should not fail");
-
-        let Some(transport_link_index) = Self::select(
-            transport_links.iter().map(|tl| {
-                (
-                    tl.link
-                        .config
-                        .reliability
-                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
-                    tl.link.config.priorities.clone(),
-                )
-            }),
-            Reliability::from(msg.is_reliable()),
-            msg.priority(),
-        ) else {
+        let Some(pipeline) =
+            self.links
+                .get_pipeline(msg.is_reliable().into(), msg.priority(), |links| {
+                    let link_props = links
+                        .iter()
+                        .map(|tl| (tl.link.reliability(), tl.link.config.priorities.clone()));
+                    Self::select(link_props, msg.is_reliable().into(), msg.priority())
+                })
+        else {
+            // No Link found
             tracing::trace!(
                 "Message dropped because the transport has no links: {}",
                 msg
@@ -100,22 +92,7 @@ impl TransportUnicastUniversal {
             self.stats.inc_tx_n_dropped(1);
             return Ok(());
         };
-
-        let transport_link = transport_links
-            .get(transport_link_index)
-            .expect("transport link index should be valid");
-
-        let pipeline = transport_link.pipeline.clone();
-        tracing::trace!(
-            "Scheduled {:?} for transmission to {} ({})",
-            msg,
-            transport_link.link.link.get_dst(),
-            self.get_zid()
-        );
-        // Drop the guard before the push_zenoh_message since
-        // the link could be congested and this operation could
-        // block for fairly long time
-        drop(transport_links);
+        tracing::trace!("Scheduled {:?} for transmission to {}", msg, self.get_zid());
         let droppable = msg.is_droppable();
         let push = pipeline.push_network_message(msg)?;
         if !push && !droppable {
