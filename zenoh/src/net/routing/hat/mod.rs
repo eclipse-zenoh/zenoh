@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{any::Any, collections::HashMap, sync::Arc};
 
-use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_config::{Config, WhatAmI};
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -35,20 +35,21 @@ use super::{
     dispatcher::{
         face::{Face, FaceState},
         pubsub::SubscriberInfo,
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
+        tables::{
+            NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, TablesData, TablesLock,
+        },
     },
     RoutingContext,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-        runtime::Runtime,
-    },
+#[cfg(feature = "unstable")]
+use crate::key_expr::KeyExpr;
+use crate::net::{
+    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::gateway::Bound,
+    runtime::Runtime,
 };
 
 mod client;
-mod linkstate_peer;
 mod p2p_peer;
 mod router;
 
@@ -56,6 +57,7 @@ zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
+// TODO(now)
 #[derive(Default, serde::Serialize)]
 pub(crate) struct Sources {
     routers: Vec<ZenohIdProto>,
@@ -73,6 +75,31 @@ impl Sources {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum InterestProfile {
+    Push,
+    Pull,
+}
+
+impl InterestProfile {
+    pub(crate) fn is_push(&self) -> bool {
+        matches!(self, InterestProfile::Push)
+    }
+
+    pub(crate) fn is_pull(&self) -> bool {
+        matches!(self, InterestProfile::Pull)
+    }
+
+    /// Computes [`InterestProfile`] from source and destination [`Bound`]s for a given entity.
+    pub(crate) fn with_bound_flow((src, dst): (&Bound, &Bound)) -> Self {
+        if src.is_north() && !dst.is_north() {
+            Self::Pull
+        } else {
+            Self::Push
+        }
+    }
+}
+
 pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
     + 'a;
 pub(crate) trait HatTrait:
@@ -80,26 +107,24 @@ pub(crate) trait HatTrait:
 {
 }
 
-pub(crate) trait HatBaseTrait {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()>;
-
-    fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;
+pub(crate) trait HatBaseTrait: Any {
+    fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync>;
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
     fn new_local_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn new_transport_unicast_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         transport: &TransportUnicast,
@@ -107,8 +132,8 @@ pub(crate) trait HatBaseTrait {
     ) -> ZResult<()>;
 
     fn handle_oam(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
         transport: &TransportUnicast,
@@ -117,104 +142,114 @@ pub(crate) trait HatBaseTrait {
 
     fn map_routing_context(
         &self,
-        tables: &Tables,
+        tables: &TablesData, // TODO(fuzzpixelz): can this be removed?
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId;
 
-    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool;
+    fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &mut RoutingExpr)
+        -> bool;
 
     fn egress_filter(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
         expr: &mut RoutingExpr,
     ) -> bool;
 
-    fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
+    fn info(&self, kind: WhatAmI) -> String;
 
     fn close_face(
-        &self,
-        tables: &TablesLock,
+        &mut self,
+        tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     );
 
     fn update_from_config(
-        &self,
-        _tables: &mut Tables,
+        &mut self,
         _tables_ref: &Arc<TablesLock>,
         _runtime: &Runtime,
     ) -> ZResult<()> {
         Ok(())
     }
 
-    fn links_info(&self, _tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo> {
+    fn links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         HashMap::new()
     }
 
-    fn route_successor(
-        &self,
-        _tables: &Tables,
-        _src: ZenohIdProto,
-        _dst: ZenohIdProto,
-    ) -> Option<ZenohIdProto> {
+    fn route_successor(&self, _src: ZenohIdProto, _dst: ZenohIdProto) -> Option<ZenohIdProto> {
         None
     }
 
-    fn route_successors(&self, _tables: &Tables) -> Vec<SuccessorEntry> {
+    fn route_successors(&self) -> Vec<SuccessorEntry> {
         Vec::new()
     }
+
+    #[allow(dead_code)]
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+pub(crate) struct DeclarationContext<'ctx> {
+    pub(crate) tables: &'ctx mut TablesData,
+    pub(crate) src_face: &'ctx mut Arc<FaceState>,
+    pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
+    pub(crate) node_id: NodeId,
 }
 
 pub(crate) trait HatInterestTrait {
-    #[allow(clippy::too_many_arguments)]
     fn declare_interest(
         &self,
-        tables: &mut Tables,
+        ctx: DeclarationContext,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
         id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         options: InterestOptions,
-        send_declare: &mut SendDeclare,
     );
-    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
-    fn declare_final(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+
+    fn undeclare_interest(&self, ctx: DeclarationContext, id: InterestId);
+
+    fn declare_final(&self, ctx: DeclarationContext, id: InterestId);
 }
 
 pub(crate) trait HatPubSubTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles subscriber declaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: DeclarationContext,
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     );
+
+    /// Handles subscriber undeclaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: DeclarationContext,
         id: SubscriberId,
-        res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        res: Option<Arc<Resource>>, // FIXME(fuzzypixelz): can this be a borrow
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
-    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_data_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
@@ -222,40 +257,44 @@ pub(crate) trait HatPubSubTrait {
 
     fn get_matching_subscriptions(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles queryable declaration.
+    ///
+    /// The declaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_queryable(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: DeclarationContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     );
+
+    /// Handles queryable undeclaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_queryable(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: DeclarationContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
-    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         expr: &mut RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
@@ -263,47 +302,48 @@ pub(crate) trait HatQueriesTrait {
 
     fn get_matching_queryables(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(
+    whatami: WhatAmI,
+    _config: &Config,
+    bound: Bound,
+) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::HatCode {}),
-        WhatAmI::Peer => {
-            if unwrap_or_default!(config.routing().peer().mode()) == *"linkstate" {
-                Box::new(linkstate_peer::HatCode {})
-            } else {
-                Box::new(p2p_peer::HatCode {})
-            }
-        }
-        WhatAmI::Router => Box::new(router::HatCode {}),
+        WhatAmI::Client => Box::new(client::Hat::new(bound)),
+        WhatAmI::Peer => Box::new(p2p_peer::Hat::new(bound)),
+        WhatAmI::Router => Box::new(router::Hat::new(bound)),
     }
 }
 
 pub(crate) trait HatTokenTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles token declaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_token(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: DeclarationContext,
         id: TokenId,
         res: &mut Arc<Resource>,
-        node_id: NodeId,
         interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     );
 
+    /// Handles token undeclaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_token(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: DeclarationContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 }
 
