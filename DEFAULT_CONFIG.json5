@@ -114,6 +114,7 @@
       period_increase_factor: 2,
     },
   },
+
   /// Configure the session open behavior.
   open: {
     /// Configure the conditions to be met before session open returns.
@@ -126,6 +127,7 @@
       declares: true,
     },
   },
+
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
@@ -229,10 +231,10 @@
         /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
         /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
         /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
- //        transport_weights: [
- //          { dst_zid: "1", weight: "10" },
- //          { dst_zid: "2", weight: "200" },
- //        ]
+        // transport_weights: [
+        //   { dst_zid: "1", weight: "10" },
+        //   { dst_zid: "2", weight: "200" },
+        // ]
       }
     },
     /// The routing strategy to use in peers and it's configuration.
@@ -246,10 +248,10 @@
         /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
         /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
         /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
- //        transport_weights: [
- //          { dst_zid: "1", weight: "10" },
- //          { dst_zid: "2", weight: "200" },
- //        ]
+        // transport_weights: [
+        //   { dst_zid: "1", weight: "10" },
+        //   { dst_zid: "2", weight: "200" },
+        // ]
       }
     },
     /// The interests-based routing configuration.
@@ -288,9 +290,9 @@
   //      {
   //        /// Optional Id, has to be unique.
   //        id: "lo0_en0_qos_overwrite",
-  //        // Optional list of ZIDs on which qos will be overwritten when communicating with.
+  //        /// Optional list of ZIDs on which qos will be overwritten when communicating with.
   //        // zids: ["38a4829bce9166ee"],
-  //        // Optional list of interfaces, if not specified, will be applied to all interfaces.
+  //        /// Optional list of interfaces, if not specified, will be applied to all interfaces.
   //        interfaces: [
   //          "lo0",
   //          "en0",
@@ -332,14 +334,14 @@
 
   //  /// The declarations aggregation strategy.
   //  aggregation: {
-  //      /// A list of key-expressions for which all included subscribers will be aggregated into.
-  //      subscribers: [
-  //        // key_expression
-  //      ],
-  //      /// A list of key-expressions for which all included publishers will be aggregated into.
-  //      publishers: [
-  //        // key_expression
-  //      ],
+  //    /// A list of key-expressions for which all included subscribers will be aggregated into.
+  //    subscribers: [
+  //      // key_expression
+  //    ],
+  //    /// A list of key-expressions for which all included publishers will be aggregated into.
+  //    publishers: [
+  //      // key_expression
+  //    ],
   //  },
 
   // /// Namespace prefix.
@@ -384,112 +386,112 @@
 
   //  /// Configure access control (ACL) rules
   //  access_control: {
-  //   /// [true/false] acl will be activated only if this is set to true
-  //   "enabled": false,
-  //   /// [deny/allow] default permission is deny (even if this is left empty or not specified)
-  //   "default_permission": "deny",
-  //   /// Rule set for permissions allowing or denying access to key-expressions
-  //   "rules":
-  //   [
-  //     {
-  //       /// Id has to be unique within the rule set
-  //       "id": "rule1",
-  //       "messages": [
-  //         "put", "delete", "declare_subscriber",
-  //         "query", "reply", "declare_queryable",
-  //         "liveliness_token", "liveliness_query", "declare_liveliness_subscriber",
-  //       ],
-  //       "flows":["egress","ingress"],
-  //       "permission": "allow",
-  //       "key_exprs": [
-  //         "test/demo"
-  //       ],
-  //     },
-  //     {
-  //       "id": "rule2",
-  //       "messages": [
-  //         "put", "delete", "declare_subscriber",
-  //         "query", "reply", "declare_queryable",
-  //       ],
-  //       "flows":["ingress"],
-  //       "permission": "allow",
-  //       "key_exprs": [
-  //         "**"
-  //       ],
-  //     },
-  //   ],
-  //   /// List of combinations of subjects.
-  //   ///
-  //   /// If a subject property (i.e. username, certificate common name or interface) is empty
-  //   /// it is interpreted as a wildcard. Moreover, a subject property cannot be an empty list.
-  //   "subjects":
-  //   [
-  //     {
-  //       /// Id has to be unique within the subjects list
-  //       "id": "subject1",
-  //       /// Subjects can be interfaces
-  //       "interfaces": [
-  //         "lo0",
-  //         "en0",
-  //       ],
-  //       /// Subjects can be cert_common_names when using TLS or Quic
-  //       "cert_common_names": [
-  //         "example.zenoh.io"
-  //       ],
-  //       /// Subjects can be usernames when using user/password authentication
-  //       "usernames": [
-  //         "zenoh-example"
-  //       ],
-  //       /// This instance translates internally to this filter:
-  //       /// (interface="lo0" && cert_common_name="example.zenoh.io" && username="zenoh-example") ||
-  //       /// (interface="en0" && cert_common_name="example.zenoh.io" && username="zenoh-example")
-  //     },
-  //     {
-  //       "id": "subject2",
-  //       "interfaces": [
-  //         "lo0",
-  //         "en0",
-  //       ],
-  //       "cert_common_names": [
-  //         "example2.zenoh.io"
-  //       ],
-  //       /// This instance translates internally to this filter:
-  //       /// (interface="lo0" && cert_common_name="example2.zenoh.io") ||
-  //       /// (interface="en0" && cert_common_name="example2.zenoh.io")
-  //     },
-  //     {
-  //       "id": "subject3",
-  //       /// An empty subject combination is a wildcard
-  //     },
-  //     {
-  //       "id": "subject4",
-  //      /// link protocols can also be used to identify transports to filter messages on.
-  //      /// If absent, the rules will be applied to all transports. An empty list is invalid.
-  //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
-  //      /// ZIDs can also be used to identify transports to filter messages on.
-  //      /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
-  //      ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
-  //      ///       If managed manually in ACL config, can be useful for prototyping but should not be used in production!
-  //      zids: ["38a4829bce9166ee"],
-  //     },
-  //   ],
-  //   /// The policies list associates rules to subjects
-  //   "policies":
-  //   [
+  //    /// [true/false] acl will be activated only if this is set to true
+  //    "enabled": false,
+  //    /// [deny/allow] default permission is deny (even if this is left empty or not specified)
+  //    "default_permission": "deny",
+  //    /// Rule set for permissions allowing or denying access to key-expressions
+  //    "rules":
+  //    [
+  //      {
+  //        /// Id has to be unique within the rule set
+  //        "id": "rule1",
+  //        "messages": [
+  //          "put", "delete", "declare_subscriber",
+  //          "query", "reply", "declare_queryable",
+  //          "liveliness_token", "liveliness_query", "declare_liveliness_subscriber",
+  //        ],
+  //        "flows":["egress","ingress"],
+  //        "permission": "allow",
+  //        "key_exprs": [
+  //          "test/demo"
+  //        ],
+  //      },
+  //      {
+  //        "id": "rule2",
+  //        "messages": [
+  //          "put", "delete", "declare_subscriber",
+  //          "query", "reply", "declare_queryable",
+  //        ],
+  //        "flows":["ingress"],
+  //        "permission": "allow",
+  //        "key_exprs": [
+  //          "**"
+  //        ],
+  //      },
+  //    ],
+  //    /// List of combinations of subjects.
+  //    ///
+  //    /// If a subject property (i.e. username, certificate common name or interface) is empty
+  //    /// it is interpreted as a wildcard. Moreover, a subject property cannot be an empty list.
+  //    "subjects":
+  //    [
+  //      {
+  //        /// Id has to be unique within the subjects list
+  //        "id": "subject1",
+  //        /// Subjects can be interfaces
+  //        "interfaces": [
+  //          "lo0",
+  //          "en0",
+  //        ],
+  //        /// Subjects can be cert_common_names when using TLS or Quic
+  //        "cert_common_names": [
+  //          "example.zenoh.io"
+  //        ],
+  //        /// Subjects can be usernames when using user/password authentication
+  //        "usernames": [
+  //          "zenoh-example"
+  //        ],
+  //        /// This instance translates internally to this filter:
+  //        /// (interface="lo0" && cert_common_name="example.zenoh.io" && username="zenoh-example") ||
+  //        /// (interface="en0" && cert_common_name="example.zenoh.io" && username="zenoh-example")
+  //      },
+  //      {
+  //        "id": "subject2",
+  //        "interfaces": [
+  //          "lo0",
+  //          "en0",
+  //        ],
+  //        "cert_common_names": [
+  //          "example2.zenoh.io"
+  //        ],
+  //        /// This instance translates internally to this filter:
+  //        /// (interface="lo0" && cert_common_name="example2.zenoh.io") ||
+  //        /// (interface="en0" && cert_common_name="example2.zenoh.io")
+  //      },
+  //      {
+  //        "id": "subject3",
+  //        /// An empty subject combination is a wildcard
+  //      },
+  //      {
+  //        "id": "subject4",
+  //        /// link protocols can also be used to identify transports to filter messages on.
+  //        /// If absent, the rules will be applied to all transports. An empty list is invalid.
+  //        link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //        /// ZIDs can also be used to identify transports to filter messages on.
+  //        /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
+  //        ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
+  //        ///       If managed manually in ACL config, can be useful for prototyping but should not be used in production!
+  //        zids: ["38a4829bce9166ee"],
+  //      },
+  //    ],
+  //    /// The policies list associates rules to subjects
+  //    "policies":
+  //    [
   //      /// Each policy associates one or multiple rules to one or multiple subject combinations
   //      {
-  //         /// Id is optional. If provided, it has to be unique within the policies list
-  //         "id": "policy1",
-  //         /// Rules and Subjects are identified with their unique IDs declared above
-  //         "rules": ["rule1"],
-  //         "subjects": ["subject1", "subject2"],
+  //        /// Id is optional. If provided, it has to be unique within the policies list
+  //        "id": "policy1",
+  //        /// Rules and Subjects are identified with their unique IDs declared above
+  //        "rules": ["rule1"],
+  //        "subjects": ["subject1", "subject2"],
   //      },
   //      {
-  //         "rules": ["rule2"],
-  //         "subjects": ["subject3", "subject4"],
+  //        "rules": ["rule2"],
+  //        "subjects": ["subject3", "subject4"],
   //      },
-  //   ]
-  //},
+  //    ]
+  //  },
 
   //  low_pass_filter: [
   //    {
@@ -686,14 +688,14 @@
         connect_private_key: null,
         /// Path to the TLS connecting side certificate
         connect_certificate: null,
-        // Whether or not to verify the matching between hostname/dns and certificate when connecting,
-        // if set to false zenoh will disregard the common names of the certificates when verifying servers.
-        // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
-        // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
+        /// Whether or not to verify the matching between hostname/dns and certificate when connecting,
+        /// if set to false zenoh will disregard the common names of the certificates when verifying servers.
+        /// This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
+        /// ca to verify that the server at baz.com is actually baz.com, let this be true (default).
         verify_name_on_connect: true,
-        // Whether or not to close links when remote certificates expires.
-        // If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
-        // note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
+        /// Whether or not to close links when remote certificates expires.
+        /// If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
+        /// note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
         close_link_on_expiration: false,
         /// Optional configuration for TCP system buffers sizes for TLS links
         ///
@@ -702,15 +704,15 @@
         /// Configure TCP write buffer size (bytes)
         // so_sndbuf: 123456,
       },
-    // // Configure optional TCP link specific parameters
-    // tcp: {
-    //   /// Optional configuration for TCP system buffers sizes for TCP links
-    //   ///
-    //   /// Configure TCP read buffer size (bytes)
-    //   // so_rcvbuf: 123456,
-    //   /// Configure TCP write buffer size (bytes)
-    //   // so_sndbuf: 123456,
-    // }
+      // // Configure optional TCP link specific parameters
+      // tcp: {
+      //   /// Optional configuration for TCP system buffers sizes for TCP links
+      //   ///
+      //   /// Configure TCP read buffer size (bytes)
+      //   // so_rcvbuf: 123456,
+      //   /// Configure TCP write buffer size (bytes)
+      //   // so_sndbuf: 123456,
+      // }
     },
     /// Shared memory configuration.
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
@@ -763,10 +765,9 @@
     },
   },
 
-  ///
-  /// Plugins configurations
-  ///
-  //
+  //  ///
+  //  /// Plugins configurations
+  //  ///
   //  plugins_loading: {
   //    /// Enable plugins loading.
   //    enabled: false,
