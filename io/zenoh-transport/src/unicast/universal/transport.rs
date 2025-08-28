@@ -409,7 +409,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     #[cfg(feature = "stats")]
     fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
-        zread!(self.links)
+        self.links
+            .read()
             .iter()
             .map(|l| (l.link.link(), l.stats.clone()))
             .collect()
