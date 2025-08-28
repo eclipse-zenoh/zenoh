@@ -924,11 +924,11 @@ impl HatTokenTrait for Hat {
 
         match ctx.src_face.whatami {
             WhatAmI::Router => {
-                // FIXME(fuzzypixelz): InterestProfile is ignored
+                // FIXME(regions): InterestProfile is ignored
                 self.declare_router_token(ctx.tables, ctx.src_face, res, router, ctx.send_declare);
             }
             WhatAmI::Peer | WhatAmI::Client => {
-                // TODO(fuzzypixelz): regions2: clients and peers of this
+                // TODO(regions2): clients and peers of this
                 // router are handled as if they were bound to future broker/peer-to-peer south hats resp.
                 self.declare_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare);
             }

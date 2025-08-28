@@ -389,7 +389,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                // FIXME(fuzzypixelz): implement manual gateway config and use it here
+                // FIXME(regions): implement manual gateway config and use it here
                 let bound = Bound::North;
 
                 Ok(Arc::new(RuntimeSession {
@@ -419,7 +419,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
 
-                // FIXME(fuzzypixelz): implement manual gateway config and use it here
+                // FIXME(regions): implement manual gateway config and use it here
                 let bound = Bound::North;
 
                 runtime
@@ -490,7 +490,7 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
 
-        // FIXME(fuzzypixelz): implement manual gateway config and use it here
+        // FIXME(regions): implement manual gateway config and use it here
         let bound = Bound::North;
 
         Ok(Arc::new(RuntimeMulticastSession {

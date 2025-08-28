@@ -29,12 +29,8 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 mod unicast;
-mod utils;
 pub use unicast::*;
-pub use utils::TlsConfigurator as QuicConfigurator;
-
-// Default ALPN protocol
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
+pub use zenoh_link_commons::quic::TlsConfigurator as QuicConfigurator;
 
 // Default MTU (QUIC PDU) in bytes.
 // NOTE: Since QUIC is a byte-stream oriented transport, theoretically it has
@@ -85,35 +81,4 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref QUIC_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-pub mod config {
-    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = "root_ca_certificate_file";
-    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
-    pub const TLS_ROOT_CA_CERTIFICATE_BASE64: &str = "root_ca_certificate_base64";
-
-    pub const TLS_LISTEN_PRIVATE_KEY_FILE: &str = "listen_private_key_file";
-    pub const TLS_LISTEN_PRIVATE_KEY_RAW: &str = "listen_private_key_raw";
-    pub const TLS_LISTEN_PRIVATE_KEY_BASE64: &str = "listen_private_key_base64";
-
-    pub const TLS_LISTEN_CERTIFICATE_FILE: &str = "listen_certificate_file";
-    pub const TLS_LISTEN_CERTIFICATE_RAW: &str = "listen_certificate_raw";
-    pub const TLS_LISTEN_CERTIFICATE_BASE64: &str = "listen_certificate_base64";
-
-    pub const TLS_CONNECT_PRIVATE_KEY_FILE: &str = "connect_private_key_file";
-    pub const TLS_CONNECT_PRIVATE_KEY_RAW: &str = "connect_private_key_raw";
-    pub const TLS_CONNECT_PRIVATE_KEY_BASE64: &str = "connect_private_key_base64";
-
-    pub const TLS_CONNECT_CERTIFICATE_FILE: &str = "connect_certificate_file";
-    pub const TLS_CONNECT_CERTIFICATE_RAW: &str = "connect_certificate_raw";
-    pub const TLS_CONNECT_CERTIFICATE_BASE64: &str = "connect_certificate_base64";
-
-    pub const TLS_ENABLE_MTLS: &str = "enable_mtls";
-    pub const TLS_ENABLE_MTLS_DEFAULT: bool = false;
-
-    pub const TLS_VERIFY_NAME_ON_CONNECT: &str = "verify_name_on_connect";
-    pub const TLS_VERIFY_NAME_ON_CONNECT_DEFAULT: bool = true;
-
-    pub const TLS_CLOSE_LINK_ON_EXPIRATION: &str = "close_link_on_expiration";
-    pub const TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT: bool = false;
 }

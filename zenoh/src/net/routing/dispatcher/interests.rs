@@ -35,7 +35,7 @@ use zenoh_util::Timed;
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::Tables},
-    hat::{DeclarationContext, SendDeclare},
+    hat::SendDeclare,
     router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,
 };

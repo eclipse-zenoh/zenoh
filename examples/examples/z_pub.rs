@@ -22,10 +22,7 @@ async fn main() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    #[cfg(feature = "unstable")]
     let (config, key_expr, payload, attachment, add_matching_listener) = parse_args();
-    #[cfg(not(feature = "unstable"))]
-    let (config, key_expr, payload, attachment, _) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
@@ -33,7 +30,6 @@ async fn main() {
     println!("Declaring Publisher on '{key_expr}'...");
     let publisher = session.declare_publisher(&key_expr).await.unwrap();
 
-    #[cfg(feature = "unstable")]
     if add_matching_listener {
         publisher
             .matching_listener()
@@ -76,7 +72,6 @@ struct Args {
     /// The attachments to add to each put.
     attach: Option<String>,
     /// Enable matching listener.
-    #[cfg(feature = "unstable")]
     #[arg(long)]
     add_matching_listener: bool,
     #[command(flatten)]
@@ -90,9 +85,6 @@ fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>, bool) {
         args.key,
         args.payload,
         args.attach,
-        #[cfg(feature = "unstable")]
         args.add_matching_listener,
-        #[cfg(not(feature = "unstable"))]
-        false,
     )
 }

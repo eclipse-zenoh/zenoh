@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[zenoh_macros::unstable]
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use zenoh_core::zread;
 use zenoh_keyexpr::keyexpr;
@@ -32,12 +30,9 @@ use super::{
 #[zenoh_macros::unstable]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
-    dispatcher::{
-        face::{Face, FaceId},
-        gateway::Bound,
-    },
+    dispatcher::{face::Face, gateway::Bound},
     hat::{DeclarationContext, InterestProfile, SendDeclare},
-    router::{get_or_set_route, Direction},
+    router::{get_or_set_route, Direction, RouteBuilder},
 };
 
 // FIXME(fuzzypixelz): this was added in e7f885ef due to sub reliability
@@ -197,7 +192,7 @@ impl Face {
             }
         });
 
-        // REVIEW(fuzzypixelz): this is necessary if HatFace is global
+        // REVIEW(regions): this is necessary if HatFace is global
         for mut res in res_cleanup {
             Resource::clean(&mut res);
         }
@@ -281,13 +276,12 @@ fn get_data_route(
     }
 }
 
-#[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_session_matching_subscriptions(
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
 ) -> HashMap<usize, Arc<FaceState>> {
-    // REVIEW(fuzzypixelz): regions2: use the broker hat
+    // REVIEW(regions2): use the broker hat
     tables.hats[Bound::session()].get_matching_subscriptions(&tables.data, key_expr)
 }
 
@@ -363,7 +357,7 @@ pub fn route_data(
         inc_stats!(face, rx, admin, msg.payload);
     }
 
-    let mut dirs = HashMap::<FaceId, Direction>::new();
+    let mut dirs = RouteBuilder::<Direction>::new();
 
     for (bound, hat) in rtables.hats.iter() {
         if hat.ingress_filter(&rtables.data, face, &mut expr) {
@@ -380,14 +374,11 @@ pub fn route_data(
 
             tracing::trace!(?bound, ?route, "route_data");
 
-            dirs.extend(
-                route
-                    .iter()
-                    .filter(|&(_, dir)| {
-                        hat.egress_filter(&rtables.data, face, &dir.dst_face, &mut expr)
-                    })
-                    .map(|(fid, dir)| (*fid, dir.clone())),
-            );
+            for dir in route.iter() {
+                if hat.egress_filter(&rtables.data, face, &dir.dst_face, &mut expr) {
+                    dirs.insert(dir.dst_face.id, || dir.clone());
+                }
+            }
         }
     }
 
@@ -401,9 +392,7 @@ pub fn route_data(
         dst_face.primitives.send_push(msg, reliability)
     };
 
-    tracing::debug!(dirs_len = dirs.len());
-
-    let mut dirs_iter = dirs.into_values();
+    let mut dirs_iter = dirs.build().into_iter();
 
     if let Some(dir) = dirs_iter.next() {
         treat_timestamp!(

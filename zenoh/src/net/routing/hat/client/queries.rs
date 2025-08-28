@@ -308,7 +308,7 @@ impl HatQueriesTrait for Hat {
         qabl_info: &QueryableInfoType,
         _profile: InterestProfile,
     ) {
-        // FIXME(fuzzypixelz): InterestProfile is ignored
+        // FIXME(regions): InterestProfile is ignored
         self.declare_simple_queryable(
             ctx.tables,
             ctx.src_face,
@@ -436,21 +436,9 @@ impl HatQueriesTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for (fid, ctx) in &mres.face_ctxs {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
-                if let Some(qabl_info) = ctx.qabl.as_ref() {
-                    route.push(QueryTargetQabl {
-                        dir: Direction {
-                            dst_face: ctx.face.clone(),
-                            wire_expr: key_expr.to_owned(),
-                            node_id: NodeId::default(),
-                        },
-                        info: Some(QueryableInfoType {
-                            complete: complete && qabl_info.complete,
-                            distance: 1,
-                        }),
-                        bound: self.bound,
-                    });
+            for face_ctx in &mres.face_ctxs {
+                if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound) {
+                    route.push(qabl);
                 }
             }
         }
@@ -458,7 +446,6 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &TablesData,

@@ -11,30 +11,28 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "unstable")]
-use std::future::{IntoFuture, Ready};
 
-#[cfg(feature = "unstable")]
-use zenoh_core::{Resolvable, Wait};
-#[cfg(feature = "unstable")]
-use zenoh_result::ZResult;
-#[cfg(feature = "unstable")]
-use {
-    crate::api::{
-        handlers::{Callback, DefaultHandler, IntoHandler},
-        matching::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
-        Id,
-    },
-    crate::sample::Locality,
-    std::sync::Arc,
-    std::{collections::HashSet, sync::Mutex},
+use std::{
+    collections::HashSet,
+    future::{IntoFuture, Ready},
+    sync::{Arc, Mutex},
 };
 
-#[cfg(feature = "unstable")]
-use crate::{api::session::WeakSession, key_expr::KeyExpr};
+use zenoh_core::{Resolvable, Wait};
+use zenoh_result::ZResult;
+
+use crate::{
+    api::{
+        handlers::{Callback, DefaultHandler, IntoHandler},
+        matching::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
+        sample::Locality,
+        session::WeakSession,
+        Id,
+    },
+    key_expr::KeyExpr,
+};
 
 /// A builder for initializing a [`MatchingListener`].
-#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a WeakSession,
@@ -45,7 +43,6 @@ pub struct MatchingListenerBuilder<'a, Handler, const BACKGROUND: bool = false> 
     pub handler: Handler,
 }
 
-#[zenoh_macros::unstable]
 impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// Receive the MatchingStatuses for this listener with a callback.
     ///
@@ -70,12 +67,11 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn callback<F>(self, callback: F) -> MatchingListenerBuilder<'a, Callback<MatchingStatus>>
     where
         F: Fn(MatchingStatus) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the MatchingStatuses for this listener with a mutable callback.
@@ -96,7 +92,6 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn callback_mut<F>(
         self,
         callback: F,
@@ -131,7 +126,6 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// # }
     /// ```
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
         Handler: IntoHandler<MatchingStatus>,
@@ -147,7 +141,6 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
     /// Register the listener callback to be run in background until the publisher is undeclared.
     ///
@@ -187,7 +180,6 @@ impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> Resolvable for MatchingListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<MatchingStatus> + Send,
@@ -196,13 +188,11 @@ where
     type To = ZResult<MatchingListener<Handler::Handler>>;
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> Wait for MatchingListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<MatchingStatus> + Send,
     Handler::Handler: Send,
 {
-    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, handler) = self.handler.into_handler();
         let state = self.session.declare_matches_listener_inner(
@@ -224,7 +214,6 @@ where
     }
 }
 
-#[zenoh_macros::unstable]
 impl<Handler> IntoFuture for MatchingListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<MatchingStatus> + Send,
@@ -233,20 +222,16 @@ where
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
 
-#[zenoh_macros::unstable]
 impl Resolvable for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
     type To = ZResult<()>;
 }
 
-#[zenoh_macros::unstable]
 impl Wait for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
-    #[zenoh_macros::unstable]
     fn wait(self) -> <Self as Resolvable>::To {
         let state = self.session.declare_matches_listener_inner(
             self.key_expr,
@@ -259,12 +244,10 @@ impl Wait for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
     }
 }
 
-#[zenoh_macros::unstable]
 impl IntoFuture for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
-    #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }

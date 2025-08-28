@@ -112,7 +112,7 @@ pub(crate) struct Hat {
     router_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
-    routers_net: Option<Network>, // TODO(fuzzypixelz): remove Option?
+    routers_net: Option<Network>, // TODO(regions): remove Option?
     routers_trees_worker: TreesComputationWorker,
 }
 
@@ -129,7 +129,7 @@ impl Debug for Hat {
 
 impl Hat {
     pub(crate) fn new(bound: Bound) -> Self {
-        // FIXME(fuzzypixelz): peer failover brokering is currently scrapped
+        // FIXME(regions): peer failover brokering is scrapped
         Self {
             bound,
             router_subs: HashSet::new(),
@@ -229,7 +229,7 @@ impl Hat {
 
     #[inline]
     pub(super) fn push_declaration_profile(&self, face: &FaceState) -> bool {
-        // REVIEW(fuzzypixelz): this is from commit 1d8c0c0, but I believe it should be `face.whatami != WhatAmI::Router
+        // REVIEW(regions): this is from commit 1d8c0c0, but I believe it should be `face.whatami != WhatAmI::Router
         face.whatami == WhatAmI::Peer
     }
 }
@@ -488,7 +488,7 @@ impl HatBaseTrait for Hat {
         _face: &FaceState,
         _expr: &mut RoutingExpr,
     ) -> bool {
-        // FIXME(fuzzypixelz): ensure that there is a south-bound peer that can
+        // FIXME(regions): ensure that there is a south-bound peer that can
         // handle duplicated messages through gossip from peers with multiple
         // connections to the same router gateway.
         true

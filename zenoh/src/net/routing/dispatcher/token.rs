@@ -190,7 +190,7 @@ impl Face {
             }
         });
 
-        // REVIEW(fuzzypixelz): this is necessary if HatFace is global
+        // REVIEW(regions): this is necessary if HatFace is global
         for mut res in res_cleanup {
             Resource::clean(&mut res);
         }

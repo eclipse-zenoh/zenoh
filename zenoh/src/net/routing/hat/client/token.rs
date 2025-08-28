@@ -447,7 +447,7 @@ impl HatTokenTrait for Hat {
         interest_id: Option<InterestId>,
         _profile: InterestProfile,
     ) {
-        // FIXME(fuzzypixelz): InterestProfile is ignored
+        // FIXME(regions): InterestProfile is ignored
         self.declare_simple_token(
             ctx.tables,
             ctx.src_face,

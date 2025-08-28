@@ -44,7 +44,7 @@ impl Bound {
     }
 }
 
-// TODO(fuzzypixelz): optimization
+// TODO(regions): optimization
 #[derive(Debug)]
 pub(crate) struct BoundMap<D>(HashMap<Bound, D>);
 
@@ -106,7 +106,7 @@ impl<D> Index<&Bound> for BoundMap<D> {
     }
 }
 
-// REVIEW(fuzzypixelz): do we need two `Index` impls?
+// REVIEW(regions): do we need two `Index` impls?
 impl<D> Index<Bound> for BoundMap<D> {
     type Output = D;
 
@@ -121,7 +121,7 @@ impl<D> IndexMut<&Bound> for BoundMap<D> {
     }
 }
 
-// REVIEW(fuzzypixelz): do we need two `IndexMut` impls?
+// REVIEW(regions): do we need two `IndexMut` impls?
 impl<D> IndexMut<Bound> for BoundMap<D> {
     fn index_mut(&mut self, bound: Bound) -> &mut Self::Output {
         self.index_mut(&bound)

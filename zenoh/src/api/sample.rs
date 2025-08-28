@@ -13,37 +13,32 @@
 //
 
 //! Sample primitives
-use std::{convert::TryFrom, fmt};
+use std::{convert::TryFrom, fmt, mem};
 
 use serde::{Deserialize, Serialize};
-use zenoh_config::{qos::PublisherLocalityConf, wrappers::EntityGlobalId};
+use zenoh_config::qos::PublisherLocalityConf;
+#[cfg(feature = "unstable")]
+use zenoh_config::wrappers::EntityGlobalId;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{
     core::{CongestionControl, Timestamp},
-    network::declare::ext::QoSType,
+    network::{declare::ext::QoSType, push},
+    zenoh::PushBody,
 };
 
 use crate::api::{
-    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding, key_expr::KeyExpr,
-    publisher::Priority,
+    builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding,
+    handlers::CallbackParameter, key_expr::KeyExpr, publisher::Priority,
 };
 
 /// The sequence number of the [`Sample`] from the source.
+#[zenoh_macros::unstable]
 pub type SourceSn = u32;
 
-/// The locality of samples to be received by subscribers or targeted by publishers.
-#[zenoh_macros::unstable]
+/// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Locality {
-    SessionLocal,
-    Remote,
-    #[default]
-    Any,
-}
-#[cfg(not(feature = "unstable"))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Locality {
     SessionLocal,
     Remote,
     #[default]
@@ -66,104 +61,6 @@ impl From<Locality> for PublisherLocalityConf {
             Locality::SessionLocal => Self::SessionLocal,
             Locality::Remote => Self::Remote,
             Locality::Any => Self::Any,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct DataInfo {
-    pub kind: SampleKind,
-    pub encoding: Option<Encoding>,
-    pub timestamp: Option<Timestamp>,
-    pub source_id: Option<EntityGlobalId>,
-    pub source_sn: Option<SourceSn>,
-    pub qos: QoS,
-}
-
-pub(crate) trait DataInfoIntoSample {
-    fn into_sample<IntoKeyExpr, IntoZBytes>(
-        self,
-        key_expr: IntoKeyExpr,
-        payload: IntoZBytes,
-        #[cfg(feature = "unstable")] reliability: Reliability,
-        attachment: Option<ZBytes>,
-    ) -> Sample
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>;
-}
-
-impl DataInfoIntoSample for DataInfo {
-    // This function is for internal use only.
-    // Technically it may create invalid sample (e.g. a delete sample with a payload and encoding)
-    // The test for it is intentionally not added to avoid inserting extra "if" into hot path.
-    // The correctness of the data should be ensured by the caller.
-    #[inline]
-    fn into_sample<IntoKeyExpr, IntoZBytes>(
-        self,
-        key_expr: IntoKeyExpr,
-        payload: IntoZBytes,
-        #[cfg(feature = "unstable")] reliability: Reliability,
-        attachment: Option<ZBytes>,
-    ) -> Sample
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>,
-    {
-        Sample {
-            key_expr: key_expr.into(),
-            payload: payload.into(),
-            kind: self.kind,
-            encoding: self.encoding.unwrap_or_default(),
-            timestamp: self.timestamp,
-            qos: self.qos,
-            #[cfg(feature = "unstable")]
-            reliability,
-            #[cfg(feature = "unstable")]
-            source_info: SourceInfo {
-                source_id: self.source_id,
-                source_sn: self.source_sn,
-            },
-            attachment,
-        }
-    }
-}
-
-impl DataInfoIntoSample for Option<DataInfo> {
-    #[inline]
-    fn into_sample<IntoKeyExpr, IntoZBytes>(
-        self,
-        key_expr: IntoKeyExpr,
-        payload: IntoZBytes,
-        #[cfg(feature = "unstable")] reliability: Reliability,
-        attachment: Option<ZBytes>,
-    ) -> Sample
-    where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
-        IntoZBytes: Into<ZBytes>,
-    {
-        if let Some(data_info) = self {
-            data_info.into_sample(
-                key_expr,
-                payload,
-                #[cfg(feature = "unstable")]
-                reliability,
-                attachment,
-            )
-        } else {
-            Sample {
-                key_expr: key_expr.into(),
-                payload: payload.into(),
-                kind: SampleKind::Put,
-                encoding: Encoding::default(),
-                timestamp: None,
-                qos: QoS::default(),
-                #[cfg(feature = "unstable")]
-                reliability,
-                #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
-                attachment,
-            }
         }
     }
 }
@@ -228,35 +125,25 @@ impl SourceInfo {
 }
 
 #[zenoh_macros::unstable]
-impl From<SourceInfo> for Option<zenoh_protocol::zenoh::put::ext::SourceInfoType> {
-    fn from(source_info: SourceInfo) -> Option<zenoh_protocol::zenoh::put::ext::SourceInfoType> {
-        if source_info.is_empty() {
+impl<const ID: u8> From<Option<zenoh_protocol::zenoh::ext::SourceInfoType<ID>>> for SourceInfo {
+    fn from(value: Option<zenoh_protocol::zenoh::ext::SourceInfoType<ID>>) -> Self {
+        SourceInfo {
+            source_id: value.as_ref().map(|i| i.id.into()),
+            source_sn: value.as_ref().map(|i| i.sn),
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<const ID: u8> From<SourceInfo> for Option<zenoh_protocol::zenoh::ext::SourceInfoType<ID>> {
+    fn from(value: SourceInfo) -> Self {
+        if value.is_empty() {
             None
         } else {
-            Some(zenoh_protocol::zenoh::put::ext::SourceInfoType {
-                id: source_info.source_id.unwrap_or_default().into(),
-                sn: source_info.source_sn.unwrap_or_default(),
+            Some(zenoh_protocol::zenoh::ext::SourceInfoType {
+                id: value.source_id.unwrap_or_default().into(),
+                sn: value.source_sn.unwrap_or_default(),
             })
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-impl From<DataInfo> for SourceInfo {
-    fn from(data_info: DataInfo) -> Self {
-        SourceInfo {
-            source_id: data_info.source_id,
-            source_sn: data_info.source_sn,
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-impl From<Option<DataInfo>> for SourceInfo {
-    fn from(data_info: Option<DataInfo>) -> Self {
-        match data_info {
-            Some(data_info) => data_info.into(),
-            None => SourceInfo::empty(),
         }
     }
 }
@@ -447,6 +334,64 @@ impl Sample {
             source_info: SourceInfo::empty(),
             attachment: None,
         }
+    }
+
+    pub(crate) fn from_push(
+        key_expr: KeyExpr<'static>,
+        qos: push::ext::QoSType,
+        body: &mut PushBody,
+        #[cfg(feature = "unstable")] reliability: Reliability,
+    ) -> Self {
+        match body {
+            PushBody::Put(put) => Self {
+                key_expr,
+                payload: mem::take(&mut put.payload).into(),
+                kind: SampleKind::Put,
+                encoding: mem::take(&mut put.encoding).into(),
+                timestamp: put.timestamp,
+                qos: qos.into(),
+                #[cfg(feature = "unstable")]
+                reliability,
+                #[cfg(feature = "unstable")]
+                source_info: mem::take(&mut put.ext_sinfo).into(),
+                attachment: mem::take(&mut put.ext_attachment).map(Into::into),
+            },
+            PushBody::Del(del) => Self {
+                key_expr,
+                payload: Default::default(),
+                kind: SampleKind::Delete,
+                encoding: Default::default(),
+                timestamp: del.timestamp,
+                qos: qos.into(),
+                #[cfg(feature = "unstable")]
+                reliability,
+                #[cfg(feature = "unstable")]
+                source_info: mem::take(&mut del.ext_sinfo).into(),
+                attachment: mem::take(&mut del.ext_attachment).map(Into::into),
+            },
+        }
+    }
+}
+
+impl CallbackParameter for Sample {
+    #[cfg(feature = "unstable")]
+    type Message<'a> = (
+        KeyExpr<'static>,
+        push::ext::QoSType,
+        &'a mut PushBody,
+        Reliability,
+    );
+    #[cfg(not(feature = "unstable"))]
+    type Message<'a> = (KeyExpr<'static>, push::ext::QoSType, &'a mut PushBody);
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        Self::from_push(
+            msg.0,
+            msg.1,
+            msg.2,
+            #[cfg(feature = "unstable")]
+            msg.3,
+        )
     }
 }
 

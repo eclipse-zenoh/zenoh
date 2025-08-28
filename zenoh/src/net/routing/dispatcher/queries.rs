@@ -37,19 +37,15 @@ use zenoh_util::Timed;
 
 use super::{
     face::FaceState,
-    resource::{QueryRoute, QueryTargetQablSet, Resource},
+    resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, TablesLock},
 };
 #[cfg(feature = "unstable")]
 use crate::key_expr::KeyExpr;
 use crate::net::routing::{
-    dispatcher::{
-        face::{Face, FaceId},
-        gateway::Bound,
-        tables::Tables,
-    },
+    dispatcher::{face::Face, gateway::Bound, tables::Tables},
     hat::{DeclarationContext, InterestProfile, SendDeclare},
-    router::{get_or_set_route, Direction},
+    router::{get_or_set_route, QueryDirection, RouteBuilder},
 };
 
 pub(crate) struct Query {
@@ -57,14 +53,13 @@ pub(crate) struct Query {
     src_qid: RequestId,
 }
 
-#[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_session_matching_queryables(
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
     complete: bool,
 ) -> HashMap<usize, Arc<FaceState>> {
-    // REVIEW(fuzzypixelz): regions2: use the broker hat
+    // REVIEW(regions2): use the broker hat
     tables.hats[Bound::session()].get_matching_queryables(&tables.data, key_expr, complete)
 }
 
@@ -230,7 +225,7 @@ impl Face {
             }
         });
 
-        // REVIEW(fuzzypixelz): this is necessary if HatFace is global
+        // REVIEW(regions): this is necessary if HatFace is global
         for mut res in res_cleanup {
             Resource::clean(&mut res);
         }
@@ -240,15 +235,15 @@ impl Face {
 #[inline]
 fn compute_final_route(
     tables: &Tables,
+    route: &mut RouteBuilder<QueryDirection>,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     expr: &mut RoutingExpr,
     target: &QueryTarget,
     query: &Arc<Query>,
-) -> QueryRoute {
+) {
     match target {
         QueryTarget::All => {
-            let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if tables.hats[qabl.bound].egress_filter(
                     &tables.data,
@@ -256,17 +251,15 @@ fn compute_final_route(
                     &qabl.dir.dst_face,
                     expr,
                 ) {
-                    route.entry(qabl.dir.dst_face.id).or_insert_with(|| {
-                        let mut direction = qabl.dir.clone();
-                        let qid = insert_pending_query(&mut direction.dst_face, query.clone());
-                        (direction, qid)
+                    route.insert(qabl.dir.dst_face.id, || {
+                        let mut dir = qabl.dir.clone();
+                        let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                        QueryDirection { dir, rid }
                     });
                 }
             }
-            route
         }
         QueryTarget::AllComplete => {
-            let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
                     && tables.hats[qabl.bound].egress_filter(
@@ -276,28 +269,33 @@ fn compute_final_route(
                         expr,
                     )
                 {
-                    route.entry(qabl.dir.dst_face.id).or_insert_with(|| {
-                        let mut direction = qabl.dir.clone();
-                        let qid = insert_pending_query(&mut direction.dst_face, query.clone());
-                        (direction, qid)
+                    route.insert(qabl.dir.dst_face.id, || {
+                        let mut dir = qabl.dir.clone();
+                        let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                        QueryDirection { dir, rid }
                     });
                 }
             }
-            route
         }
         QueryTarget::BestMatching => {
             if let Some(qabl) = qabls.iter().find(|qabl| {
                 qabl.dir.dst_face.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
             }) {
-                let mut route = HashMap::new();
-
-                let mut direction = qabl.dir.clone();
-                let qid = insert_pending_query(&mut direction.dst_face, query.clone());
-                route.insert(direction.dst_face.id, (direction, qid));
-
-                route
+                route.insert(qabl.dir.dst_face.id, || {
+                    let mut dir = qabl.dir.clone();
+                    let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                    QueryDirection { dir, rid }
+                });
             } else {
-                compute_final_route(tables, qabls, src_face, expr, &QueryTarget::All, query)
+                compute_final_route(
+                    tables,
+                    route,
+                    qabls,
+                    src_face,
+                    expr,
+                    &QueryTarget::All,
+                    query,
+                )
             }
         }
     }
@@ -533,7 +531,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 inc_req_stats!(face, rx, admin, msg.payload)
             }
 
-            let mut dirs = HashMap::<FaceId, (Direction, RequestId)>::new();
+            let mut query_dirs = RouteBuilder::<QueryDirection>::new();
 
             let queries_lock = zwrite!(tables_ref.queries_lock);
 
@@ -555,18 +553,15 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         bound,
                     );
 
-                    let route = compute_final_route(
+                    compute_final_route(
                         &rtables,
+                        &mut query_dirs,
                         &qabls,
                         face,
                         &mut expr,
                         &msg.ext_target,
                         &query,
                     );
-
-                    tracing::trace!(?bound, ?qabls, "route_query");
-
-                    dirs.extend(route);
                 }
             }
 
@@ -574,12 +569,12 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 .ext_timeout
                 .unwrap_or(rtables.data.queries_default_timeout);
 
-            tracing::debug!(dirs_len = dirs.len());
-
             drop(queries_lock);
             drop(rtables);
 
-            if dirs.is_empty() {
+            let query_dirs = query_dirs.build();
+
+            if query_dirs.is_empty() {
                 tracing::debug!(
                     "{}:{} Send final reply (no matching queryables or not master)",
                     face,
@@ -593,11 +588,11 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         ext_tstamp: None,
                     });
             } else {
-                for (dir, dst_qid) in dirs.into_values() {
+                for QueryDirection { dir, rid } in query_dirs.into_iter() {
                     QueryCleanup::spawn_query_clean_up_task(
                         &dir.dst_face,
                         tables_ref,
-                        dst_qid,
+                        rid,
                         timeout,
                     );
                     #[cfg(feature = "stats")]
@@ -611,10 +606,10 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         face,
                         msg.id,
                         dir.dst_face,
-                        dst_qid
+                        rid
                     );
                     dir.dst_face.primitives.send_request(&mut Request {
-                        id: dst_qid,
+                        id: rid,
                         wire_expr: dir.wire_expr,
                         ext_qos: msg.ext_qos,
                         ext_tstamp: msg.ext_tstamp,

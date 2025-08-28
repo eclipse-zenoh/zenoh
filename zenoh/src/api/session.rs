@@ -23,9 +23,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use ahash::HashMapExt;
 use async_trait::async_trait;
-#[cfg(feature = "unstable")]
 use once_cell::sync::OnceCell;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
@@ -34,13 +32,10 @@ use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
-use zenoh_buffers::ZBuf;
-use zenoh_collections::SingleOrVec;
+use zenoh_collections::{IntHashMap, SingleOrVec};
 use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -52,7 +47,7 @@ use zenoh_protocol::{
         declare::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber, DeclareToken,
-            TokenId, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
+            SubscriberId, TokenId, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
         },
         ext,
         interest::{InterestId, InterestMode, InterestOptions},
@@ -61,7 +56,6 @@ use zenoh_protocol::{
     },
     zenoh::{
         query::{self, ext::QueryBodyType},
-        reply::ReplyBody,
         Del, PushBody, Put, RequestBody, ResponseBody,
     },
 };
@@ -72,15 +66,7 @@ use zenoh_task::TaskController;
 
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
-use crate::api::selector::ZenohParameters;
-#[cfg(feature = "unstable")]
-use crate::api::{
-    builders::querier::QuerierBuilder,
-    matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
-    querier::QuerierState,
-    query::ReplyKeyExpr,
-    sample::SourceInfo,
-};
+use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
 use crate::{
     api::{
         admin,
@@ -89,6 +75,7 @@ use crate::{
                 PublicationBuilderDelete, PublicationBuilderPut, PublisherBuilder,
                 SessionDeleteBuilder, SessionPutBuilder,
             },
+            querier::QuerierBuilder,
             query::SessionGetBuilder,
             queryable::QueryableBuilder,
             session::OpenBuilder,
@@ -100,13 +87,15 @@ use crate::{
         info::SessionInfo,
         key_expr::{KeyExpr, KeyExprInner},
         liveliness::Liveliness,
+        matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
         publisher::{Priority, PublisherState},
+        querier::QuerierState,
         query::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
             Reply,
         },
         queryable::{Query, QueryInner, QueryableState},
-        sample::{DataInfo, DataInfoIntoSample, Locality, QoS, Sample, SampleKind},
+        sample::{Locality, QoS, Sample, SampleKind},
         selector::Selector,
         subscriber::{SubscriberKind, SubscriberState},
         Id,
@@ -135,21 +124,17 @@ pub(crate) struct SessionState {
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) liveliness_qid_counter: AtomicRequestId,
-    pub(crate) local_resources: ahash::HashMap<ExprId, Resource>,
-    pub(crate) remote_resources: ahash::HashMap<ExprId, Resource>,
-    #[cfg(feature = "unstable")]
+    pub(crate) local_resources: IntHashMap<ExprId, Resource>,
+    pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
-    #[cfg(feature = "unstable")]
     pub(crate) queriers: HashMap<Id, QuerierState>,
     pub(crate) remote_tokens: HashMap<TokenId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) liveliness_subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
-    #[cfg(feature = "unstable")]
     pub(crate) remote_queryables: HashMap<Id, (KeyExpr<'static>, bool)>,
-    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
@@ -169,21 +154,17 @@ impl SessionState {
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
             liveliness_qid_counter: AtomicRequestId::new(0),
-            local_resources: ahash::HashMap::new(),
-            remote_resources: ahash::HashMap::new(),
-            #[cfg(feature = "unstable")]
+            local_resources: IntHashMap::new(),
+            remote_resources: IntHashMap::new(),
             remote_subscribers: HashMap::new(),
             publishers: HashMap::new(),
-            #[cfg(feature = "unstable")]
             queriers: HashMap::new(),
             remote_tokens: HashMap::new(),
             //publications: Vec::new(),
             subscribers: HashMap::new(),
             liveliness_subscribers: HashMap::new(),
             queryables: HashMap::new(),
-            #[cfg(feature = "unstable")]
             remote_queryables: HashMap::new(),
-            #[cfg(feature = "unstable")]
             matching_listeners: HashMap::new(),
             queries: HashMap::new(),
             liveliness_queries: HashMap::new(),
@@ -313,7 +294,6 @@ impl SessionState {
         }
     }
 
-    #[cfg(feature = "unstable")]
     fn register_querier<'a>(
         &mut self,
         id: EntityId,
@@ -535,7 +515,6 @@ pub(crate) struct SessionInner {
     owns_runtime: bool,
     task_controller: TaskController,
     namespace: Option<OwnedNonWildKeyExpr>,
-    #[cfg(feature = "unstable")]
     face_id: OnceCell<usize>,
 }
 
@@ -700,7 +679,6 @@ impl Session {
                 owns_runtime,
                 task_controller: TaskController::default(),
                 namespace: namespace.clone(),
-                #[cfg(feature = "unstable")]
                 face_id: OnceCell::new(),
             }));
 
@@ -712,14 +690,12 @@ impl Session {
                         Arc::new(ENamespace::new(ns.clone(), Arc::new(session.downgrade()))),
                         Bound::session(),
                     );
-                    #[cfg(feature = "unstable")]
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     Arc::new(Namespace::new(ns, face))
                 }
                 None => {
                     let face =
                         router.new_primitives(Arc::new(session.downgrade()), Bound::session());
-                    #[cfg(feature = "unstable")]
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     face
                 }
@@ -1022,7 +998,6 @@ impl Session {
     /// let replies = querier.get().await.unwrap();
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn declare_querier<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -1438,7 +1413,6 @@ impl SessionInner {
         }
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn declare_querier_inner(
         &self,
         key_expr: KeyExpr,
@@ -1464,7 +1438,6 @@ impl SessionInner {
         Ok(id)
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn undeclare_querier_inner(&self, pid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         let Ok(primitives) = state.primitives() else {
@@ -1532,18 +1505,9 @@ impl SessionInner {
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber { id, wire_expr }),
             });
-            #[cfg(feature = "unstable")]
-            {
-                let state = zread!(self.state);
-                self.update_matching_status(
-                    &state,
-                    &key_expr,
-                    MatchingStatusType::Subscribers,
-                    true,
-                )
-            }
+            let state = zread!(self.state);
+            self.update_matching_status(&state, &key_expr, MatchingStatusType::Subscribers, true)
         } else if origin == Locality::SessionLocal {
-            #[cfg(feature = "unstable")]
             self.update_matching_status(&state, key_expr, MatchingStatusType::Subscribers, true)
         }
 
@@ -1599,23 +1563,6 @@ impl SessionInner {
                                     },
                                 }),
                             });
-                            #[cfg(feature = "unstable")]
-                            {
-                                let state = zread!(self.state);
-                                self.update_matching_status(
-                                    &state,
-                                    &sub_state.key_expr,
-                                    MatchingStatusType::Subscribers,
-                                    false,
-                                )
-                            }
-                        } else {
-                            drop(state);
-                        }
-                    } else {
-                        drop(state);
-                        #[cfg(feature = "unstable")]
-                        {
                             let state = zread!(self.state);
                             self.update_matching_status(
                                 &state,
@@ -1623,7 +1570,18 @@ impl SessionInner {
                                 MatchingStatusType::Subscribers,
                                 false,
                             )
+                        } else {
+                            drop(state);
                         }
+                    } else {
+                        drop(state);
+                        let state = zread!(self.state);
+                        self.update_matching_status(
+                            &state,
+                            &sub_state.key_expr,
+                            MatchingStatusType::Subscribers,
+                            false,
+                        )
                     }
                 }
                 SubscriberKind::LivelinessSubscriber => {
@@ -1694,16 +1652,13 @@ impl SessionInner {
             drop(state);
         }
 
-        #[cfg(feature = "unstable")]
-        {
-            let state = zread!(self.state);
-            self.update_matching_status(
-                &state,
-                key_expr,
-                MatchingStatusType::Queryables(complete),
-                true,
-            )
-        }
+        let state = zread!(self.state);
+        self.update_matching_status(
+            &state,
+            key_expr,
+            MatchingStatusType::Queryables(complete),
+            true,
+        );
 
         Ok(qable_state)
     }
@@ -1732,16 +1687,13 @@ impl SessionInner {
             } else {
                 drop(state);
             }
-            #[cfg(feature = "unstable")]
-            {
-                let state = zread!(self.state);
-                self.update_matching_status(
-                    &state,
-                    &qable_state.key_expr,
-                    MatchingStatusType::Queryables(qable_state.complete),
-                    false,
-                )
-            }
+            let state = zread!(self.state);
+            self.update_matching_status(
+                &state,
+                &qable_state.key_expr,
+                MatchingStatusType::Queryables(qable_state.complete),
+                false,
+            );
             Ok(())
         } else {
             Err(zerror!("Unable to find queryable").into())
@@ -1882,7 +1834,6 @@ impl SessionInner {
         Ok(())
     }
 
-    #[zenoh_macros::unstable]
     pub(crate) fn declare_matches_listener_inner(
         &self,
         key_expr: &KeyExpr,
@@ -1921,7 +1872,6 @@ impl SessionInner {
         Ok(listener_state)
     }
 
-    #[zenoh_macros::unstable]
     fn matching_status_local(
         &self,
         key_expr: &KeyExpr,
@@ -1945,7 +1895,6 @@ impl SessionInner {
         MatchingStatus { matching }
     }
 
-    #[zenoh_macros::unstable]
     fn matching_status_remote(
         &self,
         key_expr: &KeyExpr,
@@ -1963,7 +1912,6 @@ impl SessionInner {
         }
     }
 
-    #[zenoh_macros::unstable]
     fn matching_status_remote_inner(
         &self,
         key_expr: &KeyExpr,
@@ -2000,7 +1948,6 @@ impl SessionInner {
         Ok(MatchingStatus { matching })
     }
 
-    #[zenoh_macros::unstable]
     pub(crate) fn matching_status(
         &self,
         key_expr: &KeyExpr,
@@ -2021,7 +1968,6 @@ impl SessionInner {
         }
     }
 
-    #[zenoh_macros::unstable]
     pub(crate) fn update_matching_status(
         self: &Arc<Self>,
         state: &SessionState,
@@ -2067,7 +2013,6 @@ impl SessionInner {
         }
     }
 
-    #[zenoh_macros::unstable]
     pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if state.primitives.is_none() {
@@ -2082,23 +2027,22 @@ impl SessionInner {
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
-    pub(crate) fn execute_subscriber_callbacks(
+    pub(crate) fn execute_subscriber_callbacks<'a>(
         &self,
         local: bool,
-        key_expr: &WireExpr,
-        info: Option<DataInfo>,
-        payload: ZBuf,
         kind: SubscriberKind,
+        wire_expr: &WireExpr,
+        qos: push::ext::QoSType,
+        msg: impl FnOnce() -> &'a mut PushBody,
         #[cfg(feature = "unstable")] reliability: Reliability,
-        attachment: Option<ZBytes>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
-        if key_expr.suffix.is_empty() {
-            match state.get_res(&key_expr.scope, key_expr.mapping, local) {
+        if wire_expr.suffix.is_empty() {
+            match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
                     for sub in res.subscribers(kind) {
                         if sub.origin == Locality::Any
@@ -2116,12 +2060,12 @@ impl SessionInner {
                     return;
                 }
                 None => {
-                    tracing::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                    tracing::error!("Received Data for unknown expr_id: {}", wire_expr.scope);
                     return;
                 }
             }
         } else {
-            match state.wireexpr_to_keyexpr(key_expr, local) {
+            match state.wireexpr_to_keyexpr(wire_expr, local) {
                 Ok(key_expr) => {
                     for sub in state.subscribers(kind).values() {
                         if (sub.origin == Locality::Any
@@ -2139,22 +2083,22 @@ impl SessionInner {
             }
         };
         drop(state);
-        let mut sample = info.clone().into_sample(
-            // SAFETY: the keyexpr is valid
-            KeyExpr::dummy(),
-            payload,
-            #[cfg(feature = "unstable")]
-            reliability,
-            attachment,
-        );
+        if callbacks.is_empty() {
+            return;
+        }
+        let msg = msg();
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            sample.key_expr = key_expr;
-            cb.call(sample.clone());
+            #[cfg(feature = "unstable")]
+            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
+            #[cfg(not(feature = "unstable"))]
+            cb.call_with_message((key_expr, qos, &mut msg.clone()));
         }
         if let Some((cb, key_expr)) = last {
-            sample.key_expr = key_expr;
-            cb.call(sample);
+            #[cfg(feature = "unstable")]
+            cb.call_with_message((key_expr, qos, msg, reliability));
+            #[cfg(not(feature = "unstable"))]
+            cb.call_with_message((key_expr, qos, msg));
         }
     }
 
@@ -2178,48 +2122,42 @@ impl SessionInner {
         let primitives = zread!(self.state).primitives()?;
         let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
-        let mut payload = Some(payload);
+        let ext_qos = push::ext::QoSType::new(priority.into(), congestion_control, is_express);
+        let make_body = || match kind {
+            SampleKind::Put => PushBody::Put(Put {
+                timestamp,
+                encoding: encoding.clone().into(),
+                #[cfg(feature = "unstable")]
+                ext_sinfo: source_info.clone().into(),
+                #[cfg(not(feature = "unstable"))]
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_attachment: attachment.clone().map(Into::into),
+                ext_unknown: vec![],
+                payload: payload.clone().into(),
+            }),
+            SampleKind::Delete => PushBody::Del(Del {
+                timestamp,
+                #[cfg(feature = "unstable")]
+                ext_sinfo: source_info.clone().into(),
+                #[cfg(not(feature = "unstable"))]
+                ext_sinfo: None,
+                ext_attachment: attachment.clone().map(Into::into),
+                ext_unknown: vec![],
+            }),
+        };
+        let mut push = Push {
+            wire_expr: wire_expr.to_owned(),
+            ext_qos,
+            ..Push::from(make_body())
+        };
         if destination != Locality::SessionLocal {
-            let body = match kind {
-                SampleKind::Put => PushBody::Put(Put {
-                    timestamp,
-                    encoding: encoding.clone().into(),
-                    #[cfg(feature = "unstable")]
-                    ext_sinfo: source_info.clone().into(),
-                    #[cfg(not(feature = "unstable"))]
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: attachment.clone().map(|a| a.into()),
-                    ext_unknown: vec![],
-                    payload: if destination == Locality::Any {
-                        payload.clone().unwrap().into()
-                    } else {
-                        payload.take().unwrap().into()
-                    },
-                }),
-                SampleKind::Delete => PushBody::Del(Del {
-                    timestamp,
-                    #[cfg(feature = "unstable")]
-                    ext_sinfo: source_info.clone().into(),
-                    #[cfg(not(feature = "unstable"))]
-                    ext_sinfo: None,
-                    ext_attachment: attachment.clone().map(|a| a.into()),
-                    ext_unknown: vec![],
-                }),
-            };
-            let push = &mut Push {
-                wire_expr: wire_expr.to_owned(),
-                ext_qos: push::ext::QoSType::new(priority.into(), congestion_control, is_express),
-                ext_tstamp: None,
-                ext_nodeid: push::ext::NodeIdType::DEFAULT,
-                payload: body,
-            };
             match &self.namespace {
                 Some(_) => {
                     let face = primitives.as_any().downcast_ref::<Namespace>().unwrap();
                     face.send_push(
-                        push,
+                        &mut push,
                         #[cfg(feature = "unstable")]
                         reliability,
                         #[cfg(not(feature = "unstable"))]
@@ -2229,7 +2167,7 @@ impl SessionInner {
                 None => {
                     let face = primitives.as_any().downcast_ref::<Face>().unwrap();
                     face.send_push(
-                        push,
+                        &mut push,
                         #[cfg(feature = "unstable")]
                         reliability,
                         #[cfg(not(feature = "unstable"))]
@@ -2239,34 +2177,20 @@ impl SessionInner {
             }
         }
         if destination != Locality::Remote {
-            let data_info = DataInfo {
-                kind,
-                encoding: Some(encoding),
-                timestamp,
-                #[cfg(feature = "unstable")]
-                source_id: source_info.source_id,
-                #[cfg(not(feature = "unstable"))]
-                source_id: None,
-                #[cfg(feature = "unstable")]
-                source_sn: source_info.source_sn,
-                #[cfg(not(feature = "unstable"))]
-                source_sn: None,
-                qos: QoS::from(push::ext::QoSType::new(
-                    priority.into(),
-                    congestion_control,
-                    is_express,
-                )),
-            };
-
             self.execute_subscriber_callbacks(
                 true,
-                &wire_expr,
-                Some(data_info),
-                payload.take().unwrap().into(),
                 SubscriberKind::Subscriber,
+                &wire_expr,
+                ext_qos,
+                || {
+                    // check if the message has been consumed, and rebuild the payload in this case
+                    if push.wire_expr == WireExpr::empty() {
+                        push.payload = make_body();
+                    }
+                    &mut push.payload
+                },
                 #[cfg(feature = "unstable")]
                 reliability,
-                attachment,
             );
         }
         Ok(())
@@ -2325,7 +2249,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(session.zid().into()),
+                                    replier_id: None
                                 });
                             }
                         }
@@ -2424,7 +2348,7 @@ impl SessionInner {
                                 query.callback.call(Reply {
                                     result: Err(ReplyError::new("Timeout", Encoding::ZENOH_STRING)),
                                     #[cfg(feature = "unstable")]
-                                    replier_id: Some(session.zid().into()),
+                                    replier_id: None
                                 });
                             }
                         }
@@ -2518,7 +2442,7 @@ impl Primitives for WeakSession {
         trace!("recv Interest {} {:?}", msg.id, msg.wire_expr);
     }
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
-        match &msg.body {
+        match &mut msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
                 let state = &mut zwrite!(self.state);
@@ -2554,7 +2478,6 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
-                #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
                     if state.primitives.is_none() {
@@ -2584,27 +2507,23 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 trace!("recv UndeclareSubscriber {:?}", m.id);
-                #[cfg(feature = "unstable")]
-                {
-                    let mut state = zwrite!(self.state);
-                    if state.primitives.is_none() {
-                        return; // Session closing or closed
-                    }
-                    if let Some(expr) = state.remote_subscribers.remove(&m.id) {
-                        self.update_matching_status(
-                            &state,
-                            &expr,
-                            MatchingStatusType::Subscribers,
-                            false,
-                        );
-                    } else {
-                        tracing::error!("Received Undeclare Subscriber for unknown id: {}", m.id);
-                    }
+                let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
+                if let Some(expr) = state.remote_subscribers.remove(&m.id) {
+                    self.update_matching_status(
+                        &state,
+                        &expr,
+                        MatchingStatusType::Subscribers,
+                        false,
+                    );
+                } else {
+                    tracing::error!("Received Undeclare Subscriber for unknown id: {}", m.id);
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 trace!("recv DeclareQueryable {} {:?}", m.id, m.wire_expr);
-                #[cfg(feature = "unstable")]
                 {
                     let mut state = zwrite!(self.state);
                     if state.primitives.is_none() {
@@ -2636,22 +2555,19 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
-                #[cfg(feature = "unstable")]
-                {
-                    let mut state = zwrite!(self.state);
-                    if state.primitives.is_none() {
-                        return; // Session closing or closed
-                    }
-                    if let Some((expr, complete)) = state.remote_queryables.remove(&m.id) {
-                        self.update_matching_status(
-                            &state,
-                            &expr,
-                            MatchingStatusType::Queryables(complete),
-                            false,
-                        );
-                    } else {
-                        tracing::error!("Received Undeclare Queryable for unknown id: {}", m.id);
-                    }
+                let mut state = zwrite!(self.state);
+                if state.primitives.is_none() {
+                    return; // Session closing or closed
+                }
+                if let Some((expr, complete)) = state.remote_queryables.remove(&m.id) {
+                    self.update_matching_status(
+                        &state,
+                        &expr,
+                        MatchingStatusType::Queryables(complete),
+                        false,
+                    );
+                } else {
+                    tracing::error!("Received Undeclare Queryable for unknown id: {}", m.id);
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
@@ -2692,15 +2608,15 @@ impl Primitives for WeakSession {
                             e.insert(key_expr.clone());
                             drop(state);
 
+                            let mut body = None;
                             self.execute_subscriber_callbacks(
                                 false,
-                                &m.wire_expr,
-                                None,
-                                ZBuf::default(),
                                 SubscriberKind::LivelinessSubscriber,
+                                &m.wire_expr,
+                                Default::default(),
+                                || body.insert(Put::default().into()),
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
-                                None,
                             );
                         }
                     }
@@ -2718,21 +2634,15 @@ impl Primitives for WeakSession {
                     }
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
-
-                        let data_info = DataInfo {
-                            kind: SampleKind::Delete,
-                            ..Default::default()
-                        };
-
+                        let mut body = None;
                         self.execute_subscriber_callbacks(
                             false,
-                            &key_expr.to_wire(self),
-                            Some(data_info),
-                            ZBuf::default(),
                             SubscriberKind::LivelinessSubscriber,
+                            &key_expr.to_wire(self),
+                            Default::default(),
+                            || body.insert(Del::default().into()),
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
-                            None,
                         );
                     } else if m.ext_wire_expr.wire_expr != WireExpr::empty() {
                         match state
@@ -2741,21 +2651,15 @@ impl Primitives for WeakSession {
                         {
                             Ok(key_expr) => {
                                 drop(state);
-
-                                let data_info = DataInfo {
-                                    kind: SampleKind::Delete,
-                                    ..Default::default()
-                                };
-
+                                let mut body = None;
                                 self.execute_subscriber_callbacks(
                                     false,
-                                    &key_expr.to_wire(self),
-                                    Some(data_info),
-                                    ZBuf::default(),
                                     SubscriberKind::LivelinessSubscriber,
+                                    &key_expr.to_wire(self),
+                                    Default::default(),
+                                    || body.insert(Del::default().into()),
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
-                                    None,
                                 );
                             }
                             Err(err) => {
@@ -2780,48 +2684,15 @@ impl Primitives for WeakSession {
 
     fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
-        match &mut msg.payload {
-            PushBody::Put(m) => {
-                let info = DataInfo {
-                    kind: SampleKind::Put,
-                    encoding: Some(mem::take(&mut m.encoding).into()),
-                    timestamp: m.timestamp,
-                    qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
-                };
-                self.execute_subscriber_callbacks(
-                    false,
-                    &msg.wire_expr,
-                    Some(info),
-                    mem::take(&mut m.payload),
-                    SubscriberKind::Subscriber,
-                    #[cfg(feature = "unstable")]
-                    _reliability,
-                    mem::take(&mut m.ext_attachment).map(Into::into),
-                )
-            }
-            PushBody::Del(m) => {
-                let info = DataInfo {
-                    kind: SampleKind::Delete,
-                    encoding: None,
-                    timestamp: m.timestamp,
-                    qos: QoS::from(msg.ext_qos),
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.into()),
-                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn),
-                };
-                self.execute_subscriber_callbacks(
-                    false,
-                    &msg.wire_expr,
-                    Some(info),
-                    ZBuf::empty(),
-                    SubscriberKind::Subscriber,
-                    #[cfg(feature = "unstable")]
-                    _reliability,
-                    mem::take(&mut m.ext_attachment).map(Into::into),
-                )
-            }
-        }
+        self.execute_subscriber_callbacks(
+            false,
+            SubscriberKind::Subscriber,
+            &msg.wire_expr,
+            msg.ext_qos,
+            || &mut msg.payload,
+            #[cfg(feature = "unstable")]
+            _reliability,
+        );
     }
 
     fn send_request(&self, msg: &mut Request) {
@@ -2872,7 +2743,12 @@ impl Primitives for WeakSession {
                                 encoding: mem::take(&mut e.encoding).into(),
                             }),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
+                                zenoh_protocol::core::EntityGlobalIdProto {
+                                    zid: rid.zid,
+                                    eid: rid.eid,
+                                }
+                            }),
                         };
                         callback.call(new_reply);
                     }
@@ -2906,66 +2782,23 @@ impl Primitives for WeakSession {
                             );
                             return;
                         }
-
-                        struct Ret {
-                            payload: ZBuf,
-                            info: DataInfo,
-                            attachment: Option<ZBytes>,
-                        }
-                        let Ret {
-                            payload,
-                            info,
-                            attachment,
-                        } = match &mut m.payload {
-                            ReplyBody::Put(Put {
-                                timestamp,
-                                encoding,
-                                ext_sinfo,
-                                ext_attachment: _attachment,
-                                payload,
-                                ..
-                            }) => Ret {
-                                payload: mem::take(payload),
-                                info: DataInfo {
-                                    kind: SampleKind::Put,
-                                    encoding: Some(mem::take(encoding).into()),
-                                    timestamp: *timestamp,
-                                    qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
-                                },
-                                attachment: mem::take(_attachment).map(Into::into),
-                            },
-                            ReplyBody::Del(Del {
-                                timestamp,
-                                ext_sinfo,
-                                ext_attachment: _attachment,
-                                ..
-                            }) => Ret {
-                                payload: ZBuf::empty(),
-                                info: DataInfo {
-                                    kind: SampleKind::Delete,
-                                    encoding: None,
-                                    timestamp: *timestamp,
-                                    qos: QoS::from(msg.ext_qos),
-                                    source_id: ext_sinfo.as_ref().map(|i| i.id.into()),
-                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn),
-                                },
-                                attachment: mem::take(_attachment).map(Into::into),
-                            },
-                        };
-                        let sample = info.into_sample(
-                            key_expr.into_owned(),
-                            payload,
-                            #[cfg(feature = "unstable")]
-                            Reliability::Reliable,
-                            attachment,
-                        );
                         let new_reply = Reply {
-                            result: Ok(sample),
+                            result: Ok(Sample::from_push(
+                                key_expr.into_owned(),
+                                msg.ext_qos,
+                                &mut m.payload,
+                                #[cfg(feature = "unstable")]
+                                Reliability::Reliable,
+                            )),
                             #[cfg(feature = "unstable")]
-                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| rid.zid),
+                            replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
+                                zenoh_protocol::core::EntityGlobalIdProto {
+                                    zid: rid.zid,
+                                    eid: rid.eid,
+                                }
+                            }),
                         };
+
                         let callback =
                             match query.reception_mode {
                                 ConsolidationMode::None => {
@@ -3192,18 +3025,8 @@ impl Closee for Arc<SessionInner> {
         let _local_resources = std::mem::take(&mut state.local_resources);
         let _remote_resources = std::mem::take(&mut state.remote_resources);
         let _queries = std::mem::take(&mut state.queries);
+        let _matching_listeners = std::mem::take(&mut state.matching_listeners);
         drop(state);
-        #[cfg(feature = "unstable")]
-        {
-            // the lock from the outer scope cannot be reused because the declared variables
-            // would be undeclared at the end of the block, with the lock held, and we want
-            // to avoid that; so we reacquire the lock in the block
-            // anyway, it doesn't really matter, and this code will be cleaned up when the APIs
-            // will be stabilized.
-            let mut state = zwrite!(self.state);
-            let _matching_listeners = std::mem::take(&mut state.matching_listeners);
-            drop(state);
-        }
     }
 }
 

@@ -1036,7 +1036,7 @@ impl HatQueriesTrait for Hat {
 
         match ctx.src_face.whatami {
             WhatAmI::Router => {
-                // FIXME(fuzzypixelz): InterestProfile is ignored
+                // FIXME(regions): InterestProfile is ignored
                 self.declare_router_queryable(
                     ctx.tables,
                     ctx.src_face,
@@ -1047,7 +1047,7 @@ impl HatQueriesTrait for Hat {
                 );
             }
             WhatAmI::Peer | WhatAmI::Client => {
-                // TODO(fuzzypixelz): regions2: clients and peers of this
+                // TODO(regions2): clients and peers of this
                 // router are handled as if they were bound to future broker/peer-to-peer south hats resp.
                 self.declare_simple_queryable(
                     ctx.tables,
@@ -1103,28 +1103,28 @@ impl HatQueriesTrait for Hat {
         self.router_qabls
             .iter()
             .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those queryables
+                let routers = Vec::from_iter(self.res_hat(s).router_qabls.keys().cloned());
+                let mut peers = vec![];
+                let mut clients = vec![];
+                for ctx in s
+                    .face_ctxs
+                    .values()
+                    .filter(|ctx| ctx.qabl.is_some() && !ctx.face.is_local)
+                {
+                    match ctx.face.whatami {
+                        WhatAmI::Router => (),
+                        WhatAmI::Peer => peers.push(ctx.face.zid),
+                        WhatAmI::Client => clients.push(ctx.face.zid),
+                    }
+                }
                 (
                     s.clone(),
-                    // Compute the list of routers, peers and clients that are known
-                    // sources of those queryables
                     Sources {
-                        routers: Vec::from_iter(self.res_hat(s).router_qabls.keys().cloned()),
-                        peers: s
-                            .face_ctxs
-                            .values()
-                            .filter_map(|ctx| {
-                                (ctx.face.whatami == WhatAmI::Peer && ctx.qabl.is_some())
-                                    .then_some(ctx.face.zid)
-                            })
-                            .collect(),
-                        clients: s
-                            .face_ctxs
-                            .values()
-                            .filter_map(|ctx| {
-                                (ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some())
-                                    .then_some(ctx.face.zid)
-                            })
-                            .collect(),
+                        routers,
+                        peers,
+                        clients,
                     },
                 )
             })
@@ -1138,7 +1138,12 @@ impl HatQueriesTrait for Hat {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.hats.north().whatami // REVIEW(fuzzypixelz)
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
@@ -1204,9 +1209,9 @@ impl HatQueriesTrait for Hat {
                 complete,
             );
 
-            for (sid, ctx) in &mres.face_ctxs {
+            for (fid, ctx) in &mres.face_ctxs {
                 if ctx.face.whatami != WhatAmI::Router {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
                     if let Some(qabl_info) = ctx.qabl.as_ref() {
                         route.push(QueryTargetQabl {
                             dir: Direction {
@@ -1228,7 +1233,6 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &TablesData,

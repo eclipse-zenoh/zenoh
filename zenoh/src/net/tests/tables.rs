@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-// FIXME(fuzzypixelz): uncomment this
+// FIXME(regions): uncomment this
 // use std::{
 //     convert::{TryFrom, TryInto},
 //     sync::{Arc, Weak},

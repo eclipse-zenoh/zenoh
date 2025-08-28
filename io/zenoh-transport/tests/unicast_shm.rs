@@ -27,11 +27,8 @@ mod tests {
     use zenoh_core::{ztimeout, Wait};
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
-        network::{
-            push::ext::{NodeIdType, QoSType},
-            NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push,
-        },
+        core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
+        network::{push::ext::QoSType, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push},
         zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
@@ -241,23 +238,14 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let mut message: NetworkMessage = Push {
+            let mut message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
+                ..Push::from(Put {
                     payload: sbuf.into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                    ..Put::default()
+                })
+            });
 
             peer_shm02_transport.schedule(message.as_mut()).unwrap();
         }
@@ -282,23 +270,14 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let mut message: NetworkMessage = Push {
+            let mut message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
+                ..Push::from(Put {
                     payload: sbuf.into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                    ..Put::default()
+                })
+            });
 
             peer_net01_transport.schedule(message.as_mut()).unwrap();
         }

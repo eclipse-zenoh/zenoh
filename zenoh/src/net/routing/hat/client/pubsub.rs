@@ -37,7 +37,7 @@ use crate::{
             tables::{Route, RoutingExpr, TablesData},
         },
         hat::{DeclarationContext, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
-        router::Direction,
+        router::{Direction, RouteBuilder},
         RoutingContext,
     },
 };
@@ -290,7 +290,7 @@ impl HatPubSubTrait for Hat {
         sub_info: &SubscriberInfo,
         _profile: InterestProfile,
     ) {
-        // FIXME(fuzzypixelz): InterestProfile is ignored
+        // FIXME(regions): InterestProfile is ignored
         self.declare_simple_subscription(
             ctx.tables,
             ctx.src_face,
@@ -355,10 +355,10 @@ impl HatPubSubTrait for Hat {
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
-        let mut route = HashMap::new();
+        let mut route = RouteBuilder::<Direction>::new();
         let key_expr = expr.full_expr();
         if key_expr.ends_with('/') {
-            return Arc::new(route);
+            return Arc::new(route.build());
         }
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
@@ -370,7 +370,7 @@ impl HatPubSubTrait for Hat {
             Ok(ke) => ke,
             Err(e) => {
                 tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route);
+                return Arc::new(route.build());
             }
         };
 
@@ -395,14 +395,11 @@ impl HatPubSubTrait for Hat {
                     .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
                 {
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    route.insert(
-                        face.id,
-                        Direction {
-                            dst_face: face.clone(),
-                            wire_expr: key_expr.to_owned(),
-                            node_id: NodeId::default(),
-                        },
-                    );
+                    route.insert(face.id, || Direction {
+                        dst_face: face.clone(),
+                        wire_expr: key_expr.to_owned(),
+                        node_id: NodeId::default(),
+                    });
                 }
             }
         }
@@ -419,7 +416,7 @@ impl HatPubSubTrait for Hat {
 
             for (fid, ctx) in &mres.face_ctxs {
                 if ctx.subs.is_some() && ctx.face.whatami == WhatAmI::Client {
-                    route.entry(*fid).or_insert_with(|| {
+                    route.insert(*fid, || {
                         let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -430,10 +427,9 @@ impl HatPubSubTrait for Hat {
                 }
             }
         }
-        Arc::new(route)
+        Arc::new(route.build())
     }
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &TablesData,

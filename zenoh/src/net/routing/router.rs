@@ -51,7 +51,7 @@ impl Router {
     pub fn new(zid: ZenohIdProto, hlc: Option<Arc<HLC>>, config: &Config) -> ZResult<Self> {
         let hats = [(Bound::North, config.mode().unwrap_or_default())];
 
-        // TODO(fuzzypixelz): add gateway config and use it here
+        // TODO(regions): add gateway config and use it here
 
         tracing::trace!(?hats, "new router");
 
@@ -112,7 +112,6 @@ impl Router {
                     FaceStateBuilder::new(
                         fid,
                         zid,
-                        // REVIEW(fuzzypixelz): is this correct?
                         bound,
                         primitives.clone(),
                         tables.hats.map(|hat| hat.new_face()),

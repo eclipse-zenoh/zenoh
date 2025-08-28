@@ -660,8 +660,8 @@ impl HatTokenTrait for Hat {
         interest_id: Option<InterestId>,
         _profile: InterestProfile,
     ) {
-        // FIXME(fuzzypixelz): InterestProfile is ignored
-        // TODO(fuzzypixelz): regions2: clients of this peer are handled as if they were bound to a future broker south hat
+        // FIXME(regions): InterestProfile is ignored
+        // TODO(regions2): clients of this peer are handled as if they were bound to a future broker south hat
         self.declare_simple_token(
             ctx.tables,
             ctx.src_face,

@@ -57,6 +57,7 @@ zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
+// TODO(now)
 #[derive(Default, serde::Serialize)]
 pub(crate) struct Sources {
     routers: Vec<ZenohIdProto>,
@@ -169,7 +170,6 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn update_from_config(
         &mut self,
-
         _tables_ref: &Arc<TablesLock>,
         _runtime: &Runtime,
     ) -> ZResult<()> {
@@ -255,7 +255,6 @@ pub(crate) trait HatPubSubTrait {
         source_type: WhatAmI,
     ) -> Arc<Route>;
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &TablesData,
@@ -301,7 +300,6 @@ pub(crate) trait HatQueriesTrait {
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
 
-    #[zenoh_macros::unstable]
     fn get_matching_queryables(
         &self,
         tables: &TablesData,

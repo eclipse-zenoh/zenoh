@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    future::{IntoFuture, Ready},
-    sync::Arc,
-};
+use std::future::{IntoFuture, Ready};
 
 use zenoh_config::wrappers::Hello;
 use zenoh_core::{Resolvable, Wait};
@@ -71,7 +68,7 @@ impl ScoutBuilder<DefaultHandler> {
     where
         F: Fn(Hello) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the [`Hello`] messages from this scout with a mutable callback.

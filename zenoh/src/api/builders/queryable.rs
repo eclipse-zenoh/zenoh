@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    future::{IntoFuture, Ready},
-    sync::Arc,
-};
+use std::future::{IntoFuture, Ready};
 
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
@@ -72,7 +69,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     where
         F: Fn(Query) + Send + Sync + 'static,
     {
-        self.with(Callback::new(Arc::new(callback)))
+        self.with(Callback::from(callback))
     }
 
     /// Receive the queries for this Queryable with a mutable callback.
@@ -186,7 +183,6 @@ impl<Handler, const BACKGROUND: bool> QueryableBuilder<'_, '_, Handler, BACKGROU
     /// Restrict the matching queries that will be receive by this [`Queryable`]
     /// to the ones that have the given [`Locality`](Locality).
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
         self

@@ -14,7 +14,7 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{HashMap, VecDeque},
+    collections::{HashSet, VecDeque},
     convert::TryInto,
     fmt::Debug,
     hash::{Hash, Hasher},
@@ -22,8 +22,7 @@ use std::{
     sync::{Arc, RwLock, Weak},
 };
 
-use ahash::HashMapExt;
-use zenoh_collections::SingleOrBoxHashSet;
+use zenoh_collections::{IntHashMap, SingleOrBoxHashSet};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -44,7 +43,7 @@ use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
         gateway::{Bound, BoundMap},
-        tables::Tables,
+        tables::{RoutingExpr, Tables},
     },
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
@@ -60,17 +59,76 @@ pub(crate) struct Direction {
     pub(crate) node_id: NodeId,
 }
 
-pub(crate) type Route = HashMap<FaceId, Direction>;
+#[derive(Clone, Debug)]
+pub(crate) struct QueryDirection {
+    pub(crate) dir: Direction,
+    pub(crate) rid: RequestId,
+}
 
-pub(crate) type QueryRoute = HashMap<FaceId, (Direction, RequestId)>;
+pub(crate) type Route = Vec<Direction>;
 
-#[derive(Debug)]
 pub(crate) struct QueryTargetQabl {
     pub(crate) dir: Direction,
     pub(crate) info: Option<QueryableInfoType>,
     pub(crate) bound: Bound,
 }
+
+impl QueryTargetQabl {
+    pub(crate) fn new(
+        (fid, ctx): (&FaceId, &Arc<FaceContext>),
+        expr: &mut RoutingExpr,
+        complete: bool,
+        bound: &Bound,
+    ) -> Option<Self> {
+        let qabl = ctx.qabl?;
+        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+        Some(Self {
+            dir: Direction {
+                dst_face: ctx.face.clone(),
+                wire_expr: key_expr.to_owned(),
+                node_id: NodeId::default(),
+            },
+            info: Some(QueryableInfoType {
+                complete: complete && qabl.complete,
+                // NOTE: local client faces are nearer than remote client faces
+                distance: if ctx.face.is_local { 0 } else { 1 },
+            }),
+            bound: *bound,
+        })
+    }
+}
+
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
+
+/// Helper struct to build route, handling face deduplication.
+pub(crate) struct RouteBuilder<T> {
+    /// The route built.
+    route: Vec<T>,
+    /// The faces' id already inserted.
+    faces: HashSet<FaceId>,
+}
+
+impl<T> RouteBuilder<T> {
+    /// Create a new empty builder.
+    pub(crate) fn new() -> Self {
+        Self {
+            route: Vec::new(),
+            faces: HashSet::new(),
+        }
+    }
+
+    /// Insert a new direction if it has not been registered for the given face.
+    pub(crate) fn insert(&mut self, face_id: FaceId, direction: impl FnOnce() -> T) {
+        if self.faces.insert(face_id) {
+            self.route.push(direction());
+        }
+    }
+
+    /// Build the route, consuming the builder.
+    pub(crate) fn build(self) -> Vec<T> {
+        self.route
+    }
+}
 
 pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
 pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
@@ -219,7 +277,7 @@ pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    // REVIEW(fuzzypixelz): added because e.g. router/router bounds needs separate
+    // REVIEW(regions): added because e.g. router/router bounds needs separate
     // Routes (WhatAmI, NodeId -> Route) since each linkstate has a NodeId space
     pub(crate) hats: BoundMap<HatResourceContext>,
 }
@@ -265,7 +323,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) ctx: Option<Box<ResourceContext>>,
-    pub(crate) face_ctxs: ahash::HashMap<FaceId, Arc<FaceContext>>,
+    pub(crate) face_ctxs: IntHashMap<FaceId, Arc<FaceContext>>,
 }
 
 impl PartialEq for Resource {
@@ -348,7 +406,7 @@ impl Resource {
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             ctx: context.map(Box::new),
-            face_ctxs: ahash::HashMap::new(),
+            face_ctxs: IntHashMap::new(),
         }
     }
 
@@ -413,7 +471,7 @@ impl Resource {
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             ctx: None,
-            face_ctxs: ahash::HashMap::new(),
+            face_ctxs: IntHashMap::new(),
         })
     }
 

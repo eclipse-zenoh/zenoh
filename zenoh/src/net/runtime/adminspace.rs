@@ -41,7 +41,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
-use zenoh_transport::unicast::TransportUnicast;
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
@@ -597,7 +597,7 @@ fn local_data(context: &AdminContext, query: Query) {
 
     let links_info = context.runtime.get_links_info();
     // transports info
-    let transport_to_json = |transport: &TransportUnicast| {
+    let transport_unicast_to_json = |transport: &TransportUnicast| {
         let link_to_json = |link: &Link| {
             json!({
                 "src": link.src.to_string(),
@@ -628,12 +628,46 @@ fn local_data(context: &AdminContext, query: Query) {
         let json = insert_stats(json, transport.get_stats().ok().as_ref());
         json
     };
-    let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net
-        .block_in_place(transport_mgr.get_transports_unicast())
-        .iter()
-        .map(transport_to_json)
-        .collect();
+    let transport_multicast_peer_to_json =
+        |transport: &TransportMulticast, mcast_peer: &TransportPeer| {
+            let link_to_json = |link: &Link| {
+                json!({
+                    "src": link.src.to_string(),
+                    "dst": link.dst.to_string()
+                })
+            };
+            let links = mcast_peer.links.iter().map(link_to_json).collect_vec();
+            let json = json!({
+                "peer": mcast_peer.zid.to_string(),
+                "whatami": mcast_peer.whatami.to_string(),
+                "group": transport
+                    .get_link()
+                    .ok()
+                    .and_then(|t| t.group.map(|g| g.to_string()))
+                    .unwrap_or("unknown".to_string()),
 
+                "links": links,
+            });
+            #[cfg(feature = "stats")]
+            let json = insert_stats(json, transport.get_stats().ok().as_ref());
+            json
+        };
+    let mut transports: Vec<serde_json::Value> = vec![];
+    zenoh_runtime::ZRuntime::Net.block_in_place(async {
+        for transport in transport_mgr.get_transports_unicast().await {
+            transports.push(transport_unicast_to_json(&transport));
+        }
+        for mcast_transport in transport_mgr.get_transports_multicast().await {
+            if let Ok(peers) = mcast_transport.get_peers() {
+                for mcast_peer in &peers {
+                    transports.push(transport_multicast_peer_to_json(
+                        &mcast_transport,
+                        mcast_peer,
+                    ));
+                }
+            }
+        }
+    });
     let json = json!({
         "zid": context.runtime.state.zid,
         "version": context.version,

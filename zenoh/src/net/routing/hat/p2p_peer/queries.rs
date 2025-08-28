@@ -552,8 +552,8 @@ impl HatQueriesTrait for Hat {
         qabl_info: &QueryableInfoType,
         _profile: InterestProfile,
     ) {
-        // FIXME(fuzzypixelz): InterestProfile is ignored
-        // TODO(fuzzypixelz): regions2: clients of this peer are handled as if they were bound to a future broker south hat
+        // FIXME(regions): InterestProfile is ignored
+        // TODO(regions2): clients of this peer are handled as if they were bound to a future broker south hat
         self.declare_simple_queryable(
             ctx.tables,
             ctx.src_face,
@@ -582,7 +582,12 @@ impl HatQueriesTrait for Hat {
                 // Insert the key in the list of known queryables
                 let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
                 // Append src_face as a queryable source in the proper list
-                match src_face.whatami {
+                let whatami = if src_face.is_local {
+                    tables.hats.north().whatami // REVIEW(fuzzypixelz)
+                } else {
+                    src_face.whatami
+                };
+                match whatami {
                     WhatAmI::Router => srcs.routers.push(src_face.zid),
                     WhatAmI::Peer => srcs.peers.push(src_face.zid),
                     WhatAmI::Client => srcs.clients.push(src_face.zid),
@@ -599,7 +604,12 @@ impl HatQueriesTrait for Hat {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.hats.north().whatami // REVIEW(fuzzypixelz)
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
@@ -726,7 +736,6 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &TablesData,
