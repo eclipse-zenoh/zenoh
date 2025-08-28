@@ -180,8 +180,11 @@ impl TransportManager {
         tracing::trace!("TransportManagerMulticast::clear())");
 
         zasynclock!(self.state.multicast.link_managers).clear();
-
-        for (_, tm) in zasynclock!(self.state.multicast.transports).drain() {
+        let mut guard = zasynclock!(self.state.multicast.transports);
+        let transports = std::mem::take(&mut *guard);
+        // drop guard: mutex is acquired down the tm.close callstack
+        drop(guard);
+        for (_, tm) in transports {
             let _ = tm.close(close::reason::GENERIC).await;
         }
     }

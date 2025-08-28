@@ -517,7 +517,7 @@ impl EndPoint {
         self.inner.as_str()
     }
 
-    pub fn split(&self) -> (Protocol, Address, Metadata, Config) {
+    pub fn split(&self) -> (Protocol<'_>, Address<'_>, Metadata<'_>, Config<'_>) {
         (
             self.protocol(),
             self.address(),
@@ -526,35 +526,35 @@ impl EndPoint {
         )
     }
 
-    pub fn protocol(&self) -> Protocol {
+    pub fn protocol(&self) -> Protocol<'_> {
         Protocol(protocol(self.inner.as_str()))
     }
 
-    pub fn protocol_mut(&mut self) -> ProtocolMut {
+    pub fn protocol_mut(&mut self) -> ProtocolMut<'_> {
         ProtocolMut(self)
     }
 
-    pub fn address(&self) -> Address {
+    pub fn address(&self) -> Address<'_> {
         Address(address(self.inner.as_str()))
     }
 
-    pub fn address_mut(&mut self) -> AddressMut {
+    pub fn address_mut(&mut self) -> AddressMut<'_> {
         AddressMut(self)
     }
 
-    pub fn metadata(&self) -> Metadata {
+    pub fn metadata(&self) -> Metadata<'_> {
         Metadata(metadata(self.inner.as_str()))
     }
 
-    pub fn metadata_mut(&mut self) -> MetadataMut {
+    pub fn metadata_mut(&mut self) -> MetadataMut<'_> {
         MetadataMut(self)
     }
 
-    pub fn config(&self) -> Config {
+    pub fn config(&self) -> Config<'_> {
         Config(config(self.inner.as_str()))
     }
 
-    pub fn config_mut(&mut self) -> ConfigMut {
+    pub fn config_mut(&mut self) -> ConfigMut<'_> {
         ConfigMut(self)
     }
 

@@ -215,12 +215,13 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
                 let flags = OFlag::O_RDWR;
                 let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-                tracing::trace!(
-                    "open(name={:?}, flag={:?}, mode={:?})",
-                    lockpath,
-                    flags,
-                    mode
-                );
+                // TODO: we cannot use our logger inside of atexit() callstack!
+                // tracing::trace!(
+                //     "open(name={:?}, flag={:?}, mode={:?})",
+                //     lockpath,
+                //     flags,
+                //     mode
+                // );
                 match open(&lockpath, flags, mode) {
                     Ok(val) => val,
                     Err(nix::errno::Errno::ENOENT) => return true,
@@ -238,7 +239,8 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             // TODO: these flags probably can be exposed to the config
             let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
-            tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
+            // TODO: we cannot use our logger inside of atexit() callstack!
+            // tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
             match shm_open(id.as_str(), flags, mode) {
                 Ok(v) => v,
                 Err(nix::errno::Errno::ENOENT) => return true,
@@ -273,16 +275,20 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
     fn cleanup_segment(id: ID) {
         let id = Self::id_str(id);
-        tracing::trace!("shm_unlink(name={})", id);
-        if let Err(e) = shm_unlink(id.as_str()) {
-            tracing::debug!("shm_unlink() failed : {}", e);
+        // TODO: we cannot use our logger inside of atexit() callstack!
+        // tracing::trace!("shm_unlink(name={})", id);
+        if let Err(_e) = shm_unlink(id.as_str()) {
+            // TODO: we cannot use our logger inside of atexit() callstack!
+            // tracing::debug!("shm_unlink() failed : {}", e);
         };
         #[cfg(shm_external_lockfile)]
         {
             let lockpath = std::env::temp_dir().join(id);
-            tracing::trace!("remove_file(name={:?})", lockpath);
-            if let Err(e) = std::fs::remove_file(lockpath) {
-                tracing::debug!("remove_file() failed : {}", e);
+            // TODO: we cannot use our logger inside of atexit() callstack!
+            // tracing::trace!("remove_file(name={:?})", lockpath);
+            if let Err(_e) = std::fs::remove_file(lockpath) {
+                // TODO: we cannot use our logger inside of atexit() callstack!
+                // tracing::debug!("remove_file() failed : {}", e);
             }
         }
     }

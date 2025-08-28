@@ -22,11 +22,19 @@ use zenoh_task::TerminatableTask;
 use crate::{
     api::{
         builders::scouting::ScoutBuilder,
-        handlers::{Callback, DefaultHandler},
+        handlers::{Callback, CallbackParameter, DefaultHandler},
     },
     net::runtime::{orchestrator::Loop, Runtime, Scouting},
     Config,
 };
+
+impl CallbackParameter for Hello {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
 
 /// A scout that returns [`Hello`] messages through a callback.
 ///

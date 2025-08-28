@@ -60,6 +60,8 @@ pub(crate) struct InterestState {
     pub(crate) finalized: bool,
 }
 
+pub(crate) type FaceId = usize;
+
 pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohIdProto,

@@ -344,6 +344,8 @@ pub mod matching {
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
+    #[zenoh_macros::internal]
+    pub use crate::api::handlers::CallbackParameter;
     pub use crate::api::handlers::{
         Callback, CallbackDrop, DefaultHandler, FifoChannel, FifoChannelHandler, IntoHandler,
         RingChannel, RingChannelHandler,
