@@ -16,8 +16,6 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionMulticastConf;
-#[cfg(feature = "shared-memory")]
-use zenoh_config::ShmConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
@@ -38,8 +36,6 @@ pub struct TransportManagerConfigMulticast {
     pub join_interval: Duration,
     pub max_sessions: usize,
     pub is_qos: bool,
-    #[cfg(feature = "shared-memory")]
-    pub is_shm: bool,
     #[cfg(feature = "transport_compression")]
     pub is_compression: bool,
 }
@@ -50,8 +46,6 @@ pub struct TransportManagerBuilderMulticast {
     join_interval: Duration,
     max_sessions: usize,
     is_qos: bool,
-    #[cfg(feature = "shared-memory")]
-    is_shm: bool,
     #[cfg(feature = "transport_compression")]
     is_compression: bool,
 }
@@ -94,12 +88,6 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
-    #[cfg(feature = "shared-memory")]
-    pub fn shm(mut self, is_shm: bool) -> Self {
-        self.is_shm = is_shm;
-        self
-    }
-
     #[cfg(feature = "transport_compression")]
     pub fn compression(mut self, is_compression: bool) -> Self {
         self.is_compression = is_compression;
@@ -116,10 +104,6 @@ impl TransportManagerBuilderMulticast {
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
         self = self.qos(*config.transport().multicast().qos().enabled());
-        #[cfg(feature = "shared-memory")]
-        {
-            self = self.shm(*config.transport().shared_memory().enabled());
-        }
 
         Ok(self)
     }
@@ -131,8 +115,6 @@ impl TransportManagerBuilderMulticast {
             join_interval: self.join_interval,
             max_sessions: self.max_sessions,
             is_qos: self.is_qos,
-            #[cfg(feature = "shared-memory")]
-            is_shm: self.is_shm,
             #[cfg(feature = "transport_compression")]
             is_compression: self.is_compression,
         };
@@ -151,8 +133,6 @@ impl TransportManagerBuilderMulticast {
 impl Default for TransportManagerBuilderMulticast {
     fn default() -> TransportManagerBuilderMulticast {
         let link_tx = LinkTxConf::default();
-        #[cfg(feature = "shared-memory")]
-        let shm = ShmConf::default();
         #[cfg(feature = "transport_compression")]
         let compression = CompressionMulticastConf::default();
 
@@ -162,8 +142,6 @@ impl Default for TransportManagerBuilderMulticast {
             join_interval: Duration::from_millis(0),
             max_sessions: 0,
             is_qos: false,
-            #[cfg(feature = "shared-memory")]
-            is_shm: *shm.enabled(),
             #[cfg(feature = "transport_compression")]
             is_compression: *compression.enabled(),
         };

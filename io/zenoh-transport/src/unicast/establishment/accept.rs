@@ -693,10 +693,9 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "shared-memory")]
         ext_shm: manager
             .state
-            .unicast
-            .auth_shm
+            .shm_context
             .as_ref()
-            .map(ext::shm::ShmFsm::new),
+            .map(|ctx| ext::shm::ShmFsm::new(&ctx.auth)),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "transport_auth")]

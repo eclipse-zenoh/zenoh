@@ -170,8 +170,6 @@ mod tests {
         let unicast = make_transport_manager_builder(
             #[cfg(feature = "transport_multilink")]
             server_endpoints.len(),
-            #[cfg(feature = "shared-memory")]
-            false,
             lowlatency_transport,
         )
         .compression(true);
@@ -192,8 +190,6 @@ mod tests {
         let unicast = make_transport_manager_builder(
             #[cfg(feature = "transport_multilink")]
             client_endpoints.len(),
-            #[cfg(feature = "shared-memory")]
-            false,
             lowlatency_transport,
         )
         .compression(true);

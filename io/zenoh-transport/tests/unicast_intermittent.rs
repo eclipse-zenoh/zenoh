@@ -150,8 +150,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(3);
@@ -172,8 +170,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(3);
@@ -188,8 +184,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -204,8 +198,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);

@@ -97,8 +97,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         2,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -116,8 +114,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         2,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);

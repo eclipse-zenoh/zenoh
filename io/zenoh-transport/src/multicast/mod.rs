@@ -49,8 +49,6 @@ pub(crate) struct TransportConfigMulticast {
     pub(crate) sn_resolution: Bits,
     pub(crate) initial_sns: Box<[PrioritySn]>,
     pub(crate) link: TransportLinkMulticast,
-    #[cfg(feature = "shared-memory")]
-    pub(crate) is_shm: bool,
 }
 
 #[derive(Clone)]

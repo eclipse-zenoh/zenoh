@@ -36,7 +36,7 @@ use super::{
     link::{TransportLinkMulticastConfigUniversal, TransportLinkMulticastUniversal},
 };
 #[cfg(feature = "shared-memory")]
-use crate::shm::MulticastTransportShmConfig;
+use crate::shm_context::MulticastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -94,14 +94,17 @@ pub(crate) struct TransportMulticastInner {
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
+
     #[cfg(feature = "shared-memory")]
-    pub(super) shm: Option<MulticastTransportShmConfig>,
+    pub(super) shm_context: Option<MulticastTransportShmContext>,
 }
 
 impl TransportMulticastInner {
     pub(super) fn make(
         manager: TransportManager,
         config: TransportConfigMulticast,
+
+        #[cfg(feature = "shared-memory")] shm_context: Option<MulticastTransportShmContext>,
     ) -> ZResult<TransportMulticastInner> {
         let mut priority_tx = vec![];
         if (config.initial_sns.len() != 1) != (config.initial_sns.len() != Priority::NUM) {
@@ -117,12 +120,6 @@ impl TransportMulticastInner {
         #[cfg(feature = "stats")]
         let stats = TransportStats::new(Some(Arc::downgrade(&manager.get_stats())), HashMap::new());
 
-        #[cfg(feature = "shared-memory")]
-        let shm = match manager.config.multicast.is_shm {
-            true => Some(MulticastTransportShmConfig),
-            false => None,
-        };
-
         let ti = TransportMulticastInner {
             manager,
             priority_tx: priority_tx.into_boxed_slice().into(),
@@ -134,7 +131,7 @@ impl TransportMulticastInner {
             #[cfg(feature = "stats")]
             stats,
             #[cfg(feature = "shared-memory")]
-            shm,
+            shm_context,
         };
 
         let link = TransportLinkMulticastUniversal::new(ti.clone(), config.link);
@@ -163,7 +160,7 @@ impl TransportMulticastInner {
 
     #[cfg(feature = "shared-memory")]
     pub(crate) fn is_shm(&self) -> bool {
-        self.manager.config.multicast.is_shm
+        self.shm_context.is_some()
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {

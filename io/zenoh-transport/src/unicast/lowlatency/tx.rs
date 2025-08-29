@@ -15,8 +15,6 @@ use zenoh_protocol::{
     network::{NetworkMessageExt, NetworkMessageMut},
     transport::{TransportBodyLowLatencyRef, TransportMessageLowLatencyRef},
 };
-#[cfg(feature = "shared-memory")]
-use zenoh_result::bail;
 use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastLowlatency;
@@ -29,9 +27,12 @@ impl TransportUnicastLowlatency {
     #[inline(always)]
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
-        {
-            if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
-                bail!("Failed SHM conversion: {}", e);
+        if let Some(shm_context) = &self.shm_context {
+            if let Err(e) =
+                map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider)
+            {
+                tracing::trace!("Failed SHM conversion: {}", e);
+                return Ok(());
             }
         }
 

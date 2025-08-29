@@ -174,8 +174,6 @@ async fn open_transport_unicast(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         server_endpoints.len(),
-        #[cfg(feature = "shared-memory")]
-        false,
         false,
     );
     let router_manager = TransportManager::builder()
@@ -195,8 +193,6 @@ async fn open_transport_unicast(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         client_endpoints.len(),
-        #[cfg(feature = "shared-memory")]
-        false,
         false,
     );
     let client_manager = TransportManager::builder()
