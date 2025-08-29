@@ -580,6 +580,17 @@ impl TransportManager {
             };
         }
 
+        // Verify that the node does not try to connect to itself
+        if config.zid == self.zid() {
+            let e = zerror!("{} Attempt to establish transport to itself", self.zid());
+            tracing::warn!("{e}");
+            return Err(InitTransportError::Link((
+                e.into(),
+                link.fail(),
+                close::reason::CONNECTION_TO_SELF,
+            )));
+        }
+
         // Verify that we haven't reached the transport number limit
         if guard.len() >= self.config.unicast.max_sessions {
             let e = zerror!(
