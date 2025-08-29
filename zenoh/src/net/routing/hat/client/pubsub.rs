@@ -18,7 +18,7 @@ use std::{
 };
 
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, WhatAmI},
+    core::WhatAmI,
     network::declare::{
         common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
         UndeclareSubscriber,
@@ -327,29 +327,20 @@ impl HatPubSubTrait for HatCode {
     fn compute_data_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
-        }
+        };
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route.build());
-            }
-        };
-
         if source_type == WhatAmI::Client {
             for face in tables
                 .faces
@@ -362,27 +353,27 @@ impl HatPubSubTrait for HatCode {
                         && interest
                             .res
                             .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
+                            .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
                             .unwrap_or(true)
                 }) || face_hat!(face)
                     .remote_subs
                     .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
+                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), key_expr))
                 {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    let wire_expr = expr.get_best_key(face.id);
                     route.insert(face.id, || {
-                        (face.clone(), key_expr.to_owned(), NodeId::default())
+                        (face.clone(), wire_expr.to_owned(), NodeId::default())
                     });
                 }
             }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.context.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -390,8 +381,12 @@ impl HatPubSubTrait for HatCode {
             for (sid, context) in &mres.session_ctxs {
                 if context.subs.is_some() && context.face.whatami == WhatAmI::Client {
                     route.insert(*sid, || {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                        (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                        let wire_expr = expr.get_best_key(*sid);
+                        (
+                            context.face.clone(),
+                            wire_expr.to_owned(),
+                            NodeId::default(),
+                        )
                     });
                 }
             }

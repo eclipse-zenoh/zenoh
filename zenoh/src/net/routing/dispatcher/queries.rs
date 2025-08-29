@@ -207,7 +207,7 @@ fn compute_final_route(
     tables: &Tables,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     target: &QueryTarget,
     query: Arc<Query>,
 ) -> QueryRouteBuilder {
@@ -367,14 +367,13 @@ fn get_query_route(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     face: &FaceState,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<QueryTargetQablSet> {
     let local_context = hat_code.map_routing_context(tables, face, routing_context);
-    let mut compute_route =
-        || hat_code.compute_query_route(tables, expr, local_context, face.whatami);
-    if let Some(query_routes) = res
+    let compute_route = || hat_code.compute_query_route(tables, expr, local_context, face.whatami);
+    if let Some(query_routes) = expr
+        .resource()
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| &ctx.query_routes)
@@ -469,10 +468,10 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 msg.wire_expr.suffix.as_ref(),
             );
             let prefix = prefix.clone();
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            let expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let admin = expr.full_expr().starts_with("@/");
+            let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
             #[cfg(feature = "stats")]
             if !admin {
                 inc_req_stats!(face, rx, user, msg.payload)
@@ -480,18 +479,12 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 inc_req_stats!(face, rx, admin, msg.payload)
             }
 
-            if tables_ref
-                .hat_code
-                .ingress_filter(&rtables, face, &mut expr)
-            {
-                let res = Resource::get_resource(&prefix, expr.suffix);
-
+            if tables_ref.hat_code.ingress_filter(&rtables, face, &expr) {
                 let route = get_query_route(
                     tables_ref.hat_code.as_ref(),
                     &rtables,
                     face,
-                    &res,
-                    &mut expr,
+                    &expr,
                     msg.ext_nodeid.node_id,
                 );
 
@@ -506,7 +499,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                     &rtables,
                     &route,
                     face,
-                    &mut expr,
+                    &expr,
                     &msg.ext_target,
                     query,
                 )

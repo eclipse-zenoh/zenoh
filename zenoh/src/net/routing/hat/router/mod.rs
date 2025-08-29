@@ -790,13 +790,13 @@ impl HatBaseTrait for HatCode {
     }
 
     #[inline]
-    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool {
+    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &RoutingExpr) -> bool {
         face.whatami != WhatAmI::Peer
             || hat!(tables).linkstatepeers_net.is_none()
             || tables.zid
                 == *hat!(tables).elect_router(
                     &tables.zid,
-                    expr.full_expr(),
+                    expr.key_expr().map_or("", |ke| ke),
                     hat!(tables).get_router_links(face.zid),
                 )
     }
@@ -807,7 +807,7 @@ impl HatBaseTrait for HatCode {
         tables: &Tables,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
     ) -> bool {
         if src_face.id != out_face.id
             && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
@@ -817,7 +817,7 @@ impl HatBaseTrait for HatCode {
                 || tables.zid
                     == *hat!(tables).elect_router(
                         &tables.zid,
-                        expr.full_expr(),
+                        expr.key_expr().map_or("", |ke| ke),
                         hat!(tables).get_router_links(out_face.zid),
                     );
 

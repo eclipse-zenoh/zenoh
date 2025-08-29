@@ -19,7 +19,7 @@ use std::{
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, WhatAmI, ZenohIdProto},
+    core::{WhatAmI, ZenohIdProto},
     network::{
         declare::{
             common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
@@ -1215,7 +1215,7 @@ impl HatPubSubTrait for HatCode {
     fn compute_data_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
@@ -1238,12 +1238,8 @@ impl HatPubSubTrait for HatCode {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                         route.insert(face.id, || {
-                                            let key_expr = Resource::get_best_key(
-                                                expr.prefix,
-                                                expr.suffix,
-                                                face.id,
-                                            );
-                                            (face.clone(), key_expr.to_owned(), source)
+                                            let wire_expr = expr.get_best_key(face.id);
+                                            (face.clone(), wire_expr.to_owned(), source)
                                         });
                                     }
                                 }
@@ -1257,32 +1253,24 @@ impl HatPubSubTrait for HatCode {
         }
 
         let mut route = RouteBuilder::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
-        }
+        };
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route.build());
-            }
-        };
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.context.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         let master = !hat!(tables).full_net(WhatAmI::Peer)
-            || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
+            || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
                 == tables.zid;
 
         for mres in matches.iter() {
@@ -1324,8 +1312,12 @@ impl HatPubSubTrait for HatCode {
                 for (sid, context) in &mres.session_ctxs {
                     if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
                         route.insert(*sid, || {
-                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                            let wire_expr = expr.get_best_key(*sid);
+                            (
+                                context.face.clone(),
+                                wire_expr.to_owned(),
+                                NodeId::default(),
+                            )
                         });
                     }
                 }
@@ -1335,7 +1327,7 @@ impl HatPubSubTrait for HatCode {
             route.insert(mcast_group.id, || {
                 (
                     mcast_group.clone(),
-                    expr.full_expr().to_string().into(),
+                    key_expr.to_string().into(),
                     NodeId::default(),
                 )
             });
