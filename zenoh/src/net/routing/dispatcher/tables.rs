@@ -42,34 +42,11 @@ use crate::net::{
     runtime::WeakRuntime,
 };
 
-struct RoutingExprCache<'a> {
-    resource: Option<&'a Arc<Resource>>,
-    full_expr: Option<Cow<'a, keyexpr>>,
-}
-
-impl<'a> RoutingExprCache<'a> {
-    fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
-        let resource = Resource::get_resource_ref(prefix, suffix);
-        debug_assert!(resource.is_some() || !suffix.is_empty());
-        let empty_err = || keyexpr::new("").unwrap_err();
-        let full_expr = match resource.as_ref() {
-            Some(res) => res.keyexpr().ok_or_else(empty_err).map(Cow::Borrowed),
-            None => [prefix.expr(), suffix].concat().try_into().map(Cow::Owned),
-        };
-        if let Err(e) = &full_expr {
-            tracing::warn!("Invalid KE reached the system: {}", e);
-        }
-        Self {
-            resource,
-            full_expr: full_expr.ok(),
-        }
-    }
-}
-
 pub(crate) struct RoutingExpr<'a> {
     prefix: &'a Arc<Resource>,
     suffix: &'a str,
-    cache: OnceCell<RoutingExprCache<'a>>,
+    resource: OnceCell<Option<&'a Arc<Resource>>>,
+    key_expr: OnceCell<Option<Cow<'a, keyexpr>>>,
 }
 
 impl<'a> RoutingExpr<'a> {
@@ -78,21 +55,38 @@ impl<'a> RoutingExpr<'a> {
         RoutingExpr {
             prefix,
             suffix,
-            cache: OnceCell::new(),
+            resource: OnceCell::new(),
+            key_expr: OnceCell::new(),
         }
     }
 
-    fn cache(&self) -> &RoutingExprCache<'a> {
-        self.cache
-            .get_or_init(|| RoutingExprCache::new(self.prefix, self.suffix))
+    pub(crate) fn resource(&self) -> Option<&'a Arc<Resource>> {
+        *self
+            .resource
+            .get_or_init(|| Resource::get_resource_ref(self.prefix, self.suffix))
     }
 
-    pub(crate) fn resource(&self) -> Option<&'a Arc<Resource>> {
-        self.cache().resource
+    fn compute_key_expr(&self) -> Option<Cow<'a, keyexpr>> {
+        let full_expr = match self.resource().as_ref() {
+            Some(res) => res
+                .keyexpr()
+                .ok_or_else(|| keyexpr::new("").unwrap_err())
+                .map(Cow::Borrowed),
+            None => [self.prefix.expr(), self.suffix]
+                .concat()
+                .try_into()
+                .map(Cow::Owned),
+        };
+        if let Err(e) = &full_expr {
+            tracing::warn!("Invalid KE reached the system: {}", e);
+        }
+        full_expr.ok()
     }
 
     pub(crate) fn key_expr(&self) -> Option<&keyexpr> {
-        self.cache().full_expr.as_deref()
+        self.key_expr
+            .get_or_init(|| self.compute_key_expr())
+            .as_deref()
     }
 
     pub(crate) fn get_best_key(&self, sid: usize) -> WireExpr<'a> {
