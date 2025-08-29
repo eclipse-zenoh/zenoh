@@ -21,7 +21,7 @@ use std::{
     sync::{Arc, RwLock, Weak},
 };
 
-use zenoh_collections::{IntHashMap, SingleOrBoxHashSet};
+use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -85,7 +85,7 @@ pub(crate) struct RouteBuilder<T = Direction> {
     /// The route built.
     route: Vec<T>,
     /// The faces' id already inserted.
-    faces: HashSet<usize>,
+    faces: IntHashSet<usize>,
 }
 
 impl<T> RouteBuilder<T> {
@@ -93,7 +93,7 @@ impl<T> RouteBuilder<T> {
     pub(crate) fn new() -> Self {
         Self {
             route: Vec::new(),
-            faces: HashSet::new(),
+            faces: IntHashSet::new(),
         }
     }
 
