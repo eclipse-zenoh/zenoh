@@ -162,7 +162,7 @@ mod tests {
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .zid(peer_shm01)            
+            .zid(peer_shm01)
             .unicast(
                 TransportManager::config_unicast()
                     .lowlatency(lowlatency_transport)

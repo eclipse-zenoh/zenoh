@@ -167,7 +167,6 @@ impl TransportManagerBuilder {
         self
     }
 
-    
     #[cfg(feature = "shared-memory")]
     pub fn shm_reader(mut self, shm_reader: Option<ShmReader>) -> Self {
         self.shm_reader = shm_reader;
