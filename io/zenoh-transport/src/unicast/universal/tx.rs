@@ -150,8 +150,10 @@ impl TransportUnicastUniversal {
     #[inline(always)]
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
-        {
-            if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
+        if let Some(shm_context) = &self.shm_context {
+            if let Err(e) =
+                map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider)
+            {
                 tracing::trace!("Failed SHM conversion: {}", e);
                 #[cfg(feature = "stats")]
                 self.stats.inc_tx_n_dropped(1);

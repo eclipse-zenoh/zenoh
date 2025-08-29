@@ -30,6 +30,8 @@ use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 
+#[cfg(feature = "shared-memory")]
+use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -75,12 +77,15 @@ pub(crate) struct TransportUnicastUniversal {
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_context: Option<UnicastTransportShmContext>,
 }
 
 impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
         #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
@@ -126,6 +131,8 @@ impl TransportUnicastUniversal {
             block_first_notifier,
             #[cfg(feature = "unstable")]
             block_first_waiter,
+            #[cfg(feature = "shared-memory")]
+            shm_context,
         });
 
         Ok(t)

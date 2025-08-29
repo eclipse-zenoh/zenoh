@@ -582,10 +582,9 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         ext_shm: manager
             .state
-            .unicast
-            .auth_shm
+            .shm_context
             .as_ref()
-            .map(ext::shm::ShmFsm::new),
+            .map(|ctx| ext::shm::ShmFsm::new(&ctx.auth)),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),

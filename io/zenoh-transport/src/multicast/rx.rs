@@ -44,8 +44,8 @@ impl TransportMulticastInner {
     ) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
-            if self.manager.config.multicast.is_shm {
-                if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr) {
+            if let Some(shm_context) = &self.shm_context {
+                if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &shm_context.shm_reader) {
                     tracing::debug!("Error receiving SHM buffer: {e}");
                     return Ok(());
                 }
