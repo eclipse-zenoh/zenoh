@@ -13,6 +13,8 @@
 //
 use std::{
     any::Any,
+    borrow::Cow,
+    cell::OnceCell,
     collections::HashMap,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -23,8 +25,9 @@ use std::{
 
 use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohIdProto},
+    core::{ExprId, WhatAmI, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -39,10 +42,34 @@ use crate::net::{
     runtime::WeakRuntime,
 };
 
+struct RoutingExprCache<'a> {
+    resource: Option<&'a Arc<Resource>>,
+    full_expr: Option<Cow<'a, keyexpr>>,
+}
+
+impl<'a> RoutingExprCache<'a> {
+    fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
+        let resource = Resource::get_resource_ref(prefix, suffix);
+        debug_assert!(resource.is_some() || !suffix.is_empty());
+        let empty_err = || keyexpr::new("").unwrap_err();
+        let full_expr = match resource.as_ref() {
+            Some(res) => res.keyexpr().ok_or_else(empty_err).map(Cow::Borrowed),
+            None => [prefix.expr(), suffix].concat().try_into().map(Cow::Owned),
+        };
+        if let Err(e) = &full_expr {
+            tracing::warn!("Invalid KE reached the system: {}", e);
+        }
+        Self {
+            resource,
+            full_expr: full_expr.ok(),
+        }
+    }
+}
+
 pub(crate) struct RoutingExpr<'a> {
-    pub(crate) prefix: &'a Arc<Resource>,
-    pub(crate) suffix: &'a str,
-    full: Option<String>,
+    prefix: &'a Arc<Resource>,
+    suffix: &'a str,
+    cache: OnceCell<RoutingExprCache<'a>>,
 }
 
 impl<'a> RoutingExpr<'a> {
@@ -51,16 +78,28 @@ impl<'a> RoutingExpr<'a> {
         RoutingExpr {
             prefix,
             suffix,
-            full: None,
+            cache: OnceCell::new(),
         }
     }
 
-    #[inline]
-    pub(crate) fn full_expr(&mut self) -> &str {
-        if self.full.is_none() {
-            self.full = Some(self.prefix.expr().to_string() + self.suffix);
+    fn cache(&self) -> &RoutingExprCache<'a> {
+        self.cache
+            .get_or_init(|| RoutingExprCache::new(self.prefix, self.suffix))
+    }
+
+    pub(crate) fn resource(&self) -> Option<&'a Arc<Resource>> {
+        self.cache().resource
+    }
+
+    pub(crate) fn key_expr(&self) -> Option<&keyexpr> {
+        self.cache().full_expr.as_deref()
+    }
+
+    pub(crate) fn get_best_key(&self, sid: usize) -> WireExpr<'a> {
+        match self.resource() {
+            Some(res) => res.get_best_key("", sid),
+            None => self.prefix.get_best_key(self.suffix, sid),
         }
-        self.full.as_ref().unwrap()
     }
 }
 
