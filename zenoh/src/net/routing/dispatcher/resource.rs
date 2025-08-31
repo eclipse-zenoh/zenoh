@@ -14,7 +14,7 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{HashSet, VecDeque},
+    collections::VecDeque,
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
