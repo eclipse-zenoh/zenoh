@@ -52,8 +52,8 @@ enum ProviderInitState {
 }
 
 pub struct LazyShmProvider {
-    state: Mutex<ProviderInitState>,
     message_size_threshold: usize,
+    state: Mutex<ProviderInitState>,
 }
 
 impl LazyShmProvider {
@@ -61,16 +61,16 @@ impl LazyShmProvider {
         let cfg = ProviderInitCfg { shm_size };
         let state = Mutex::new(ProviderInitState::Enabled(cfg));
         Self {
-            state,
             message_size_threshold,
+            state,
         }
     }
 
     pub fn new_disabled() -> Self {
         let state = Mutex::new(ProviderInitState::Disabled);
         Self {
-            state,
             message_size_threshold: 0,
+            state,
         }
     }
 
@@ -134,7 +134,7 @@ impl LazyShmProvider {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportShmConfig {
-    partner_protocols: HashSet<ProtocolID>,
+    partner_protocols: Box<[ProtocolID]>,
 }
 
 impl PartnerShmConfig for TransportShmConfig {
@@ -145,8 +145,9 @@ impl PartnerShmConfig for TransportShmConfig {
 
 impl TransportShmConfig {
     pub fn new(partner_segment: AuthSegment) -> Self {
+        let t: HashSet<ProtocolID> = partner_segment.protocols().iter().cloned().collect();
         Self {
-            partner_protocols: partner_segment.protocols().iter().cloned().collect(),
+            partner_protocols: t.iter().cloned().collect(),
         }
     }
 }
