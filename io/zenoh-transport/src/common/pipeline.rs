@@ -779,8 +779,8 @@ impl TransmissionPipeline {
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
             status: status.clone(),
-            wait_before_drop: config.wait_before_drop,
-            wait_before_close: config.wait_before_close,
+            wait_before_drop: (config.wait_before_drop.0.as_micros().try_into().unwrap(), config.wait_before_drop.1.as_micros().try_into().unwrap()),
+            wait_before_close: config.wait_before_close.as_micros().try_into().unwrap(),
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
@@ -840,8 +840,8 @@ pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
     status: Arc<TransmissionPipelineStatus>,
-    wait_before_drop: (Duration, Duration),
-    wait_before_close: Duration,
+    wait_before_drop: (u64, u64),
+    wait_before_close: u64,
 }
 
 impl TransmissionPipelineProducer {
@@ -864,9 +864,9 @@ impl TransmissionPipelineProducer {
             if self.status.is_congested(priority) {
                 return Ok(false);
             }
-            (self.wait_before_drop.0, Some(self.wait_before_drop.1))
+            (Duration::from_micros(self.wait_before_drop.0), Some(Duration::from_micros(self.wait_before_drop.1)))
         } else {
-            (self.wait_before_close, None)
+            (Duration::from_micros(self.wait_before_close), None)
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
