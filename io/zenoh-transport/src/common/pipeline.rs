@@ -878,10 +878,15 @@ impl TransmissionPipelineProducer {
             }
             (
                 Duration::from_micros(self.status.waits.wait_before_drop.0.into()),
-                Some(Duration::from_micros(self.status.waits.wait_before_drop.1.into())),
+                Some(Duration::from_micros(
+                    self.status.waits.wait_before_drop.1.into(),
+                )),
             )
         } else {
-            (Duration::from_micros(self.status.waits.wait_before_close.into()), None)
+            (
+                Duration::from_micros(self.status.waits.wait_before_close.into()),
+                None,
+            )
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.

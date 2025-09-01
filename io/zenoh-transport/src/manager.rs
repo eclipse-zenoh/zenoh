@@ -290,6 +290,11 @@ impl TransportManagerBuilder {
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
+        #[cfg(feature = "shared-memory")]
+        {
+            self = self.shm(config.transport().shared_memory().clone());
+        }
+
         let (c, errors) = zenoh_link::LinkConfigurator::default().configurations(config);
         if !errors.is_empty() {
             use std::fmt::Write;
