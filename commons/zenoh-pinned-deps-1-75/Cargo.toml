@@ -28,36 +28,36 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 base64ct = "=1.6.0"
-litemap = "=0.7.4"
+home = "=0.5.9"
 icu_normalizer = "=1.5.0"
+litemap = "=0.7.4"
+lz4_flex = "=0.11.3"
+pest = "=2.8.0"
 pest_derive = "=2.8.0"
-time = "=0.3.41"
 pest_generator = "=2.8.0"
 pest_meta = "=2.8.0"
-static_init = "=1.0.3"
-home = "=0.5.9"
-zerofrom = "=0.1.5"
-tinystr="=0.8.0"
 potential_utf = "=0.1.0"
-pest = "=2.8.0"
+static_init = "=1.0.3"
+time = "=0.3.41"
+tinystr = "=0.8.0"
 twox-hash = "=1.6.3"
-lz4_flex = "=0.11.3"
+zerofrom = "=0.1.5"
 
 [package.metadata.cargo-machete]
 ignored = [
   "base64ct",
-  "litemap",
+  "home",
   "icu_normalizer",
+  "litemap",
+  "lz4_flex",
+  "pest",
   "pest_derive",
-  "time",
   "pest_generator",
   "pest_meta",
-  "static_init",
-  "home",
-  "zerofrom",
-  "tinystr",
   "potential_utf",
-  "pest",
+  "static_init",
+  "time",
+  "tinystr",
   "twox-hash",
-  "lz4_flex"
+  "zerofrom",
 ]
