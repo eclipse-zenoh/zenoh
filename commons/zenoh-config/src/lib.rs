@@ -108,7 +108,9 @@ pub enum InterceptorFlow {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum DownsamplingMessage {
+    Delete,
     Push,
+    Put,
     Query,
     Reply,
 }
