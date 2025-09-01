@@ -23,7 +23,6 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use token::{token_new_face, undeclare_simple_token};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
@@ -34,20 +33,15 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
-use self::{
-    interests::interests_new_face,
-    pubsub::{pubsub_new_face, undeclare_simple_subscription},
-    queries::{queries_new_face, undeclare_simple_queryable},
-};
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
+        tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
     },
     HatBaseTrait, HatTrait, SendDeclare,
 };
 use crate::net::{
-    routing::dispatcher::{face::Face, interests::RemoteInterest},
+    routing::dispatcher::{face::Face, gateway::Bound, interests::RemoteInterest},
     runtime::Runtime,
 };
 
@@ -56,37 +50,40 @@ mod pubsub;
 mod queries;
 mod token;
 
-macro_rules! face_hat {
-    ($f:expr) => {
-        $f.hat.downcast_ref::<HatFace>().unwrap()
-    };
+pub(crate) struct Hat {
+    bound: Bound,
 }
-use face_hat;
 
-macro_rules! face_hat_mut {
-    ($f:expr) => {
-        get_mut_unchecked($f).hat.downcast_mut::<HatFace>().unwrap()
-    };
-}
-use face_hat_mut;
+impl Hat {
+    pub(crate) fn new(bound: Bound) -> Self {
+        Self { bound }
+    }
 
-struct HatTables {}
+    pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
+        face_state.hat[self.bound].downcast_ref().unwrap()
+    }
 
-impl HatTables {
-    fn new() -> Self {
-        Self {}
+    pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
+        get_mut_unchecked(face_state).hat[self.bound]
+            .downcast_mut()
+            .unwrap()
+    }
+
+    pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
+        &tables.hats[self.bound].faces
+    }
+
+    pub(crate) fn faces_mut<'t>(
+        &self,
+        tables: &'t mut TablesData,
+    ) -> &'t mut HashMap<usize, Arc<FaceState>> {
+        &mut tables.hats[self.bound].faces
     }
 }
 
-pub(crate) struct HatCode {}
-
-impl HatBaseTrait for HatCode {
-    fn init(&self, _tables: &mut Tables, _runtime: Runtime) -> ZResult<()> {
+impl HatBaseTrait for Hat {
+    fn init(&mut self, _tables: &mut TablesData, _runtime: Runtime) -> ZResult<()> {
         Ok(())
-    }
-
-    fn new_tables(&self, _router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
-        Box::new(HatTables::new())
     }
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync> {
@@ -98,47 +95,46 @@ impl HatBaseTrait for HatCode {
     }
 
     fn new_local_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
-        queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
-        tables.disable_all_routes();
+        self.interests_new_face(tables, &mut face.state);
+        self.pubsub_new_face(tables, &mut face.state, send_declare);
+        self.queries_new_face(tables, &mut face.state, send_declare);
+        self.token_new_face(tables, &mut face.state, send_declare);
+        tables.hats[self.bound].disable_all_routes();
         Ok(())
     }
 
     fn new_transport_unicast_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Face,
         _transport: &TransportUnicast,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        interests_new_face(tables, &mut face.state);
-        pubsub_new_face(tables, &mut face.state, send_declare);
-        queries_new_face(tables, &mut face.state, send_declare);
-        token_new_face(tables, &mut face.state, send_declare);
-        tables.disable_all_routes();
+        self.interests_new_face(tables, &mut face.state);
+        self.pubsub_new_face(tables, &mut face.state, send_declare);
+        self.queries_new_face(tables, &mut face.state, send_declare);
+        self.token_new_face(tables, &mut face.state, send_declare);
+        tables.hats[self.bound].disable_all_routes();
         Ok(())
     }
 
     fn close_face(
-        &self,
-        tables: &TablesLock,
+        &mut self,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
         let face = get_mut_unchecked(face);
-        let hat_face = match face.hat.downcast_mut::<HatFace>() {
+        let hat_face = match face.hat[self.bound].downcast_mut::<HatFace>() {
             Some(hate_face) => hate_face,
             None => {
                 tracing::error!("Error downcasting face hat in close_face!");
@@ -152,84 +148,73 @@ impl HatBaseTrait for HatCode {
         hat_face.local_tokens.clear();
 
         for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(res).face_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.remote_mappings.clear();
         for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).session_ctxs.remove(&face.id);
+            get_mut_unchecked(res).face_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
+            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
+            self.undeclare_simple_subscription(tables, &mut face_clone, &mut res, send_declare);
 
-            if res.context.is_some() {
+            if res.ctx.is_some() {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
                             .disable_data_routes();
                         subs_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_data_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
                 subs_matches.push(res);
             }
         }
 
         let mut qabls_matches = vec![];
         for (_id, mut res) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
+            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
+            self.undeclare_simple_queryable(tables, &mut face_clone, &mut res, send_declare);
 
-            if res.context.is_some() {
+            if res.ctx.is_some() {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
                             .disable_query_routes();
                         qabls_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_query_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
                 qabls_matches.push(res);
             }
         }
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
+            self.undeclare_simple_token(tables, &mut face_clone, &mut res, send_declare);
         }
 
         for mut res in subs_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_data_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
             Resource::clean(&mut res);
         }
         for mut res in qabls_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_query_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
             Resource::clean(&mut res);
         }
-        wtables.faces.remove(&face.id);
-        drop(wtables);
+        self.faces_mut(tables).remove(&face.id);
     }
 
     fn handle_oam(
-        &self,
-        _tables: &mut Tables,
+        &mut self,
+        _tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         _oam: &mut Oam,
         _transport: &TransportUnicast,
@@ -241,7 +226,7 @@ impl HatBaseTrait for HatCode {
     #[inline]
     fn map_routing_context(
         &self,
-        _tables: &Tables,
+        _tables: &TablesData,
         _face: &FaceState,
         _routing_context: NodeId,
     ) -> NodeId {
@@ -249,14 +234,19 @@ impl HatBaseTrait for HatCode {
     }
 
     #[inline]
-    fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
+    fn ingress_filter(
+        &self,
+        _tables: &TablesData,
+        _face: &FaceState,
+        _expr: &mut RoutingExpr,
+    ) -> bool {
         true
     }
 
     #[inline]
     fn egress_filter(
         &self,
-        _tables: &Tables,
+        _tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
         _expr: &mut RoutingExpr,
@@ -266,8 +256,16 @@ impl HatBaseTrait for HatCode {
             && src_face.mcast_group.is_none()
     }
 
-    fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
+    fn info(&self, _kind: WhatAmI) -> String {
         "graph {}".to_string()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -305,4 +303,4 @@ impl HatFace {
     }
 }
 
-impl HatTrait for HatCode {}
+impl HatTrait for Hat {}
