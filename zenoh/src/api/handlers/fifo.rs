@@ -17,14 +17,15 @@
 use std::{
     future::Future,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
 
 use zenoh_result::ZResult;
 
-use crate::api::handlers::{callback::Callback, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE};
+use crate::api::handlers::{
+    callback::Callback, CallbackParameter, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE,
+};
 
 /// An handler implementing FIFO semantics.
 ///
@@ -53,17 +54,17 @@ impl Default for FifoChannel {
 #[derive(Debug, Clone)]
 pub struct FifoChannelHandler<T>(flume::Receiver<T>);
 
-impl<T: Send + 'static> IntoHandler<T> for FifoChannel {
+impl<T: CallbackParameter + Send + 'static> IntoHandler<T> for FifoChannel {
     type Handler = FifoChannelHandler<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
         let (sender, receiver) = flume::bounded(self.capacity);
         (
-            Callback::new(Arc::new(move |t| {
+            Callback::from(move |t| {
                 if let Err(error) = sender.send(t) {
                     tracing::error!(%error)
                 }
-            })),
+            }),
             FifoChannelHandler(receiver),
         )
     }
@@ -346,7 +347,7 @@ impl<T> futures::stream::FusedStream for RecvStream<'_, T> {
     }
 }
 
-impl<T: Clone + Send + Sync + 'static> IntoHandler<T>
+impl<T: CallbackParameter + Clone + Send + Sync + 'static> IntoHandler<T>
     for (std::sync::mpsc::SyncSender<T>, std::sync::mpsc::Receiver<T>)
 {
     type Handler = std::sync::mpsc::Receiver<T>;
@@ -354,11 +355,11 @@ impl<T: Clone + Send + Sync + 'static> IntoHandler<T>
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
         let (sender, receiver) = self;
         (
-            Callback::new(Arc::new(move |t| {
+            Callback::from(move |t: T| {
                 if let Err(error) = sender.send(t.clone()) {
                     tracing::error!(%error)
                 }
-            })),
+            }),
             receiver,
         )
     }

@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "unstable")]
 #![cfg(feature = "internal_config")]
 
 use std::time::Duration;
@@ -67,10 +66,7 @@ fn is_locality_compatible(locality: Locality, same_session: bool) -> bool {
 }
 
 async fn zenoh_querier_matching_status_inner(querier_locality: Locality, same_session: bool) {
-    println!(
-        "Querier origin :{:?}, same session: {same_session}",
-        querier_locality
-    );
+    println!("Querier origin :{querier_locality:?}, same session: {same_session}");
     zenoh_util::init_log_from_env_or("error");
     let key_expr = match querier_locality {
         Locality::SessionLocal => "zenoh_querier_matching_status_local_test",
@@ -175,10 +171,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, same_se
 }
 
 async fn zenoh_publisher_matching_status_inner(publisher_locality: Locality, same_session: bool) {
-    println!(
-        "Publisher origin: {:?}, same session: {same_session}",
-        publisher_locality
-    );
+    println!("Publisher origin: {publisher_locality:?}, same session: {same_session}");
     zenoh_util::init_log_from_env_or("error");
     let key_expr = match publisher_locality {
         Locality::SessionLocal => "zenoh_publisher_matching_status_local_test",

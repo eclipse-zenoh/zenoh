@@ -37,27 +37,27 @@ impl Locator {
         Ok(Self(ep))
     }
 
-    pub fn protocol(&self) -> Protocol {
+    pub fn protocol(&self) -> Protocol<'_> {
         self.0.protocol()
     }
 
-    pub fn protocol_mut(&mut self) -> ProtocolMut {
+    pub fn protocol_mut(&mut self) -> ProtocolMut<'_> {
         self.0.protocol_mut()
     }
 
-    pub fn address(&self) -> Address {
+    pub fn address(&self) -> Address<'_> {
         self.0.address()
     }
 
-    pub fn address_mut(&mut self) -> AddressMut {
+    pub fn address_mut(&mut self) -> AddressMut<'_> {
         self.0.address_mut()
     }
 
-    pub fn metadata(&self) -> Metadata {
+    pub fn metadata(&self) -> Metadata<'_> {
         self.0.metadata()
     }
 
-    pub fn metadata_mut(&mut self) -> MetadataMut {
+    pub fn metadata_mut(&mut self) -> MetadataMut<'_> {
         self.0.metadata_mut()
     }
 
@@ -118,7 +118,7 @@ impl fmt::Display for Locator {
 
 impl fmt::Debug for Locator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

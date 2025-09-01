@@ -28,13 +28,20 @@ pub mod wrappers;
 use std::convert::TryFrom;
 // This is a false positive from the rust analyser
 use std::{
-    any::Any, collections::HashSet, fmt, io::Read, net::SocketAddr, num::NonZeroU16, ops,
-    path::Path, sync::Weak,
+    any::Any,
+    collections::HashSet,
+    fmt,
+    io::Read,
+    net::SocketAddr,
+    num::NonZeroU16,
+    ops::{self, Bound, RangeBounds},
+    path::Path,
+    sync::Weak,
 };
 
 use include::recursive_include;
 use nonempty_collections::NEVec;
-use qos::{PublisherQoSConfList, QosOverwriteMessage, QosOverwrites};
+use qos::{PublisherQoSConfList, QosFilter, QosOverwriteMessage, QosOverwrites};
 use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -92,7 +99,7 @@ pub struct TransportWeight {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum InterceptorFlow {
     Egress,
     Ingress,
@@ -174,6 +181,81 @@ pub struct AclConfigSubjects {
     pub cert_common_names: Option<NEVec<CertCommonName>>,
     pub usernames: Option<NEVec<Username>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
+    pub zids: Option<NEVec<ZenohId>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfRange {
+    start: Option<u64>,
+    end: Option<u64>,
+}
+
+impl ConfRange {
+    pub fn new(start: Option<u64>, end: Option<u64>) -> Self {
+        Self { start, end }
+    }
+}
+
+impl RangeBounds<u64> for ConfRange {
+    fn start_bound(&self) -> Bound<&u64> {
+        match self.start {
+            Some(ref start) => Bound::Included(start),
+            None => Bound::Unbounded,
+        }
+    }
+    fn end_bound(&self) -> Bound<&u64> {
+        match self.end {
+            Some(ref end) => Bound::Included(end),
+            None => Bound::Unbounded,
+        }
+    }
+}
+
+impl serde::Serialize for ConfRange {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!(
+            "{}..{}",
+            self.start.unwrap_or_default(),
+            self.end.unwrap_or_default()
+        ))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ConfRange {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct V;
+
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = ConfRange;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("range string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let (start, end) = v
+                    .split_once("..")
+                    .ok_or_else(|| serde::de::Error::custom("invalid range"))?;
+                let parse_bound = |bound: &str| {
+                    (!bound.is_empty())
+                        .then(|| bound.parse::<u64>())
+                        .transpose()
+                        .map_err(|_| serde::de::Error::custom("invalid range bound"))
+                };
+                Ok(ConfRange::new(parse_bound(start)?, parse_bound(end)?))
+            }
+        }
+        deserializer.deserialize_str(V)
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -192,11 +274,15 @@ pub struct QosOverwriteItemConf {
     /// List of message types on which the qos overwrite will be applied.
     pub messages: NEVec<QosOverwriteMessage>,
     /// List of key expressions to apply qos overwrite.
-    pub key_exprs: Vec<OwnedKeyExpr>,
+    pub key_exprs: Option<NEVec<OwnedKeyExpr>>,
     // The qos value to overwrite with.
     pub overwrite: QosOverwrites,
     /// QosOverwrite flow directions: egress and/or ingress.
     pub flows: Option<NEVec<InterceptorFlow>>,
+    /// QoS filter to apply to the messages matching this item.
+    pub qos: Option<QosFilter>,
+    /// payload_size range for the messages matching this item.
+    pub payload_size: Option<ConfRange>,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -242,7 +328,7 @@ pub enum InterceptorLink {
 
 impl std::fmt::Display for InterceptorLink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Transport({:?})", self)
+        write!(f, "Transport({self:?})")
     }
 }
 
@@ -279,7 +365,7 @@ pub enum AclMessage {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Permission {
     Allow,
     Deny,
@@ -357,7 +443,8 @@ validated_struct::validator! {
     #[doc(hidden)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
-        id: ZenohId,
+        /// If not specified a random Zenoh ID will be generated upon session creation.
+        id: Option<ZenohId>,
         /// The metadata of the instance. Arbitrary json data available from the admin space
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
@@ -892,6 +979,183 @@ fn config_deser() {
             .unwrap(),
     )
         .unwrap_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    overwrite: {
+                      priority: "foo",
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    );
+    assert!(config.is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    overwrite: {
+                      priority: +8,
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    );
+    assert!(config.is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    overwrite: {
+                      priority: "data_high",
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().overwrite.priority,
+        Some(qos::PriorityUpdateConf::Priority(
+            qos::PriorityConf::DataHigh
+        ))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    overwrite: {
+                      priority: +1,
+                    },
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().overwrite.priority,
+        Some(qos::PriorityUpdateConf::Increment(1))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    payload_size: "0..99",
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .qos()
+            .network()
+            .first()
+            .unwrap()
+            .payload_size
+            .as_ref()
+            .map(|r| (r.start_bound(), r.end_bound())),
+        Some((Bound::Included(&0), Bound::Included(&99)))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    payload_size: "100..",
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .qos()
+            .network()
+            .first()
+            .unwrap()
+            .payload_size
+            .as_ref()
+            .map(|r| (r.start_bound(), r.end_bound())),
+        Some((Bound::Included(&100), Bound::Unbounded))
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+              qos: {
+                network: [
+                  {
+                    messages: ["put"],
+                    qos: {
+                      congestion_control: "drop",
+                      priority: "data",
+                      express: true,
+                      reliability: "reliable",
+                    },
+                    overwrite: {},
+                  },
+                ],
+              }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config.qos().network().first().unwrap().qos,
+        Some(QosFilter {
+            congestion_control: Some(qos::CongestionControlConf::Drop),
+            priority: Some(qos::PriorityConf::Data),
+            express: Some(true),
+            reliability: Some(qos::ReliabilityConf::Reliable),
+        })
+    );
+
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
@@ -910,7 +1174,7 @@ impl Config {
     pub fn get(
         &self,
         key: &str,
-    ) -> Result<<Self as ValidatedMapAssociatedTypes>::Accessor, GetError> {
+    ) -> Result<<Self as ValidatedMapAssociatedTypes<'_>>::Accessor, GetError> {
         <Self as ValidatedMap>::get(self, key)
     }
 
@@ -999,6 +1263,9 @@ impl Config {
                 let mut content = String::new();
                 if let Err(e) = f.read_to_string(&mut content) {
                     bail!(e)
+                }
+                if content.is_empty() {
+                    bail!("Empty config file");
                 }
                 match path
                     .extension()
@@ -1161,7 +1428,7 @@ impl PluginsConfig {
             let required = match value.get("__required__") {
                 None => false,
                 Some(Value::Bool(b)) => *b,
-                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", id)
+                _ => panic!("Plugin '{id}' has an invalid '__required__' configuration property (must be a boolean)")
             };
             let name = match value.get("__plugin__") {
                 Some(Value::String(p)) => p,
@@ -1171,8 +1438,8 @@ impl PluginsConfig {
             if let Some(paths) = value.get("__path__") {
                 let paths = match paths {
                     Value::String(s) => vec![s.clone()],
-                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id) }).collect(),
-                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", id)
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s { s.clone() } else { panic!("Plugin '{id}' has an invalid '__path__' configuration property (must be either string or array of strings)") }).collect(),
+                    _ => panic!("Plugin '{id}' has an invalid '__path__' configuration property (must be either string or array of strings)")
                 };
                 PluginLoad { id: id.clone(), name: name.clone(), paths: Some(paths), required }
             } else {
@@ -1285,7 +1552,7 @@ impl std::fmt::Debug for PluginsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut values: Value = self.values.clone();
         sift_privates(&mut values);
-        write!(f, "{:?}", values)
+        write!(f, "{values:?}")
     }
 }
 

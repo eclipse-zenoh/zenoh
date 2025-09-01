@@ -17,7 +17,7 @@ use rand::{RngCore, SeedableRng};
 use tokio::sync::Mutex as AsyncMutex;
 use zenoh_config::{Config, LinkRxConf, QueueAllocConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_link::NewLinkChannelSender;
+use zenoh_link::{LinkKind, NewLinkChannelSender};
 use zenoh_protocol::{
     core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohIdProto},
     transport::BatchSize,
@@ -117,10 +117,10 @@ pub struct TransportManagerConfig {
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
-    pub endpoints: HashMap<String, String>, // (protocol, config)
+    pub link_configs: HashMap<LinkKind, String>, // (protocol, config)
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
-    pub protocols: Vec<String>,
+    pub supported_links: Vec<LinkKind>,
 }
 
 pub struct TransportManagerState {
@@ -149,9 +149,9 @@ pub struct TransportManagerBuilder {
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
     multicast: TransportManagerBuilderMulticast,
-    endpoints: HashMap<String, String>, // (protocol, config)
+    link_configs: HashMap<LinkKind, String>, // (protocol, config)
     tx_threads: usize,
-    protocols: Option<Vec<String>>,
+    supported_links: Option<Vec<LinkKind>>,
     #[cfg(feature = "shared-memory")]
     shm_reader: Option<ShmReader>,
 }
@@ -223,8 +223,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn endpoints(mut self, endpoints: HashMap<String, String>) -> Self {
-        self.endpoints = endpoints;
+    pub fn link_configs(mut self, link_configs: HashMap<LinkKind, String>) -> Self {
+        self.link_configs = link_configs;
         self
     }
 
@@ -244,12 +244,15 @@ impl TransportManagerBuilder {
     }
 
     pub fn protocols(mut self, protocols: Option<Vec<String>>) -> Self {
-        self.protocols = protocols;
+        self.supported_links =
+            protocols.map(|ps| LinkKind::new_supported_links(ps.iter().map(|s| s.as_str())));
         self
     }
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        self = self.zid((*config.id()).into());
+        if let Some(zid) = *config.id() {
+            self = self.zid(zid.into());
+        }
         if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }
@@ -282,11 +285,11 @@ impl TransportManagerBuilder {
             use std::fmt::Write;
             let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
             for (proto, err) in errors {
-                write!(&mut formatter, "\t{proto}: {err}\r\n")?;
+                write!(&mut formatter, "\t{proto:?}: {err}\r\n")?;
             }
             bail!("{}", formatter);
         }
-        self = self.endpoints(c);
+        self = self.link_configs(c);
         self = self.unicast(
             TransportManagerBuilderUnicast::default()
                 .from_config(config)
@@ -339,15 +342,12 @@ impl TransportManagerBuilder {
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
             multicast: multicast.config,
-            endpoints: self.endpoints,
+            link_configs: self.link_configs,
             handler,
             tx_threads: self.tx_threads,
-            protocols: self.protocols.unwrap_or_else(|| {
-                zenoh_link::PROTOCOLS
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect()
-            }),
+            supported_links: self
+                .supported_links
+                .unwrap_or_else(|| zenoh_link::ALL_SUPPORTED_LINKS.to_vec()),
         };
 
         let state = TransportManagerState {
@@ -390,11 +390,11 @@ impl Default for TransportManagerBuilder {
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
             link_rx_buffer_size: *link_rx.buffer_size(),
-            endpoints: HashMap::new(),
+            link_configs: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
-            protocols: None,
+            supported_links: None,
             #[cfg(feature = "shared-memory")]
             shm_reader: None,
         }
@@ -481,6 +481,7 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
+        self.close_multicast().await;
         self.task_controller.terminate_all_async().await;
     }
 

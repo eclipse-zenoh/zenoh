@@ -30,7 +30,10 @@
   /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
   /// For TCP, UDP, Quic and TLS links, it is possible to specify a `bind` address for the local socket:
   /// E.g. tcp/192.168.0.1:7447#bind=192.168.0.1:0
-  //  Note!: Currently it is unsupported to specify both `bind` and `iface`. 
+  ///  Note!: Currently it is unsupported to specify both `bind` and `iface`.
+  ///
+  /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
+  /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -77,6 +80,9 @@
   ///
   /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
   /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
+  ///
+  /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
+  /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
@@ -302,6 +308,15 @@
   //        /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //        /// If absent, the rules will be applied to both flows.
   //        flows: ["egress", "ingress"],
+  //        /// QoS filter to apply to the messages matching this item.
+  //        qos: {
+  //          congestion_control: "drop",
+  //          priority: "data",
+  //          express: true,
+  //          reliability: "reliable",
+  //        },
+  //        /// payload_size range for the messages matching this item.
+  //        payload_size: "1000000..",
   //        key_exprs: ["test/demo"],
   //        overwrite: {
   //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
@@ -350,7 +365,7 @@
   //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
   //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //      /// If absent, the rules will be applied to both flows.
-  //      flow: ["ingress", "egress"],
+  //      flows: ["ingress", "egress"],
   //      /// List of message type on which downsampling will be applied. Must not be empty.
   //      messages: [
   //        /// Publication (Put and Delete)
@@ -451,6 +466,11 @@
   //      /// link protocols can also be used to identify transports to filter messages on.
   //      /// If absent, the rules will be applied to all transports. An empty list is invalid.
   //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //      /// ZIDs can also be used to identify transports to filter messages on.
+  //      /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
+  //      ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
+  //      ///       If managed manually in ACL config, can be useful for prototyping but should not be used in production!
+  //      zids: ["38a4829bce9166ee"],
   //     },
   //   ],
   //   /// The policies list associates rules to subjects
@@ -483,7 +503,7 @@
   //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
   //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //      /// If absent, the filter will be applied to both flows.
-  //      flow: ["ingress", "egress"],
+  //      flows: ["ingress", "egress"],
   //      /// List of message type on which the filter will be applied. Must not be empty.
   //      messages: [
   //        "put",
@@ -871,7 +891,7 @@
   //          volume: "memory",
   //          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
   //          /// If not configured, complete defaults to false.
-  //          complete: "true",
+  //          complete: true,
   //        },
   //        influx_demo: {
   //          key_expr: "demo/influxdb/**",

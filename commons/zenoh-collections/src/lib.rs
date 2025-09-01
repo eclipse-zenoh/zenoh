@@ -37,3 +37,8 @@ pub use ring_buffer::*;
 pub mod stack_buffer;
 #[cfg(feature = "std")]
 pub use stack_buffer::*;
+
+#[cfg(feature = "std")]
+pub mod int_hash_map;
+#[cfg(feature = "std")]
+pub use int_hash_map::*;

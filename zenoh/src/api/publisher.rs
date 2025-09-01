@@ -13,10 +13,12 @@
 //
 
 use std::{
+    collections::HashSet,
     convert::TryFrom,
     fmt,
     future::{IntoFuture, Ready},
     pin::Pin,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 
@@ -29,26 +31,23 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};
 #[cfg(feature = "unstable")]
 use {
-    crate::api::{
-        builders::matching_listener::MatchingListenerBuilder,
-        handlers::DefaultHandler,
-        matching::{MatchingStatus, MatchingStatusType},
-        sample::SourceInfo,
-    },
-    std::{collections::HashSet, sync::Arc, sync::Mutex},
-    zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-    zenoh_protocol::core::Reliability,
+    crate::api::sample::SourceInfo, zenoh_config::wrappers::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdProto, zenoh_protocol::core::Reliability,
 };
 
 use crate::api::{
-    builders::publisher::{
-        PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
-        PublisherDeleteBuilder, PublisherPutBuilder,
+    builders::{
+        matching_listener::MatchingListenerBuilder,
+        publisher::{
+            PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut,
+            PublisherDeleteBuilder, PublisherPutBuilder,
+        },
     },
     bytes::ZBytes,
     encoding::Encoding,
+    handlers::DefaultHandler,
     key_expr::KeyExpr,
+    matching::{MatchingStatus, MatchingStatusType},
     sample::{Locality, Sample, SampleFields},
     session::{UndeclarableSealed, WeakSession},
     Id,
@@ -111,7 +110,6 @@ pub struct Publisher<'a> {
     pub(crate) destination: Locality,
     #[cfg(feature = "unstable")]
     pub(crate) reliability: Reliability,
-    #[cfg(feature = "unstable")]
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -243,7 +241,6 @@ impl<'a> Publisher<'a> {
     ///     .matching();
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
         zenoh_core::ResolveFuture::new(async move {
             self.session.matching_status(
@@ -276,7 +273,6 @@ impl<'a> Publisher<'a> {
     /// }
     /// # }
     /// ```
-    #[zenoh_macros::unstable]
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
             session: &self.session,
@@ -307,12 +303,9 @@ impl<'a> Publisher<'a> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // set the flag first to avoid double panic if this function panic
         self.undeclare_on_drop = false;
-        #[cfg(feature = "unstable")]
-        {
-            let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
-            for id in ids {
-                self.session.undeclare_matches_listener_inner(id)?
-            }
+        let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
+        for id in ids {
+            self.session.undeclare_matches_listener_inner(id)?
         }
         self.session.undeclare_publisher_inner(self.id)
     }
@@ -426,7 +419,7 @@ impl Sink<Sample> for Publisher<'_> {
 /// If QoS is enabled, Zenoh keeps one transmission queue per [`Priority`] P, where all messages in
 /// the queue have [`Priority`] P. These queues are serviced in the order of their assigned
 /// [`Priority`] (i.e. from [`Priority::RealTime`] to [`Priority::Background`]).
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]
 pub enum Priority {
     RealTime = 1,

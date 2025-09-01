@@ -12,40 +12,45 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-link"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-link"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 transport_quic = ["zenoh-link-quic"]
-transport_tcp = ["zenoh-link-tcp", "zenoh-config/transport_tcp"]
+transport_quic_datagram = ["zenoh-link-quic_datagram"]
+transport_serial = ["zenoh-link-serial"]
+transport_tcp = ["zenoh-config/transport_tcp", "zenoh-link-tcp"]
 transport_tls = ["zenoh-link-tls"]
 transport_udp = ["zenoh-link-udp"]
+transport_unixpipe = [
+  "zenoh-link-unixpipe",
+  "zenoh-link-unixpipe/transport_unixpipe",
+]
 transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
-transport_ws = ["zenoh-link-ws"]
-transport_serial = ["zenoh-link-serial"]
-transport_unixpipe = ["zenoh-link-unixpipe", "zenoh-link-unixpipe/transport_unixpipe"]
 transport_vsock = ["zenoh-link-vsock"]
+transport_ws = ["zenoh-link-ws"]
 
 [dependencies]
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-link-quic = { workspace = true, optional = true }
+zenoh-link-quic_datagram = { workspace = true, optional = true }
 zenoh-link-serial = { workspace = true, optional = true }
 zenoh-link-tcp = { workspace = true, optional = true }
 zenoh-link-tls = { workspace = true, optional = true }
 zenoh-link-udp = { workspace = true, optional = true }
-zenoh-link-unixsock_stream = { workspace = true, optional = true }
-zenoh-link-ws = { workspace = true, optional = true }
 zenoh-link-unixpipe = { workspace = true, optional = true }
+zenoh-link-unixsock_stream = { workspace = true, optional = true }
 zenoh-link-vsock = { workspace = true, optional = true }
+zenoh-link-ws = { workspace = true, optional = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }

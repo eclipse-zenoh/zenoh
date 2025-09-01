@@ -12,30 +12,32 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-protocol"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-protocol"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 default = ["std"]
 internal = []
-std = [
-    "rand?/std",
-    "rand?/std_rng",
-    "serde/std",
-    "uhlc/std",
-    "zenoh-keyexpr/std",
-    "zenoh-result/std",
-]
 shared-memory = ["std", "zenoh-buffers/shared-memory"]
+std = [
+  "rand?/std",
+  "rand?/std_rng",
+  "serde/std",
+  "uhlc/std",
+  "zenoh-buffers/std",
+  "zenoh-keyexpr/std",
+  "zenoh-result/std",
+]
 test = ["rand", "zenoh-buffers/test"]
+unstable = []
 
 [dependencies]
 const_format = { workspace = true }

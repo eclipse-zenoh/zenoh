@@ -30,10 +30,7 @@ use zenoh_protocol::{
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use crate::{
-    net::{
-        protocol::linkstate::LinkInfo,
-        routing::{interceptor::*, RoutingContext},
-    },
+    net::{protocol::linkstate::LinkInfo, routing::interceptor::*},
     Session,
 };
 
@@ -104,15 +101,11 @@ impl InterceptorTrait for LinkTraceInterceptor {
         None
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
-        _cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
+    fn intercept(&self, msg: &mut NetworkMessageMut, _ctx: &mut dyn InterceptorContext) -> bool {
         if let NetworkBodyMut::Push(&mut Push {
             payload: PushBody::Put(ref mut p),
             ..
-        }) = &mut ctx.msg.body
+        }) = &mut msg.body
         {
             let s = str::from_utf8(p.payload.to_zslice().as_slice())
                 .unwrap()
@@ -283,7 +276,7 @@ async fn create_net(
                 .map(|(id, _)| id + port_offset)
                 .collect::<Vec<_>>();
         let mut config = get_basic_router_config(&[port_offset + v.0], &connect, wai).await;
-        config.set_id(zid).unwrap();
+        config.set_id(Some(zid)).unwrap();
         let weights =
             v.1.iter()
                 .filter_map(|(e, w)| {
@@ -323,9 +316,9 @@ async fn create_net(
     }
 
     let mut config_client_a = get_basic_client_config(source + port_offset).await;
-    config_client_a.set_id(start_id).unwrap();
+    config_client_a.set_id(Some(start_id)).unwrap();
     let mut config_client_b = get_basic_client_config(dest + port_offset).await;
-    config_client_b.set_id(end_id).unwrap();
+    config_client_b.set_id(Some(end_id)).unwrap();
 
     let session_a = ztimeout!(open(config_client_a)).unwrap();
     let session_b = ztimeout!(open(config_client_b)).unwrap();
@@ -816,7 +809,7 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_link_weights_info_diamond_routers() {
     init_log_from_env_or("error");
-    test_link_weights_info_diamond_inner(34000, WhatAmI::Router).await;
+    test_link_weights_info_diamond_inner(36000, WhatAmI::Router).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

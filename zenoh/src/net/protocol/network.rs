@@ -199,6 +199,12 @@ impl Network {
         }
 
         self.link_weights = link_weights;
+        tracing::info!(
+            "{} Update link weights to {:?}",
+            &self.name,
+            &self.link_weights
+        );
+
         if dests_to_update.is_empty()
             || !(self.full_linkstate || self.router_peers_failover_brokering)
         {
@@ -411,11 +417,8 @@ impl Network {
                 }))
     }
 
-    fn get_default_link_weight_to(&self, idx: NodeIndex) -> LinkEdgeWeight {
-        self.link_weights
-            .get(&self.graph[idx].zid)
-            .copied()
-            .unwrap_or_default()
+    fn get_default_link_weight_to(&self, zid: &ZenohIdProto) -> LinkEdgeWeight {
+        self.link_weights.get(zid).copied().unwrap_or_default()
     }
 
     fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex) {
@@ -837,17 +840,23 @@ impl Network {
                 }
             };
 
-            let link_weight = self.get_default_link_weight_to(idx);
+            let link_weight = self.get_default_link_weight_to(&zid);
+            self.graph[self.idx].links.insert(zid, link_weight);
+            self.graph[self.idx].sn += 1;
+
             if self.full_linkstate
                 && self.graph[idx]
                     .links
                     .contains_key(&self.graph[self.idx].zid)
             {
                 self.update_edge(self.idx, idx);
-                tracing::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
+                tracing::trace!(
+                    "{} Update edge (link) {} {}",
+                    &self.name,
+                    self.graph[self.idx].zid,
+                    zid
+                );
             }
-            self.graph[self.idx].links.insert(zid, link_weight);
-            self.graph[self.idx].sn += 1;
 
             // Send updated self linkstate on all existing links except new one
             self.links

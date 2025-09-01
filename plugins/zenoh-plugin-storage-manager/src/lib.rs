@@ -213,7 +213,7 @@ impl StorageRuntimeInner {
         }
         self.plugins_manager
             .started_plugin_mut(name)
-            .ok_or(format!("Cannot find volume '{}' to stop it", name))?
+            .ok_or(format!("Cannot find volume '{name}' to stop it"))?
             .stop();
         Ok(())
     }
@@ -302,7 +302,7 @@ impl PluginControl for StorageRuntime {
     fn report(&self) -> PluginReport {
         PluginReport::default()
     }
-    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
         let guard = self.0.lock().unwrap();
         guard
             .plugins_manager

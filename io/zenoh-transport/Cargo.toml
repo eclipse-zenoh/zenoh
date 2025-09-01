@@ -12,86 +12,85 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-transport"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-transport"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = [
-    "zenoh-protocol/shared-memory",
-    "zenoh-shm",
-    "zenoh-codec/shared-memory",
-    "zenoh-buffers/shared-memory",
-]
-auth_pubkey = ["transport_auth", "rsa"]
+auth_pubkey = ["rsa", "transport_auth"]
 auth_usrpwd = ["transport_auth"]
-transport_auth = []
-transport_multilink = ["auth_pubkey"]
-transport_quic = ["zenoh-link/transport_quic"]
-transport_tcp = ["zenoh-link/transport_tcp", "zenoh-config/transport_tcp"]
-transport_tls = ["zenoh-link/transport_tls"]
-transport_udp = ["zenoh-link/transport_udp"]
-transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
-transport_ws = ["zenoh-link/transport_ws"]
-transport_serial = ["zenoh-link/transport_serial"]
-transport_compression = []
-transport_unixpipe = ["zenoh-link/transport_unixpipe"]
-transport_vsock = ["zenoh-link/transport_vsock"]
+default = ["test", "transport_multilink"]
+shared-memory = [
+  "zenoh-buffers/shared-memory",
+  "zenoh-codec/shared-memory",
+  "zenoh-protocol/shared-memory",
+  "zenoh-shm",
+]
 stats = []
 test = []
-unstable = []
-default = ["test", "transport_multilink"]
+transport_auth = []
+transport_compression = []
+transport_multilink = ["auth_pubkey"]
+transport_quic = ["zenoh-link/transport_quic"]
+transport_quic_datagram = ["zenoh-link/transport_quic_datagram"]
+transport_serial = ["zenoh-link/transport_serial"]
+transport_tcp = ["zenoh-config/transport_tcp", "zenoh-link/transport_tcp"]
+transport_tls = ["zenoh-link/transport_tls"]
+transport_udp = ["zenoh-link/transport_udp"]
+transport_unixpipe = ["zenoh-link/transport_unixpipe"]
+transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
+transport_vsock = ["zenoh-link/transport_vsock"]
+transport_ws = ["zenoh-link/transport_ws"]
+unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
 
 [dependencies]
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
-tokio = { workspace = true, features = [
-    "sync",
-    "fs",
-    "time",
-    "macros",
-    "rt-multi-thread",
-    "io-util",
-    "net",
-] }
-lazy_static = { workspace = true }
-tokio-util = { workspace = true, features = ["rt"] }
 flume = { workspace = true }
-tracing = { workspace = true }
+lazy_static = { workspace = true }
 lz4_flex = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
-sha3 = { workspace = true }
 serde = { workspace = true, features = ["default"] }
+sha3 = { workspace = true }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "macros",
+  "net",
+  "rt-multi-thread",
+  "sync",
+  "time",
+] }
+tokio-util = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-crypto = { workspace = true }
 zenoh-link = { workspace = true }
+zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-runtime = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
-zenoh-util = { workspace = true }
-zenoh-runtime = { workspace = true }
 zenoh-task = { workspace = true }
-
-
+zenoh-util = { workspace = true }
 
 [dev-dependencies]
-futures-util = { workspace = true }
-zenoh-util = { workspace = true }
-zenoh-protocol = { workspace = true, features = ["test"] }
 futures = { workspace = true }
-zenoh-link-commons = { workspace = true }
+futures-util = { workspace = true }
+zenoh-protocol = { workspace = true, features = ["test"] }
+zenoh-util = { workspace = true }

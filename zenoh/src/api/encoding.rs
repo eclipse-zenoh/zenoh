@@ -69,7 +69,7 @@ use zenoh_protocol::core::EncodingId;
 /// assert_eq!("text/plain;utf-8", &encoding2.to_string());
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Encoding(zenoh_protocol::core::Encoding);
 
 impl Encoding {
@@ -517,6 +517,9 @@ impl Encoding {
         50u16 => "video/raw",
         51u16 => "video/vp8",
         52u16 => "video/vp9",
+        // The 0xFFFFu16 is used to indicate an custom encoding where both encoding and schema
+        // are stored in the schema field.
+        0xFFFFu16 => "",
     };
 
     const STR_TO_ID: phf::Map<&'static str, EncodingId> = phf_map! {
@@ -612,7 +615,9 @@ impl From<&str> for Encoding {
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
         // if id is not recognized, e.g. `t == "my_encoding"`, put it in the schema
+        // and set the id to 0xFFFF
         } else {
+            inner.id = 0xFFFF;
             schema = t;
         }
         if !schema.is_empty() {
@@ -649,6 +654,8 @@ impl From<&Encoding> for Cow<'static, str> {
         ) {
             // Perfect match
             (Some(i), None) => Cow::Borrowed(i),
+            // Custom encoding, both id and schema are in the schema field
+            (Some(""), Some(s)) => Cow::Owned(su8_to_str(s).into()),
             // ID and schema
             (Some(i), Some(s)) => {
                 Cow::Owned(format!("{}{}{}", i, Encoding::SCHEMA_SEP, su8_to_str(s)))
@@ -708,5 +715,78 @@ impl Encoding {
     #[zenoh_macros::internal]
     pub fn new(id: EncodingId, schema: Option<ZSlice>) -> Self {
         Encoding(zenoh_protocol::core::Encoding { id, schema })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
+    use super::*;
+
+    #[test]
+    fn hash() {
+        let encodings = [
+            Encoding::ZENOH_BYTES,
+            Encoding::ZENOH_STRING,
+            Encoding::ZENOH_STRING.with_schema("utf-8"),
+            Encoding::ZENOH_STRING.with_schema("utf-8"),
+        ];
+        let hashes = encodings.map(|e| {
+            let mut hasher = DefaultHasher::new();
+            e.hash(&mut hasher);
+            hasher.finish()
+        });
+
+        assert_ne!(hashes[0], hashes[1]);
+        assert_ne!(hashes[0], hashes[2]);
+        assert_ne!(hashes[1], hashes[2]);
+        assert_eq!(hashes[2], hashes[3]);
+    }
+
+    #[test]
+    fn test_default_encoding() {
+        let default = Encoding::default();
+        assert_eq!(default, Encoding::ZENOH_BYTES);
+        assert_eq!(default.to_string(), "zenoh/bytes");
+    }
+
+    #[test]
+    fn test_from_str() {
+        // Test constants conversion
+        assert_eq!(Encoding::from("zenoh/bytes"), Encoding::ZENOH_BYTES);
+        assert_eq!(Encoding::from("zenoh/string"), Encoding::ZENOH_STRING);
+        assert_eq!(Encoding::from("text/plain"), Encoding::TEXT_PLAIN);
+        assert_eq!(
+            Encoding::from("application/json"),
+            Encoding::APPLICATION_JSON
+        );
+    }
+
+    #[test]
+    fn test_to_string() {
+        // Test constants to string
+        assert_eq!(Encoding::ZENOH_BYTES.to_string(), "zenoh/bytes");
+        assert_eq!(Encoding::ZENOH_STRING.to_string(), "zenoh/string");
+        assert_eq!(Encoding::TEXT_PLAIN.to_string(), "text/plain");
+        assert_eq!(Encoding::APPLICATION_JSON.to_string(), "application/json");
+    }
+
+    #[test]
+    fn test_schema() {
+        // Test with schema using with_schema method
+        let with_schema = Encoding::TEXT_PLAIN.with_schema("utf-8");
+        assert_eq!(with_schema.to_string(), "text/plain;utf-8");
+
+        // Test from string with schema
+        let from_str = Encoding::from("text/plain;utf-8");
+        assert_eq!(from_str.to_string(), "text/plain;utf-8");
+
+        // Unknown encoding with schema
+        let unknown_with_schema = Encoding::from("custom/format;v1.0");
+        assert_eq!(unknown_with_schema.to_string(), "custom/format;v1.0");
     }
 }

@@ -24,10 +24,7 @@ use zenoh_examples::CommonArgs;
 async fn main() {
     // initiate logging
     zenoh::init_log_from_env_or("error");
-    #[cfg(feature = "unstable")]
     let (config, selector, payload, target, timeout, add_matching_listener) = parse_args();
-    #[cfg(not(feature = "unstable"))]
-    let (config, selector, payload, target, timeout, _) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
@@ -40,7 +37,6 @@ async fn main() {
         .await
         .unwrap();
 
-    #[cfg(feature = "unstable")]
     if add_matching_listener {
         querier
             .matching_listener()
@@ -93,7 +89,7 @@ async fn main() {
                         .payload()
                         .try_to_string()
                         .unwrap_or_else(|e| e.to_string().into());
-                    println!(">> Received (ERROR: '{}')", payload);
+                    println!(">> Received (ERROR: '{payload}')");
                 }
             }
         }
@@ -123,7 +119,6 @@ struct Args {
     /// The query timeout in milliseconds.
     timeout: u64,
     /// Enable matching listener.
-    #[cfg(feature = "unstable")]
     #[arg(long)]
     add_matching_listener: bool,
     #[command(flatten)]
@@ -149,9 +144,6 @@ fn parse_args() -> (
             Qt::AllComplete => QueryTarget::AllComplete,
         },
         Duration::from_millis(args.timeout),
-        #[cfg(feature = "unstable")]
         args.add_matching_listener,
-        #[cfg(not(feature = "unstable"))]
-        false,
     )
 }

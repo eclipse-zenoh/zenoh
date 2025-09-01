@@ -34,21 +34,22 @@ use super::{
     face_hat, face_hat_mut, get_peer, get_router, hat, hat_mut, push_declaration_profile, res_hat,
     res_hat_mut, HatCode, HatContext, HatFace, HatTables,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::{linkstate::LinkEdgeWeight, network::Network},
-    routing::{
-        dispatcher::{
-            face::FaceState,
-            interests::RemoteInterest,
-            pubsub::SubscriberInfo,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::{linkstate::LinkEdgeWeight, network::Network},
+        routing::{
+            dispatcher::{
+                face::FaceState,
+                interests::RemoteInterest,
+                pubsub::SubscriberInfo,
+                resource::{NodeId, Resource, SessionContext},
+                tables::{Route, RoutingExpr, Tables},
+            },
+            hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+            router::{disable_matches_data_routes, RouteBuilder},
+            RoutingContext,
         },
-        hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
-        router::disable_matches_data_routes,
-        RoutingContext,
     },
 };
 
@@ -1151,31 +1152,36 @@ impl HatPubSubTrait for HatCode {
             .router_subs
             .iter()
             .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those subscriptions
+                let routers = Vec::from_iter(res_hat!(s).router_subs.iter().cloned());
+                let mut peers = if hat!(tables).full_net(WhatAmI::Peer) {
+                    Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned())
+                } else {
+                    vec![]
+                };
+                let mut clients = vec![];
+                for ctx in s
+                    .session_ctxs
+                    .values()
+                    .filter(|ctx| ctx.subs.is_some() && !ctx.face.is_local)
+                {
+                    match ctx.face.whatami {
+                        WhatAmI::Router => (),
+                        WhatAmI::Peer => {
+                            if !hat!(tables).full_net(WhatAmI::Peer) {
+                                peers.push(ctx.face.zid);
+                            }
+                        }
+                        WhatAmI::Client => clients.push(ctx.face.zid),
+                    }
+                }
                 (
                     s.clone(),
-                    // Compute the list of routers, peers and clients that are known
-                    // sources of those subscriptions
                     Sources {
-                        routers: Vec::from_iter(res_hat!(s).router_subs.iter().cloned()),
-                        peers: if hat!(tables).full_net(WhatAmI::Peer) {
-                            Vec::from_iter(res_hat!(s).linkstatepeer_subs.iter().cloned())
-                        } else {
-                            s.session_ctxs
-                                .values()
-                                .filter_map(|f| {
-                                    (f.face.whatami == WhatAmI::Peer && f.subs.is_some())
-                                        .then_some(f.face.zid)
-                                })
-                                .collect()
-                        },
-                        clients: s
-                            .session_ctxs
-                            .values()
-                            .filter_map(|f| {
-                                (f.face.whatami == WhatAmI::Client && f.subs.is_some())
-                                    .then_some(f.face.zid)
-                            })
-                            .collect(),
+                        routers,
+                        peers,
+                        clients,
                     },
                 )
             })
@@ -1189,7 +1195,12 @@ impl HatPubSubTrait for HatCode {
                 if interest.options.subscribers() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
@@ -1210,7 +1221,7 @@ impl HatPubSubTrait for HatCode {
     ) -> Arc<Route> {
         #[inline]
         fn insert_faces_for_subs(
-            route: &mut Route,
+            route: &mut RouteBuilder,
             expr: &RoutingExpr,
             tables: &Tables,
             net: &Network,
@@ -1226,7 +1237,7 @@ impl HatPubSubTrait for HatCode {
                             {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                        route.entry(face.id).or_insert_with(|| {
+                                        route.insert(face.id, || {
                                             let key_expr = Resource::get_best_key(
                                                 expr.prefix,
                                                 expr.suffix,
@@ -1245,10 +1256,10 @@ impl HatPubSubTrait for HatCode {
             }
         }
 
-        let mut route = HashMap::new();
+        let mut route = RouteBuilder::new();
         let key_expr = expr.full_expr();
         if key_expr.ends_with('/') {
-            return Arc::new(route);
+            return Arc::new(route.build());
         }
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
@@ -1260,7 +1271,7 @@ impl HatPubSubTrait for HatCode {
             Ok(ke) => ke,
             Err(e) => {
                 tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route);
+                return Arc::new(route.build());
             }
         };
         let res = Resource::get_resource(expr.prefix, expr.suffix);
@@ -1312,7 +1323,7 @@ impl HatPubSubTrait for HatCode {
             if master || source_type == WhatAmI::Router {
                 for (sid, context) in &mres.session_ctxs {
                     if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
-                        route.entry(*sid).or_insert_with(|| {
+                        route.insert(*sid, || {
                             let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                             (context.face.clone(), key_expr.to_owned(), NodeId::default())
                         });
@@ -1321,19 +1332,17 @@ impl HatPubSubTrait for HatCode {
             }
         }
         for mcast_group in &tables.mcast_groups {
-            route.insert(
-                mcast_group.id,
+            route.insert(mcast_group.id, || {
                 (
                     mcast_group.clone(),
                     expr.full_expr().to_string().into(),
                     NodeId::default(),
-                ),
-            );
+                )
+            });
         }
-        Arc::new(route)
+        Arc::new(route.build())
     }
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,

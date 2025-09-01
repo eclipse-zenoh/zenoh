@@ -20,9 +20,9 @@ use std::{
     time::Duration,
 };
 
-use ahash::HashMapExt;
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
+use zenoh_collections::IntHashMap;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
@@ -60,6 +60,8 @@ pub(crate) struct InterestState {
     pub(crate) finalized: bool,
 }
 
+pub(crate) type FaceId = usize;
+
 pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohIdProto,
@@ -70,8 +72,8 @@ pub struct FaceState {
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
     pub(crate) pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
-    pub(crate) local_mappings: ahash::HashMap<ExprId, Arc<Resource>>,
-    pub(crate) remote_mappings: ahash::HashMap<ExprId, Arc<Resource>>,
+    pub(crate) local_mappings: IntHashMap<ExprId, Arc<Resource>>,
+    pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
@@ -104,8 +106,8 @@ impl FaceState {
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
             pending_current_interests: HashMap::new(),
-            local_mappings: ahash::HashMap::new(),
-            remote_mappings: ahash::HashMap::new(),
+            local_mappings: IntHashMap::new(),
+            remote_mappings: IntHashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
@@ -299,7 +301,7 @@ impl Primitives for Face {
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
             declare_interest(
-                ctrl_lock.as_ref(),
+                self.tables.hat_code.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
                 msg.id,
@@ -314,7 +316,7 @@ impl Primitives for Face {
             }
         } else {
             undeclare_interest(
-                ctrl_lock.as_ref(),
+                self.tables.hat_code.as_ref(),
                 &self.tables,
                 &mut self.state.clone(),
                 msg.id,
@@ -334,7 +336,7 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 let mut declares = vec![];
                 declare_subscription(
-                    ctrl_lock.as_ref(),
+                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -351,7 +353,7 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 let mut declares = vec![];
                 undeclare_subscription(
-                    ctrl_lock.as_ref(),
+                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -367,7 +369,7 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 let mut declares = vec![];
                 declare_queryable(
-                    ctrl_lock.as_ref(),
+                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -384,7 +386,7 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 let mut declares = vec![];
                 undeclare_queryable(
-                    ctrl_lock.as_ref(),
+                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -400,7 +402,7 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut declares = vec![];
                 declare_token(
-                    ctrl_lock.as_ref(),
+                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -417,7 +419,7 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 let mut declares = vec![];
                 undeclare_token(
-                    ctrl_lock.as_ref(),
+                    self.tables.hat_code.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     m.id,
@@ -440,7 +442,7 @@ impl Primitives for Face {
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
                     declare_final(
-                        ctrl_lock.as_ref(),
+                        self.tables.hat_code.as_ref(),
                         &mut wtables,
                         &mut self.state.clone(),
                         id,
@@ -490,7 +492,7 @@ impl Primitives for Face {
         finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
             declares.push((p.clone(), m))
         });
-        ctrl_lock.close_face(
+        self.tables.hat_code.close_face(
             &self.tables,
             &self.tables.clone(),
             &mut state,

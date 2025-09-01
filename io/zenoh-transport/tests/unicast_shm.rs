@@ -27,19 +27,14 @@ mod tests {
     use zenoh_core::{ztimeout, Wait};
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
-        network::{
-            push::ext::{NodeIdType, QoSType},
-            NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push,
-        },
+        core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
+        network::{push::ext::QoSType, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push},
         zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
     use zenoh_shm::{
         api::{
-            protocol_implementations::posix::{
-                posix_shm_provider_backend::PosixShmProviderBackend, protocol_id::POSIX_PROTOCOL_ID,
-            },
+            protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
             provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
         },
         ShmBufInner,
@@ -116,9 +111,9 @@ mod tests {
                     PushBody::Put(Put { payload, .. }) => {
                         for zs in payload.zslices() {
                             if self.is_shm && zs.downcast_ref::<ShmBufInner>().is_none() {
-                                panic!("Expected ShmBufInner: {:?}", zs);
+                                panic!("Expected ShmBufInner: {zs:?}");
                             } else if !self.is_shm && zs.downcast_ref::<ShmBufInner>().is_some() {
-                                panic!("Not Expected ShmBufInner: {:?}", zs);
+                                panic!("Not Expected ShmBufInner: {zs:?}");
                             }
                         }
                         payload.contiguous().into_owned()
@@ -159,13 +154,9 @@ mod tests {
         // create SHM provider
         let backend = PosixShmProviderBackend::builder()
             .with_size(2 * MSG_SIZE)
-            .unwrap()
             .wait()
             .unwrap();
-        let shm01 = ShmProviderBuilder::builder()
-            .protocol_id::<POSIX_PROTOCOL_ID>()
-            .backend(backend)
-            .wait();
+        let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
@@ -247,23 +238,14 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let mut message: NetworkMessage = Push {
+            let mut message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
+                ..Push::from(Put {
                     payload: sbuf.into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                    ..Put::default()
+                })
+            });
 
             peer_shm02_transport.schedule(message.as_mut()).unwrap();
         }
@@ -288,23 +270,14 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let mut message: NetworkMessage = Push {
+            let mut message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
+                ..Push::from(Put {
                     payload: sbuf.into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                    ..Put::default()
+                })
+            });
 
             peer_net01_transport.schedule(message.as_mut()).unwrap();
         }

@@ -41,7 +41,7 @@ fn zbuf_test() {
 
     let codec = Zenoh080::new();
     codec.write(&mut writer, &zbuf).unwrap();
-    println!("Buffer: {:?}", buffer);
+    println!("Buffer: {buffer:?}");
 
     let mut reader = buffer.reader();
     let ret: ZBuf = codec.read(&mut reader).unwrap();
@@ -178,7 +178,7 @@ fn codec_zint_len() {
         let mut writer = buff.writer();
         let n: u64 = 1 << (7 * i);
         codec.write(&mut writer, n).unwrap();
-        println!("ZInt len: {} {:02x?}", n, buff);
+        println!("ZInt len: {n} {buff:02x?}");
         assert_eq!(codec.w_len(n), buff.len());
     }
 

@@ -26,11 +26,11 @@ use std::{
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 #[cfg(feature = "unstable")]
 use zenoh::qos::Reliability;
-#[cfg(feature = "unstable")]
-use zenoh::query::Querier;
 #[cfg(all(feature = "internal", feature = "unstable"))]
 use zenoh::Wait;
-use zenoh::{key_expr::KeyExpr, qos::CongestionControl, sample::SampleKind, Session};
+use zenoh::{
+    key_expr::KeyExpr, qos::CongestionControl, query::Querier, sample::SampleKind, Session,
+};
 use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;
@@ -55,7 +55,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
+    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = zenoh::Config::default();
@@ -70,7 +70,7 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
+    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
     (peer01, peer02)
@@ -84,8 +84,8 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .endpoints
         .set(vec![endpoint01.parse().unwrap()])
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(true)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {}", endpoint01);
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    println!("[  ][01a] Opening peer01 session: {endpoint01}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
 
     let mut config = zenoh::Config::default();
@@ -94,8 +94,8 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
         .endpoints
         .set(vec![endpoint02.parse().unwrap()])
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(true)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {}", endpoint02);
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    println!("[  ][02a] Opening peer02 session: {endpoint02}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
     (peer01, peer02)
@@ -179,12 +179,10 @@ impl HasGet for SessionGetter<'_, '_> {
     }
 }
 
-#[cfg(feature = "unstable")]
 struct QuerierGetter<'a> {
     querier: Querier<'a>,
 }
 
-#[cfg(feature = "unstable")]
 impl HasGet for QuerierGetter<'_> {
     async fn get(&self, params: &str) -> zenoh::handlers::FifoChannelHandler<zenoh::query::Reply> {
         ztimeout!(self.querier.get().parameters(params)).unwrap()
@@ -250,7 +248,8 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("ok_put").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.replier_id(), Some(qbl.id().zid()));
+                #[cfg(feature = "unstable")]
+                assert_eq!(s.replier_id(), Some(qbl.id()));
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Put);
                 assert_eq!(s.payload().len(), size);
@@ -268,7 +267,8 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("ok_del").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.replier_id(), Some(qbl.id().zid()));
+                #[cfg(feature = "unstable")]
+                assert_eq!(s.replier_id(), Some(qbl.id()));
                 let s = s.result().unwrap();
                 assert_eq!(s.kind(), SampleKind::Delete);
                 assert_eq!(s.payload().len(), 0);
@@ -286,7 +286,8 @@ async fn test_session_query_reply_internal<Getter: HasGet>(
         for _ in 0..msg_count {
             let rs = getter.get("err").await;
             while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.replier_id(), Some(qbl.id().zid()));
+                #[cfg(feature = "unstable")]
+                assert_eq!(s.replier_id(), Some(qbl.id()));
                 let e = s.result().unwrap_err();
                 assert_eq!(e.payload().len(), size);
                 cnt += 1;
@@ -319,7 +320,6 @@ async fn test_session_getrep(peer01: &Session, peer02: &Session, reliability: Re
     ))
 }
 
-#[cfg(feature = "unstable")]
 async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";
     println!("[QQ][00c] Declaring Querier on peer02 session");
@@ -341,7 +341,6 @@ async fn zenoh_session_unicast() {
     let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
-    #[cfg(feature = "unstable")]
     test_session_qrrep(&peer01, &peer02, Reliability::Reliable).await;
     close_session(peer01, peer02).await;
 }
@@ -370,7 +369,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Creating r1 session runtime: {:?}", endpoints);
+    println!("[  ][01a] Creating r1 session runtime: {endpoints:?}");
     let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
     r1.start().await.unwrap();
 
@@ -386,7 +385,7 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Creating r2 session runtime: {:?}", endpoints);
+    println!("[  ][02a] Creating r2 session runtime: {endpoints:?}");
     let mut r2 = RuntimeBuilder::new(config).build().await.unwrap();
     r2.start().await.unwrap();
 
@@ -449,7 +448,6 @@ async fn zenoh_session_close_in_background_sync() {
     close_task_2.wait().unwrap();
 }
 
-#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_undeclare_subscribers_same_keyexpr() {
     let key_expr = "test/undeclare/subscribers";
@@ -459,4 +457,39 @@ async fn test_undeclare_subscribers_same_keyexpr() {
     tokio::time::sleep(SLEEP).await;
     ztimeout!(sub1.undeclare()).unwrap();
     ztimeout!(sub2.undeclare()).unwrap();
+}
+
+#[cfg(feature = "internal")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_session_from_cloned_config() {
+    use zenoh::Config;
+
+    let (pub_config, sub_config) = {
+        let mut common_config = Config::default();
+        let locator = "tcp/127.0.0.1:38446";
+        common_config
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+
+        let mut pub_config = common_config.clone();
+        let mut sub_config = common_config;
+
+        sub_config
+            .listen
+            .endpoints
+            .set(vec![locator.parse().unwrap()])
+            .unwrap();
+        pub_config
+            .connect
+            .endpoints
+            .set(vec![locator.parse().unwrap()])
+            .unwrap();
+
+        (pub_config, sub_config)
+    };
+
+    let _pub_session = zenoh::open(pub_config).await.unwrap();
+    let _sub_session = zenoh::open(sub_config).await.unwrap();
 }

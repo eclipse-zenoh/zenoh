@@ -18,14 +18,18 @@ mod test {
     use std::{
         fs,
         path::PathBuf,
+        str::FromStr,
         sync::{atomic::AtomicBool, Arc, Mutex},
         time::Duration,
     };
 
     use once_cell::sync::Lazy;
     use tokio::runtime::Handle;
-    use zenoh::{config::WhatAmI, Config, Session};
-    use zenoh_config::{EndPoint, ModeDependentValue, ZenohId};
+    use zenoh::{
+        config::{WhatAmI, ZenohId},
+        Config, Session,
+    };
+    use zenoh_config::{EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -94,6 +98,12 @@ mod test {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_link_protocols() {
         test_pub_sub_auth_link_protocol(1234).await
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_zid() {
+        zenoh_util::init_log_from_env_or("error");
+        test_pub_sub_auth_zid(29459).await
     }
 
     #[allow(clippy::all)]
@@ -275,7 +285,7 @@ client2name:client2passwd";
         config
             .listen
             .endpoints
-            .set(vec![format!("tls/127.0.0.1:{}", port).parse().unwrap()])
+            .set(vec![format!("tls/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -298,19 +308,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{cert_path}/serversidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{cert_path}/serverside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -328,7 +338,7 @@ client2name:client2passwd";
         config
             .listen
             .endpoints
-            .set(vec![format!("quic/127.0.0.1:{}", port).parse().unwrap()])
+            .set(vec![format!("quic/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -351,19 +361,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{cert_path}/serversidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{cert_path}/serverside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config
     }
@@ -454,19 +464,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_listen_private_key(Some(format!("{}/serversidekey.pem", cert_path)))
+            .set_listen_private_key(Some(format!("{cert_path}/serversidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_listen_certificate(Some(format!("{}/serverside.pem", cert_path)))
+            .set_listen_certificate(Some(format!("{cert_path}/serverside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config
     }
@@ -504,19 +514,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -557,19 +567,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         config.transport.unicast.set_lowlatency(lowlatency).unwrap();
         config
@@ -615,19 +625,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
         let mut config = zenoh::Config::default();
@@ -660,19 +670,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
@@ -770,19 +780,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s01 = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -822,19 +832,19 @@ client2name:client2passwd";
             .transport
             .link
             .tls
-            .set_connect_private_key(Some(format!("{}/clientsidekey.pem", cert_path)))
+            .set_connect_private_key(Some(format!("{cert_path}/clientsidekey.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_connect_certificate(Some(format!("{}/clientside.pem", cert_path)))
+            .set_connect_certificate(Some(format!("{cert_path}/clientside.pem")))
             .unwrap();
         config
             .transport
             .link
             .tls
-            .set_root_ca_certificate(Some(format!("{}/ca.pem", cert_path)))
+            .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
         let s02 = ztimeout!(zenoh::open(config)).unwrap();
         (s01, s02)
@@ -2061,8 +2071,113 @@ client2name:client2passwd";
             .endpoints
             .set(vec![format!("udp/127.0.0.1:{port}").parse().unwrap()])
             .unwrap();
-        config_connect.set_id(ZenohId::default()).unwrap();
         let session_allowed = zenoh::open(config_connect).await.unwrap();
+
+        let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
+
+        session_denied.put(key_expr, "DENIED").await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(sub.try_recv().unwrap().is_none());
+
+        session_allowed.put(key_expr, "ALLOWED").await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        let value = sub.recv_async().await;
+        assert!(value.is_ok());
+        let sample = value.unwrap();
+        let payload = sample.payload().try_to_string().unwrap();
+        assert!(payload.eq("ALLOWED"));
+
+        sub.undeclare().await.unwrap();
+        session_allowed.close().await.unwrap();
+        session_denied.close().await.unwrap();
+        listener_session.close().await.unwrap();
+    }
+
+    async fn test_pub_sub_auth_zid(port: u16) {
+        let key_expr = "acl_auth_test/pubsub/by_zid";
+        let test_zid = "abcdef";
+
+        let mut config_listener = zenoh::Config::default();
+        config_listener
+            .listen
+            .set_endpoints(ModeDependentValue::Unique(vec![format!(
+                "tcp/127.0.0.1:{port}"
+            )
+            .parse()
+            .unwrap()]))
+            .unwrap();
+        config_listener
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
+            .unwrap();
+        config_listener
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+
+        config_listener
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "id": "r1",
+                            "permission": "deny",
+                            "flows": ["ingress"],
+                            "messages": [
+                                "put",
+                            ],
+                            "key_exprs": [
+                                "**"
+                            ],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            "id": "s1",
+                            "zids": [ "abcdef" ],
+                        }
+                    ],
+                    "policies": [
+                        {
+                            "rules": ["r1"],
+                            "subjects": ["s1"],
+                        }
+                    ]
+                }"#,
+            )
+            .unwrap();
+
+        let listener_session = zenoh::open(config_listener).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        let mut config_connect = zenoh::Config::default();
+        config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
+        config_connect
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+        config_connect
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
+            .unwrap();
+        config_connect
+            .connect
+            .endpoints
+            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
+            .unwrap();
+        let session_allowed = zenoh::open(config_connect.clone()).await.unwrap();
+
+        config_connect
+            .set_id(Some(ZenohId::from_str(test_zid).unwrap()))
+            .unwrap();
+        let session_denied = zenoh::open(config_connect).await.unwrap();
 
         let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
 

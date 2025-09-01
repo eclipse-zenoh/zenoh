@@ -540,9 +540,9 @@ impl FromStr for Reliability {
         } else if desc == Reliability::Reliable as u8 {
             Ok(Reliability::Reliable)
         } else {
-            return Err(InvalidReliability {
+            Err(InvalidReliability {
                 found: s.to_string(),
-            });
+            })
         }
     }
 }
@@ -561,7 +561,7 @@ impl Channel {
 }
 
 /// Congestion control strategy.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]
 pub enum CongestionControl {
     #[default]
@@ -570,6 +570,11 @@ pub enum CongestionControl {
     /// When transmitting a message in a node with a full queue, the node will wait for queue to
     /// progress.
     Block = 1,
+    #[cfg(feature = "unstable")]
+    /// When transmitting a message in a node with a full queue, the node will wait for queue to
+    /// progress, but only for the first message sent with this strategy; other messages will be
+    /// dropped.
+    BlockFirst = 2,
 }
 
 impl CongestionControl {

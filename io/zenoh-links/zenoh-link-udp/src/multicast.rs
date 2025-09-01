@@ -23,7 +23,8 @@ use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{
-    LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait, BIND_SOCKET,
+    parse_dscp, set_dscp, LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
+    BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Config, EndPoint, Locator},
@@ -189,7 +190,8 @@ impl LinkManagerMulticastUdp {
         mcast_addr: &SocketAddr,
         config: Config<'_>,
         bind_socket: Option<&str>,
-    ) -> ZResult<(UdpSocket, UdpSocket, SocketAddr)> {
+        dscp: Option<u32>,
+    ) -> ZResult<(UdpSocket, SocketAddr, UdpSocket, SocketAddr)> {
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
             IpAddr::V6(_) => Domain::IPV6,
@@ -201,14 +203,12 @@ impl LinkManagerMulticastUdp {
             match (bind_addr, mcast_addr) {
                 (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
                     return Err(Box::from(format!(
-                        "Protocols must match: Cannot bind to IPv6 {} and join IPv4 {}",
-                        local, dest
+                        "Protocols must match: Cannot bind to IPv6 {local} and join IPv4 {dest}"
                     )));
                 }
                 (SocketAddr::V4(local), SocketAddr::V6(dest)) => {
                     return Err(Box::from(format!(
-                        "Protocols must match: Cannot bind to IPv4 {} and join IPv6 {}",
-                        local, dest
+                        "Protocols must match: Cannot bind to IPv4 {local} and join IPv6 {dest}"
                     )));
                 }
                 _ => bind_addr, // No issue here
@@ -279,6 +279,10 @@ impl LinkManagerMulticastUdp {
         ucast_sock
             .bind(&local_addr.into())
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+
+        if let Some(dscp) = dscp {
+            set_dscp(&ucast_sock, *mcast_addr, dscp)?;
+        }
 
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
@@ -376,8 +380,14 @@ impl LinkManagerMulticastUdp {
             .local_addr()
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
         assert_eq!(ucast_addr.ip(), local_addr.ip());
+        // We may have bind to port 0, so we need to retrieve the actual port
+        let mcast_port = mcast_sock
+            .local_addr()
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?
+            .port();
+        let mcast_addr = SocketAddr::new(mcast_addr.ip(), mcast_port);
 
-        Ok((mcast_sock, ucast_sock, ucast_addr))
+        Ok((mcast_sock, mcast_addr, ucast_sock, ucast_addr))
     }
 }
 
@@ -390,16 +400,17 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
             .collect::<Vec<SocketAddr>>();
         let config = endpoint.config();
         let bind_socket = config.get(BIND_SOCKET);
+        let dscp = parse_dscp(&config)?;
 
         let mut errs: Vec<ZError> = vec![];
         for maddr in mcast_addrs {
             match self
-                .new_link_inner(&maddr, endpoint.config(), bind_socket)
+                .new_link_inner(&maddr, endpoint.config(), bind_socket, dscp)
                 .await
             {
-                Ok((mcast_sock, ucast_sock, ucast_addr)) => {
+                Ok((mcast_sock, mcast_addr, ucast_sock, ucast_addr)) => {
                     let link = Arc::new(LinkMulticastUdp::new(
-                        ucast_addr, ucast_sock, maddr, mcast_sock,
+                        ucast_addr, ucast_sock, mcast_addr, mcast_sock,
                     ));
 
                     return Ok(LinkMulticast(link));

@@ -21,6 +21,7 @@ use zenoh::{
     qos::{CongestionControl, Priority},
     Config, Wait,
 };
+use zenoh_config::ZenohId;
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -35,6 +36,7 @@ async fn get_basic_router_config(port: u16) -> Config {
         .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config.set_id(Some(ZenohId::default())).unwrap();
     config
 }
 
@@ -47,6 +49,7 @@ async fn get_basic_client_config(port: u16) -> Config {
         .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config.set_id(Some(ZenohId::default())).unwrap();
     config
 }
 
@@ -447,7 +450,7 @@ async fn test_qos_overwrite_zids() {
                 flows: ["egress"]
             }}
         ]"#,
-        config_client2.id()
+        config_client2.id().unwrap()
     );
     config_router
         .insert_json5("qos/network", &qos_network)

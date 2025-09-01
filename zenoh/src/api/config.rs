@@ -130,6 +130,8 @@ impl Config {
     // REVIEW(fuzzypixelz): the error variant of the Result is a Result because this does
     // deserialization AND validation.
     #[zenoh_macros::unstable]
+    // TODO(yellowhatter): clippy says that Error here is extremely large (1k)
+    #[allow(clippy::result_large_err)]
     pub fn from_deserializer<'d, D: serde::Deserializer<'d>>(
         d: D,
     ) -> Result<Self, Result<Self, D::Error>>
@@ -220,18 +222,18 @@ impl Notifier<Config> {
         }
     }
 
-    pub fn lock(&self) -> MutexGuard<Config> {
+    pub fn lock(&self) -> MutexGuard<'_, Config> {
         self.lock_config()
     }
 
-    fn lock_subscribers(&self) -> MutexGuard<Vec<flume::Sender<Notification>>> {
+    fn lock_subscribers(&self) -> MutexGuard<'_, Vec<flume::Sender<Notification>>> {
         self.inner
             .subscribers
             .lock()
             .expect("acquiring Notifier's subscribers Mutex should not fail")
     }
 
-    fn lock_config(&self) -> MutexGuard<Config> {
+    fn lock_config(&self) -> MutexGuard<'_, Config> {
         self.inner
             .inner
             .lock()

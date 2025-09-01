@@ -306,7 +306,7 @@ impl<'s> Parameters<'s> {
         item
     }
 
-    /// Removes a key from the map, returning the value at the key if the key was previously in the parameters.    
+    /// Removes a key from the map, returning the value at the key if the key was previously in the parameters.
     pub fn remove<K>(&mut self, k: K) -> Option<String>
     where
         K: Borrow<str>,
@@ -466,7 +466,7 @@ impl fmt::Display for Parameters<'_> {
 
 impl fmt::Debug for Parameters<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 

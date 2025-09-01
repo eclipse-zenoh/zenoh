@@ -532,16 +532,14 @@ mod tests {
     use std::vec;
 
     use rand::Rng;
-    use zenoh_buffers::ZBuf;
     use zenoh_core::zcondfeat;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, Priority, Reliability, WireExpr},
+        core::{CongestionControl, Priority, Reliability, WireExpr},
         network::{ext, NetworkMessage, NetworkMessageExt, Push},
         transport::{
             frame::{self, FrameHeader},
             Fragment, KeepAlive, TransportMessage,
         },
-        zenoh::{PushBody, Put},
     };
 
     use super::*;
@@ -565,7 +563,7 @@ mod tests {
                 };
                 let mut wbatch = WBatch::new(config);
                 wbatch.encode(&msg_in).unwrap();
-                println!("Encoded WBatch: {:?}", wbatch);
+                println!("Encoded WBatch: {wbatch:?}");
 
                 let mut buffer = zcondfeat!(
                     "transport_compression",
@@ -580,16 +578,16 @@ mod tests {
                     Finalize::Batch => wbatch.as_slice(),
                     Finalize::Buffer => buffer.as_mut().unwrap().as_slice(),
                 };
-                println!("Finalized WBatch: {:02x?}", bytes);
+                println!("Finalized WBatch: {bytes:02x?}");
 
                 let mut rbatch = RBatch::new(config, bytes.to_vec().into_boxed_slice());
-                println!("Decoded RBatch: {:?}", rbatch);
+                println!("Decoded RBatch: {rbatch:?}");
                 rbatch
                     .initialize(|| {
                         zenoh_buffers::vec::uninit(config.mtu as usize).into_boxed_slice()
                     })
                     .unwrap();
-                println!("Initialized RBatch: {:?}", rbatch);
+                println!("Initialized RBatch: {rbatch:?}");
                 let msg_out: TransportMessage = rbatch.decode().unwrap();
                 assert_eq!(msg_in, msg_out);
             }
@@ -607,23 +605,11 @@ mod tests {
         let mut batch = WBatch::new(config);
 
         let tmsg: TransportMessage = KeepAlive.into();
-        let mut nmsg: NetworkMessage = Push {
+        let mut nmsg = NetworkMessage::from(Push {
             wire_expr: WireExpr::empty(),
             ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-                payload: ZBuf::from(vec![0u8; 8]),
-            }),
-        }
-        .into();
+            ..Push::from(vec![0u8; 8])
+        });
 
         let mut tmsgs_in = vec![];
         let mut nmsgs_in = vec![];

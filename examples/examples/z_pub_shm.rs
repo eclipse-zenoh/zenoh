@@ -14,14 +14,10 @@
 use clap::Parser;
 use zenoh::{
     key_expr::KeyExpr,
-    shm::{
-        BlockOn, GarbageCollect, PosixShmProviderBackend, ShmProviderBuilder, POSIX_PROTOCOL_ID,
-    },
+    shm::{BlockOn, GarbageCollect, ShmProviderBuilder},
     Config, Wait,
 };
 use zenoh_examples::CommonArgs;
-
-const N: usize = 10;
 
 #[tokio::main]
 async fn main() -> zenoh::Result<()> {
@@ -34,41 +30,31 @@ async fn main() -> zenoh::Result<()> {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating POSIX SHM provider...");
-    // create an SHM backend...
+    // Create SHM provider with default backend
     // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(N * 1024)
-        .unwrap()
+    let provider = ShmProviderBuilder::default_backend(1024 * 1024)
         .wait()
         .unwrap();
-    // ...and an SHM provider
-    let provider = ShmProviderBuilder::builder()
-        .protocol_id::<POSIX_PROTOCOL_ID>()
-        .backend(backend)
-        .wait();
 
+    println!("Declaring Publisher on '{path}'...");
     let publisher = session.declare_publisher(&path).await.unwrap();
-
-    // Create allocation layout for series of similar allocations
-    println!("Allocating Shared Memory Buffer...");
-    let layout = provider.alloc(1024).into_layout().unwrap();
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        // Allocate particular SHM buffer using pre-created layout
-        let mut sbuf = layout
-            .alloc()
-            .with_policy::<BlockOn<GarbageCollect>>()
-            .await
-            .unwrap();
 
         // We reserve a small space at the beginning of the buffer to include the iteration index
         // of the write. This is simply to have the same format as zn_pub.
         let prefix = format!("[{idx:4}] ");
         let prefix_len = prefix.len();
         let slice_len = prefix_len + payload.len();
+
+        // Allocate SHM buffer
+        let mut sbuf = provider
+            .alloc(slice_len)
+            .with_policy::<BlockOn<GarbageCollect>>()
+            .await
+            .unwrap();
 
         sbuf[0..prefix_len].copy_from_slice(prefix.as_bytes());
         sbuf[prefix_len..slice_len].copy_from_slice(payload.as_bytes());

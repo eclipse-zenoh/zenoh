@@ -13,7 +13,7 @@
 //
 
 use std::{
-    fmt::{self, Debug},
+    fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -24,13 +24,16 @@ use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
-use time::OffsetDateTime;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
-use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names,
+    get_ip_interface_names, parse_dscp,
+    quic::{
+        get_cert_chain_expiration, get_cert_common_name, get_quic_addr, get_quic_host,
+        TlsClientConfig, TlsServerConfig, ALPN_QUIC_HTTP,
+    },
+    set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
@@ -41,10 +44,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
-use crate::{
-    utils::{get_quic_addr, get_quic_host, TlsClientConfig, TlsServerConfig},
-    ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
-};
+use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
@@ -281,6 +281,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
 
         let socket = tokio::net::UdpSocket::bind(src_addr).await?;
+        if let Some(dscp) = parse_dscp(&epconf)? {
+            set_dscp(&socket, src_addr, dscp)?;
+        }
 
         // Initialize the Endpoint
         if let Some(iface) = client_crypto.bind_iface {
@@ -289,9 +292,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let mut quic_endpoint = {
             // create the Endpoint with this socket
-            let runtime = quinn::default_runtime().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-            })?;
+            let runtime = quinn::default_runtime()
+                .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
             ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
                 EndpointConfig::default(),
                 None,
@@ -410,9 +412,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
 
                 // create the Endpoint with this socket
-                let runtime = quinn::default_runtime().ok_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found")
-                })?;
+                let runtime = quinn::default_runtime()
+                    .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
                 ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
                     EndpointConfig::default(),
                     Some(server_config),
@@ -600,65 +601,4 @@ async fn accept_task(
         }
     }
     Ok(())
-}
-
-fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
-    let mut auth_id = QuicAuthId { auth_value: None };
-    if let Some(pi) = conn.peer_identity() {
-        let serv_certs = pi
-            .downcast::<Vec<rustls_pki_types::CertificateDer>>()
-            .unwrap();
-        if let Some(item) = serv_certs.iter().next() {
-            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
-            let subject_name = cert
-                .subject
-                .iter_common_name()
-                .next()
-                .and_then(|cn| cn.as_str().ok())
-                .unwrap();
-            auth_id = QuicAuthId {
-                auth_value: Some(subject_name.to_string()),
-            };
-        }
-    }
-    Ok(auth_id)
-}
-
-/// Returns the minimum value of the `not_after` field in the remote certificate chain.
-/// Returns `None` if the remote certificate chain is empty
-fn get_cert_chain_expiration(conn: &quinn::Connection) -> ZResult<Option<OffsetDateTime>> {
-    let mut link_expiration: Option<OffsetDateTime> = None;
-    if let Some(pi) = conn.peer_identity() {
-        if let Ok(remote_certs) = pi.downcast::<Vec<rustls_pki_types::CertificateDer>>() {
-            for cert in *remote_certs {
-                let (_, cert) = X509Certificate::from_der(cert.as_ref())?;
-                let cert_expiration = cert.validity().not_after.to_datetime();
-                link_expiration = link_expiration
-                    .map(|current_min| current_min.min(cert_expiration))
-                    .or(Some(cert_expiration));
-            }
-        }
-    }
-    Ok(link_expiration)
-}
-
-#[derive(Clone)]
-struct QuicAuthId {
-    auth_value: Option<String>,
-}
-
-impl Debug for QuicAuthId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Common Name: {}",
-            self.auth_value.as_deref().unwrap_or("None")
-        )
-    }
-}
-
-impl From<QuicAuthId> for LinkAuthId {
-    fn from(value: QuicAuthId) -> Self {
-        LinkAuthId::Quic(value.auth_value.clone())
-    }
 }
