@@ -779,7 +779,10 @@ impl TransmissionPipeline {
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
             status: status.clone(),
-            wait_before_drop: (config.wait_before_drop.0.as_micros().try_into().unwrap(), config.wait_before_drop.1.as_micros().try_into().unwrap()),
+            wait_before_drop: (
+                config.wait_before_drop.0.as_micros().try_into().unwrap(),
+                config.wait_before_drop.1.as_micros().try_into().unwrap(),
+            ),
             wait_before_close: config.wait_before_close.as_micros().try_into().unwrap(),
         };
         let consumer = TransmissionPipelineConsumer {
@@ -864,7 +867,10 @@ impl TransmissionPipelineProducer {
             if self.status.is_congested(priority) {
                 return Ok(false);
             }
-            (Duration::from_micros(self.wait_before_drop.0), Some(Duration::from_micros(self.wait_before_drop.1)))
+            (
+                Duration::from_micros(self.wait_before_drop.0),
+                Some(Duration::from_micros(self.wait_before_drop.1)),
+            )
         } else {
             (Duration::from_micros(self.wait_before_close), None)
         };
