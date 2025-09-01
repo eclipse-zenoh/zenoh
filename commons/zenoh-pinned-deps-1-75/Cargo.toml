@@ -28,34 +28,36 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 base64ct = "=1.6.0"
-home = "=0.5.9"
-jsonschema = { version = "=0.20.0", default-features = false }
-librocksdb-sys = "=0.17.1"
-lz4_flex = "=0.11.3"
-pest = "=2.7.12"
-pest_derive = "=2.7.12"
-pest_generator = "=2.7.12"
-pest_meta = "=2.7.12"
-rocksdb = "=0.23.0"
+litemap = "=0.7.4"
+icu_normalizer = "=1.5.0"
+pest_derive = "=2.8.0"
+time = "=0.3.41"
+pest_generator = "=2.8.0"
+pest_meta = "=2.8.0"
 static_init = "=1.0.3"
-thiserror = "=1.0.69"
+home = "=0.5.9"
+zerofrom = "=0.1.5"
+tinystr="=0.8.0"
+potential_utf = "=0.1.0"
+pest = "=2.8.0"
 twox-hash = "=1.6.3"
-url = "=2.5.2"
+lz4_flex = "=0.11.3"
 
 [package.metadata.cargo-machete]
 ignored = [
   "base64ct",
-  "home",
-  "jsonschema",
-  "librocksdb-sys",
-  "lz4_flex",
-  "pest",
+  "litemap",
+  "icu_normalizer",
   "pest_derive",
+  "time",
   "pest_generator",
   "pest_meta",
-  "rocksdb",
   "static_init",
-  "thiserror",
+  "home",
+  "zerofrom",
+  "tinystr",
+  "potential_utf",
+  "pest",
   "twox-hash",
-  "url",
+  "lz4_flex"
 ]
