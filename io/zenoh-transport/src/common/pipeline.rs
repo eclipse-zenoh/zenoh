@@ -804,7 +804,8 @@ struct TransmissionPipelineStatus {
     congested: AtomicU8,
     // Bitflags to indicate the given priority queue has messages waiting to be sent
     pending: AtomicU8,
-
+    // wait parameters
+    // Note: this is placed here to optimize TransmissionPipelineProducer memory layout and improve performance
     waits: Waits,
 }
 
