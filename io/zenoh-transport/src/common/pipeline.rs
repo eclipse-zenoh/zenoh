@@ -693,6 +693,13 @@ impl TransmissionPipeline {
             disabled: AtomicBool::new(false),
             congested: AtomicU8::new(0),
             pending: AtomicU8::new(0),
+            waits: Waits {
+                wait_before_drop: (
+                    config.wait_before_drop.0.as_micros().try_into().unwrap(),
+                    config.wait_before_drop.1.as_micros().try_into().unwrap(),
+                ),
+                wait_before_close: config.wait_before_close.as_micros().try_into().unwrap(),
+            },
         });
 
         let mut stage_in = vec![];
@@ -779,11 +786,6 @@ impl TransmissionPipeline {
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
             status: status.clone(),
-            wait_before_drop: (
-                config.wait_before_drop.0.as_micros().try_into().unwrap(),
-                config.wait_before_drop.1.as_micros().try_into().unwrap(),
-            ),
-            wait_before_close: config.wait_before_close.as_micros().try_into().unwrap(),
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
@@ -802,6 +804,8 @@ struct TransmissionPipelineStatus {
     congested: AtomicU8,
     // Bitflags to indicate the given priority queue has messages waiting to be sent
     pending: AtomicU8,
+
+    waits: Waits,
 }
 
 impl TransmissionPipelineStatus {
@@ -839,12 +843,16 @@ impl TransmissionPipelineStatus {
 }
 
 #[derive(Clone)]
+struct Waits {
+    wait_before_drop: (u32, u32),
+    wait_before_close: u32,
+}
+
+#[derive(Clone)]
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
     status: Arc<TransmissionPipelineStatus>,
-    wait_before_drop: (u64, u64),
-    wait_before_close: u64,
 }
 
 impl TransmissionPipelineProducer {
@@ -868,11 +876,11 @@ impl TransmissionPipelineProducer {
                 return Ok(false);
             }
             (
-                Duration::from_micros(self.wait_before_drop.0),
-                Some(Duration::from_micros(self.wait_before_drop.1)),
+                Duration::from_micros(self.status.waits.wait_before_drop.0.into()),
+                Some(Duration::from_micros(self.status.waits.wait_before_drop.1.into())),
             )
         } else {
-            (Duration::from_micros(self.wait_before_close), None)
+            (Duration::from_micros(self.status.waits.wait_before_close.into()), None)
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
