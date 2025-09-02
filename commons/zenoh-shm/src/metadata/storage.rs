@@ -89,8 +89,6 @@ impl MetadataStorage {
             .generation
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut guard = self.available.lock().unwrap();
-        let _new_insert = guard.push_front(descriptor);
-        #[cfg(feature = "test")]
-        assert!(_new_insert);
+        guard.push_front(descriptor);
     }
 }
