@@ -16,7 +16,8 @@ use zenoh_core::Wait;
 use zenoh_shm::api::{
     client::shm_client::ShmClient,
     protocol_implementations::posix::{
-        posix_shm_client::PosixShmClient, posix_shm_provider_backend::PosixShmProviderBackend,
+        posix_shm_client::PosixShmClient,
+        posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
     },
     provider::{
         shm_provider_backend::ShmProviderBackend,
@@ -30,7 +31,7 @@ static BUFFER_SIZE: usize = 1000;
 #[test]
 fn posix_shm_provider_create() {
     let size = 1024;
-    let backend = PosixShmProviderBackend::builder()
+    let backend = PosixShmProviderBackendBinaryHeap::builder()
         .with_size(size)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
@@ -39,7 +40,7 @@ fn posix_shm_provider_create() {
 
 #[test]
 fn posix_shm_provider_alloc() {
-    let backend = PosixShmProviderBackend::builder()
+    let backend = PosixShmProviderBackendBinaryHeap::builder()
         .with_size(1024)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
@@ -53,7 +54,7 @@ fn posix_shm_provider_alloc() {
 
 #[test]
 fn posix_shm_provider_open() {
-    let backend = PosixShmProviderBackend::builder()
+    let backend = PosixShmProviderBackendBinaryHeap::builder()
         .with_size(1024)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
@@ -76,7 +77,7 @@ fn posix_shm_provider_allocator() {
     // size to allocate in the provider
     let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
 
-    let backend = PosixShmProviderBackend::builder()
+    let backend = PosixShmProviderBackendBinaryHeap::builder()
         .with_size(size_to_alloc)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");

@@ -48,6 +48,8 @@ zenoh-buffers = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
+buddy_system_allocator = { workspace = true }
+talc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }
