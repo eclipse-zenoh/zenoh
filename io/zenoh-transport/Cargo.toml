@@ -30,7 +30,6 @@ auth_usrpwd = ["transport_auth"]
 default = ["test", "transport_multilink"]
 shared-memory = [
   "zenoh-buffers/shared-memory",
-
   "zenoh-codec/shared-memory",
   "zenoh-protocol/shared-memory",
   "zenoh-shm",
@@ -53,7 +52,6 @@ transport_ws = ["zenoh-link/transport_ws"]
 unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
 
 [dependencies]
-arc-swap = { workspace = true }
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
 flume = { workspace = true }
@@ -93,5 +91,6 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+futures-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 zenoh-util = { workspace = true }

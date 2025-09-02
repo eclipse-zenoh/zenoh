@@ -50,12 +50,6 @@ impl TransportLinkUnicast {
         Self::init(link, config)
     }
 
-    pub(super) fn reliability(&self) -> Reliability {
-        self.config
-            .reliability
-            .unwrap_or_else(|| self.link.is_reliable().into())
-    }
-
     pub(crate) fn reconfigure(self, new_config: TransportLinkUnicastConfig) -> Self {
         Self::init(self.link, new_config)
     }
