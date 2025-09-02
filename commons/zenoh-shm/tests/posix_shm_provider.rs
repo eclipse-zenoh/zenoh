@@ -20,8 +20,8 @@ use zenoh_shm::api::{
         posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
     },
     provider::{
-        shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, MemoryLayout},
+        memory_layout::MemoryLayout, shm_provider_backend::ShmProviderBackend,
+        types::AllocAlignment,
     },
 };
 
