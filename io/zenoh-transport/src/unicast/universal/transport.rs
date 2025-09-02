@@ -190,7 +190,13 @@ impl TransportUnicastUniversal {
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
+        // Notify the callback that we have closed the transport
+        if let Some(cb) = callback.as_ref() {
+            cb.closed();
+        }
+
         // Close all the links
+        // Closing links can be slow, so we do it after everything.
         let mut links = {
             let mut l_guard = self.links.write();
             let links = l_guard.to_vec();
@@ -199,11 +205,6 @@ impl TransportUnicastUniversal {
         };
         for l in links.drain(..) {
             let _ = l.close().await;
-        }
-
-        // Notify the callback that we have closed the transport
-        if let Some(cb) = callback.as_ref() {
-            cb.closed();
         }
 
         Ok(())
