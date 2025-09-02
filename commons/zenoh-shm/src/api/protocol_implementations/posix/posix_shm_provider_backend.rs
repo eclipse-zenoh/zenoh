@@ -13,7 +13,6 @@
 //
 
 use std::{
-    borrow::Borrow,
     cmp,
     collections::BinaryHeap,
     num::NonZeroUsize,
@@ -35,8 +34,9 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
+        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
         shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError, ZLayoutError},
+        types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
 };
 
@@ -66,52 +66,44 @@ impl PartialEq for Chunk {
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBuilder;
-
-impl PosixShmProviderBackendBuilder {
-    /// Use existing layout
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout<Layout: Borrow<MemoryLayout>>(
-        self,
-        layout: Layout,
-    ) -> LayoutedPosixShmProviderBackendBuilder<Layout> {
-        LayoutedPosixShmProviderBackendBuilder { layout }
-    }
-
-    /// Construct layout in-place using arguments
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout_args(
-        self,
-        size: usize,
-        alignment: AllocAlignment,
-    ) -> Result<LayoutedPosixShmProviderBackendBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(size, alignment)?;
-        Ok(LayoutedPosixShmProviderBackendBuilder { layout })
-    }
-
-    /// Construct layout in-place from size (default alignment will be used)
-    #[zenoh_macros::unstable_doc]
-    pub fn with_size(self, size: usize) -> LayoutedPosixShmProviderBackendBuilder<MemoryLayout> {
-        // `unwrap` here should never fail. If it fails - check that the default alignment is 1
-        let layout = MemoryLayout::new(size, AllocAlignment::default()).unwrap();
-        LayoutedPosixShmProviderBackendBuilder { layout }
-    }
-}
-
-#[zenoh_macros::unstable_doc]
-pub struct LayoutedPosixShmProviderBackendBuilder<Layout: Borrow<MemoryLayout>> {
+pub struct PosixShmProviderBackendBuilder<Layout: MemLayout> {
     layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Resolvable for LayoutedPosixShmProviderBackendBuilder<Layout> {
+impl<Layout: TryIntoMemoryLayout> Resolvable for PosixShmProviderBackendBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackend>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Wait for LayoutedPosixShmProviderBackendBuilder<Layout> {
+impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendBuilder<Layout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackend::new(self.layout.borrow())
+        let layout: MemoryLayout = self.layout.try_into()?;
+        PosixShmProviderBackend::new(&layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl Resolvable for PosixShmProviderBackendBuilder<&MemoryLayout> {
+    type To = ZResult<PosixShmProviderBackend>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for PosixShmProviderBackendBuilder<&MemoryLayout> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackend::new(self.layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Resolvable for PosixShmProviderBackendBuilder<StaticLayout<T>> {
+    type To = ZResult<PosixShmProviderBackend>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Wait for PosixShmProviderBackendBuilder<StaticLayout<T>> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackend::new(&self.layout.into())
     }
 }
 
@@ -128,8 +120,8 @@ pub struct PosixShmProviderBackend {
 impl PosixShmProviderBackend {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder() -> PosixShmProviderBackendBuilder {
-        PosixShmProviderBackendBuilder
+    pub fn builder<Layout: MemLayout>(layout: Layout) -> PosixShmProviderBackendBuilder<Layout> {
+        PosixShmProviderBackendBuilder { layout }
     }
 
     fn new(layout: &MemoryLayout) -> ZResult<Self> {
