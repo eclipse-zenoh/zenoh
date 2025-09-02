@@ -32,6 +32,7 @@ use zenoh::{
     },
     Session, Wait,
 };
+use zenoh_buffers::ZBuf;
 use zenoh_core::ztimeout;
 use zenoh_shm::api::buffer::traits::OwnedShmBuf;
 
@@ -56,6 +57,12 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
                 .collect::<Vec<_>>(),
         )
         .unwrap();
+    config
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_message_size_threshold(1)
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {endpoints:?}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
@@ -76,6 +83,12 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
         .transport
         .shared_memory
         .set_enabled(!NO_SHM_FOR_SECOND_PEER)
+        .unwrap();
+    config
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_message_size_threshold(1)
         .unwrap();
     println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -123,6 +136,8 @@ enum ResizeBuffer {
     Resize,
     // Halve the buffer size and change the layout after allocation
     Relayout,
+    // Make buffer non-shm buffer
+    NonSHM,
 }
 
 async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
@@ -148,12 +163,15 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
         let _sub = ztimeout!(peer01
             .declare_subscriber(&key_expr)
             .callback(move |sample| {
-                let expected_size = if resize_buffer != ResizeBuffer::NoResize {
-                    size / 2
-                } else {
-                    size
+                let expected_size = match resize_buffer {
+                    ResizeBuffer::NoResize => size,
+                    ResizeBuffer::Resize => size / 2,
+                    ResizeBuffer::Relayout => size / 2,
+                    ResizeBuffer::NonSHM => size,
                 };
-                assert_eq!(sample.payload().len(), expected_size);
+
+                let len = sample.payload().len();
+                assert_eq!(len, expected_size);
 
                 if NO_SHM_FOR_SECOND_PEER {
                     assert!(sample.payload().as_shm().is_none());
@@ -192,12 +210,21 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
                     .unwrap(),
                 ResizeBuffer::Resize => sbuf.try_resize((size / 2).try_into().unwrap()).unwrap(),
                 ResizeBuffer::NoResize => {}
+                ResizeBuffer::NonSHM => {}
             }
             println!("{c} created");
 
+            // convert SHM to non shm if set up by config
+            let buf = if resize_buffer == ResizeBuffer::NonSHM {
+                let r = sbuf.as_ref().to_vec();
+                ZBuf::from(r)
+            } else {
+                ZBuf::from(sbuf)
+            };
+
             // Publish this message
             ztimeout!(peer02
-                .put(&key_expr, sbuf)
+                .put(&key_expr, buf)
                 .congestion_control(CongestionControl::Block))
             .unwrap();
             println!("{c} putted");
@@ -273,6 +300,37 @@ async fn zenoh_shm_unicast_to_non_shm() {
         &peer02,
         Reliability::Reliable,
         ResizeBuffer::NoResize,
+    )
+    .await;
+    close_session(peer01, peer02).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_shm_unicast_implicit_optimization() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
+
+    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
+
+    {
+        let key = "warmup";
+        let _sub = peer01
+            .declare_subscriber("warmup")
+            .callback(|_| {})
+            .wait()
+            .unwrap();
+        // Wait for the declaration to propagate
+        tokio::time::sleep(SLEEP).await;
+        let _ = peer02.put(key, "test").wait().unwrap();
+        // Wait for implicit SHM to init
+        tokio::time::sleep(SLEEP).await;
+    }
+
+    test_session_pubsub::<false>(
+        &peer01,
+        &peer02,
+        Reliability::Reliable,
+        ResizeBuffer::NonSHM,
     )
     .await;
     close_session(peer01, peer02).await;

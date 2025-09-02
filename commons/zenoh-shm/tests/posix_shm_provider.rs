@@ -18,6 +18,8 @@ use zenoh_shm::api::{
     protocol_implementations::posix::{
         posix_shm_client::PosixShmClient,
         posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
+        posix_shm_provider_backend_buddy::PosixShmProviderBackendBuddy,
+        posix_shm_provider_backend_talc::PosixShmProviderBackendTalc,
     },
     provider::{
         memory_layout::MemoryLayout, shm_provider_backend::ShmProviderBackend,
@@ -70,7 +72,7 @@ fn posix_shm_provider_open() {
 }
 
 #[test]
-fn posix_shm_provider_allocator() {
+fn posix_shm_provider_binary_heap_allocator() {
     // size to allocate in the provider
     let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
 
@@ -124,4 +126,80 @@ fn posix_shm_provider_allocator() {
 
     // confirm that allocator is free
     assert_eq!(backend.available(), real_size);
+}
+
+#[test]
+fn posix_shm_provider_buddy_allocator() {
+    // size to allocate in the provider
+    let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
+
+    let backend = PosixShmProviderBackendBuddy::builder(size_to_alloc)
+        .wait()
+        .expect("Error creating PosixShmProviderBackend!");
+
+    let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
+
+    // exhaust memory by allocating it all
+    let mut buffers = vec![];
+    while let Ok(buf) = backend.alloc(&layout) {
+        buffers.push(buf);
+    }
+
+    for _ in 0..100 {
+        // there is nothing to allocate at this point
+        assert!(backend.alloc(&layout).is_err());
+
+        // free buffer
+        let to_free = buffers.pop().unwrap().descriptor;
+        backend.free(&to_free);
+
+        // allocate new one
+        let buf = backend
+            .alloc(&layout)
+            .expect("PosixShmProviderBackend: error allocating buffer");
+        buffers.push(buf);
+    }
+
+    // free buffers
+    while let Some(buffer) = buffers.pop() {
+        backend.free(&buffer.descriptor);
+    }
+}
+
+#[test]
+fn posix_shm_provider_talc_allocator() {
+    // size to allocate in the provider
+    let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
+
+    let backend = PosixShmProviderBackendTalc::builder(size_to_alloc)
+        .wait()
+        .expect("Error creating PosixShmProviderBackend!");
+
+    let layout = MemoryLayout::new(BUFFER_SIZE, AllocAlignment::default()).unwrap();
+
+    // exhaust memory by allocating it all
+    let mut buffers = vec![];
+    while let Ok(buf) = backend.alloc(&layout) {
+        buffers.push(buf);
+    }
+
+    for _ in 0..100 {
+        // there is nothing to allocate at this point
+        assert!(backend.alloc(&layout).is_err());
+
+        // free buffer
+        let to_free = buffers.pop().unwrap().descriptor;
+        backend.free(&to_free);
+
+        // allocate new one
+        let buf = backend
+            .alloc(&layout)
+            .expect("PosixShmProviderBackend: error allocating buffer");
+        buffers.push(buf);
+    }
+
+    // free buffers
+    while let Some(buffer) = buffers.pop() {
+        backend.free(&buffer.descriptor);
+    }
 }
