@@ -147,6 +147,19 @@ pub struct DownsamplingItemConf {
     pub flows: Option<NEVec<InterceptorFlow>>,
 }
 
+fn downsampling_validator(d: &Vec<DownsamplingItemConf>) -> bool {
+    for item in d {
+        if item
+            .messages
+            .iter()
+            .any(|m| *m == DownsamplingMessage::Push)
+        {
+            tracing::warn!("In 'downsampling/messages' configuration: 'push' is deprecated and may not be supported in future versions, use 'put' and/or 'delete' instead");
+        }
+    }
+    true
+}
+
 #[derive(Serialize, Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct LowPassFilterConf {
@@ -846,7 +859,7 @@ validated_struct::validator! {
         pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
-        downsampling: Vec<DownsamplingItemConf>,
+        downsampling: Vec<DownsamplingItemConf> where (downsampling_validator),
 
         /// Configuration of the access control (ACL)
         pub access_control: AclConfig {

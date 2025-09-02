@@ -184,7 +184,6 @@ impl From<&NEVec<DownsamplingMessage>> for DownsamplingFilters {
                 DownsamplingMessage::Delete => res.put = true,
                 #[allow(deprecated)]
                 DownsamplingMessage::Push => {
-                    tracing::warn!("DownsamplingMessage::Push is deprecated and may not be supported in future versions, use DownsamplingMessage::Put and/or DownsamplingMessage::Delete instead");
                     res.put = true;
                     res.delete = true;
                 }
