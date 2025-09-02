@@ -19,8 +19,8 @@ use zenoh_shm::api::{
         posix_shm_client::PosixShmClient, posix_shm_provider_backend::PosixShmProviderBackend,
     },
     provider::{
-        shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, MemoryLayout},
+        memory_layout::MemoryLayout, shm_provider_backend::ShmProviderBackend,
+        types::AllocAlignment,
     },
 };
 
@@ -30,8 +30,7 @@ static BUFFER_SIZE: usize = 1000;
 #[test]
 fn posix_shm_provider_create() {
     let size = 1024;
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(size)
+    let backend = PosixShmProviderBackend::builder(size)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
     assert!(backend.available() >= size);
@@ -39,8 +38,7 @@ fn posix_shm_provider_create() {
 
 #[test]
 fn posix_shm_provider_alloc() {
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(1024)
+    let backend = PosixShmProviderBackend::builder(1024)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
@@ -53,8 +51,7 @@ fn posix_shm_provider_alloc() {
 
 #[test]
 fn posix_shm_provider_open() {
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(1024)
+    let backend = PosixShmProviderBackend::builder(1024)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
@@ -76,8 +73,7 @@ fn posix_shm_provider_allocator() {
     // size to allocate in the provider
     let size_to_alloc = BUFFER_SIZE * BUFFER_NUM;
 
-    let backend = PosixShmProviderBackend::builder()
-        .with_size(size_to_alloc)
+    let backend = PosixShmProviderBackend::builder(size_to_alloc)
         .wait()
         .expect("Error creating PosixShmProviderBackend!");
 
