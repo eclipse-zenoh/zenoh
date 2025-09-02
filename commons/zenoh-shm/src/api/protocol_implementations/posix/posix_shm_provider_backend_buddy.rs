@@ -14,7 +14,6 @@
 
 use std::{
     alloc::Layout,
-    borrow::Borrow,
     ptr::NonNull,
     sync::{Arc, Mutex},
 };
@@ -32,64 +31,52 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
+        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
         shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError, ZLayoutError},
+        types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
 };
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBuddyBuilder;
-
-impl PosixShmProviderBackendBuddyBuilder {
-    /// Use existing layout
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout<Layout: Borrow<MemoryLayout>>(
-        self,
-        layout: Layout,
-    ) -> LayoutedPosixShmProviderBackendBuddyBuilder<Layout> {
-        LayoutedPosixShmProviderBackendBuddyBuilder { layout }
-    }
-
-    /// Construct layout in-place using arguments
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout_args(
-        self,
-        size: usize,
-        alignment: AllocAlignment,
-    ) -> Result<LayoutedPosixShmProviderBackendBuddyBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(size, alignment)?;
-        Ok(LayoutedPosixShmProviderBackendBuddyBuilder { layout })
-    }
-
-    /// Construct layout in-place from size (default alignment will be used)
-    #[zenoh_macros::unstable_doc]
-    pub fn with_size(
-        self,
-        size: usize,
-    ) -> LayoutedPosixShmProviderBackendBuddyBuilder<MemoryLayout> {
-        // `unwrap` here should never fail. If it fails - check that the default alignment is 1
-        let layout = MemoryLayout::new(size, AllocAlignment::default()).unwrap();
-        LayoutedPosixShmProviderBackendBuddyBuilder { layout }
-    }
-}
-
-#[zenoh_macros::unstable_doc]
-pub struct LayoutedPosixShmProviderBackendBuddyBuilder<Layout: Borrow<MemoryLayout>> {
+pub struct PosixShmProviderBackendBuddyBuilder<Layout: MemLayout> {
     layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Resolvable
-    for LayoutedPosixShmProviderBackendBuddyBuilder<Layout>
-{
+impl<Layout: TryIntoMemoryLayout> Resolvable for PosixShmProviderBackendBuddyBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBuddy>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Wait for LayoutedPosixShmProviderBackendBuddyBuilder<Layout> {
+impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendBuddyBuilder<Layout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackendBuddy::new(self.layout.borrow())
+        let layout: MemoryLayout = self.layout.try_into()?;
+        PosixShmProviderBackendBuddy::new(&layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl Resolvable for PosixShmProviderBackendBuddyBuilder<&MemoryLayout> {
+    type To = ZResult<PosixShmProviderBackendBuddy>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for PosixShmProviderBackendBuddyBuilder<&MemoryLayout> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendBuddy::new(self.layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Resolvable for PosixShmProviderBackendBuddyBuilder<StaticLayout<T>> {
+    type To = ZResult<PosixShmProviderBackendBuddy>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Wait for PosixShmProviderBackendBuddyBuilder<StaticLayout<T>> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendBuddy::new(&self.layout.into())
     }
 }
 
@@ -106,8 +93,10 @@ pub struct PosixShmProviderBackendBuddy {
 impl PosixShmProviderBackendBuddy {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder() -> PosixShmProviderBackendBuddyBuilder {
-        PosixShmProviderBackendBuddyBuilder
+    pub fn builder<Layout: MemLayout>(
+        layout: Layout,
+    ) -> PosixShmProviderBackendBuddyBuilder<Layout> {
+        PosixShmProviderBackendBuddyBuilder { layout }
     }
 
     fn new(layout: &MemoryLayout) -> ZResult<Self> {

@@ -13,7 +13,6 @@
 //
 
 use std::{
-    borrow::Borrow,
     cmp,
     collections::BinaryHeap,
     num::NonZeroUsize,
@@ -35,8 +34,9 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
+        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
         shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError, ZLayoutError},
+        types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
 };
 
@@ -66,59 +66,44 @@ impl PartialEq for Chunk {
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBinaryHeapBuilder;
-
-impl PosixShmProviderBackendBinaryHeapBuilder {
-    /// Use existing layout
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout<Layout: Borrow<MemoryLayout>>(
-        self,
-        layout: Layout,
-    ) -> LayoutedPosixShmProviderBackendBinaryHeapBuilder<Layout> {
-        LayoutedPosixShmProviderBackendBinaryHeapBuilder { layout }
-    }
-
-    /// Construct layout in-place using arguments
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout_args(
-        self,
-        size: usize,
-        alignment: AllocAlignment,
-    ) -> Result<LayoutedPosixShmProviderBackendBinaryHeapBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(size, alignment)?;
-        Ok(LayoutedPosixShmProviderBackendBinaryHeapBuilder { layout })
-    }
-
-    /// Construct layout in-place from size (default alignment will be used)
-    #[zenoh_macros::unstable_doc]
-    pub fn with_size(
-        self,
-        size: usize,
-    ) -> LayoutedPosixShmProviderBackendBinaryHeapBuilder<MemoryLayout> {
-        // `unwrap` here should never fail. If it fails - check that the default alignment is 1
-        let layout = MemoryLayout::new(size, AllocAlignment::default()).unwrap();
-        LayoutedPosixShmProviderBackendBinaryHeapBuilder { layout }
-    }
-}
-
-#[zenoh_macros::unstable_doc]
-pub struct LayoutedPosixShmProviderBackendBinaryHeapBuilder<Layout: Borrow<MemoryLayout>> {
+pub struct PosixShmProviderBackendBinaryHeapBuilder<Layout: MemLayout> {
     layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Resolvable
-    for LayoutedPosixShmProviderBackendBinaryHeapBuilder<Layout>
-{
+impl<Layout: TryIntoMemoryLayout> Resolvable for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBinaryHeap>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Wait
-    for LayoutedPosixShmProviderBackendBinaryHeapBuilder<Layout>
-{
+impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackendBinaryHeap::new(self.layout.borrow())
+        let layout: MemoryLayout = self.layout.try_into()?;
+        PosixShmProviderBackendBinaryHeap::new(&layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl Resolvable for PosixShmProviderBackendBinaryHeapBuilder<&MemoryLayout> {
+    type To = ZResult<PosixShmProviderBackendBinaryHeap>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for PosixShmProviderBackendBinaryHeapBuilder<&MemoryLayout> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendBinaryHeap::new(self.layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Resolvable for PosixShmProviderBackendBinaryHeapBuilder<StaticLayout<T>> {
+    type To = ZResult<PosixShmProviderBackendBinaryHeap>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Wait for PosixShmProviderBackendBinaryHeapBuilder<StaticLayout<T>> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendBinaryHeap::new(&self.layout.into())
     }
 }
 
@@ -136,8 +121,10 @@ pub struct PosixShmProviderBackendBinaryHeap {
 impl PosixShmProviderBackendBinaryHeap {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder() -> PosixShmProviderBackendBinaryHeapBuilder {
-        PosixShmProviderBackendBinaryHeapBuilder
+    pub fn builder<Layout: MemLayout>(
+        layout: Layout,
+    ) -> PosixShmProviderBackendBinaryHeapBuilder<Layout> {
+        PosixShmProviderBackendBinaryHeapBuilder { layout }
     }
 
     fn new(layout: &MemoryLayout) -> ZResult<Self> {

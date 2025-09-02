@@ -13,13 +13,9 @@
 //
 
 use crate::api::protocol_implementations::posix::posix_shm_provider_backend_talc::{
-    LayoutedPosixShmProviderBackendTalcBuilder, PosixShmProviderBackendTalc,
-    PosixShmProviderBackendTalcBuilder,
+    PosixShmProviderBackendTalc, PosixShmProviderBackendTalcBuilder,
 };
 
-pub type PosixShmProviderBackendBuilder = PosixShmProviderBackendTalcBuilder;
-
-pub type LayoutedPosixShmProviderBackendBuilder<Layout> =
-    LayoutedPosixShmProviderBackendTalcBuilder<Layout>;
+pub type PosixShmProviderBackendBuilder<What> = PosixShmProviderBackendTalcBuilder<What>;
 
 pub type PosixShmProviderBackend = PosixShmProviderBackendTalc;

@@ -14,7 +14,6 @@
 
 use std::{
     alloc::Layout,
-    borrow::Borrow,
     ptr::NonNull,
     slice,
     sync::{Arc, Mutex},
@@ -33,64 +32,52 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
+        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
         shm_provider_backend::ShmProviderBackend,
-        types::{AllocAlignment, ChunkAllocResult, MemoryLayout, ZAllocError, ZLayoutError},
+        types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
 };
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendTalcBuilder;
-
-impl PosixShmProviderBackendTalcBuilder {
-    /// Use existing layout
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout<Layout: Borrow<MemoryLayout>>(
-        self,
-        layout: Layout,
-    ) -> LayoutedPosixShmProviderBackendTalcBuilder<Layout> {
-        LayoutedPosixShmProviderBackendTalcBuilder { layout }
-    }
-
-    /// Construct layout in-place using arguments
-    #[zenoh_macros::unstable_doc]
-    pub fn with_layout_args(
-        self,
-        size: usize,
-        alignment: AllocAlignment,
-    ) -> Result<LayoutedPosixShmProviderBackendTalcBuilder<MemoryLayout>, ZLayoutError> {
-        let layout = MemoryLayout::new(size, alignment)?;
-        Ok(LayoutedPosixShmProviderBackendTalcBuilder { layout })
-    }
-
-    /// Construct layout in-place from size (default alignment will be used)
-    #[zenoh_macros::unstable_doc]
-    pub fn with_size(
-        self,
-        size: usize,
-    ) -> LayoutedPosixShmProviderBackendTalcBuilder<MemoryLayout> {
-        // `unwrap` here should never fail. If it fails - check that the default alignment is 1
-        let layout = MemoryLayout::new(size, AllocAlignment::default()).unwrap();
-        LayoutedPosixShmProviderBackendTalcBuilder { layout }
-    }
-}
-
-#[zenoh_macros::unstable_doc]
-pub struct LayoutedPosixShmProviderBackendTalcBuilder<Layout: Borrow<MemoryLayout>> {
+pub struct PosixShmProviderBackendTalcBuilder<Layout: MemLayout> {
     layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Resolvable
-    for LayoutedPosixShmProviderBackendTalcBuilder<Layout>
-{
+impl<Layout: TryIntoMemoryLayout> Resolvable for PosixShmProviderBackendTalcBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendTalc>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Wait for LayoutedPosixShmProviderBackendTalcBuilder<Layout> {
+impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendTalcBuilder<Layout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackendTalc::new(self.layout.borrow())
+        let layout: MemoryLayout = self.layout.try_into()?;
+        PosixShmProviderBackendTalc::new(&layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl Resolvable for PosixShmProviderBackendTalcBuilder<&MemoryLayout> {
+    type To = ZResult<PosixShmProviderBackendTalc>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for PosixShmProviderBackendTalcBuilder<&MemoryLayout> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendTalc::new(self.layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Resolvable for PosixShmProviderBackendTalcBuilder<StaticLayout<T>> {
+    type To = ZResult<PosixShmProviderBackendTalc>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Wait for PosixShmProviderBackendTalcBuilder<StaticLayout<T>> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendTalc::new(&self.layout.into())
     }
 }
 
@@ -108,8 +95,10 @@ pub struct PosixShmProviderBackendTalc {
 impl PosixShmProviderBackendTalc {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder() -> PosixShmProviderBackendTalcBuilder {
-        PosixShmProviderBackendTalcBuilder
+    pub fn builder<Layout: MemLayout>(
+        layout: Layout,
+    ) -> PosixShmProviderBackendTalcBuilder<Layout> {
+        PosixShmProviderBackendTalcBuilder { layout }
     }
 
     fn new(layout: &MemoryLayout) -> ZResult<Self> {
