@@ -674,7 +674,8 @@ impl StageOut {
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
-    pub(crate) wait_before_drop: (Duration, Duration),
+    pub(crate) wait_before_drop: Duration,
+    pub(crate) max_wait_before_drop_fragments: Duration,
     pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
@@ -694,10 +695,13 @@ impl TransmissionPipeline {
             congested: AtomicU8::new(0),
             pending: AtomicU8::new(0),
             waits: Waits {
-                wait_before_drop: (
-                    config.wait_before_drop.0.as_micros().try_into().unwrap(),
-                    config.wait_before_drop.1.as_micros().try_into().unwrap(),
-                ),
+                wait_before_drop: config.wait_before_drop.as_micros().try_into().unwrap(),
+                max_wait_before_drop_fragments: config
+                    .max_wait_before_drop_fragments
+                    .as_micros()
+                    .try_into()
+                    .unwrap(),
+
                 wait_before_close: config.wait_before_close.as_micros().try_into().unwrap(),
             },
         });
@@ -845,7 +849,9 @@ impl TransmissionPipelineStatus {
 
 #[derive(Clone)]
 struct Waits {
-    wait_before_drop: (u32, u32),
+    wait_before_drop: u32,
+    max_wait_before_drop_fragments: u32,
+
     wait_before_close: u32,
 }
 
@@ -877,9 +883,9 @@ impl TransmissionPipelineProducer {
                 return Ok(false);
             }
             (
-                Duration::from_micros(self.status.waits.wait_before_drop.0.into()),
+                Duration::from_micros(self.status.waits.wait_before_drop.into()),
                 Some(Duration::from_micros(
-                    self.status.waits.wait_before_drop.1.into(),
+                    self.status.waits.max_wait_before_drop_fragments.into(),
                 )),
             )
         } else {
@@ -1071,7 +1077,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_drop: Duration::from_millis(1),
+        max_wait_before_drop_fragments: Duration::from_millis(1024),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
         queue_alloc: QueueAllocConf {
@@ -1088,7 +1095,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_drop: Duration::from_millis(1),
+        max_wait_before_drop_fragments: Duration::from_millis(1024),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
         queue_alloc: QueueAllocConf {

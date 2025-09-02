@@ -787,8 +787,8 @@ validated_struct::validator! {
                     /// Enables transport optimization for large messages (default `true`).
                     /// Implicitly puts large messages into shared memory for transports with SHM-compatible connection.
                     enabled: bool,
-                    /// SHM cache size in bytes used for transport optimization (default `16 * 1024 * 1024`).
-                    cache_size: NonZeroUsize,
+                    /// SHM arena size in bytes used for transport optimization (default `16 * 1024 * 1024`).
+                    pool_size: NonZeroUsize,
                     /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
                     message_size_threshold: usize,
                 },

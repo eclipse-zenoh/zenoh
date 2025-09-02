@@ -77,7 +77,7 @@ impl ShmContext {
 
         let shm_provider = Arc::new(if *cfg.transport_optimization.enabled() {
             LazyShmProvider::new(
-                *cfg.transport_optimization.cache_size(),
+                *cfg.transport_optimization.pool_size(),
                 *cfg.transport_optimization.message_size_threshold(),
             )
         } else {
