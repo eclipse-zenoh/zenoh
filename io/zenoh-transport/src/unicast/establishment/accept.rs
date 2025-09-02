@@ -465,7 +465,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
                     close::reason::MAX_LINKS => tracing::debug!("{}", e),
                     _ => tracing::error!("{}", e),
                 }
-                return Err((e.into(), None));
+                return Err((e.into(), Some(reason)));
             }
             _ => {
                 let e = zerror!(

@@ -67,12 +67,18 @@ impl TransportPeerEventHandler for SCRouter {
 
 async fn run(endpoints: &[EndPoint]) {
     // Define client and router IDs
-    let router_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_id1 = ZenohIdProto::try_from([1]).unwrap();
+    let router_id2 = ZenohIdProto::try_from([2]).unwrap();
 
     // Create the router transport manager
     println!(">>> Transport Whitelist [1a1]");
-    let router_manager = TransportManager::builder()
-        .zid(router_id)
+    let router_manager1: TransportManager = TransportManager::builder()
+        .zid(router_id1)
+        .protocols(Some(vec![])) // No protocols allowed
+        .build(Arc::new(SHRouter))
+        .unwrap();
+    let router_manager2: TransportManager = TransportManager::builder()
+        .zid(router_id2)
         .protocols(Some(vec![])) // No protocols allowed
         .build(Arc::new(SHRouter))
         .unwrap();
@@ -80,20 +86,27 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let res = ztimeout!(router_manager.add_listener_unicast(e.clone()));
+        let res = ztimeout!(router_manager1.add_listener_unicast(e.clone()));
         assert!(res.is_err());
 
         println!("Open endpoint: {e}");
-        let res = ztimeout!(router_manager.open_transport_unicast(e.clone()));
+        let res = ztimeout!(router_manager2.open_transport_unicast(e.clone()));
         assert!(res.is_err());
     }
 
     // Create the router transport manager
     println!(">>> Transport Whitelist [2a1]");
-    let unicast = TransportManager::config_unicast().max_links(usize::MAX);
-    let router_manager = TransportManager::builder()
-        .zid(router_id)
-        .unicast(unicast)
+    let router_manager1 = TransportManager::builder()
+        .zid(router_id1)
+        .unicast(TransportManager::config_unicast().max_links(usize::MAX))
+        .protocols(Some(Vec::from_iter(
+            endpoints.iter().map(|e| e.protocol().to_string()),
+        )))
+        .build(Arc::new(SHRouter))
+        .unwrap();
+    let router_manager2 = TransportManager::builder()
+        .zid(router_id2)
+        .unicast(TransportManager::config_unicast().max_links(usize::MAX))
         .protocols(Some(Vec::from_iter(
             endpoints.iter().map(|e| e.protocol().to_string()),
         )))
@@ -103,12 +116,12 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let _ = ztimeout!(router_manager.add_listener_unicast(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager1.add_listener_unicast(e.clone())).unwrap();
 
         tokio::time::sleep(SLEEP).await;
 
         println!("Open endpoint: {e}");
-        let _ = ztimeout!(router_manager.open_transport_unicast(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager2.open_transport_unicast(e.clone())).unwrap();
 
         tokio::time::sleep(SLEEP).await;
     }
