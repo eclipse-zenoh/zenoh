@@ -43,8 +43,6 @@ default = [
   "transport_udp",
   "transport_unixsock-stream",
   "transport_ws",
-  "shared-memory",
-  "unstable"
 ]
 internal = [
   "zenoh-config/internal",
