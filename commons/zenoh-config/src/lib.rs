@@ -19,6 +19,8 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
+#![allow(deprecated)]
+
 pub mod defaults;
 mod include;
 pub mod qos;
@@ -109,6 +111,7 @@ pub enum InterceptorFlow {
 #[serde(rename_all = "snake_case")]
 pub enum DownsamplingMessage {
     Delete,
+    #[deprecated = "Use `Put` or `Delete` instead."]
     Push,
     Put,
     Query,
