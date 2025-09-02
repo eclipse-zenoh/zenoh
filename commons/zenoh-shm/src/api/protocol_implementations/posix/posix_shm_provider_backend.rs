@@ -12,18 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//use crate::api::protocol_implementations::posix::posix_shm_provider_backend_binary_heap::{
-//    LayoutedPosixShmProviderBackendBinaryHeapBuilder, PosixShmProviderBackendBinaryHeap,
-//    PosixShmProviderBackendBinaryHeapBuilder,
-//};
-//
-//pub type PosixShmProviderBackendBuilder = PosixShmProviderBackendBinaryHeapBuilder;
-//
-//pub type LayoutedPosixShmProviderBackendBuilder<Layout> =
-//    LayoutedPosixShmProviderBackendBinaryHeapBuilder<Layout>;
-//
-//pub type PosixShmProviderBackend = PosixShmProviderBackendBinaryHeap;
-
 use crate::api::protocol_implementations::posix::posix_shm_provider_backend_talc::{
     LayoutedPosixShmProviderBackendTalcBuilder, PosixShmProviderBackendTalc,
     PosixShmProviderBackendTalcBuilder,

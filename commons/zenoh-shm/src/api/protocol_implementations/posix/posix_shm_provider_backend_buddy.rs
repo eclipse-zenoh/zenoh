@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -64,7 +64,10 @@ impl PosixShmProviderBackendBuddyBuilder {
 
     /// Construct layout in-place from size (default alignment will be used)
     #[zenoh_macros::unstable_doc]
-    pub fn with_size(self, size: usize) -> LayoutedPosixShmProviderBackendBuddyBuilder<MemoryLayout> {
+    pub fn with_size(
+        self,
+        size: usize,
+    ) -> LayoutedPosixShmProviderBackendBuddyBuilder<MemoryLayout> {
         // `unwrap` here should never fail. If it fails - check that the default alignment is 1
         let layout = MemoryLayout::new(size, AllocAlignment::default()).unwrap();
         LayoutedPosixShmProviderBackendBuddyBuilder { layout }
@@ -77,7 +80,9 @@ pub struct LayoutedPosixShmProviderBackendBuddyBuilder<Layout: Borrow<MemoryLayo
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: Borrow<MemoryLayout>> Resolvable for LayoutedPosixShmProviderBackendBuddyBuilder<Layout> {
+impl<Layout: Borrow<MemoryLayout>> Resolvable
+    for LayoutedPosixShmProviderBackendBuddyBuilder<Layout>
+{
     type To = ZResult<PosixShmProviderBackendBuddy>;
 }
 
