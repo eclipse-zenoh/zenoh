@@ -165,11 +165,11 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &LazyShmProvider,
-) -> ZResult<()> {
+) {
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
-            PushBody::Del(_) => Ok(()),
+            PushBody::Del(_) => {}
         },
         NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
@@ -181,7 +181,7 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
         NetworkBodyMut::ResponseFinal(_)
         | NetworkBodyMut::Interest(_)
         | NetworkBodyMut::Declare(_)
-        | NetworkBodyMut::OAM(_) => Ok(()),
+        | NetworkBodyMut::OAM(_) => {}
     }
 }
 
@@ -228,7 +228,7 @@ trait MapShm {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &LazyShmProvider,
-    ) -> ZResult<()>;
+    );
 }
 
 fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
@@ -236,7 +236,7 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
     ext_shm: &mut Option<ShmType<ID>>,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &LazyShmProvider,
-) -> ZResult<()> {
+) {
     for zs in zbuf.zslices_mut() {
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
@@ -251,7 +251,6 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
             }
         }
     }
-    Ok(())
 }
 
 fn map_to_shmbuf<const ID: u8>(
@@ -276,11 +275,11 @@ impl MapShm for Put {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &LazyShmProvider,
-    ) -> ZResult<()> {
+    ) {
         let Self {
             payload, ext_shm, ..
         } = self;
-        map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider)
+        map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
@@ -297,7 +296,7 @@ impl MapShm for Query {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &LazyShmProvider,
-    ) -> ZResult<()> {
+    ) {
         if let Self {
             ext_body: Some(QueryBodyType {
                 payload, ext_shm, ..
@@ -305,9 +304,8 @@ impl MapShm for Query {
             ..
         } = self
         {
-            map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider)?;
+            map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
         }
-        Ok(())
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
@@ -330,14 +328,13 @@ impl MapShm for Reply {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &LazyShmProvider,
-    ) -> ZResult<()> {
+    ) {
         if let PushBody::Put(Put {
             payload, ext_shm, ..
         }) = &mut self.payload
         {
-            map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider)?;
+            map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
         }
-        Ok(())
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
@@ -357,11 +354,11 @@ impl MapShm for Err {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &LazyShmProvider,
-    ) -> ZResult<()> {
+    ) {
         let Self {
             payload, ext_shm, ..
         } = self;
-        map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider)
+        map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
