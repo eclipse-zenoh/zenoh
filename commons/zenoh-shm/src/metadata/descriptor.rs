@@ -153,7 +153,7 @@ impl PartialOrd for OwnedMetadataDescriptor {
 
 impl PartialEq for OwnedMetadataDescriptor {
     fn eq(&self, other: &Self) -> bool {
-        self.watchdog.eq(&other.watchdog)
+        (self.header as *const ChunkHeaderType).eq(&(other.header as *const _))
     }
 }
 impl Eq for OwnedMetadataDescriptor {}

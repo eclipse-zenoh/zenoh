@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::BTreeSet,
+    collections::LinkedList,
     sync::{Arc, Mutex},
 };
 
@@ -31,25 +31,25 @@ use crate::api::provider::types::ZAllocError;
 pub static mut GLOBAL_METADATA_STORAGE: MetadataStorage = MetadataStorage::new().unwrap();
 
 pub struct MetadataStorage {
-    available: Arc<Mutex<BTreeSet<OwnedMetadataDescriptor>>>,
+    available: Mutex<LinkedList<OwnedMetadataDescriptor>>,
 }
 
 impl MetadataStorage {
     fn new() -> ZResult<Self> {
         // See ordering implementation for OwnedMetadataDescriptor
         #[allow(clippy::mutable_key_type)]
-        let mut initially_available = BTreeSet::<OwnedMetadataDescriptor>::default();
+        let mut initially_available = LinkedList::<OwnedMetadataDescriptor>::default();
 
         Self::add_segment(&mut initially_available)?;
 
         Ok(Self {
-            available: Arc::new(Mutex::new(initially_available)),
+            available: Mutex::new(initially_available),
         })
     }
 
     // See ordering implementation for OwnedMetadataDescriptor
     #[allow(clippy::mutable_key_type)]
-    fn add_segment(collection: &mut BTreeSet<OwnedMetadataDescriptor>) -> ZResult<()> {
+    fn add_segment(collection: &mut LinkedList<OwnedMetadataDescriptor>) -> ZResult<()> {
         let segment = Arc::new(MetadataSegment::create()?);
 
         for index in 0..segment.data.count() {
@@ -63,18 +63,18 @@ impl MetadataStorage {
                 .generation
                 .store(0, std::sync::atomic::Ordering::SeqCst);
 
-            collection.insert(descriptor);
+            collection.push_back(descriptor);
         }
         Ok(())
     }
 
     pub fn allocate(&self) -> Result<AllocatedMetadataDescriptor, ZAllocError> {
         let mut guard = zlock!(self.available);
-        let descriptor = match guard.pop_first() {
+        let descriptor = match guard.pop_front() {
             Some(val) => val,
             None => {
                 Self::add_segment(&mut guard)?;
-                guard.pop_first().ok_or(ZAllocError::Other)?
+                guard.pop_front().ok_or(ZAllocError::Other)?
             }
         };
         drop(guard);
@@ -89,7 +89,7 @@ impl MetadataStorage {
             .generation
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut guard = self.available.lock().unwrap();
-        let _new_insert = guard.insert(descriptor);
+        let _new_insert = guard.push_front(descriptor);
         #[cfg(feature = "test")]
         assert!(_new_insert);
     }
