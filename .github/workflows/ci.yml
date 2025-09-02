@@ -251,6 +251,8 @@ jobs:
       - name: Run tests with SHM (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
         run: sudo cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        env:
+          RUST_BACKTRACE: 1
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'windows-latest' }}
