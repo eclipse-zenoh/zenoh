@@ -695,14 +695,9 @@ impl TransmissionPipeline {
             congested: AtomicU8::new(0),
             pending: AtomicU8::new(0),
             waits: Waits {
-                wait_before_drop: config.wait_before_drop.as_micros().try_into().unwrap(),
-                max_wait_before_drop_fragments: config
-                    .max_wait_before_drop_fragments
-                    .as_micros()
-                    .try_into()
-                    .unwrap(),
-
-                wait_before_close: config.wait_before_close.as_micros().try_into().unwrap(),
+                wait_before_drop: config.wait_before_drop,
+                max_wait_before_drop_fragments: config.max_wait_before_drop_fragments,
+                wait_before_close: config.wait_before_close,
             },
         });
 
@@ -849,10 +844,10 @@ impl TransmissionPipelineStatus {
 
 #[derive(Clone)]
 struct Waits {
-    wait_before_drop: u32,
-    max_wait_before_drop_fragments: u32,
+    wait_before_drop: Duration,
+    max_wait_before_drop_fragments: Duration,
 
-    wait_before_close: u32,
+    wait_before_close: Duration,
 }
 
 #[derive(Clone)]
@@ -883,16 +878,11 @@ impl TransmissionPipelineProducer {
                 return Ok(false);
             }
             (
-                Duration::from_micros(self.status.waits.wait_before_drop.into()),
-                Some(Duration::from_micros(
-                    self.status.waits.max_wait_before_drop_fragments.into(),
-                )),
+                self.status.waits.wait_before_drop,
+                Some(self.status.waits.max_wait_before_drop_fragments),
             )
         } else {
-            (
-                Duration::from_micros(self.status.waits.wait_before_close.into()),
-                None,
-            )
+            (self.status.waits.wait_before_close, None)
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
