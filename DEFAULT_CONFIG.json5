@@ -370,8 +370,10 @@
   //     flows: ["ingress", "egress"],
   //     /// List of message type on which downsampling will be applied. Must not be empty.
   //     messages: [
-  //       /// Publication (Put and Delete)
-  //       "push",
+  //       /// Delete
+  //       "delete",
+  //       /// Put
+  //       "put",
   //       /// Get
   //       "query",
   //       /// Queryable Reply to a Query
