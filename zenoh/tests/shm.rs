@@ -321,7 +321,7 @@ async fn zenoh_shm_unicast_implicit_optimization() {
             .unwrap();
         // Wait for the declaration to propagate
         tokio::time::sleep(SLEEP).await;
-        let _ = peer02.put(key, "test").wait().unwrap();
+        peer02.put(key, "test").wait().unwrap();
         // Wait for implicit SHM to init
         tokio::time::sleep(SLEEP).await;
     }
