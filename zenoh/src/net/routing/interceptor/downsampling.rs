@@ -32,7 +32,10 @@ use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
     impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
 };
-use zenoh_protocol::network::NetworkBodyMut;
+use zenoh_protocol::{
+    network::{NetworkBodyMut, Push},
+    zenoh::PushBody,
+};
 use zenoh_result::ZResult;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -167,7 +170,8 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct DownsamplingFilters {
-    push: bool,
+    delete: bool,
+    put: bool,
     query: bool,
     reply: bool,
 }
@@ -177,7 +181,13 @@ impl From<&NEVec<DownsamplingMessage>> for DownsamplingFilters {
         let mut res = Self::default();
         for v in value {
             match v {
-                DownsamplingMessage::Push => res.push = true,
+                DownsamplingMessage::Delete => res.put = true,
+                #[allow(deprecated)]
+                DownsamplingMessage::Push => {
+                    res.put = true;
+                    res.delete = true;
+                }
+                DownsamplingMessage::Put => res.put = true,
                 DownsamplingMessage::Query => res.query = true,
                 DownsamplingMessage::Reply => res.reply = true,
             }
@@ -204,7 +214,14 @@ pub(crate) struct DownsamplingInterceptor {
 impl DownsamplingInterceptor {
     fn is_msg_filtered(&self, msg: &mut NetworkMessageMut) -> bool {
         match msg.body {
-            NetworkBodyMut::Push(_) => self.filtered_messages.push,
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => self.filtered_messages.delete,
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => self.filtered_messages.put,
             NetworkBodyMut::Request(_) => self.filtered_messages.query,
             NetworkBodyMut::Response(_) => self.filtered_messages.reply,
             NetworkBodyMut::ResponseFinal(_) => false,

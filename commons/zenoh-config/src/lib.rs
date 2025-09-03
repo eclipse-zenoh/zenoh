@@ -19,6 +19,8 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
+#![allow(deprecated)]
+
 pub mod defaults;
 mod include;
 pub mod qos;
@@ -108,7 +110,10 @@ pub enum InterceptorFlow {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum DownsamplingMessage {
+    Delete,
+    #[deprecated = "Use `Put` or `Delete` instead."]
     Push,
+    Put,
     Query,
     Reply,
 }
@@ -140,6 +145,19 @@ pub struct DownsamplingItemConf {
     pub rules: NEVec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress
     pub flows: Option<NEVec<InterceptorFlow>>,
+}
+
+fn downsampling_validator(d: &Vec<DownsamplingItemConf>) -> bool {
+    for item in d {
+        if item
+            .messages
+            .iter()
+            .any(|m| *m == DownsamplingMessage::Push)
+        {
+            tracing::warn!("In 'downsampling/messages' configuration: 'push' is deprecated and may not be supported in future versions, use 'put' and/or 'delete' instead");
+        }
+    }
+    true
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -851,7 +869,7 @@ validated_struct::validator! {
         pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
-        downsampling: Vec<DownsamplingItemConf>,
+        downsampling: Vec<DownsamplingItemConf> where (downsampling_validator),
 
         /// Configuration of the access control (ACL)
         pub access_control: AclConfig {
