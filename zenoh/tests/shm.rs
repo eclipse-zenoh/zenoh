@@ -310,7 +310,7 @@ async fn zenoh_shm_unicast_implicit_optimization() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19448"]).await;
+    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19453"]).await;
 
     {
         let key = "warmup";
