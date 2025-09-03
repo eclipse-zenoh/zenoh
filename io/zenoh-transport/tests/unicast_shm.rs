@@ -333,7 +333,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14002).parse().unwrap();
         run(&endpoint, false).await;
     }
 
