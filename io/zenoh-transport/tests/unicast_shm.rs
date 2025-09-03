@@ -164,7 +164,6 @@ mod tests {
             .zid(peer_shm01)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(true)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
@@ -178,21 +177,23 @@ mod tests {
             .zid(peer_shm02)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(true)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
             .build(peer_shm02_handler.clone())
             .unwrap();
 
+        let mut shm = zenoh_config::ShmConf::default();
+        let _ = shm.set_enabled(false);
+
         // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
+            .shm(shm)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(false)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )

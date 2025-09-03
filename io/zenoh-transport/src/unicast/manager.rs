@@ -23,8 +23,6 @@ use std::{
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
-#[cfg(feature = "shared-memory")]
-use zenoh_config::ShmConf;
 use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
 use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
@@ -34,11 +32,7 @@ use zenoh_protocol::{
     transport::{close, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::reader::ShmReader;
 
-#[cfg(feature = "shared-memory")]
-use super::establishment::ext::shm::AuthUnicast;
 use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
@@ -70,8 +64,6 @@ pub struct TransportManagerConfigUnicast {
     pub is_lowlatency: bool,
     #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
-    #[cfg(feature = "shared-memory")]
-    pub is_shm: bool,
     #[cfg(feature = "transport_compression")]
     pub is_compression: bool,
 }
@@ -120,10 +112,6 @@ pub struct TransportManagerStateUnicast {
     // Active authenticators
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Arc<Auth>,
-    // SHM probing
-    // Option will be None if SHM is disabled by Config
-    #[cfg(feature = "shared-memory")]
-    pub(super) auth_shm: Option<AuthUnicast>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -146,8 +134,6 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_qos: bool,
     #[cfg(feature = "transport_multilink")]
     pub(super) max_links: usize,
-    #[cfg(feature = "shared-memory")]
-    pub(super) is_shm: bool,
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
     pub(super) is_lowlatency: bool,
@@ -208,12 +194,6 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    #[cfg(feature = "shared-memory")]
-    pub fn shm(mut self, is_shm: bool) -> Self {
-        self.is_shm = is_shm;
-        self
-    }
-
     #[cfg(feature = "transport_compression")]
     pub fn compression(mut self, is_compression: bool) -> Self {
         self.is_compression = is_compression;
@@ -240,10 +220,6 @@ impl TransportManagerBuilderUnicast {
         {
             self = self.max_links(*config.transport().unicast().max_links());
         }
-        #[cfg(feature = "shared-memory")]
-        {
-            self = self.shm(*config.transport().shared_memory().enabled());
-        }
         #[cfg(feature = "transport_auth")]
         {
             self = self.authenticator(Auth::from_config(config).await?);
@@ -259,7 +235,6 @@ impl TransportManagerBuilderUnicast {
     pub fn build(
         self,
         #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
-        #[cfg(feature = "shared-memory")] shm_reader: &ShmReader,
     ) -> ZResult<TransportManagerParamsUnicast> {
         if self.is_qos && self.is_lowlatency {
             bail!("'qos' and 'lowlatency' options are incompatible");
@@ -275,8 +250,6 @@ impl TransportManagerBuilderUnicast {
             is_qos: self.is_qos,
             #[cfg(feature = "transport_multilink")]
             max_links: self.max_links,
-            #[cfg(feature = "shared-memory")]
-            is_shm: self.is_shm,
             is_lowlatency: self.is_lowlatency,
             #[cfg(feature = "transport_compression")]
             is_compression: self.is_compression,
@@ -290,13 +263,6 @@ impl TransportManagerBuilderUnicast {
             multilink: Arc::new(MultiLink::make(prng, config.max_links > 1)?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
-            #[cfg(feature = "shared-memory")]
-            auth_shm: match self.is_shm {
-                true => Some(AuthUnicast::new(
-                    shm_reader.supported_protocols().as_slice(),
-                )?),
-                false => None,
-            },
         };
 
         let params = TransportManagerParamsUnicast { config, state };
@@ -310,8 +276,6 @@ impl Default for TransportManagerBuilderUnicast {
         let transport = TransportUnicastConf::default();
         let link_tx = LinkTxConf::default();
         let qos = QoSUnicastConf::default();
-        #[cfg(feature = "shared-memory")]
-        let shm = ShmConf::default();
         #[cfg(feature = "transport_compression")]
         let compression = CompressionUnicastConf::default();
 
@@ -325,8 +289,6 @@ impl Default for TransportManagerBuilderUnicast {
             is_qos: *qos.enabled(),
             #[cfg(feature = "transport_multilink")]
             max_links: *transport.max_links(),
-            #[cfg(feature = "shared-memory")]
-            is_shm: *shm.enabled(),
             #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
             is_lowlatency: *transport.lowlatency(),
@@ -618,12 +580,39 @@ impl TransportManager {
         #[cfg(feature = "stats")]
         let stats = TransportStats::new(Some(Arc::downgrade(&self.get_stats())), labels);
 
+        #[cfg(feature = "shared-memory")]
+        let shm_context = match &config.shm {
+            Some(shm_config) => self.state.shm_context.as_ref().map(|context| {
+                use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
+
+                use crate::{
+                    shm::{LazyShmProvider, PartnerShmConfig},
+                    shm_context::UnicastTransportShmContext,
+                };
+
+                let shm_provider = if shm_config.supports_protocol(POSIX_PROTOCOL_ID) {
+                    context.shm_provider.clone()
+                } else {
+                    Arc::new(LazyShmProvider::new_disabled())
+                };
+
+                UnicastTransportShmContext::new(
+                    context.shm_reader.clone(),
+                    shm_provider,
+                    shm_config.clone(),
+                )
+            }),
+            None => None,
+        };
+
         // Select and create transport implementation depending on the cfg and enabled features
         let t = if config.is_lowlatency {
             tracing::debug!("Will use LowLatency transport!");
             TransportUnicastLowlatency::make(
                 self.clone(),
                 config.clone(),
+                #[cfg(feature = "shared-memory")]
+                shm_context,
                 #[cfg(feature = "stats")]
                 stats,
             )
@@ -633,6 +622,8 @@ impl TransportManager {
                 TransportUnicastUniversal::make(
                     self.clone(),
                     config.clone(),
+                    #[cfg(feature = "shared-memory")]
+                    shm_context,
                     #[cfg(feature = "stats")]
                     stats
                 ),

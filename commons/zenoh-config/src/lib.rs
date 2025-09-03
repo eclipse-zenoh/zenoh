@@ -35,7 +35,7 @@ use std::{
     fmt,
     io::Read,
     net::SocketAddr,
-    num::NonZeroU16,
+    num::{NonZeroU16, NonZeroUsize},
     ops::{self, Bound, RangeBounds},
     path::Path,
     sync::Weak,
@@ -800,6 +800,16 @@ validated_struct::validator! {
                 /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
                 /// startup time, but guarantees no latency impact when first SHM buffer is processed.
                 mode: ShmInitMode,
+                pub transport_optimization:
+                LargeMessageTransportOpt {
+                    /// Enables transport optimization for large messages (default `true`).
+                    /// Implicitly puts large messages into shared memory for transports with SHM-compatible connection.
+                    enabled: bool,
+                    /// SHM arena size in bytes used for transport optimization (default `16 * 1024 * 1024`).
+                    pool_size: NonZeroUsize,
+                    /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
+                    message_size_threshold: usize,
+                },
             },
             pub auth: #[derive(Default)]
             AuthConf {
