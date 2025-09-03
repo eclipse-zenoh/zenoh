@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::LinkedList,
+    collections::VecDeque,
     sync::{Arc, Mutex},
 };
 
@@ -31,14 +31,14 @@ use crate::api::provider::types::ZAllocError;
 pub static mut GLOBAL_METADATA_STORAGE: MetadataStorage = MetadataStorage::new().unwrap();
 
 pub struct MetadataStorage {
-    available: Mutex<LinkedList<OwnedMetadataDescriptor>>,
+    available: Mutex<VecDeque<OwnedMetadataDescriptor>>,
 }
 
 impl MetadataStorage {
     fn new() -> ZResult<Self> {
         // See ordering implementation for OwnedMetadataDescriptor
         #[allow(clippy::mutable_key_type)]
-        let mut initially_available = LinkedList::<OwnedMetadataDescriptor>::default();
+        let mut initially_available = VecDeque::<OwnedMetadataDescriptor>::default();
 
         Self::add_segment(&mut initially_available)?;
 
@@ -49,7 +49,7 @@ impl MetadataStorage {
 
     // See ordering implementation for OwnedMetadataDescriptor
     #[allow(clippy::mutable_key_type)]
-    fn add_segment(collection: &mut LinkedList<OwnedMetadataDescriptor>) -> ZResult<()> {
+    fn add_segment(collection: &mut VecDeque<OwnedMetadataDescriptor>) -> ZResult<()> {
         let segment = Arc::new(MetadataSegment::create()?);
 
         for index in 0..segment.data.count() {
@@ -89,6 +89,6 @@ impl MetadataStorage {
             .generation
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut guard = self.available.lock().unwrap();
-        guard.push_front(descriptor);
+        guard.push_back(descriptor);
     }
 }
