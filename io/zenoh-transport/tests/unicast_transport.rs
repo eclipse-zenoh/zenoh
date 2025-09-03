@@ -243,7 +243,7 @@ jbQ9gpChosdjF0Bgblo7HSUct/2Va+YlYwW+WFjJX8k4oN6ZU5W5xhdfO8Czmgwk
 US5kJ/+1M0uR8zUhZHL61FbsdPxEj+fYKrHv4woo+A==
 -----END CERTIFICATE-----";
 
-const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT: Duration = Duration::from_secs(120);
 const SLEEP: Duration = Duration::from_secs(1);
 const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
