@@ -2017,11 +2017,16 @@ impl SessionInner {
     }
 
     pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
-        if state.primitives.is_none() {
-            return Ok(());
-        }
-        if let Some(state) = state.matching_listeners.remove(&sid) {
+        let state = {
+            let mut state = zwrite!(self.state);
+            if state.primitives.is_none() {
+                return Ok(());
+            }
+
+            state.matching_listeners.remove(&sid)
+        };
+
+        if let Some(state) = state {
             trace!("undeclare_matches_listener_inner({:?})", state);
             Ok(())
         } else {
