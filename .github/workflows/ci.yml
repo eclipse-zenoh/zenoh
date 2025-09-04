@@ -187,14 +187,8 @@ jobs:
       - name: Check unused dependencies
         run: cargo machete
 
-      # To compile the previous version of zenoh, we need to replace the token-cell 1.5.0 with 2.0.0.
-      # Otherwise, the compilation w/o `Cargo.lock` will fail because it will try to use 1.6.0, which is incompatible with 1.5.0.
       - name: Check SemVer Compatibility
-        run: |
-          rm -rf /tmp/baseline
-          git clone --branch ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }} https://github.com/eclipse-zenoh/zenoh.git /tmp/baseline
-          sed -i 's/token-cell = { version = "1\.5\.0"/token-cell = { version = "2.0.0"/' /tmp/baseline/Cargo.toml
-          cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
+        run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
         
       - name: Check TOML formatting
         if: ${{ !contains(matrix.os, 'windows') }}
