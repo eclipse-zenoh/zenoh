@@ -380,9 +380,8 @@ impl HatPubSubTrait for HatCode {
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::SUB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr, Resource::SUB)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -435,9 +434,8 @@ impl HatPubSubTrait for HatCode {
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::SUB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::SUB)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();

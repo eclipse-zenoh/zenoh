@@ -20,7 +20,6 @@ use std::{
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::WireExpr,
     network::{
@@ -71,8 +70,11 @@ impl fmt::Debug for RemoteInterest {
 }
 
 impl RemoteInterest {
-    pub(crate) fn matches(&self, res: &Arc<Resource>) -> bool {
-        self.res.as_ref().map(|r| r.matches(res)).unwrap_or(true)
+    pub(crate) fn matches(&self, res: &Arc<Resource>, flag: u8) -> bool {
+        self.res
+            .as_ref()
+            .map(|r| r.matches(res, flag))
+            .unwrap_or(true)
     }
 }
 
@@ -232,19 +234,19 @@ pub(crate) fn declare_interest(
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
-                            .unwrap_or_default();
+                        // let mut matches = keyexpr::new(fullexpr.as_str())
+                        //     .map(|ke| Resource::get_matches(&rtables, ke))
+                        //     .unwrap_or_default();
                         drop(rtables);
                         let mut wtables = zwrite!(tables_ref.tables);
-                        let mut res = Resource::make_resource(
+                        let res = Resource::make_resource(
                             hat_code,
                             &mut wtables,
                             &mut prefix,
                             expr.suffix.as_ref(),
                         );
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
+                        // matches.push(Arc::downgrade(&res));
+                        // Resource::match_resource(&wtables, &mut res, matches);
                         (res, wtables)
                     };
 

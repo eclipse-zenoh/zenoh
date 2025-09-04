@@ -109,7 +109,7 @@ fn propagate_simple_token_to(
         let matching_interests = face_hat!(dst_face)
             .remote_interests
             .values()
-            .filter(|i| i.options.tokens() && i.matches(res))
+            .filter(|i| i.options.tokens() && i.matches(res, Resource::TOK))
             .cloned()
             .collect::<Vec<_>>();
 
@@ -433,7 +433,7 @@ fn propagate_forget_simple_token(
         }) && face_hat!(face)
             .remote_interests
             .values()
-            .any(|i| i.options.tokens() && i.matches(res) && !i.options.aggregate())
+            .any(|i| i.options.tokens() && i.matches(res, Resource::TOK) && !i.options.aggregate())
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
@@ -462,14 +462,17 @@ fn propagate_forget_simple_token(
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_tokens(tables, &m, &face)
-                            || remote_linkstatepeer_tokens(tables, &m)
-                            || remote_router_tokens(tables, &m))
+            if !Resource::get_matches_for(tables, &res, Resource::TOK)
+                .iter()
+                .any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_simple_tokens(tables, &m, &face)
+                                || remote_linkstatepeer_tokens(tables, &m)
+                                || remote_router_tokens(tables, &m))
+                    })
                 })
-            }) {
+            {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                     send_declare(
                         &face.primitives,
@@ -487,16 +490,13 @@ fn propagate_forget_simple_token(
                             res.expr().to_string(),
                         ),
                     );
-                } else if face_hat!(face)
-                    .remote_interests
-                    .values()
-                    .any(|i| i.options.tokens() && i.matches(&res) && !i.options.aggregate())
-                    && src_face.map_or(true, |src_face| {
-                        src_face.whatami != WhatAmI::Peer
-                            || face.whatami != WhatAmI::Peer
-                            || hat!(tables).failover_brokering(src_face.zid, face.zid)
-                    })
-                {
+                } else if face_hat!(face).remote_interests.values().any(|i| {
+                    i.options.tokens() && i.matches(&res, Resource::TOK) && !i.options.aggregate()
+                }) && src_face.map_or(true, |src_face| {
+                    src_face.whatami != WhatAmI::Peer
+                        || face.whatami != WhatAmI::Peer
+                        || hat!(tables).failover_brokering(src_face.zid, face.zid)
+                }) {
                     // Token has never been declared on this face.
                     // Send an Undeclare with a one shot generated id and a WireExpr ext.
                     send_declare(
@@ -750,14 +750,17 @@ pub(super) fn undeclare_simple_token(
                     .cloned()
                     .collect::<Vec<Arc<Resource>>>()
                 {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade().is_some_and(|m| {
-                            m.context.is_some()
-                                && (remote_simple_tokens(tables, &m, face)
-                                    || remote_linkstatepeer_tokens(tables, &m)
-                                    || remote_router_tokens(tables, &m))
+                    if !Resource::get_matches_for(tables, &res, Resource::TOK)
+                        .iter()
+                        .any(|m| {
+                            m.upgrade().is_some_and(|m| {
+                                m.context.is_some()
+                                    && (remote_simple_tokens(tables, &m, face)
+                                        || remote_linkstatepeer_tokens(tables, &m)
+                                        || remote_router_tokens(tables, &m))
+                            })
                         })
-                    }) {
+                    {
                         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                             send_declare(
                                 &face.primitives,
@@ -1007,7 +1010,7 @@ pub(crate) fn declare_token_interest(
             if aggregate {
                 if hat!(tables).router_tokens.iter().any(|token| {
                     token.context.is_some()
-                        && token.matches(res)
+                        && token.matches(res, Resource::TOK)
                         && (remote_simple_tokens(tables, token, face)
                             || remote_linkstatepeer_tokens(tables, token)
                             || remote_router_tokens(tables, token))
@@ -1032,7 +1035,7 @@ pub(crate) fn declare_token_interest(
             } else {
                 for token in &hat!(tables).router_tokens {
                     if token.context.is_some()
-                        && token.matches(res)
+                        && token.matches(res, Resource::TOK)
                         && (res_hat!(token)
                             .router_tokens
                             .iter()
