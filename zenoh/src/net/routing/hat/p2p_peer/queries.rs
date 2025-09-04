@@ -613,6 +613,25 @@ impl HatQueriesTrait for HatCode {
             source_type
         );
 
+        let matches = expr
+            .resource()
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
+            for face_ctx @ (_, ctx) in &mres.session_ctxs {
+                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
+                        route.push(qabl);
+                    }
+                }
+            }
+        }
+
         if source_type == WhatAmI::Client {
             // TODO: BestMatching: What if there is a local compete ?
             for face in tables.faces.values() {
@@ -636,37 +655,8 @@ impl HatQueriesTrait for HatCode {
                     });
                 }
             }
-
-            for face in tables.faces.values().filter(|f| {
-                f.whatami == WhatAmI::Peer
-                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
-            }) {
-                let wire_expr = expr.get_best_key(face.id);
-                route.push(QueryTargetQabl {
-                    direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
-                    info: None,
-                });
-            }
         }
 
-        let matches = expr
-            .resource()
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for face_ctx @ (_, ctx) in &mres.session_ctxs {
-                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
-                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
-                        route.push(qabl);
-                    }
-                }
-            }
-        }
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }

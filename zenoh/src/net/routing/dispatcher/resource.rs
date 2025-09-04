@@ -105,7 +105,6 @@ impl<T> RouteBuilder<T> {
     }
 
     pub(crate) fn try_insert(&mut self, face_id: usize, direction: impl FnOnce() -> Option<T>) {
-        dbg!(&self.faces);
         if !self.faces.contains(&face_id) {
             if let Some(direction) = direction() {
                 self.faces.insert(face_id);
