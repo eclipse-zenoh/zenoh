@@ -16,7 +16,7 @@ use alloc::{
     string::String,
     sync::{Arc, Weak},
 };
-use core::fmt::Debug;
+use core::{fmt::Debug, ops::Deref};
 
 use token_cell::prelude::*;
 
@@ -154,7 +154,7 @@ where
             let as_node: &Arc<
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
             > = node.as_node();
-            node = unsafe { (*as_node.get()).children.child_at(chunk)? };
+            node = ketree_borrow(as_node, token).children.child_at(chunk)?;
         }
         Some((node.as_node(), token))
     }
@@ -195,7 +195,7 @@ where
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
             > = node.as_node();
             node = unsafe {
-                (*as_node.get())
+                (*as_node.as_ref().deref().get())
                     .children
                     .entry(chunk)
                     .get_or_insert_with(|k| construct_node(k, Some(Arc::downgrade(as_node))))
@@ -428,16 +428,17 @@ where
     ) {
         let mut wild = false;
         let inner = ketree_borrow_mut(&self.inner, token);
-        inner.children.filter_out(
-            &mut |child| match unsafe { (*child.get()).prune(&mut predicate) } {
+        inner.children.filter_out(&mut |child| {
+            let c = unsafe { &mut *child.as_ref().deref().get() };
+            match c.prune(&mut predicate) {
                 PruneResult::Delete => Arc::strong_count(child) <= 1,
                 PruneResult::NonWild => false,
                 PruneResult::Wild => {
                     wild = true;
                     false
                 }
-            },
-        );
+            }
+        });
         inner.wildness.set(wild);
     }
 }
@@ -446,41 +447,56 @@ pub(crate) mod sealed {
     use alloc::sync::Arc;
     use core::ops::{Deref, DerefMut};
 
-    use token_cell::prelude::{TokenCell, TokenTrait};
+    use token_cell::prelude::{TokenCell, TokenCellTrait, TokenTrait};
 
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
-            unsafe { &*self.0.get() }
+            self.0
+                .try_borrow(self.1)
+                .unwrap_or_else(|_| panic!("Token mismatch"))
         }
     }
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &mut Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
-            unsafe { &*self.0.get() }
+            self.0
+                .try_borrow(self.1)
+                .unwrap_or_else(|_| panic!("Token mismatch"))
         }
     }
     impl<T, Token: TokenTrait> DerefMut for Tokenized<&TokenCell<T, Token>, &mut Token> {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            unsafe { &mut *self.0.get() }
+            self.0
+                .try_borrow_mut(self.1)
+                .unwrap_or_else(|_| panic!("Token mismatch"))
         }
     }
     impl<T, Token: TokenTrait> Deref for Tokenized<&Arc<TokenCell<T, Token>>, &Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
-            unsafe { &*self.0.get() }
+            self.0
+                .as_ref()
+                .try_borrow(self.1)
+                .unwrap_or_else(|_| panic!("Token mismatch"))
         }
     }
     impl<T, Token: TokenTrait> Deref for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
-            unsafe { &*self.0.get() }
+            self.0
+                .as_ref()
+                .try_borrow(self.1)
+                .unwrap_or_else(|_| panic!("Token mismatch"))
         }
     }
     impl<T, Token: TokenTrait> DerefMut for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            unsafe { &mut *self.0.get() }
+            self.0
+                .as_ref()
+                .try_borrow_mut(self.1)
+                .unwrap_or_else(|_| panic!("Token mismatch"))
         }
     }
     impl<A, B> From<(A, B)> for Tokenized<A, B> {
@@ -585,7 +601,7 @@ where
     fn prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
         let mut result = PruneResult::NonWild;
         self.children.filter_out(&mut |child| {
-            let c = unsafe { &mut *child.get() };
+            let c = unsafe { &mut *child.as_ref().deref().get() };
             match c.prune(predicate) {
                 PruneResult::Delete => Arc::strong_count(child) <= 1,
                 PruneResult::NonWild => false,
@@ -623,15 +639,15 @@ where
         Weight,
     >>::Parent;
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
-        (*self.get()).parent()
+        (*self.as_ref().deref().get()).parent()
     }
 
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
-        (*self.get()).keyexpr()
+        (*self.as_ref().deref().get()).keyexpr()
     }
 
     unsafe fn __weight(&self) -> Option<&Weight> {
-        (*self.get()).weight()
+        (*self.as_ref().deref().get()).weight()
     }
 
     type Child = <KeArcTreeNode<Weight, Parent, Wildness, Children, Token> as UIKeyExprTreeNode<
@@ -643,7 +659,7 @@ where
 >>::Children;
 
     unsafe fn __children(&self) -> &Self::Children {
-        (*self.get()).children()
+        (*self.as_ref().deref().get()).children()
     }
 }
 
@@ -767,7 +783,7 @@ where
     pub fn is_zombie(&self) -> bool {
         match &self.parent {
             Some(parent) => match parent.upgrade() {
-                Some(parent) => unsafe { &*parent.get() }.is_zombie(),
+                Some(parent) => unsafe { (*parent.as_ref().deref().get()).is_zombie() },
                 None => true,
             },
             None => false,
@@ -796,6 +812,8 @@ where
                     &*parent
                         .upgrade()
                         .expect("Attempted to use a zombie KeArcTreeNode (see KeArcTreeNode::is_zombie())")
+                        .as_ref()
+                        .deref()
                         .get()
                 };
                 parent._keyexpr(capacity + self.chunk.len() + 1) + "/"

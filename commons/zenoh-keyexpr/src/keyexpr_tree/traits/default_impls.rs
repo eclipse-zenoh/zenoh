@@ -13,6 +13,7 @@
 //
 
 use alloc::{boxed::Box, sync::Arc};
+use core::ops::Deref;
 
 use token_cell::prelude::{TokenCell, TokenCellTrait, TokenTrait};
 
@@ -40,7 +41,7 @@ impl<T: HasChunk> HasChunk for Arc<T> {
 }
 impl<T: HasChunk, Token: TokenTrait> HasChunk for TokenCell<T, Token> {
     fn chunk(&self) -> &keyexpr {
-        T::chunk(unsafe { &*self.get() })
+        T::chunk(unsafe { &*self.deref().get() })
     }
 }
 impl<T> AsNode<T> for T {
