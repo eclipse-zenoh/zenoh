@@ -86,9 +86,12 @@ impl<T> Wait for PosixShmProviderBackendBuddyBuilder<StaticLayout<T>> {
 #[zenoh_macros::unstable_doc]
 pub struct PosixShmProviderBackendBuddy {
     segment: Arc<PosixShmSegment>,
-    heap: Mutex<Heap<30>>,
+    heap: Mutex<Heap<BUDDY_ORDER>>,
     alignment: AllocAlignment,
 }
+
+// see `buddy_system_allocator` doc for details
+const BUDDY_ORDER: usize = 30;
 
 impl PosixShmProviderBackendBuddy {
     /// Get the builder to construct a new instance
@@ -106,7 +109,7 @@ impl PosixShmProviderBackendBuddy {
         // additional memory we re-layout the size
         let real_size = segment.segment.elem_count().get();
 
-        let mut heap = Heap::<30>::empty();
+        let mut heap = Heap::empty();
 
         unsafe { heap.init(segment.segment.elem_mut(0) as usize, real_size) };
 
