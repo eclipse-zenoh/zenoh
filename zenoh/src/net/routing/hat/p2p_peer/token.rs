@@ -89,7 +89,7 @@ fn propagate_simple_token_to(
                 .values()
                 .filter(|i| {
                     i.options.tokens()
-                        && i.matches(res)
+                        && i.matches(res, Resource::TOK)
                         && (i.mode.current() || src_interest_id.is_none())
                 })
                 .cloned()
@@ -282,10 +282,9 @@ fn propagate_forget_simple_token(
             );
         } else if src_face.id != face.id
             && (src_face.whatami == WhatAmI::Client || face.whatami == WhatAmI::Client)
-            && face_hat!(face)
-                .remote_interests
-                .values()
-                .any(|i| i.options.tokens() && i.matches(res) && !i.options.aggregate())
+            && face_hat!(face).remote_interests.values().any(|i| {
+                i.options.tokens() && i.matches(res, Resource::TOK) && !i.options.aggregate()
+            })
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
@@ -314,10 +313,14 @@ fn propagate_forget_simple_token(
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_simple_tokens(tables, &m, &face))
-            }) {
+            if !Resource::get_matches_for(tables, &res, Resource::TOK)
+                .iter()
+                .any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some() && remote_simple_tokens(tables, &m, &face)
+                    })
+                })
+            {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                     send_declare(
                         &face.primitives,
@@ -335,11 +338,9 @@ fn propagate_forget_simple_token(
                             res.expr().to_string(),
                         ),
                     );
-                } else if face_hat!(face)
-                    .remote_interests
-                    .values()
-                    .any(|i| i.options.tokens() && i.matches(&res) && !i.options.aggregate())
-                {
+                } else if face_hat!(face).remote_interests.values().any(|i| {
+                    i.options.tokens() && i.matches(&res, Resource::TOK) && !i.options.aggregate()
+                }) {
                     // Token has never been declared on this face.
                     // Send an Undeclare with a one shot generated id and a WireExpr ext.
                     send_declare(
@@ -413,11 +414,14 @@ pub(super) fn undeclare_simple_token(
                     .cloned()
                     .collect::<Vec<Arc<Resource>>>()
                 {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade().is_some_and(|m| {
-                            m.context.is_some() && remote_simple_tokens(tables, &m, face)
+                    if !Resource::get_matches_for(tables, &res, Resource::TOK)
+                        .iter()
+                        .any(|m| {
+                            m.upgrade().is_some_and(|m| {
+                                m.context.is_some() && remote_simple_tokens(tables, &m, face)
+                            })
                         })
-                    }) {
+                    {
                         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                             send_declare(
                                 &face.primitives,
@@ -520,7 +524,7 @@ pub(crate) fn declare_token_interest(
                     face_hat!(src_face)
                         .remote_tokens
                         .values()
-                        .any(|token| token.context.is_some() && token.matches(res))
+                        .any(|token| token.context.is_some() && token.matches(res, Resource::TOK))
                 }) {
                     let id = make_token_id(res, face, mode);
                     let wire_expr =
@@ -548,7 +552,7 @@ pub(crate) fn declare_token_interest(
                     .collect::<Vec<Arc<FaceState>>>()
                 {
                     for token in face_hat!(src_face).remote_tokens.values() {
-                        if token.context.is_some() && token.matches(res) {
+                        if token.context.is_some() && token.matches(res, Resource::TOK) {
                             let id = make_token_id(token, face, mode);
                             let wire_expr = Resource::decl_key(
                                 token,

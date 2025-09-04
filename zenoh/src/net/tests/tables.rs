@@ -162,7 +162,7 @@ fn match_test() {
     }
 
     for key_expr1 in key_exprs.iter() {
-        let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1);
+        let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1, 0b11111111);
         dbg!(res_matches.len());
         for key_expr2 in key_exprs.iter() {
             if res_matches
@@ -900,5 +900,5 @@ fn big_key_expr() {
     let res = Resource::get_resource(&root, &key_expr).unwrap();
     root.get_best_key(&key_expr, face.state.id);
     res.get_best_key("/a", face.state.id + 1);
-    Resource::get_matches(&face.tables.tables.read().unwrap(), &key_expr);
+    Resource::get_matches(&face.tables.tables.read().unwrap(), &key_expr, 0b11111111);
 }

@@ -73,7 +73,7 @@ pub(crate) fn declare_subscription(
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .map(|ke| Resource::get_matches(&rtables, ke, Resource::SUB))
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
@@ -84,9 +84,10 @@ pub(crate) fn declare_subscription(
                         expr.suffix.as_ref(),
                     );
                     matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
+                    Resource::match_resource(&wtables, &mut res, matches, Resource::SUB);
                     (res, wtables)
                 };
+            get_mut_unchecked::<Resource>(&mut res).flag(Resource::SUB);
 
             hat_code.declare_subscription(
                 &mut wtables,
@@ -151,6 +152,7 @@ pub(crate) fn undeclare_subscription(
         hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id, send_declare)
     {
         tracing::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
+        get_mut_unchecked::<Resource>(&mut res).unflag(Resource::SUB);
         disable_matches_data_routes(&mut wtables, &mut res);
         Resource::clean(&mut res);
         drop(wtables);
@@ -160,10 +162,10 @@ pub(crate) fn undeclare_subscription(
     }
 }
 
-pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(crate) fn disable_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         get_mut_unchecked(res).context_mut().disable_data_routes();
-        for match_ in &res.context().matches {
+        for match_ in Resource::get_matches_for(tables, res, Resource::SUB).iter() {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
                 get_mut_unchecked(&mut match_)

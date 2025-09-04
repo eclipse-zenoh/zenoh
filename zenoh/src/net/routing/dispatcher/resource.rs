@@ -270,7 +270,9 @@ pub(crate) type DataRoutes = Routes<Arc<Route>>;
 pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
-    pub(crate) matches: Vec<Weak<Resource>>,
+    pub(crate) subs_matches: Option<Vec<Weak<Resource>>>,
+    pub(crate) qabl_matches: Option<Vec<Weak<Resource>>>,
+    pub(crate) token_matches: Option<Vec<Weak<Resource>>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
@@ -279,7 +281,9 @@ pub(crate) struct ResourceContext {
 impl ResourceContext {
     fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
-            matches: Vec::new(),
+            subs_matches: None,
+            qabl_matches: None,
+            token_matches: None,
             hat,
             data_routes: Default::default(),
             query_routes: Default::default(),
@@ -299,6 +303,7 @@ pub struct Resource {
     pub(crate) parent: Option<Arc<Resource>>,
     pub(crate) expr: String,
     pub(crate) suffix: usize,
+    pub(crate) flags: u8,
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
@@ -376,6 +381,7 @@ impl Resource {
             parent: Some(parent.clone()),
             expr: parent.expr.clone() + suffix,
             suffix: parent.expr.len(),
+            flags: 0,
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             context: context.map(Box::new),
@@ -411,13 +417,59 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(crate) fn matches(&self, other: &Arc<Resource>) -> bool {
-        self.context
-            .as_ref()
-            .unwrap()
-            .matches
-            .iter()
-            .any(|m| m.upgrade().is_some_and(|m| &m == other))
+    pub(crate) fn matches(&self, other: &Arc<Resource>, flag: u8) -> bool {
+        let matches = match flag {
+            Resource::SUB => self.context.as_ref().unwrap().subs_matches.as_ref(),
+            Resource::QAB => self.context.as_ref().unwrap().qabl_matches.as_ref(),
+            Resource::TOK => self.context.as_ref().unwrap().token_matches.as_ref(),
+            _ => None,
+        };
+        if let Some(matches) = matches {
+            matches
+                .iter()
+                .any(|m| m.upgrade().is_some_and(|m| &m == other))
+        } else {
+            self.keyexpr()
+                .and_then(|k1| other.keyexpr().map(|k2| k1.intersects(k2)))
+                .unwrap_or_else(|| {
+                    tracing::error!("Call Resource::matches() on root Resource");
+                    false
+                })
+        }
+    }
+
+    pub(crate) const KEY: u8 = 0b00000001;
+    pub(crate) const SUB: u8 = 0b00000010;
+    pub(crate) const QAB: u8 = 0b00000100;
+    pub(crate) const TOK: u8 = 0b00001000;
+
+    pub(crate) fn flag(&mut self, flag: u8) {
+        if self.flags & flag != 0 {
+            return;
+        }
+        self.flags |= flag;
+        if let Some(parent) = self.parent.as_mut() {
+            get_mut_unchecked(parent).flag(flag);
+        }
+    }
+
+    pub(crate) fn has_flag(&self, flag: u8) -> bool {
+        match flag {
+            Self::SUB => self.session_ctxs.values().any(|c| c.subs.is_some()),
+            Self::QAB => self.session_ctxs.values().any(|c| c.qabl.is_some()),
+            Self::TOK => self.session_ctxs.values().any(|c| c.token),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn unflag(&mut self, flag: u8) {
+        if self.has_flag(flag) || self.children.iter().any(|c| c.flags | flag != 0) {
+            return;
+        }
+        self.flags &= !flag;
+        if let Some(parent) = self.parent.as_mut() {
+            get_mut_unchecked(parent).flag(flag);
+        }
     }
 
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
@@ -441,6 +493,7 @@ impl Resource {
             parent: None,
             expr: String::from(""),
             suffix: 0,
+            flags: 0,
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             context: None,
@@ -455,14 +508,62 @@ impl Resource {
             if Arc::strong_count(res) <= 3 && res.children.is_empty() {
                 // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
                 tracing::debug!("Unregister resource {}", res.expr());
-                if let Some(context) = mutres.context.as_mut() {
-                    for match_ in &mut context.matches {
+                if let Some(subs_matches) = mutres
+                    .context
+                    .as_mut()
+                    .and_then(|c| c.subs_matches.as_mut())
+                {
+                    // TODO double check we don't also need to do that if subs_matches is None
+                    for match_ in subs_matches {
                         let mut match_ = match_.upgrade().unwrap();
                         if !Arc::ptr_eq(&match_, res) {
                             let mutmatch = get_mut_unchecked(&mut match_);
-                            if let Some(ctx) = mutmatch.context.as_mut() {
-                                ctx.matches
-                                    .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
+                            if let Some(subs_ms) = mutmatch
+                                .context
+                                .as_mut()
+                                .and_then(|c| c.subs_matches.as_mut())
+                            {
+                                subs_ms.retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
+                            }
+                        }
+                    }
+                }
+                if let Some(qabl_matches) = mutres
+                    .context
+                    .as_mut()
+                    .and_then(|c| c.qabl_matches.as_mut())
+                {
+                    // TODO double check we don't also need to do that if qabl_matches is None
+                    for match_ in qabl_matches {
+                        let mut match_ = match_.upgrade().unwrap();
+                        if !Arc::ptr_eq(&match_, res) {
+                            let mutmatch = get_mut_unchecked(&mut match_);
+                            if let Some(qabl_ms) = mutmatch
+                                .context
+                                .as_mut()
+                                .and_then(|c| c.qabl_matches.as_mut())
+                            {
+                                qabl_ms.retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
+                            }
+                        }
+                    }
+                }
+                if let Some(token_matches) = mutres
+                    .context
+                    .as_mut()
+                    .and_then(|c| c.token_matches.as_mut())
+                {
+                    // TODO double check we don't also need to do that if token_matches is None
+                    for match_ in token_matches {
+                        let mut match_ = match_.upgrade().unwrap();
+                        if !Arc::ptr_eq(&match_, res) {
+                            let mutmatch = get_mut_unchecked(&mut match_);
+                            if let Some(token_ms) = mutmatch
+                                .context
+                                .as_mut()
+                                .and_then(|c| c.token_matches.as_mut())
+                            {
+                                token_ms.retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
                             }
                         }
                     }
@@ -608,7 +709,7 @@ impl Resource {
                 if push
                     || face.remote_key_interests.values().any(|res| {
                         res.as_ref()
-                            .map(|res| res.matches(&nonwild_prefix))
+                            .map(|res| res.matches(&nonwild_prefix, Resource::KEY))
                             .unwrap_or(true)
                     })
                 {
@@ -727,7 +828,7 @@ impl Resource {
             .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+    pub fn get_matches(tables: &Tables, key_expr: &keyexpr, flag: u8) -> Vec<Weak<Resource>> {
         pub fn visit_nodes<T>(node: T, mut visit: impl FnMut(T, &mut VecDeque<T>)) {
             let mut nodes = VecDeque::from([node]);
             while let Some(node) = nodes.pop_front() {
@@ -744,94 +845,154 @@ impl Resource {
                 }
             });
         }
-        fn get_matches_from(
-            key_expr: &keyexpr,
-            from: &Arc<Resource>,
-            matches: &mut Vec<Weak<Resource>>,
-        ) {
-            visit_nodes((key_expr, from), |(key_expr, from), nodes| {
-                if from.parent.is_none() || from.suffix() == "/" {
-                    for child in from.children.iter() {
-                        nodes.push_back((key_expr, child));
-                    }
-                    return;
+
+        let mut matches = Vec::new();
+        visit_nodes((key_expr, &tables.root_res), |(key_expr, from), nodes| {
+            if from.flags & flag == 0 {
+                return;
+            }
+
+            if from.parent.is_none() || from.suffix() == "/" {
+                for child in from.children.iter() {
+                    nodes.push_back((key_expr, child));
                 }
-                let suffix: &keyexpr = from
-                    .suffix()
-                    .strip_prefix('/')
-                    .unwrap_or(from.suffix())
-                    .try_into()
-                    .unwrap();
-                let (ke_chunk, ke_rest) = match key_expr.split_once('/') {
-                    // SAFETY: chunks of keyexpr are valid keyexprs
-                    Some((chunk, rest)) => unsafe {
-                        (
-                            keyexpr::from_str_unchecked(chunk),
-                            Some(keyexpr::from_str_unchecked(rest)),
-                        )
-                    },
-                    None => (key_expr, None),
-                };
-                if ke_chunk.intersects(suffix) {
-                    match ke_rest {
-                        None => {
-                            if ke_chunk.as_bytes() == b"**" {
-                                push_all(from, matches)
-                            } else {
-                                if from.context.is_some() {
-                                    matches.push(Arc::downgrade(from));
-                                }
-                                if suffix.as_bytes() == b"**" {
-                                    for child in from.children.iter() {
-                                        nodes.push_back((key_expr, child));
-                                    }
-                                }
-                                if let Some(child) =
-                                    from.children.get("/**").or_else(|| from.children.get("**"))
-                                {
-                                    if child.context.is_some() {
-                                        matches.push(Arc::downgrade(child))
-                                    }
-                                }
+                return;
+            }
+
+            let suffix: &keyexpr = from
+                .suffix()
+                .strip_prefix('/')
+                .unwrap_or(from.suffix())
+                .try_into()
+                .unwrap();
+            let (ke_chunk, ke_rest) = match key_expr.split_once('/') {
+                // SAFETY: chunks of keyexpr are valid keyexprs
+                Some((chunk, rest)) => unsafe {
+                    (
+                        keyexpr::from_str_unchecked(chunk),
+                        Some(keyexpr::from_str_unchecked(rest)),
+                    )
+                },
+                None => (key_expr, None),
+            };
+            if ke_chunk.intersects(suffix) {
+                match ke_rest {
+                    None => {
+                        if ke_chunk.as_bytes() == b"**" {
+                            push_all(from, &mut matches)
+                        } else {
+                            if from.context.is_some() {
+                                matches.push(Arc::downgrade(from));
                             }
-                        }
-                        Some(rest) if rest.as_bytes() == b"**" => push_all(from, matches),
-                        Some(rest) => {
-                            let recheck_keyexpr_one_level_lower =
-                                ke_chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
-                            for child in from.children.iter() {
-                                nodes.push_back((rest, child));
-                                if recheck_keyexpr_one_level_lower {
+                            if suffix.as_bytes() == b"**" {
+                                for child in from.children.iter() {
                                     nodes.push_back((key_expr, child));
                                 }
                             }
-                            if recheck_keyexpr_one_level_lower {
-                                nodes.push_back((rest, from));
+                            if let Some(child) =
+                                from.children.get("/**").or_else(|| from.children.get("**"))
+                            {
+                                if child.context.is_some() {
+                                    matches.push(Arc::downgrade(child))
+                                }
                             }
                         }
-                    };
-                }
-            })
-        }
-        let mut matches = Vec::new();
-        get_matches_from(key_expr, &tables.root_res, &mut matches);
+                    }
+                    Some(rest) if rest.as_bytes() == b"**" => push_all(from, &mut matches),
+                    Some(rest) => {
+                        let recheck_keyexpr_one_level_lower =
+                            ke_chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
+                        for child in from.children.iter() {
+                            nodes.push_back((rest, child));
+                            if recheck_keyexpr_one_level_lower {
+                                nodes.push_back((key_expr, child));
+                            }
+                        }
+                        if recheck_keyexpr_one_level_lower {
+                            nodes.push_back((rest, from));
+                        }
+                    }
+                };
+            }
+        });
         matches.sort_unstable_by_key(Weak::as_ptr);
         matches.dedup_by_key(|res| Weak::as_ptr(res));
         matches
     }
 
-    pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
-        if res.context.is_some() {
-            for match_ in &matches {
-                let mut match_ = match_.upgrade().unwrap();
-                get_mut_unchecked(&mut match_)
-                    .context_mut()
-                    .matches
-                    .push(Arc::downgrade(res));
-            }
-            get_mut_unchecked(res).context_mut().matches = matches;
+    pub fn get_matches_for<'a>(
+        tables: &Tables,
+        res: &'a Arc<Resource>,
+        flag: u8,
+    ) -> Cow<'a, [Weak<Resource>]> {
+        let matches = match flag {
+            Resource::SUB => res.context.as_ref().and_then(|c| c.subs_matches.as_ref()),
+            Resource::QAB => res.context.as_ref().and_then(|c| c.qabl_matches.as_ref()),
+            Resource::TOK => res.context.as_ref().and_then(|c| c.token_matches.as_ref()),
+            _ => None,
+        };
+        if let Some(matches) = matches {
+            Cow::from(matches)
         } else {
+            let Some(key_expr) = Resource::keyexpr(res) else {
+                tracing::error!("Call Resource::get_matches_for() on root Resource");
+                return Cow::from(vec![]);
+            };
+            Cow::from(Resource::get_matches(tables, key_expr, flag))
+        }
+    }
+
+    pub fn match_resource(
+        _tables: &Tables,
+        res: &mut Arc<Resource>,
+        matches: Vec<Weak<Resource>>,
+        flag: u8,
+    ) {
+        if res.context.is_none() {
             tracing::error!("Call match_resource() on context less res {}", res.expr());
+            return;
+        }
+        match flag {
+            Resource::SUB => {
+                for match_ in &matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if let Some(m) = get_mut_unchecked(&mut match_)
+                        .context_mut()
+                        .subs_matches
+                        .as_mut()
+                    {
+                        m.push(Arc::downgrade(res));
+                    }
+                }
+                get_mut_unchecked(res).context_mut().subs_matches = Some(matches);
+            }
+            Resource::QAB => {
+                for match_ in &matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if let Some(m) = get_mut_unchecked(&mut match_)
+                        .context_mut()
+                        .qabl_matches
+                        .as_mut()
+                    {
+                        m.push(Arc::downgrade(res));
+                    }
+                }
+                get_mut_unchecked(res).context_mut().qabl_matches = Some(matches);
+            }
+            Resource::TOK => {
+                for match_ in &matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if let Some(m) = get_mut_unchecked(&mut match_)
+                        .context_mut()
+                        .token_matches
+                        .as_mut()
+                    {
+                        m.push(Arc::downgrade(res));
+                    }
+                }
+                get_mut_unchecked(res).context_mut().token_matches = Some(matches);
+            }
+            _ => tracing::error!("Invalid flag in Resource::match_resource()"),
         }
     }
 
@@ -895,21 +1056,17 @@ pub(crate) fn register_expr(
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
-                            .unwrap_or_default();
                         drop(rtables);
                         let mut wtables = zwrite!(tables.tables);
-                        let mut res = Resource::make_resource(
+                        let res = Resource::make_resource(
                             tables.hat_code.as_ref(),
                             &mut wtables,
                             &mut prefix,
                             expr.suffix.as_ref(),
                         );
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
                         (res, wtables)
                     };
+                get_mut_unchecked::<Resource>(&mut res).flag(Resource::KEY);
                 let ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
@@ -964,19 +1121,19 @@ pub(crate) fn register_expr_interest(
                 } else {
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
+                    // let mut matches = keyexpr::new(fullexpr.as_str())
+                    //     .map(|ke| Resource::get_matches(&rtables, ke))
+                    //     .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res = Resource::make_resource(
+                    let res = Resource::make_resource(
                         tables.hat_code.as_ref(),
                         &mut wtables,
                         &mut prefix,
                         expr.suffix.as_ref(),
                     );
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
+                    // matches.push(Arc::downgrade(&res));
+                    // Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
                 get_mut_unchecked(face)

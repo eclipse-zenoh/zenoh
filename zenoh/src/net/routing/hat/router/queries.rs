@@ -253,7 +253,7 @@ fn propagate_simple_queryable(
             && face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|i| i.options.queryables() && i.matches(res))
+                .any(|i| i.options.queryables() && i.matches(res, Resource::QAB))
             && if full_peers_net {
                 dst_face.whatami == WhatAmI::Client
             } else {
@@ -574,14 +574,17 @@ fn propagate_forget_simple_queryable(
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_qabls(&m, &face)
-                            || remote_linkstatepeer_qabls(tables, &m)
-                            || remote_router_qabls(tables, &m))
+            if !Resource::get_matches_for(tables, &res, Resource::QAB)
+                .iter()
+                .any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_simple_qabls(&m, &face)
+                                || remote_linkstatepeer_qabls(tables, &m)
+                                || remote_router_qabls(tables, &m))
+                    })
                 })
-            }) {
+            {
                 if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                     send_declare(
                         &face.primitives,
@@ -833,14 +836,17 @@ pub(super) fn undeclare_simple_queryable(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade().is_some_and(|m| {
-                        m.context.is_some()
-                            && (remote_simple_qabls(&m, face)
-                                || remote_linkstatepeer_qabls(tables, &m)
-                                || remote_router_qabls(tables, &m))
+                if !Resource::get_matches_for(tables, &res, Resource::QAB)
+                    .iter()
+                    .any(|m| {
+                        m.upgrade().is_some_and(|m| {
+                            m.context.is_some()
+                                && (remote_simple_qabls(&m, face)
+                                    || remote_linkstatepeer_qabls(tables, &m)
+                                    || remote_router_qabls(tables, &m))
+                        })
                     })
-                }) {
+                {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         send_declare(
                             &face.primitives,
@@ -1156,7 +1162,7 @@ pub(crate) fn declare_qabl_interest(
             if aggregate {
                 if hat!(tables).router_qabls.iter().any(|qabl| {
                     qabl.context.is_some()
-                        && qabl.matches(res)
+                        && qabl.matches(res, Resource::QAB)
                         && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
                             || res_hat!(qabl)
                                 .linkstatepeer_qabls
@@ -1197,7 +1203,7 @@ pub(crate) fn declare_qabl_interest(
             } else {
                 for qabl in hat!(tables).router_qabls.iter() {
                     if qabl.context.is_some()
-                        && qabl.matches(res)
+                        && qabl.matches(res, Resource::QAB)
                         && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
                             || res_hat!(qabl)
                                 .linkstatepeer_qabls
@@ -1439,9 +1445,8 @@ impl HatQueriesTrait for HatCode {
         let matches = expr
             .resource()
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::QAB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::QAB)));
 
         let master = !hat!(tables).full_net(WhatAmI::Peer)
             || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
@@ -1516,9 +1521,8 @@ impl HatQueriesTrait for HatCode {
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::QAB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::QAB)));
 
         let master = !hat!(tables).full_net(WhatAmI::Peer)
             || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())

@@ -121,7 +121,7 @@ fn propagate_simple_subscription_to(
         let matching_interests = face_hat!(dst_face)
             .remote_interests
             .values()
-            .filter(|i| i.options.subscribers() && i.matches(res))
+            .filter(|i| i.options.subscribers() && i.matches(res, Resource::SUB))
             .cloned()
             .collect::<Vec<_>>();
 
@@ -450,14 +450,17 @@ fn propagate_forget_simple_subscription(
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_subs(&m, &face)
-                            || remote_linkstatepeer_subs(tables, &m)
-                            || remote_router_subs(tables, &m))
+            if !Resource::get_matches_for(tables, &res, Resource::SUB)
+                .iter()
+                .any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_simple_subs(&m, &face)
+                                || remote_linkstatepeer_subs(tables, &m)
+                                || remote_router_subs(tables, &m))
+                    })
                 })
-            }) {
+            {
                 if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                     send_declare(
                         &face.primitives,
@@ -696,14 +699,17 @@ pub(super) fn undeclare_simple_subscription(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade().is_some_and(|m| {
-                        m.context.is_some()
-                            && (remote_simple_subs(&m, face)
-                                || remote_linkstatepeer_subs(tables, &m)
-                                || remote_router_subs(tables, &m))
+                if !Resource::get_matches_for(tables, &res, Resource::SUB)
+                    .iter()
+                    .any(|m| {
+                        m.upgrade().is_some_and(|m| {
+                            m.context.is_some()
+                                && (remote_simple_subs(&m, face)
+                                    || remote_linkstatepeer_subs(tables, &m)
+                                    || remote_router_subs(tables, &m))
+                        })
                     })
-                }) {
+                {
                     if let Some(id) = face_hat_mut!(&mut face).local_subs.remove(&res) {
                         send_declare(
                             &face.primitives,
@@ -955,7 +961,7 @@ pub(crate) fn declare_sub_interest(
             if aggregate {
                 if hat!(tables).router_subs.iter().any(|sub| {
                     sub.context.is_some()
-                        && sub.matches(res)
+                        && sub.matches(res, Resource::SUB)
                         && (remote_simple_subs(sub, face)
                             || remote_linkstatepeer_subs(tables, sub)
                             || remote_router_subs(tables, sub))
@@ -983,7 +989,7 @@ pub(crate) fn declare_sub_interest(
             } else {
                 for sub in &hat!(tables).router_subs {
                     if sub.context.is_some()
-                        && sub.matches(res)
+                        && sub.matches(res, Resource::SUB)
                         && (res_hat!(sub).router_subs.iter().any(|r| *r != tables.zid)
                             || res_hat!(sub)
                                 .linkstatepeer_subs
@@ -1265,9 +1271,8 @@ impl HatPubSubTrait for HatCode {
         let matches = expr
             .resource()
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::SUB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::SUB)));
 
         let master = !hat!(tables).full_net(WhatAmI::Peer)
             || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())
@@ -1376,9 +1381,8 @@ impl HatPubSubTrait for HatCode {
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::SUB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::SUB)));
 
         let master = !hat!(tables).full_net(WhatAmI::Peer)
             || *hat!(tables).elect_router(&tables.zid, key_expr, hat!(tables).shared_nodes.iter())

@@ -98,7 +98,7 @@ fn propagate_simple_queryable_to(
             || face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|i| i.options.queryables() && i.matches(res)))
+                .any(|i| i.options.queryables() && i.matches(res, Resource::QAB)))
         && src_face
             .as_ref()
             .map(|src_face| {
@@ -207,8 +207,8 @@ fn propagate_forget_simple_queryable(
     res: &mut Arc<Resource>,
     send_declare: &mut SendDeclare,
 ) {
-    for face in tables.faces.values_mut() {
-        if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
+    for mut face in tables.faces.values().cloned() {
+        if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
             send_declare(
                 &face.primitives,
                 RoutingContext::with_expr(
@@ -232,11 +232,14 @@ fn propagate_forget_simple_queryable(
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade()
-                    .is_some_and(|m| m.context.is_some() && remote_simple_qabls(&m, face))
-            }) {
-                if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(&res) {
+            if !Resource::get_matches_for(tables, &res, Resource::QAB)
+                .iter()
+                .any(|m| {
+                    m.upgrade()
+                        .is_some_and(|m| m.context.is_some() && remote_simple_qabls(&m, &face))
+                })
+            {
+                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -306,10 +309,13 @@ pub(super) fn undeclare_simple_queryable(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade()
-                        .is_some_and(|m| m.context.is_some() && (remote_simple_qabls(&m, face)))
-                }) {
+                if !Resource::get_matches_for(tables, &res, Resource::QAB)
+                    .iter()
+                    .any(|m| {
+                        m.upgrade()
+                            .is_some_and(|m| m.context.is_some() && (remote_simple_qabls(&m, face)))
+                    })
+                {
                     if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
                         send_declare(
                             &face.primitives,
@@ -417,7 +423,7 @@ pub(super) fn declare_qabl_interest(
                         && face_hat!(src_face)
                             .remote_qabls
                             .values()
-                            .any(|qabl| qabl.context.is_some() && qabl.matches(res))
+                            .any(|qabl| qabl.context.is_some() && qabl.matches(res, Resource::QAB))
                 }) {
                     let info = local_qabl_info(tables, res, face);
                     let id = make_qabl_id(res, face, mode, info);
@@ -450,7 +456,7 @@ pub(super) fn declare_qabl_interest(
                 {
                     if src_face.id != face.id {
                         for qabl in face_hat!(src_face).remote_qabls.values() {
-                            if qabl.context.is_some() && qabl.matches(res) {
+                            if qabl.context.is_some() && qabl.matches(res, Resource::QAB) {
                                 let info = local_qabl_info(tables, qabl, face);
                                 let id = make_qabl_id(qabl, face, mode, info);
                                 let key_expr = Resource::decl_key(
@@ -612,9 +618,8 @@ impl HatQueriesTrait for HatCode {
         let matches = expr
             .resource()
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::QAB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::QAB)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -677,9 +682,8 @@ impl HatQueriesTrait for HatCode {
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+            .map(|res| Resource::get_matches_for(tables, res, Resource::QAB))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr, Resource::QAB)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();

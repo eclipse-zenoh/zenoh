@@ -22,6 +22,7 @@ use zenoh_protocol::{
         interest::InterestId,
     },
 };
+use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
@@ -66,7 +67,7 @@ pub(crate) fn declare_token(
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .map(|ke| Resource::get_matches(&rtables, ke, Resource::TOK))
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
@@ -77,9 +78,10 @@ pub(crate) fn declare_token(
                         expr.suffix.as_ref(),
                     );
                     matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
+                    Resource::match_resource(&wtables, &mut res, matches, Resource::TOK);
                     (res, wtables)
                 };
+            get_mut_unchecked::<Resource>(&mut res).flag(Resource::TOK);
 
             hat_code.declare_token(
                 &mut wtables,
@@ -130,7 +132,7 @@ pub(crate) fn undeclare_token(
                         let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.wire_expr.suffix.as_ref());
                         let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
+                            .map(|ke| Resource::get_matches(&rtables, ke, Resource::TOK))
                             .unwrap_or_default();
                         drop(rtables);
                         let mut wtables = zwrite!(tables.tables);
@@ -141,7 +143,7 @@ pub(crate) fn undeclare_token(
                             expr.wire_expr.suffix.as_ref(),
                         );
                         matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
+                        Resource::match_resource(&wtables, &mut res, matches, Resource::TOK);
                         (Some(res), wtables)
                     }
                 }
@@ -157,9 +159,11 @@ pub(crate) fn undeclare_token(
         }
     };
 
-    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
+    if let Some(mut res) =
+        hat_code.undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
     {
         tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
+        get_mut_unchecked::<Resource>(&mut res).unflag(Resource::TOK);
     } else {
         // NOTE: This is expected behavior if liveliness tokens are denied with ingress ACL interceptor.
         tracing::debug!("{} Undeclare unknown token {}", face, id);

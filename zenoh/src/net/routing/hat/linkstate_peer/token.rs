@@ -119,7 +119,7 @@ fn propagate_simple_token_to(
             let matching_interests = face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .filter(|i| i.options.tokens() && i.matches(res))
+                .filter(|i| i.options.tokens() && i.matches(res, Resource::TOK))
                 .cloned()
                 .collect::<Vec<_>>();
 
@@ -386,13 +386,16 @@ fn propagate_forget_simple_token(
             .cloned()
             .collect::<Vec<Arc<Resource>>>()
         {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_tokens(tables, &m, &face)
-                            || remote_linkstatepeer_tokens(tables, &m))
+            if !Resource::get_matches_for(tables, &res, Resource::TOK)
+                .iter()
+                .any(|m| {
+                    m.upgrade().is_some_and(|m| {
+                        m.context.is_some()
+                            && (remote_simple_tokens(tables, &m, &face)
+                                || remote_linkstatepeer_tokens(tables, &m))
+                    })
                 })
-            }) {
+            {
                 if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                     send_declare(
                         &face.primitives,
@@ -541,13 +544,16 @@ pub(super) fn undeclare_simple_token(
                     .cloned()
                     .collect::<Vec<Arc<Resource>>>()
                 {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade().is_some_and(|m| {
-                            m.context.is_some()
-                                && (remote_simple_tokens(tables, &m, face)
-                                    || remote_linkstatepeer_tokens(tables, &m))
+                    if !Resource::get_matches_for(tables, &res, Resource::TOK)
+                        .iter()
+                        .any(|m| {
+                            m.upgrade().is_some_and(|m| {
+                                m.context.is_some()
+                                    && (remote_simple_tokens(tables, &m, face)
+                                        || remote_linkstatepeer_tokens(tables, &m))
+                            })
                         })
-                    }) {
+                    {
                         if let Some(id) = face_hat_mut!(&mut face).local_tokens.remove(&res) {
                             send_declare(
                                 &face.primitives,
@@ -671,7 +677,7 @@ pub(crate) fn declare_token_interest(
             if aggregate {
                 if hat!(tables).linkstatepeer_tokens.iter().any(|token| {
                     token.context.is_some()
-                        && token.matches(res)
+                        && token.matches(res, Resource::TOK)
                         && (remote_simple_tokens(tables, token, face)
                             || remote_linkstatepeer_tokens(tables, token))
                 }) {
@@ -694,7 +700,7 @@ pub(crate) fn declare_token_interest(
             } else {
                 for token in &hat!(tables).linkstatepeer_tokens {
                     if token.context.is_some()
-                        && token.matches(res)
+                        && token.matches(res, Resource::TOK)
                         && (remote_simple_tokens(tables, token, face)
                             || remote_linkstatepeer_tokens(tables, token))
                     {
