@@ -89,7 +89,7 @@ pub(crate) struct RouteBuilder<T = Direction> {
 }
 
 impl<T> RouteBuilder<T> {
-    /// Create a new empty builder.
+    /// Creates a new empty builder.
     pub(crate) fn new() -> Self {
         Self {
             route: Vec::new(),
@@ -97,10 +97,20 @@ impl<T> RouteBuilder<T> {
         }
     }
 
-    /// Insert a new direction if it has not been registered for the given face.
+    /// Inserts a new direction if it has not been registered for the given face.
     pub(crate) fn insert(&mut self, face_id: usize, direction: impl FnOnce() -> T) {
         if self.faces.insert(face_id) {
             self.route.push(direction());
+        }
+    }
+
+    pub(crate) fn try_insert(&mut self, face_id: usize, direction: impl FnOnce() -> Option<T>) {
+        dbg!(&self.faces);
+        if !self.faces.contains(&face_id) {
+            if let Some(direction) = direction() {
+                self.faces.insert(face_id);
+                self.route.push(direction);
+            }
         }
     }
 

@@ -24,7 +24,7 @@ use zenoh_protocol::{
             common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
             UndeclareSubscriber,
         },
-        interest::{InterestId, InterestMode},
+        interest::{InterestId, InterestMode, InterestOptions},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -626,43 +626,6 @@ impl HatPubSubTrait for HatCode {
             source_type
         );
 
-        if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami == WhatAmI::Router)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.subscribers()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
-                            .unwrap_or(true)
-                }) || face_hat!(face)
-                    .remote_subs
-                    .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), key_expr))
-                {
-                    let wire_expr = expr.get_best_key(face.id);
-                    route.insert(face.id, || {
-                        (face.clone(), wire_expr.to_owned(), NodeId::default())
-                    });
-                }
-            }
-
-            for face in tables.faces.values().filter(|f| {
-                f.whatami == WhatAmI::Peer
-                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
-            }) {
-                route.insert(face.id, || {
-                    let wire_expr = expr.get_best_key(face.id);
-                    (face.clone(), wire_expr.to_owned(), NodeId::default())
-                });
-            }
-        }
-
         let matches = expr
             .resource()
             .as_ref()
@@ -688,6 +651,32 @@ impl HatPubSubTrait for HatCode {
                 }
             }
         }
+
+        if source_type == WhatAmI::Client {
+            for face in tables.faces.values() {
+                if face.whatami == WhatAmI::Router {
+                    route.try_insert(face.id, || {
+                        face.local_interests
+                            .values()
+                            .all(|interest| {
+                                !interest.finalized_includes(InterestOptions::subscribers, key_expr)
+                            })
+                            .then(|| {
+                                let wire_expr = expr.get_best_key(face.id);
+                                (face.clone(), wire_expr.to_owned(), NodeId::default())
+                            })
+                    });
+                } else if face.whatami == WhatAmI::Peer
+                    && initial_interest(face).is_some_and(|i| !i.finalized)
+                {
+                    route.insert(face.id, || {
+                        let wire_expr = expr.get_best_key(face.id);
+                        (face.clone(), wire_expr.to_owned(), NodeId::default())
+                    });
+                }
+            }
+        }
+
         for mcast_group in &tables.mcast_groups {
             route.insert(mcast_group.id, || {
                 (

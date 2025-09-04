@@ -23,6 +23,7 @@ use std::{
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
@@ -58,6 +59,22 @@ pub(crate) struct InterestState {
     pub(crate) options: InterestOptions,
     pub(crate) res: Option<Arc<Resource>>,
     pub(crate) finalized: bool,
+}
+
+impl InterestState {
+    pub(crate) fn finalized_includes(
+        &self,
+        option_is: impl FnOnce(&InterestOptions) -> bool,
+        key_expr: &keyexpr,
+    ) -> bool {
+        self.finalized
+            && option_is(&self.options)
+            && self
+                .res
+                .as_ref()
+                .and_then(|res| res.keyexpr())
+                .map_or(true, |ke| ke.includes(key_expr))
+    }
 }
 
 pub(crate) type FaceId = usize;

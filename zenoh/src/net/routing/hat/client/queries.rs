@@ -22,9 +22,12 @@ use zenoh_protocol::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI,
     },
-    network::declare::{
-        common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare, DeclareBody,
-        DeclareQueryable, QueryableId, UndeclareQueryable,
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
+            DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
+        },
+        interest::InterestOptions,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -358,34 +361,6 @@ impl HatQueriesTrait for HatCode {
             source_type
         );
 
-        if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami != WhatAmI::Client)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
-                            .unwrap_or(true)
-                }) || face_hat!(face)
-                    .remote_qabls
-                    .values()
-                    .any(|qbl| KeyExpr::keyexpr_intersect(qbl.expr(), key_expr))
-                {
-                    let wire_expr = expr.get_best_key(face.id);
-                    route.push(QueryTargetQabl {
-                        direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
-                        info: None,
-                    });
-                }
-            }
-        }
-
         let matches = expr
             .resource()
             .as_ref()
@@ -402,6 +377,25 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
+
+        if source_type == WhatAmI::Client {
+            for face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami != WhatAmI::Client)
+            {
+                if face.local_interests.values().all(|interest| {
+                    !interest.finalized_includes(InterestOptions::queryables, key_expr)
+                }) {
+                    let wire_expr = expr.get_best_key(face.id);
+                    route.push(QueryTargetQabl {
+                        direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                        info: None,
+                    });
+                }
+            }
+        }
+
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }

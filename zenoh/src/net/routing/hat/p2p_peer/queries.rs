@@ -27,7 +27,7 @@ use zenoh_protocol::{
             common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
         },
-        interest::{InterestId, InterestMode},
+        interest::{InterestId, InterestMode, InterestOptions},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -615,23 +615,19 @@ impl HatQueriesTrait for HatCode {
 
         if source_type == WhatAmI::Client {
             // TODO: BestMatching: What if there is a local compete ?
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami == WhatAmI::Router)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
-                            .unwrap_or(true)
-                }) || face_hat!(face)
-                    .remote_qabls
-                    .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), key_expr))
+            for face in tables.faces.values() {
+                if face.whatami == WhatAmI::Router {
+                    if face.local_interests.values().all(|interest| {
+                        !interest.finalized_includes(InterestOptions::queryables, key_expr)
+                    }) {
+                        let wire_expr = expr.get_best_key(face.id);
+                        route.push(QueryTargetQabl {
+                            direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                            info: None,
+                        });
+                    }
+                } else if face.whatami == WhatAmI::Peer
+                    && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
