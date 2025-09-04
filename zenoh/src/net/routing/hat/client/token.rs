@@ -126,7 +126,7 @@ fn declare_simple_token(
                 register_simple_token(tables, &mut face.clone(), id, res);
             }
             let id = make_token_id(res, &mut interest.src_face.clone(), interest.mode);
-            let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+            let (wire_expr, _, _) = Resource::get_best_key(res, "", interest.src_face.id);
             send_declare(
                 &interest.src_face.primitives,
                 RoutingContext::with_expr(
@@ -210,7 +210,7 @@ fn propagate_forget_simple_token(
                         body: DeclareBody::UndeclareToken(UndeclareToken {
                             id: face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst),
                             ext_wire_expr: WireExprType {
-                                wire_expr: Resource::get_best_key(res, "", face.id),
+                                wire_expr: Resource::get_best_key(res, "", face.id).0,
                             },
                         }),
                     },

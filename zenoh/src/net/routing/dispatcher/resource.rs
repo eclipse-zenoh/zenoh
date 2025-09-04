@@ -39,10 +39,7 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::{
-        face::{Face, FaceId},
-        tables::RoutingExpr,
-    },
+    dispatcher::{face::FaceId, tables::RoutingExpr},
     hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
@@ -51,7 +48,13 @@ use crate::net::routing::{
 
 pub(crate) type NodeId = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
+pub(crate) type Direction = (
+    Arc<FaceState>,
+    WireExpr<'static>,
+    String,
+    Option<InterceptorCache>,
+    NodeId,
+);
 pub(crate) type Route = Vec<Direction>;
 
 pub(crate) struct QueryTargetQabl {
@@ -66,9 +69,15 @@ impl QueryTargetQabl {
         complete: bool,
     ) -> Option<Self> {
         let qabl = ctx.qabl?;
-        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+        let (wire_expr, full_expr, cache) = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
         Some(Self {
-            direction: (ctx.face.clone(), key_expr.to_owned(), NodeId::default()),
+            direction: (
+                ctx.face.clone(),
+                wire_expr,
+                full_expr,
+                cache,
+                NodeId::default(),
+            ),
             info: Some(QueryableInfoType {
                 complete: complete && qabl.complete,
                 // NOTE: local client faces are nearer than remote client faces
@@ -111,14 +120,15 @@ impl<T> RouteBuilder<T> {
 }
 pub(crate) type QueryRouteBuilder = RouteBuilder<(Direction, RequestId)>;
 
-pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
+#[derive(Clone)]
+pub(crate) struct InterceptorCache(Arc<Cache<Option<Box<dyn Any + Send + Sync>>>>);
 pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
 
 impl InterceptorCache {
     pub(crate) fn new(value: Option<Box<dyn Any + Send + Sync>>, version: usize) -> Self {
-        Self(Cache::<Option<Box<dyn Any + Send + Sync>>>::new(
+        Self(Arc::new(Cache::<Option<Box<dyn Any + Send + Sync>>>::new(
             value, version,
-        ))
+        )))
     }
 
     pub(crate) fn empty() -> Self {
@@ -126,14 +136,14 @@ impl InterceptorCache {
     }
 
     #[inline]
-    fn value(
+    pub(crate) fn value(
         &self,
         interceptor: &InterceptorsChain,
-        resource: &Resource,
+        key_expr: Option<&keyexpr>,
     ) -> Option<InterceptorCacheValueType> {
         self.0
             .value(interceptor.version, || {
-                interceptor.compute_keyexpr_cache(resource.keyexpr()?)
+                interceptor.compute_keyexpr_cache(key_expr?)
             })
             .ok()
     }
@@ -636,31 +646,39 @@ impl Resource {
     /// If none is found, and if the tested resource itself doesn't have a declared keyexpr,
     /// then the parent tree is walked through. If there is still no declared keyexpr, the whole
     /// prefix+suffix string is used.
-    pub fn get_best_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+    pub fn get_best_key(
+        &self,
+        suffix: &str,
+        sid: usize,
+    ) -> (WireExpr<'static>, String, Option<InterceptorCache>) {
         /// Retrieve a declared keyexpr, either local or remote.
-        fn get_wire_expr<'a>(
+        fn is_best_key<'a>(
             prefix: &Resource,
             suffix: impl FnOnce() -> Cow<'a, str>,
             sid: usize,
-        ) -> Option<WireExpr<'a>> {
+        ) -> Option<(WireExpr<'static>, String, Option<InterceptorCache>)> {
             let ctx = prefix.session_ctxs.get(&sid)?;
             let (scope, mapping) = match (ctx.remote_expr_id, ctx.local_expr_id) {
                 (Some(expr_id), _) => (expr_id, Mapping::Receiver),
                 (_, Some(expr_id)) => (expr_id, Mapping::Sender),
                 _ => return None,
             };
-            Some(WireExpr {
+            let suffix = suffix();
+            let cache = suffix.is_empty().then(|| ctx.e_interceptor_cache.clone());
+            let full_expr = [prefix.expr(), &suffix].concat();
+            let wire_expr = WireExpr {
                 scope,
-                suffix: suffix(),
+                suffix,
                 mapping,
-            })
+            };
+            Some((wire_expr.to_owned(), full_expr, cache))
         }
         /// Walk through the children tree, looking for a declared keyexpr.
-        fn get_best_child_key<'a>(
+        fn get_best_child_key(
             mut prefix: &Resource,
-            suffix: &'a str,
+            suffix: &str,
             sid: usize,
-        ) -> Option<WireExpr<'a>> {
+        ) -> Option<(WireExpr<'static>, String, Option<InterceptorCache>)> {
             let mut suffix_rest = suffix;
             // do not use recursion as the tree may have arbitrary depth
             // first we get the closest matching child
@@ -673,8 +691,8 @@ impl Resource {
             }
             // then we go backward checking the child and its parents
             while suffix_rest != suffix {
-                if let Some(wire_expr) = get_wire_expr(prefix, || suffix_rest.into(), sid) {
-                    return Some(wire_expr);
+                if let Some(best_key) = is_best_key(prefix, || suffix_rest.into(), sid) {
+                    return Some(best_key);
                 }
                 suffix_rest = &suffix[suffix.len() - suffix_rest.len() - prefix.suffix().len()..];
                 prefix = prefix.parent.as_ref().unwrap();
@@ -682,17 +700,17 @@ impl Resource {
             None
         }
         /// Walk through the parent tree, looking for a declared keyexpr.
-        fn get_best_parent_key<'a>(
+        fn get_best_parent_key(
             prefix: &Resource,
-            suffix: &'a str,
+            suffix: &str,
             sid: usize,
             mut parent: &Resource,
-        ) -> Option<WireExpr<'a>> {
+        ) -> Option<(WireExpr<'static>, String, Option<InterceptorCache>)> {
             // do not use recursion as the tree may have arbitrary depth
             loop {
                 let parent_suffix = || [&prefix.expr[parent.expr.len()..], suffix].concat().into();
-                if let Some(wire_expr) = get_wire_expr(parent, parent_suffix, sid) {
-                    return Some(wire_expr);
+                if let Some(best_key) = is_best_key(parent, parent_suffix, sid) {
+                    return Some(best_key);
                 }
                 match parent.parent.as_ref() {
                     Some(p) => parent = p,
@@ -701,9 +719,12 @@ impl Resource {
             }
         }
         get_best_child_key(self, suffix, sid)
-            .or_else(|| get_wire_expr(self, || suffix.into(), sid))
+            .or_else(|| is_best_key(self, || suffix.into(), sid))
             .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
-            .unwrap_or_else(|| [&self.expr, suffix].concat().into())
+            .unwrap_or_else(|| {
+                let full_expr = [&self.expr, suffix].concat();
+                (full_expr.clone().into(), full_expr, None)
+            })
     }
 
     pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
@@ -822,22 +843,22 @@ impl Resource {
 
     pub(crate) fn get_ingress_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
-            .get(&face.state.id)
-            .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
+            .get(&face.id)
+            .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self.keyexpr()))
     }
 
     pub(crate) fn get_egress_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
-            .get(&face.state.id)
-            .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
+            .get(&face.id)
+            .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self.keyexpr()))
     }
 }
 

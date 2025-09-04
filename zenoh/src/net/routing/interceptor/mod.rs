@@ -24,7 +24,7 @@ use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
-use std::any::Any;
+use std::{any::Any, sync::Arc};
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -38,7 +38,7 @@ pub mod downsampling;
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::face::Face, interceptor::downsampling::downsampling_interceptor_factories,
+        dispatcher::face::FaceState, interceptor::downsampling::downsampling_interceptor_factories,
     },
 };
 
@@ -88,7 +88,7 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
 
 pub(crate) trait InterceptorContext {
     #[allow(dead_code)]
-    fn face(&self) -> Option<Face>;
+    fn face(&self) -> Option<Arc<FaceState>>;
     fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str>;
     #[inline]
     fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
@@ -174,13 +174,12 @@ impl InterceptorTrait for InterceptorsChain {
     }
 
     fn intercept<'a>(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        let mut ctx = ChainContext { ctx, index: 0 };
-        for interceptor in &self.interceptors {
+        for (index, interceptor) in self.interceptors.iter().enumerate() {
+            let mut ctx = ChainContext { ctx, index };
             if !interceptor.intercept(msg, &mut ctx as &mut dyn InterceptorContext) {
                 tracing::trace!("Msg intercepted!");
                 return false;
             }
-            ctx.index += 1;
         }
         true
     }
@@ -192,7 +191,7 @@ struct ChainContext<'a> {
 }
 
 impl InterceptorContext for ChainContext<'_> {
-    fn face(&self) -> Option<Face> {
+    fn face(&self) -> Option<Arc<FaceState>> {
         self.ctx.face()
     }
 

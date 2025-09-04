@@ -869,7 +869,7 @@ pub(super) fn pubsub_linkstate_change(
                 .collect::<Vec<Arc<Resource>>>();
             for res in to_forget {
                 if let Some(id) = face_hat_mut!(&mut src_face).local_subs.remove(&res) {
-                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
+                    let (wire_expr, _, _) = Resource::get_best_key(&res, "", src_face.id);
                     send_declare(
                         &src_face.primitives,
                         RoutingContext::with_expr(
@@ -1238,12 +1238,13 @@ impl HatPubSubTrait for HatCode {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                         route.insert(face.id, || {
-                                            let key_expr = Resource::get_best_key(
-                                                expr.prefix,
-                                                expr.suffix,
-                                                face.id,
-                                            );
-                                            (face.clone(), key_expr.to_owned(), source)
+                                            let (wire_expr, full_expr, cache) =
+                                                Resource::get_best_key(
+                                                    expr.prefix,
+                                                    expr.suffix,
+                                                    face.id,
+                                                );
+                                            (face.clone(), wire_expr, full_expr, cache, source)
                                         });
                                     }
                                 }
@@ -1324,8 +1325,15 @@ impl HatPubSubTrait for HatCode {
                 for (sid, context) in &mres.session_ctxs {
                     if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
                         route.insert(*sid, || {
-                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (context.face.clone(), key_expr.to_owned(), NodeId::default())
+                            let (wire_expr, full_expr, cache) =
+                                Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                            (
+                                context.face.clone(),
+                                wire_expr,
+                                full_expr,
+                                cache,
+                                NodeId::default(),
+                            )
                         });
                     }
                 }
@@ -1333,9 +1341,12 @@ impl HatPubSubTrait for HatCode {
         }
         for mcast_group in &tables.mcast_groups {
             route.insert(mcast_group.id, || {
+                let full_expr = expr.full_expr().to_string();
                 (
                     mcast_group.clone(),
-                    expr.full_expr().to_string().into(),
+                    full_expr.clone().into(),
+                    full_expr,
+                    None,
                     NodeId::default(),
                 )
             });
