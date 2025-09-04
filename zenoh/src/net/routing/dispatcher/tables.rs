@@ -13,6 +13,8 @@
 //
 use std::{
     any::Any,
+    borrow::Cow,
+    cell::OnceCell,
     collections::HashMap,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -23,8 +25,9 @@ use std::{
 
 use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohIdProto},
+    core::{ExprId, WhatAmI, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -40,9 +43,10 @@ use crate::net::{
 };
 
 pub(crate) struct RoutingExpr<'a> {
-    pub(crate) prefix: &'a Arc<Resource>,
-    pub(crate) suffix: &'a str,
-    full: Option<String>,
+    prefix: &'a Arc<Resource>,
+    suffix: &'a str,
+    resource: OnceCell<Option<&'a Arc<Resource>>>,
+    key_expr: OnceCell<Option<Cow<'a, keyexpr>>>,
 }
 
 impl<'a> RoutingExpr<'a> {
@@ -51,16 +55,45 @@ impl<'a> RoutingExpr<'a> {
         RoutingExpr {
             prefix,
             suffix,
-            full: None,
+            resource: OnceCell::new(),
+            key_expr: OnceCell::new(),
         }
     }
 
-    #[inline]
-    pub(crate) fn full_expr(&mut self) -> &str {
-        if self.full.is_none() {
-            self.full = Some(self.prefix.expr().to_string() + self.suffix);
+    pub(crate) fn resource(&self) -> Option<&'a Arc<Resource>> {
+        *self
+            .resource
+            .get_or_init(|| Resource::get_resource_ref(self.prefix, self.suffix))
+    }
+
+    fn compute_key_expr(&self) -> Option<Cow<'a, keyexpr>> {
+        let full_expr = match self.resource().as_ref() {
+            Some(res) => res
+                .keyexpr()
+                .ok_or_else(|| keyexpr::new("").unwrap_err())
+                .map(Cow::Borrowed),
+            None => [self.prefix.expr(), self.suffix]
+                .concat()
+                .try_into()
+                .map(Cow::Owned),
+        };
+        if let Err(e) = &full_expr {
+            tracing::warn!("Invalid KE reached the system: {}", e);
         }
-        self.full.as_ref().unwrap()
+        full_expr.ok()
+    }
+
+    pub(crate) fn key_expr(&self) -> Option<&keyexpr> {
+        self.key_expr
+            .get_or_init(|| self.compute_key_expr())
+            .as_deref()
+    }
+
+    pub(crate) fn get_best_key(&self, sid: usize) -> WireExpr<'a> {
+        match self.resource() {
+            Some(res) => res.get_best_key("", sid),
+            None => self.prefix.get_best_key(self.suffix, sid),
+        }
     }
 }
 
