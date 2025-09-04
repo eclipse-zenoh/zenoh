@@ -41,14 +41,11 @@ pub const fn unlikely(b: bool) -> bool {
 
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
-
 // +-------+
 // | ERROR |
 // +-------+
-
 #[cfg(not(feature = "std"))]
 pub use core::error::Error as IError;
-
 #[cfg(feature = "std")]
 pub use std::error::Error as IError;
 
