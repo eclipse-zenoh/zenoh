@@ -548,8 +548,9 @@ pub mod shm {
             with_id::WithProtocolID,
         },
         protocol_implementations::posix::{
-            posix_shm_client::PosixShmClient,
-            posix_shm_provider_backend::{PosixShmProviderBackend, PosixShmProviderBackendBuilder},
+            posix_shm_client::PosixShmClient, posix_shm_provider_backend::*,
+            posix_shm_provider_backend_binary_heap::*, posix_shm_provider_backend_buddy::*,
+            posix_shm_provider_backend_talc::*,
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},

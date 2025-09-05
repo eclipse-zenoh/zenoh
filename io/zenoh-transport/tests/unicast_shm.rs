@@ -34,7 +34,7 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{
         api::{
-            protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+            protocol_implementations::posix::posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
             provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
         },
         ShmBufInner,
@@ -152,7 +152,7 @@ mod tests {
         let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
-        let backend = PosixShmProviderBackend::builder(2 * MSG_SIZE)
+        let backend = PosixShmProviderBackendBinaryHeap::builder(2 * MSG_SIZE)
             .wait()
             .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();
@@ -333,7 +333,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14002).parse().unwrap();
         run(&endpoint, false).await;
     }
 
