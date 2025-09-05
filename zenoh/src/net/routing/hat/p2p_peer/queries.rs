@@ -27,7 +27,7 @@ use zenoh_protocol::{
             common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -636,9 +636,11 @@ impl HatQueriesTrait for HatCode {
             // TODO: BestMatching: What if there is a local compete ?
             for face in tables.faces.values() {
                 if face.whatami == WhatAmI::Router {
-                    if face.local_interests.values().all(|interest| {
-                        !interest.finalized_includes(InterestOptions::queryables, key_expr)
-                    }) {
+                    let has_interest_finalized = expr
+                        .resource()
+                        .and_then(|res| res.session_ctxs.get(&face.id))
+                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    if !has_interest_finalized {
                         let wire_expr = expr.get_best_key(face.id);
                         route.push(QueryTargetQabl {
                             direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),

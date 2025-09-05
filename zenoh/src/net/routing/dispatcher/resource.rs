@@ -155,6 +155,8 @@ pub(crate) struct SessionContext {
     pub(crate) subs: Option<SubscriberInfo>,
     pub(crate) qabl: Option<QueryableInfoType>,
     pub(crate) token: bool,
+    pub(crate) subscriber_interest_finalized: bool,
+    pub(crate) queryable_interest_finalized: bool,
     pub(crate) in_interceptor_cache: InterceptorCache,
     pub(crate) e_interceptor_cache: InterceptorCache,
 }
@@ -168,6 +170,8 @@ impl SessionContext {
             subs: None,
             qabl: None,
             token: false,
+            subscriber_interest_finalized: false,
+            queryable_interest_finalized: false,
             in_interceptor_cache: InterceptorCache::empty(),
             e_interceptor_cache: InterceptorCache::empty(),
         }

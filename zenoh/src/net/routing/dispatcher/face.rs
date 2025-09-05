@@ -23,7 +23,6 @@ use std::{
 use arc_swap::ArcSwap;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
     network::{
@@ -47,7 +46,7 @@ use super::{
 use crate::net::{
     primitives::{McastMux, Mux, Primitives},
     routing::{
-        dispatcher::interests::finalize_pending_interests,
+        dispatcher::interests::{finalize_pending_interests, RemoteInterest},
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -56,31 +55,58 @@ use crate::net::{
 };
 
 pub(crate) struct InterestState {
+    face: FaceId,
     pub(crate) options: InterestOptions,
     pub(crate) res: Option<Arc<Resource>>,
     pub(crate) finalized: bool,
 }
 
 impl InterestState {
-    pub(crate) fn finalized_includes(
-        &self,
-        option_is: impl FnOnce(&InterestOptions) -> bool,
-        key_expr: &keyexpr,
-    ) -> bool {
-        self.finalized
-            && option_is(&self.options)
-            && self
-                .res
-                .as_ref()
-                .and_then(|res| res.keyexpr())
-                .map_or(true, |ke| ke.includes(key_expr))
+    pub(crate) fn new(
+        face: FaceId,
+        options: InterestOptions,
+        res: Option<Arc<Resource>>,
+        finalized: bool,
+    ) -> Self {
+        let mut interest = Self {
+            face,
+            options,
+            res,
+            finalized: false,
+        };
+        if finalized {
+            interest.set_finalized();
+        }
+        interest
+    }
+
+    pub(crate) fn set_finalized(&mut self) {
+        self.finalized = true;
+        if self.options.subscribers() || self.options.queryables() {
+            if let Some(res) = self.res.as_mut().map(get_mut_unchecked) {
+                if let Some(ctx) = res.session_ctxs.get_mut(&self.face).map(get_mut_unchecked) {
+                    if self.options.subscribers() {
+                        ctx.subscriber_interest_finalized = true;
+                    }
+                    if self.options.queryables() {
+                        ctx.queryable_interest_finalized = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PartialEq<RemoteInterest> for InterestState {
+    fn eq(&self, other: &RemoteInterest) -> bool {
+        self.options == other.options && self.res == other.res
     }
 }
 
 pub(crate) type FaceId = usize;
 
 pub struct FaceState {
-    pub(crate) id: usize,
+    pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
@@ -454,7 +480,7 @@ impl Primitives for Face {
                     get_mut_unchecked(&mut self.state.clone())
                         .local_interests
                         .entry(id)
-                        .and_modify(|interest| interest.finalized = true);
+                        .and_modify(|interest| interest.set_finalized());
 
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];

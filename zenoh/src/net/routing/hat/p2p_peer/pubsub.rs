@@ -24,7 +24,7 @@ use zenoh_protocol::{
             common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
             UndeclareSubscriber,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -656,15 +656,14 @@ impl HatPubSubTrait for HatCode {
             for face in tables.faces.values() {
                 if face.whatami == WhatAmI::Router {
                     route.try_insert(face.id, || {
-                        face.local_interests
-                            .values()
-                            .all(|interest| {
-                                !interest.finalized_includes(InterestOptions::subscribers, key_expr)
-                            })
-                            .then(|| {
-                                let wire_expr = expr.get_best_key(face.id);
-                                (face.clone(), wire_expr.to_owned(), NodeId::default())
-                            })
+                        let has_interest_finalized = expr
+                            .resource()
+                            .and_then(|res| res.session_ctxs.get(&face.id))
+                            .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                        (!has_interest_finalized).then(|| {
+                            let wire_expr = expr.get_best_key(face.id);
+                            (face.clone(), wire_expr.to_owned(), NodeId::default())
+                        })
                     });
                 } else if face.whatami == WhatAmI::Peer
                     && initial_interest(face).is_some_and(|i| !i.finalized)
