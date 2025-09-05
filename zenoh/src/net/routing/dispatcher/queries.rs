@@ -680,3 +680,19 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
             });
     }
 }
+
+pub(crate) fn get_remote_queryables_count(
+    queryables: &HashMap<u32, (Arc<Resource>, bool)>,
+    res: &Arc<Resource>,
+    complete: bool,
+) -> (usize, usize) {
+    queryables.values().fold((0, 0), |mut a, (ref r, c)| {
+        if *r == *res {
+            a.0 += 1;
+            if *c == complete {
+                a.1 += 1;
+            }
+        }
+        a
+    })
+}

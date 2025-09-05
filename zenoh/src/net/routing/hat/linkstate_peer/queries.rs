@@ -51,7 +51,7 @@ use crate::{
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },
             hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-            router::disable_matches_query_routes,
+            router::{disable_matches_query_routes, get_remote_queryables_count},
             RoutingContext,
         },
     },
@@ -309,9 +309,11 @@ fn register_simple_queryable(
                 .entry(face.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
-        .qabl = Some(*qabl_info);
+        .add_queryable(qabl_info);
     }
-    face_hat_mut!(face).remote_qabls.insert(id, res.clone());
+    face_hat_mut!(face)
+        .remote_qabls
+        .insert(id, (res.clone(), qabl_info.complete));
 }
 
 fn declare_simple_queryable(
@@ -540,15 +542,15 @@ pub(super) fn undeclare_simple_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    complete: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if !face_hat_mut!(face)
-        .remote_qabls
-        .values()
-        .any(|s| *s == *res)
-    {
+    let (count, complete_count) =
+        get_remote_queryables_count(&face_hat_mut!(face).remote_qabls, res, complete);
+
+    if count == 0 || (complete && complete_count == 0) {
         if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).qabl = None;
+            get_mut_unchecked(ctx).remove_queryable(complete && count > 0);
         }
 
         let mut simple_qabls = simple_qabls(res);
@@ -557,6 +559,15 @@ pub(super) fn undeclare_simple_queryable(
         if simple_qabls.is_empty() {
             undeclare_linkstatepeer_queryable(tables, None, res, &tables.zid.clone(), send_declare);
         } else {
+            if count > 0 {
+                undeclare_linkstatepeer_queryable(
+                    tables,
+                    None,
+                    res,
+                    &tables.zid.clone(),
+                    send_declare,
+                );
+            }
             let local_info = local_peer_qabl_info(tables, res);
             register_linkstatepeer_queryable(
                 tables,
@@ -631,8 +642,8 @@ fn forget_simple_queryable(
     id: QueryableId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
-    if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
-        undeclare_simple_queryable(tables, face, &mut res, send_declare);
+    if let Some((mut res, complete)) = face_hat_mut!(face).remote_qabls.remove(&id) {
+        undeclare_simple_queryable(tables, face, &mut res, complete, send_declare);
         Some(res)
     } else {
         None

@@ -163,6 +163,25 @@ impl SessionContext {
             e_interceptor_cache: InterceptorCache::empty(),
         }
     }
+
+    pub(crate) fn remove_queryable(&mut self, complete_only: bool) {
+        if let Some(q) = &mut self.qabl {
+            if complete_only {
+                q.complete = false;
+            } else {
+                self.qabl = None;
+            }
+        }
+    }
+
+    pub(crate) fn add_queryable(&mut self, q_info: &QueryableInfoType) {
+        if let Some(q) = &mut self.qabl {
+            q.complete = q.complete | q_info.complete;
+            q.distance = q.distance.min(q_info.distance);
+        } else {
+            self.qabl = Some(*q_info);
+        }
+    }
 }
 
 /// Global version number for route computation.
