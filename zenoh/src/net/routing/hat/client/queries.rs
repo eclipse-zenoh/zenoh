@@ -276,7 +276,7 @@ pub(super) fn queries_new_face(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        for &(ref qabl, _) in face_hat!(face).remote_qabls.values() {
+        for (qabl, _) in face_hat!(face).remote_qabls.values() {
             propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }

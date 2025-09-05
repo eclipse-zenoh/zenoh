@@ -176,7 +176,7 @@ impl SessionContext {
 
     pub(crate) fn add_queryable(&mut self, q_info: &QueryableInfoType) {
         if let Some(q) = &mut self.qabl {
-            q.complete = q.complete | q_info.complete;
+            q.complete = q.complete || q_info.complete;
             q.distance = q.distance.min(q_info.distance);
         } else {
             self.qabl = Some(*q_info);

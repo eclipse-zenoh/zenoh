@@ -157,7 +157,6 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
             _router = Some(ztimeout!(zenoh::open(c)).unwrap());
             create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Client, WhatAmI::Client)).await
         }
-        _ => unreachable!(),
     };
     let locality_compatible = is_locality_compatible(querier_locality, same_session);
 
