@@ -278,6 +278,11 @@ impl<T> IntHashSet<T> {
 
 impl<T: Copy + Into<usize> + Eq + Hash> IntHashSet<T> {
     #[inline]
+    pub fn contains(&self, value: &T) -> bool {
+        self.0.contains_key(value)
+    }
+
+    #[inline]
     pub fn insert(&mut self, value: T) -> bool {
         self.0.insert(value, ()).is_none()
     }
