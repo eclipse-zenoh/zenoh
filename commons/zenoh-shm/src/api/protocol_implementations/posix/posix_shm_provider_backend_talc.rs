@@ -58,6 +58,18 @@ impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendTalcBuilder<La
 }
 
 #[zenoh_macros::unstable_doc]
+impl Resolvable for PosixShmProviderBackendTalcBuilder<MemoryLayout> {
+    type To = ZResult<PosixShmProviderBackendTalc>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for PosixShmProviderBackendTalcBuilder<MemoryLayout> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendTalc::new(&self.layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
 impl Resolvable for PosixShmProviderBackendTalcBuilder<&MemoryLayout> {
     type To = ZResult<PosixShmProviderBackendTalc>;
 }
