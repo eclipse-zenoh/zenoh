@@ -680,6 +680,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "buddy_system_allocator"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7913f22349ffcfc6ca0ca9a656ec26cfbba538ed49c31a273dff2c5d1ea83d9"
+dependencies = [
+ "spin 0.9.8",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4211,6 +4220,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "talc"
+version = "4.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3ae828aa394de34c7de08f522d1b86bd1c182c668d27da69caadda00590f26d"
+
+[[package]]
 name = "tempfile"
 version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6013,6 +6028,7 @@ version = "1.5.0"
 dependencies = [
  "advisory-lock",
  "async-trait",
+ "buddy_system_allocator",
  "cfg_aliases 0.2.1",
  "crossbeam-channel",
  "crossbeam-queue",
@@ -6024,6 +6040,7 @@ dependencies = [
  "stabby",
  "static_assertions",
  "static_init",
+ "talc",
  "thread-priority",
  "tokio",
  "tracing",

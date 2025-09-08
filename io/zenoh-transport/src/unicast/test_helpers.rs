@@ -17,14 +17,9 @@ use crate::{unicast::TransportManagerBuilderUnicast, TransportManager};
 
 pub fn make_transport_manager_builder(
     #[cfg(feature = "transport_multilink")] max_links: usize,
-    #[cfg(feature = "shared-memory")] with_shm: bool,
     lowlatency_transport: bool,
 ) -> TransportManagerBuilderUnicast {
-    let transport = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        with_shm,
-        lowlatency_transport,
-    );
+    let transport = make_basic_transport_manager_builder(lowlatency_transport);
 
     zcondfeat!(
         "transport_multilink",
@@ -37,18 +32,10 @@ pub fn make_transport_manager_builder(
 }
 
 pub fn make_basic_transport_manager_builder(
-    #[cfg(feature = "shared-memory")] with_shm: bool,
     lowlatency_transport: bool,
 ) -> TransportManagerBuilderUnicast {
     println!("Create transport manager builder...");
-    let config = zcondfeat!(
-        "shared-memory",
-        {
-            println!("...with SHM...");
-            TransportManager::config_unicast().shm(with_shm)
-        },
-        TransportManager::config_unicast()
-    );
+    let config = TransportManager::config_unicast();
     if lowlatency_transport {
         println!("...with LowLatency transport...");
     }

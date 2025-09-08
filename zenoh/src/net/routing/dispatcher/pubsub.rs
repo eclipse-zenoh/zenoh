@@ -25,11 +25,12 @@ use zenoh_sync::get_mut_unchecked;
 use super::{
     face::FaceState,
     resource::{Direction, Resource},
-    tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
+    tables::{NodeId, Route, Tables, TablesLock},
 };
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
+        dispatcher::tables::RoutingExpr,
         hat::{HatTrait, SendDeclare},
         router::get_or_set_route,
     },
@@ -214,14 +215,13 @@ fn get_data_route(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     face: &FaceState,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<Route> {
     let local_context = hat_code.map_routing_context(tables, face, routing_context);
-    let mut compute_route =
-        || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
-    if let Some(data_routes) = res
+    let compute_route = || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
+    if let Some(data_routes) = expr
+        .resource()
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| &ctx.data_routes)
@@ -287,10 +287,7 @@ pub fn route_data(
     reliability: Reliability,
 ) {
     let tables = zread!(tables_ref.tables);
-    match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        .cloned()
-    {
+    match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::trace!(
                 "{} Route data for res {}{}",
@@ -298,10 +295,10 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let admin = expr.full_expr().starts_with("@/");
+            let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
             #[cfg(feature = "stats")]
             if !admin {
                 inc_stats!(face, rx, user, msg.payload);
@@ -309,15 +306,12 @@ pub fn route_data(
                 inc_stats!(face, rx, admin, msg.payload);
             }
 
-            if tables_ref.hat_code.ingress_filter(&tables, face, &mut expr) {
-                let res = Resource::get_resource(&prefix, expr.suffix);
-
+            if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
                 let route = get_data_route(
                     tables_ref.hat_code.as_ref(),
                     &tables,
                     face,
-                    &res,
-                    &mut expr,
+                    &expr,
                     msg.ext_nodeid.node_id,
                 );
 
@@ -328,7 +322,7 @@ pub fn route_data(
                         let (outface, key_expr, context) = route.iter().next().unwrap();
                         if tables_ref
                             .hat_code
-                            .egress_filter(&tables, face, outface, &mut expr)
+                            .egress_filter(&tables, face, outface, &expr)
                         {
                             drop(tables);
                             #[cfg(feature = "stats")]
@@ -349,7 +343,7 @@ pub fn route_data(
                             .filter(|(outface, _key_expr, _context)| {
                                 tables_ref
                                     .hat_code
-                                    .egress_filter(&tables, face, outface, &mut expr)
+                                    .egress_filter(&tables, face, outface, &expr)
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();

@@ -30,6 +30,8 @@ use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 
+#[cfg(feature = "shared-memory")]
+use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -50,13 +52,15 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct TransportUnicastUniversal {
     // Transport Manager
-    pub(crate) manager: TransportManager,
+    pub(crate) manager: Arc<TransportManager>,
     // Transport config
-    pub(super) config: TransportConfigUnicast,
+    pub(super) config: Arc<TransportConfigUnicast>,
     // Tx priorities
     pub(super) priority_tx: Arc<[TransportPriorityTx]>,
     // Rx priorities
     pub(super) priority_rx: Arc<[TransportPriorityRx]>,
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_context: Option<UnicastTransportShmContext>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
     // The callback
@@ -81,6 +85,7 @@ impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
         #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
@@ -112,8 +117,8 @@ impl TransportUnicastUniversal {
         block_first_notifier.notify().unwrap();
 
         let t = Arc::new(TransportUnicastUniversal {
-            manager,
-            config,
+            manager: Arc::new(manager),
+            config: Arc::new(config),
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
@@ -126,6 +131,8 @@ impl TransportUnicastUniversal {
             block_first_notifier,
             #[cfg(feature = "unstable")]
             block_first_waiter,
+            #[cfg(feature = "shared-memory")]
+            shm_context,
         });
 
         Ok(t)

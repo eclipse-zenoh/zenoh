@@ -20,10 +20,7 @@ use std::{
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
     core::{
-        key_expr::{
-            include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
-        },
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI, ZenohIdProto,
     },
     network::{
@@ -710,7 +707,7 @@ pub(super) fn queries_tree_change(tables: &mut Tables, new_children: &[Vec<NodeI
 #[inline]
 fn insert_target_for_qabls(
     route: &mut QueryTargetQablSet,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     tables: &Tables,
     net: &Network,
     source: NodeId,
@@ -726,10 +723,9 @@ fn insert_target_for_qabls(
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 if net.distances.len() > qabl_idx.index() {
-                                    let key_expr =
-                                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                                    let wire_expr = expr.get_best_key(face.id);
                                     route.push(QueryTargetQabl {
-                                        direction: (face.clone(), key_expr.to_owned(), source),
+                                        direction: (face.clone(), wire_expr.to_owned(), source),
                                         info: Some(QueryableInfoType {
                                             complete: complete && qabl_info.complete,
                                             distance: net.distances[qabl_idx.index()] as u16,
@@ -991,34 +987,26 @@ impl HatQueriesTrait for HatCode {
     fn compute_query_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
-        }
+        };
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return EMPTY_ROUTE.clone();
-            }
-        };
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.context.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();

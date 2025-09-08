@@ -61,14 +61,14 @@ pub(crate) struct QueryTargetQabl {
 
 impl QueryTargetQabl {
     pub(crate) fn new(
-        (fid, ctx): (&FaceId, &Arc<SessionContext>),
-        expr: &mut RoutingExpr,
+        (&fid, ctx): (&FaceId, &Arc<SessionContext>),
+        expr: &RoutingExpr,
         complete: bool,
     ) -> Option<Self> {
         let qabl = ctx.qabl?;
-        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+        let wire_expr = expr.get_best_key(fid);
         Some(Self {
-            direction: (ctx.face.clone(), key_expr.to_owned(), NodeId::default()),
+            direction: (ctx.face.clone(), wire_expr.to_owned(), NodeId::default()),
             info: Some(QueryableInfoType {
                 complete: complete && qabl.complete,
                 // NOTE: local client faces are nearer than remote client faces
@@ -89,7 +89,7 @@ pub(crate) struct RouteBuilder<T = Direction> {
 }
 
 impl<T> RouteBuilder<T> {
-    /// Create a new empty builder.
+    /// Creates a new empty builder.
     pub(crate) fn new() -> Self {
         Self {
             route: Vec::new(),
@@ -97,10 +97,19 @@ impl<T> RouteBuilder<T> {
         }
     }
 
-    /// Insert a new direction if it has not been registered for the given face.
+    /// Inserts a new direction if it has not been registered for the given face.
     pub(crate) fn insert(&mut self, face_id: usize, direction: impl FnOnce() -> T) {
         if self.faces.insert(face_id) {
             self.route.push(direction());
+        }
+    }
+
+    pub(crate) fn try_insert(&mut self, face_id: usize, direction: impl FnOnce() -> Option<T>) {
+        if !self.faces.contains(&face_id) {
+            if let Some(direction) = direction() {
+                self.faces.insert(face_id);
+                self.route.push(direction);
+            }
         }
     }
 
@@ -541,17 +550,25 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_resource(mut from: &Arc<Resource>, mut suffix: &str) -> Option<Arc<Resource>> {
+    pub fn get_resource_ref<'a>(
+        mut from: &'a Arc<Resource>,
+        mut suffix: &str,
+    ) -> Option<&'a Arc<Resource>> {
         if !suffix.is_empty() && !suffix.starts_with('/') {
             if let Some(parent) = &from.parent {
-                return Resource::get_resource(parent, &[from.suffix(), suffix].concat());
+                return Resource::get_resource_ref(parent, &[from.suffix(), suffix].concat());
             }
         }
         // do not use recursion as the tree may have arbitrary depth
         while let Some((chunk, rest)) = Self::split_first_chunk(suffix) {
             (from, suffix) = (from.children.get(chunk)?, rest);
         }
-        Some(from.clone())
+        Some(from)
+    }
+
+    #[inline]
+    pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
+        Self::get_resource_ref(from, suffix).cloned()
     }
 
     /// Split the suffix at the next '/' (after leading one), returning None if the suffix is empty.
