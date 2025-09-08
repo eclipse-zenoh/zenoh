@@ -177,18 +177,18 @@ pub enum ZLayoutError {
     ProviderIncompatibleLayout,
 }
 
-impl From<ZLayoutError> for zenoh_result::Error {
-    fn from(value: ZLayoutError) -> Self {
-        zerror!(
-            "Layouting error: {}",
-            match value {
-                ZLayoutError::IncorrectLayoutArgs => "Incorrect layout arguments",
-                ZLayoutError::ProviderIncompatibleLayout => "Layout is incompatible with provider",
+impl Display for ZLayoutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IncorrectLayoutArgs => write!(f, "incorrect layout arguments"),
+            Self::ProviderIncompatibleLayout => {
+                write!(f, "layout is incompatible with the provider")
             }
-        )
-        .into()
+        }
     }
 }
+
+impl std::error::Error for ZLayoutError {}
 
 /// SHM chunk allocation result
 #[zenoh_macros::unstable_doc]
