@@ -34,6 +34,8 @@ enum TestType {
     PeerClient,
     PeerPeer,
     ClientRouterClient,
+    RouterRouter,
+    RouterClient,
 }
 
 async fn create_session_pair(locator: &str, modes: (WhatAmI, WhatAmI)) -> (Session, Session) {
@@ -46,21 +48,10 @@ async fn create_session_pair(locator: &str, modes: (WhatAmI, WhatAmI)) -> (Sessi
     config2.scouting.multicast.set_enabled(Some(false)).unwrap();
 
     match modes {
-        (WhatAmI::Peer, WhatAmI::Peer) => {
-            config1
-                .listen
-                .endpoints
-                .set(vec![locator.parse().unwrap()])
-                .unwrap();
-            config2
-                .connect
-                .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-                .unwrap();
-            let session1 = ztimeout!(zenoh::open(config1)).unwrap();
-            let session2 = ztimeout!(zenoh::open(config2)).unwrap();
-            (session1, session2)
-        }
-        (WhatAmI::Peer, WhatAmI::Client) => {
+        (WhatAmI::Peer, WhatAmI::Peer)
+        | (WhatAmI::Router, WhatAmI::Router)
+        | (WhatAmI::Peer, WhatAmI::Client)
+        | (WhatAmI::Router, WhatAmI::Client) => {
             config1
                 .listen
                 .endpoints
@@ -156,6 +147,12 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
                 .unwrap();
             _router = Some(ztimeout!(zenoh::open(c)).unwrap());
             create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Client, WhatAmI::Client)).await
+        }
+        TestType::RouterRouter => {
+            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Router, WhatAmI::Router)).await
+        }
+        TestType::RouterClient => {
+            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Router, WhatAmI::Client)).await
         }
     };
     let locality_compatible = is_locality_compatible(querier_locality, same_session);
@@ -308,6 +305,8 @@ async fn zenoh_querier_matching_status() -> ZResult<()> {
         TestType::PeerClient,
         TestType::PeerPeer,
         TestType::ClientRouterClient,
+        TestType::RouterRouter,
+        TestType::RouterClient,
     ];
     for tt in test_types {
         zenoh_querier_matching_status_inner(Locality::Any, tt).await;

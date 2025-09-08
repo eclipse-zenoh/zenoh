@@ -808,6 +808,7 @@ pub(super) fn undeclare_simple_queryable(
             undeclare_router_queryable(tables, None, res, &tables.zid.clone(), send_declare);
         } else {
             let local_info = local_router_qabl_info(tables, res);
+            undeclare_router_queryable(tables, None, res, &tables.zid.clone(), send_declare);
             register_router_queryable(tables, None, res, &local_info, tables.zid, send_declare);
             propagate_forget_simple_queryable_to_peers(tables, res, send_declare);
         }
