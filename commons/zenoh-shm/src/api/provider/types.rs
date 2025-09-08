@@ -14,8 +14,6 @@
 
 use std::{fmt::Display, num::NonZeroUsize};
 
-use zenoh_core::zerror;
-
 use super::chunk::AllocatedChunk;
 use crate::api::buffer::{typed::Typed, zshmmut::ZShmMut};
 
@@ -31,23 +29,21 @@ pub enum ZAllocError {
     Other,
 }
 
-impl From<zenoh_result::Error> for ZAllocError {
-    fn from(_value: zenoh_result::Error) -> Self {
-        Self::Other
+impl Display for ZAllocError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZAllocError::NeedDefragment => write!(f, "need defragmentation"),
+            ZAllocError::OutOfMemory => write!(f, "out of memory"),
+            ZAllocError::Other => write!(f, "other"),
+        }
     }
 }
 
-impl From<ZAllocError> for zenoh_result::Error {
-    fn from(value: ZAllocError) -> Self {
-        zerror!(
-            "Allocation error: {}",
-            match value {
-                ZAllocError::NeedDefragment => "need defragmentation",
-                ZAllocError::OutOfMemory => "out of memory",
-                ZAllocError::Other => "other",
-            }
-        )
-        .into()
+impl std::error::Error for ZAllocError {}
+
+impl From<zenoh_result::Error> for ZAllocError {
+    fn from(_value: zenoh_result::Error) -> Self {
+        Self::Other
     }
 }
 
@@ -212,6 +208,17 @@ pub enum ZLayoutAllocError {
     Layout(ZLayoutError),
 }
 
+impl Display for ZLayoutAllocError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZLayoutAllocError::Alloc(err) => write!(f, "{}", err),
+            ZLayoutAllocError::Layout(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl std::error::Error for ZLayoutAllocError {}
+
 impl From<ZLayoutError> for ZLayoutAllocError {
     fn from(value: ZLayoutError) -> Self {
         Self::Layout(value)
@@ -221,15 +228,6 @@ impl From<ZLayoutError> for ZLayoutAllocError {
 impl From<ZAllocError> for ZLayoutAllocError {
     fn from(value: ZAllocError) -> Self {
         Self::Alloc(value)
-    }
-}
-
-impl From<ZLayoutAllocError> for zenoh_result::Error {
-    fn from(value: ZLayoutAllocError) -> Self {
-        match value {
-            ZLayoutAllocError::Alloc(alloc) => alloc.into(),
-            ZLayoutAllocError::Layout(layout) => layout.into(),
-        }
     }
 }
 
