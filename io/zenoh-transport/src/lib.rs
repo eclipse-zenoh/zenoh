@@ -27,6 +27,8 @@ pub use common::stats;
 
 #[cfg(feature = "shared-memory")]
 mod shm;
+#[cfg(feature = "shared-memory")]
+mod shm_context;
 
 use std::{any::Any, sync::Arc};
 

@@ -240,7 +240,7 @@ fn compute_final_route(
     route: &mut RouteBuilder<QueryDirection>,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     target: &QueryTarget,
     query: &Arc<Query>,
 ) {
@@ -416,15 +416,15 @@ pub(crate) fn disable_matches_query_routes(res: &mut Arc<Resource>, bound: &Boun
 fn get_query_route(
     tables: &Tables,
     face: &FaceState,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     routing_context: NodeId,
     bound: &Bound,
 ) -> Arc<QueryTargetQablSet> {
     let local_context = tables.hats[bound].map_routing_context(&tables.data, face, routing_context);
-    let mut compute_route =
+    let compute_route =
         || tables.hats[bound].compute_query_route(&tables.data, expr, local_context, face.whatami);
-    if let Some(query_routes) = res
+    if let Some(query_routes) = expr
+        .resource()
         .as_ref()
         .and_then(|res| res.ctx.as_ref())
         .map(|ctx| &ctx.hats[bound].query_routes)
@@ -522,10 +522,10 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 msg.wire_expr.suffix.as_ref(),
             );
             let prefix = prefix.clone();
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            let expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let admin = expr.full_expr().starts_with("@/");
+            let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
             #[cfg(feature = "stats")]
             if !admin {
                 inc_req_stats!(face, rx, user, msg.payload)
@@ -543,24 +543,16 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
             });
 
             for (bound, hat) in rtables.hats.iter() {
-                if hat.ingress_filter(&rtables.data, face, &mut expr) {
-                    let res = Resource::get_resource(&prefix, expr.suffix);
-
-                    let qabls = get_query_route(
-                        &rtables,
-                        face,
-                        &res,
-                        &mut expr,
-                        msg.ext_nodeid.node_id,
-                        bound,
-                    );
+                if hat.ingress_filter(&rtables.data, face, &expr) {
+                    let qabls =
+                        get_query_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
 
                     compute_final_route(
                         &rtables,
                         &mut query_dirs,
                         &qabls,
                         face,
-                        &mut expr,
+                        &expr,
                         &msg.ext_target,
                         &query,
                     );

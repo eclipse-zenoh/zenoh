@@ -19,7 +19,7 @@ use std::{
 
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, WhatAmI, ZenohIdProto},
+    core::{WhatAmI, ZenohIdProto},
     network::{
         declare::{
             common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
@@ -594,7 +594,7 @@ impl Hat {
                         && interest
                             .res
                             .as_ref()
-                            .map(|r| r.matches(&res))
+                            .map(|r| r.matches(res))
                             .unwrap_or(true)
                 })
                 || router == &tables.zid
@@ -1094,7 +1094,7 @@ impl HatPubSubTrait for Hat {
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
@@ -1119,14 +1119,10 @@ impl HatPubSubTrait for Hat {
                                     if let Some(face) = this.face(tables, &net.graph[direction].zid)
                                     {
                                         route.insert(face.id, || {
-                                            let key_expr = Resource::get_best_key(
-                                                expr.prefix,
-                                                expr.suffix,
-                                                face.id,
-                                            );
+                                            let wire_expr = expr.get_best_key(face.id);
                                             Direction {
                                                 dst_face: face.clone(),
-                                                wire_expr: key_expr.to_owned(),
+                                                wire_expr: wire_expr.to_owned(),
                                                 node_id: source,
                                             }
                                         });
@@ -1142,29 +1138,21 @@ impl HatPubSubTrait for Hat {
         }
 
         let mut route = RouteBuilder::<Direction>::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
-        }
+        };
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route.build());
-            }
-        };
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.ctx.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -1187,10 +1175,10 @@ impl HatPubSubTrait for Hat {
             for (fid, ctx) in &mres.face_ctxs {
                 if ctx.subs.is_some() && ctx.face.whatami != WhatAmI::Router {
                     route.insert(*fid, || {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+                        let wire_expr = expr.get_best_key(*fid);
                         Direction {
                             dst_face: ctx.face.clone(),
-                            wire_expr: key_expr.to_owned(),
+                            wire_expr: wire_expr.to_owned(),
                             node_id: NodeId::default(),
                         }
                     });
@@ -1200,7 +1188,7 @@ impl HatPubSubTrait for Hat {
         for mcast_group in self.mcast_groups(tables) {
             route.insert(mcast_group.id, || Direction {
                 dst_face: mcast_group.clone(),
-                wire_expr: expr.full_expr().to_string().into(),
+                wire_expr: key_expr.to_string().into(),
                 node_id: NodeId::default(),
             });
         }

@@ -366,12 +366,7 @@ impl HatBaseTrait for Hat {
     }
 
     #[inline]
-    fn ingress_filter(
-        &self,
-        _tables: &TablesData,
-        _face: &FaceState,
-        _expr: &mut RoutingExpr,
-    ) -> bool {
+    fn ingress_filter(&self, _tables: &TablesData, _face: &FaceState, _expr: &RoutingExpr) -> bool {
         true
     }
 
@@ -381,7 +376,7 @@ impl HatBaseTrait for Hat {
         _tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
-        _expr: &mut RoutingExpr,
+        _expr: &RoutingExpr,
     ) -> bool {
         src_face.id != out_face.id
             && (out_face.mcast_group.is_none()

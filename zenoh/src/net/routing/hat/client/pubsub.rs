@@ -18,10 +18,13 @@ use std::{
 };
 
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, WhatAmI},
-    network::declare::{
-        self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
-        UndeclareSubscriber,
+    core::WhatAmI,
+    network::{
+        declare::{
+            self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+            UndeclareSubscriber,
+        },
+        interest::InterestOptions,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -345,28 +348,46 @@ impl HatPubSubTrait for Hat {
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::<Direction>::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
-        }
+        };
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return Arc::new(route.build());
+
+        let matches = expr
+            .resource()
+            .as_ref()
+            .and_then(|res| res.ctx.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+
+            for (sid, ctx) in &mres.face_ctxs {
+                if ctx.subs.is_some()
+                    && (source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client)
+                {
+                    route.insert(*sid, || {
+                        let wire_expr = expr.get_best_key(*sid);
+                        Direction {
+                            dst_face: ctx.face.clone(),
+                            wire_expr: wire_expr.to_owned(),
+                            node_id: NodeId::default(),
+                        }
+                    });
+                }
             }
-        };
+        }
 
         if source_type == WhatAmI::Client {
             for face in self
@@ -374,53 +395,24 @@ impl HatPubSubTrait for Hat {
                 .values()
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.subscribers()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
-                            .unwrap_or(true)
-                }) || self
-                    .face_hat(face)
-                    .remote_subs
-                    .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
-                {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    route.insert(face.id, || Direction {
-                        dst_face: face.clone(),
-                        wire_expr: key_expr.to_owned(),
-                        node_id: NodeId::default(),
-                    });
-                }
+                route.try_insert(face.id, || {
+                    face.local_interests
+                        .values()
+                        .all(|interest| {
+                            !interest.finalized_includes(InterestOptions::subscribers, key_expr)
+                        })
+                        .then(|| {
+                            let wire_expr = expr.get_best_key(face.id);
+                            Direction {
+                                dst_face: face.clone(),
+                                wire_expr: wire_expr.to_owned(),
+                                node_id: NodeId::default(),
+                            }
+                        })
+                });
             }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
-            for (fid, ctx) in &mres.face_ctxs {
-                if ctx.subs.is_some() && ctx.face.whatami == WhatAmI::Client {
-                    route.insert(*fid, || {
-                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
-                        Direction {
-                            dst_face: ctx.face.clone(),
-                            wire_expr: key_expr.to_owned(),
-                            node_id: NodeId::default(),
-                        }
-                    });
-                }
-            }
-        }
         Arc::new(route.build())
     }
 

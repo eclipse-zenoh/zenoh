@@ -34,7 +34,7 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{
         api::{
-            protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+            protocol_implementations::posix::posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
             provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
         },
         ShmBufInner,
@@ -152,8 +152,7 @@ mod tests {
         let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
-        let backend = PosixShmProviderBackend::builder()
-            .with_size(2 * MSG_SIZE)
+        let backend = PosixShmProviderBackendBinaryHeap::builder(2 * MSG_SIZE)
             .wait()
             .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();
@@ -165,7 +164,6 @@ mod tests {
             .zid(peer_shm01)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(true)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
@@ -179,21 +177,23 @@ mod tests {
             .zid(peer_shm02)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(true)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
             .build(peer_shm02_handler.clone())
             .unwrap();
 
+        let mut shm = zenoh_config::ShmConf::default();
+        let _ = shm.set_enabled(false);
+
         // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
+            .shm(shm)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(false)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
@@ -333,7 +333,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14002).parse().unwrap();
         run(&endpoint, false).await;
     }
 

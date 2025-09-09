@@ -163,15 +163,14 @@ pub(crate) trait HatBaseTrait: Any {
         Some(face.zid.clone())
     }
 
-    fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &mut RoutingExpr)
-        -> bool;
+    fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
 
     fn egress_filter(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
     ) -> bool;
 
     fn info(&self, kind: WhatAmI) -> String;
@@ -321,7 +320,7 @@ pub(crate) trait HatPubSubTrait {
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route>;
@@ -368,7 +367,7 @@ pub(crate) trait HatQueriesTrait {
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;

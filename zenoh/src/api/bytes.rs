@@ -461,7 +461,8 @@ impl From<bytes::Bytes> for ZBytes {
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 const _: () = {
-    use zenoh_shm::api::buffer::{zshm::ZShm, zshmmut::ZShmMut};
+    use zenoh_shm::api::buffer::{typed::Typed, zshm::ZShm, zshmmut::ZShmMut};
+
     impl From<ZShm> for ZBytes {
         fn from(value: ZShm) -> Self {
             Self(ZSlice::from(value).into())
@@ -470,6 +471,11 @@ const _: () = {
     impl From<ZShmMut> for ZBytes {
         fn from(value: ZShmMut) -> Self {
             Self(ZSlice::from(value).into())
+        }
+    }
+    impl<T, Tbuf: Into<ZBytes>> From<Typed<T, Tbuf>> for ZBytes {
+        fn from(value: Typed<T, Tbuf>) -> Self {
+            value.into_inner().into()
         }
     }
 };

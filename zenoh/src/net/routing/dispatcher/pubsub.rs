@@ -252,16 +252,15 @@ macro_rules! treat_timestamp {
 fn get_data_route(
     tables: &Tables,
     face: &FaceState,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     routing_context: NodeId,
     bound: &Bound,
 ) -> Arc<Route> {
     let local_context = tables.hats[bound].map_routing_context(&tables.data, face, routing_context);
-    let mut compute_route =
+    let compute_route =
         || tables.hats[bound].compute_data_route(&tables.data, expr, local_context, face.whatami);
-
-    match res
+    match expr
+        .resource()
         .as_ref()
         .and_then(|res| res.ctx.as_ref())
         .map(|ctx| &ctx.hats[bound].data_routes)
@@ -330,7 +329,6 @@ pub fn route_data(
     let Some(prefix) = rtables
         .data
         .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        .cloned()
     else {
         tracing::error!(
             "{} Route data with unknown scope {}!",
@@ -347,10 +345,10 @@ pub fn route_data(
         msg.wire_expr.suffix.as_ref()
     );
 
-    let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+    let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
     #[cfg(feature = "stats")]
-    let admin = expr.full_expr().starts_with("@/");
+    let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
     #[cfg(feature = "stats")]
     if !admin {
         inc_stats!(face, rx, user, msg.payload);
@@ -361,22 +359,13 @@ pub fn route_data(
     let mut dirs = RouteBuilder::<Direction>::new();
 
     for (bound, hat) in rtables.hats.iter() {
-        if hat.ingress_filter(&rtables.data, face, &mut expr) {
-            let res = Resource::get_resource(&prefix, expr.suffix);
-
-            let route = get_data_route(
-                &rtables,
-                face,
-                &res,
-                &mut expr,
-                msg.ext_nodeid.node_id,
-                bound,
-            );
+        if hat.ingress_filter(&rtables.data, face, &expr) {
+            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
 
             tracing::trace!(?bound, ?route, "route_data");
 
             for dir in route.iter() {
-                if hat.egress_filter(&rtables.data, face, &dir.dst_face, &mut expr) {
+                if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
                     dirs.insert(dir.dst_face.id, || dir.clone());
                 }
             }

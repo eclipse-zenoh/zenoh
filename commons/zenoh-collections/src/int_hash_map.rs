@@ -29,7 +29,7 @@ fn fallback_to_hashmap(key: usize, len: usize) -> bool {
 /// too low, then the storage falls back to a regular hashmap.
 /// The whole API is fully compatible with `HashMap` one.
 #[derive(Debug)]
-pub enum IntHashMap<K: Copy + Into<usize>, V> {
+pub enum IntHashMap<K, V> {
     // Because maps can have holes, the value is optional in the vector. The key is also stored,
     // in order to provide a compatible iteration API
     Vec {
@@ -39,9 +39,9 @@ pub enum IntHashMap<K: Copy + Into<usize>, V> {
     Map(ahash::HashMap<K, V>),
 }
 
-impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
+impl<K, V> IntHashMap<K, V> {
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self::Vec {
             vec: Vec::new(),
             items: 0,
@@ -86,7 +86,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize>, V> IntHashMap<K, V> {
     }
 }
 
-impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
+impl<K: Copy + Into<usize> + Eq + Hash, V> IntHashMap<K, V> {
     #[inline]
     pub fn get(&self, k: &K) -> Option<&V> {
         match self {
@@ -178,7 +178,7 @@ impl<K: Copy + Into<usize> + TryFrom<usize> + Eq + Hash, V> IntHashMap<K, V> {
     }
 }
 
-impl<K: Copy + Into<usize> + TryFrom<usize>, V> Default for IntHashMap<K, V> {
+impl<K, V> Default for IntHashMap<K, V> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -213,7 +213,7 @@ pub enum Iter<'a, K, V> {
     Map(hash_map::Iter<'a, K, V>),
 }
 
-impl<'a, K: Copy + TryFrom<usize>, V> Iterator for Iter<'a, K, V> {
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     #[inline]
@@ -257,11 +257,40 @@ impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
     }
 }
 
-impl<'a, K: Copy + Into<usize> + TryFrom<usize>, V> IntoIterator for &'a IntHashMap<K, V> {
+impl<'a, K, V> IntoIterator for &'a IntHashMap<K, V> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct IntHashSet<T>(IntHashMap<T, ()>);
+
+impl<T> IntHashSet<T> {
+    #[inline]
+    pub const fn new() -> IntHashSet<T> {
+        Self(IntHashMap::new())
+    }
+}
+
+impl<T: Copy + Into<usize> + Eq + Hash> IntHashSet<T> {
+    #[inline]
+    pub fn contains(&self, value: &T) -> bool {
+        self.0.contains_key(value)
+    }
+
+    #[inline]
+    pub fn insert(&mut self, value: T) -> bool {
+        self.0.insert(value, ()).is_none()
+    }
+}
+
+impl<T> Default for IntHashSet<T> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }

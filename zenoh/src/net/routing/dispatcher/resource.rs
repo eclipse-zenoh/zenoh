@@ -14,7 +14,7 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{HashSet, VecDeque},
+    collections::VecDeque,
     convert::TryInto,
     fmt::Debug,
     hash::{Hash, Hasher},
@@ -22,7 +22,7 @@ use std::{
     sync::{Arc, RwLock, Weak},
 };
 
-use zenoh_collections::{IntHashMap, SingleOrBoxHashSet};
+use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -79,17 +79,17 @@ pub(crate) struct QueryTargetQabl {
 
 impl QueryTargetQabl {
     pub(crate) fn new(
-        (fid, ctx): (&FaceId, &Arc<FaceContext>),
-        expr: &mut RoutingExpr,
+        (&fid, ctx): (&FaceId, &Arc<FaceContext>),
+        expr: &RoutingExpr,
         complete: bool,
         bound: &Bound,
     ) -> Option<Self> {
         let qabl = ctx.qabl?;
-        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
+        let wire_expr = expr.get_best_key(fid);
         Some(Self {
             dir: Direction {
                 dst_face: ctx.face.clone(),
-                wire_expr: key_expr.to_owned(),
+                wire_expr: wire_expr.to_owned(),
                 node_id: NodeId::default(),
             },
             info: Some(QueryableInfoType {
@@ -109,15 +109,15 @@ pub(crate) struct RouteBuilder<T> {
     /// The route built.
     route: Vec<T>,
     /// The faces' id already inserted.
-    faces: HashSet<FaceId>,
+    faces: IntHashSet<usize>,
 }
 
 impl<T> RouteBuilder<T> {
-    /// Create a new empty builder.
+    /// Creates a new empty builder.
     pub(crate) fn new() -> Self {
         Self {
             route: Vec::new(),
-            faces: HashSet::new(),
+            faces: IntHashSet::new(),
         }
     }
 
@@ -125,6 +125,15 @@ impl<T> RouteBuilder<T> {
     pub(crate) fn insert(&mut self, face_id: FaceId, direction: impl FnOnce() -> T) {
         if self.faces.insert(face_id) {
             self.route.push(direction());
+        }
+    }
+
+    pub(crate) fn try_insert(&mut self, face_id: usize, direction: impl FnOnce() -> Option<T>) {
+        if !self.faces.contains(&face_id) {
+            if let Some(direction) = direction() {
+                self.faces.insert(face_id);
+                self.route.push(direction);
+            }
         }
     }
 
@@ -566,17 +575,25 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_resource(mut from: &Arc<Resource>, mut suffix: &str) -> Option<Arc<Resource>> {
+    pub fn get_resource_ref<'a>(
+        mut from: &'a Arc<Resource>,
+        mut suffix: &str,
+    ) -> Option<&'a Arc<Resource>> {
         if !suffix.is_empty() && !suffix.starts_with('/') {
             if let Some(parent) = &from.parent {
-                return Resource::get_resource(parent, &[from.suffix(), suffix].concat());
+                return Resource::get_resource_ref(parent, &[from.suffix(), suffix].concat());
             }
         }
         // do not use recursion as the tree may have arbitrary depth
         while let Some((chunk, rest)) = Self::split_first_chunk(suffix) {
             (from, suffix) = (from.children.get(chunk)?, rest);
         }
-        Some(from.clone())
+        Some(from)
+    }
+
+    #[inline]
+    pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
+        Self::get_resource_ref(from, suffix).cloned()
     }
 
     /// Split the suffix at the next '/' (after leading one), returning None if the suffix is empty.

@@ -114,6 +114,7 @@
       period_increase_factor: 2,
     },
   },
+
   /// Configure the session open behavior.
   open: {
     /// Configure the conditions to be met before session open returns.
@@ -126,6 +127,7 @@
       declares: true,
     },
   },
+
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
@@ -229,11 +231,11 @@
         /// If none of the two endpoint nodes of a transport specifies its weight, a weight of 100 is applied.
         /// If only one of the two endpoint nodes of a transport specifies its weight, the specified weight is applied.
         /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
- //        transport_weights: [
- //          { dst_zid: "1", weight: "10" },
- //          { dst_zid: "2", weight: "200" },
- //        ]
-      }
+        // transport_weights: [
+        //   { dst_zid: "1", weight: "10" },
+        //   { dst_zid: "2", weight: "200" },
+        // ]
+      },
     },
     /// The interests-based routing configuration.
     /// This configuration applies regardless of the mode (router, peer or client).
@@ -245,85 +247,85 @@
     },
   },
 
-  //  /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config for overwritten values)
-  //  qos: {
-  //    /// Overwrite QoS options for PUT and DELETE messages
-  //    publication: [
-  //      {
-  //        /// PUT and DELETE messages on key expressions that are included by these key expressions
-  //        /// will have their QoS options overwritten by the given config.
-  //        key_exprs: ["demo/**", "example/key"],
-  //        /// Configurations that will be applied on the publisher.
-  //        /// Options that are supplied here will overwrite the configuration given in Zenoh API
-  //        config: {
-  //          congestion_control: "block",
-  //          priority: "data_high",
-  //          express: true,
-  //          reliability: "best_effort",
-  //          allowed_destination: "remote",
-  //        },
-  //      },
-  //    ],
-  //    /// Overwrite QoS options for messages sent and received from/to the network
-  //    /// This allows more fine grained rules (per network card, etc...) but is
-  //    /// less performant than the publication option above.
-  //    network: [
-  //      {
-  //        /// Optional Id, has to be unique.
-  //        id: "lo0_en0_qos_overwrite",
-  //        // Optional list of ZIDs on which qos will be overwritten when communicating with.
-  //        // zids: ["38a4829bce9166ee"],
-  //        // Optional list of interfaces, if not specified, will be applied to all interfaces.
-  //        interfaces: [
-  //          "lo0",
-  //          "en0",
-  //        ],
-  //        /// Optional list of link protocols. Transports with at least one of these links will have their qos overwritten.
-  //        /// If absent, the overwrite will be applied to all transports. An empty list is invalid.
-  //        link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
-  //        /// List of message types to apply to.
-  //        messages: [
-  //          "put", // put publications
-  //          "delete" // delete publications
-  //          "query", // get queries
-  //          "reply", // replies to queries
-  //        ],
-  //        /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
-  //        /// If absent, the rules will be applied to both flows.
-  //        flows: ["egress", "ingress"],
-  //        /// QoS filter to apply to the messages matching this item.
-  //        qos: {
-  //          congestion_control: "drop",
-  //          priority: "data",
-  //          express: true,
-  //          reliability: "reliable",
-  //        },
-  //        /// payload_size range for the messages matching this item.
-  //        payload_size: "1000000..",
-  //        key_exprs: ["test/demo"],
-  //        overwrite: {
-  //          /// Optional new priority value, if not specified priority of the messages will stay unchanged.
-  //          priority: "real_time",
-  //          /// Optional new congestion control value, if not specified congestion control of the messages will stay unchanged.
-  //          congestion_control: "block",
-  //          /// Optional new express value, if not specified express flag of the messages will stay unchanged.
-  //          express: true
-  //        },
-  //      },
-  //    ],
-  //  },
+  // /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config for overwritten values)
+  // qos: {
+  //   /// Overwrite QoS options for PUT and DELETE messages
+  //   publication: [
+  //     {
+  //       /// PUT and DELETE messages on key expressions that are included by these key expressions
+  //       /// will have their QoS options overwritten by the given config.
+  //       key_exprs: ["demo/**", "example/key"],
+  //       /// Configurations that will be applied on the publisher.
+  //       /// Options that are supplied here will overwrite the configuration given in Zenoh API
+  //       config: {
+  //         congestion_control: "block",
+  //         priority: "data_high",
+  //         express: true,
+  //         reliability: "best_effort",
+  //         allowed_destination: "remote",
+  //       },
+  //     },
+  //   ],
+  //   /// Overwrite QoS options for messages sent and received from/to the network
+  //   /// This allows more fine grained rules (per network card, etc...) but is
+  //   /// less performant than the publication option above.
+  //   network: [
+  //     {
+  //       /// Optional Id, has to be unique.
+  //       id: "lo0_en0_qos_overwrite",
+  //       /// Optional list of ZIDs on which qos will be overwritten when communicating with.
+  //       // zids: ["38a4829bce9166ee"],
+  //       /// Optional list of interfaces, if not specified, will be applied to all interfaces.
+  //       interfaces: [
+  //         "lo0",
+  //         "en0",
+  //       ],
+  //       /// Optional list of link protocols. Transports with at least one of these links will have their qos overwritten.
+  //       /// If absent, the overwrite will be applied to all transports. An empty list is invalid.
+  //       link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //       /// List of message types to apply to.
+  //       messages: [
+  //         "put", // put publications
+  //         "delete", // delete publications
+  //         "query", // get queries
+  //         "reply", // replies to queries
+  //       ],
+  //       /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
+  //       /// If absent, the rules will be applied to both flows.
+  //       flows: ["egress", "ingress"],
+  //       /// QoS filter to apply to the messages matching this item.
+  //       qos: {
+  //         congestion_control: "drop",
+  //         priority: "data",
+  //         express: true,
+  //         reliability: "reliable",
+  //       },
+  //       /// payload_size range for the messages matching this item.
+  //       payload_size: "1000000..",
+  //       key_exprs: ["test/demo"],
+  //       overwrite: {
+  //         /// Optional new priority value, if not specified priority of the messages will stay unchanged.
+  //         priority: "real_time",
+  //         /// Optional new congestion control value, if not specified congestion control of the messages will stay unchanged.
+  //         congestion_control: "block",
+  //         /// Optional new express value, if not specified express flag of the messages will stay unchanged.
+  //         express: true,
+  //       },
+  //     },
+  //   ],
+  // },
 
-  //  /// The declarations aggregation strategy.
-  //  aggregation: {
-  //      /// A list of key-expressions for which all included subscribers will be aggregated into.
-  //      subscribers: [
-  //        // key_expression
-  //      ],
-  //      /// A list of key-expressions for which all included publishers will be aggregated into.
-  //      publishers: [
-  //        // key_expression
-  //      ],
-  //  },
+  // /// The declarations aggregation strategy.
+  // aggregation: {
+  //   /// A list of key-expressions for which all included subscribers will be aggregated into.
+  //   subscribers: [
+  //     // key_expression
+  //   ],
+  //   /// A list of key-expressions for which all included publishers will be aggregated into.
+  //   publishers: [
+  //     // key_expression
+  //   ],
+  // },
 
   // /// Namespace prefix.
   // /// If specified, all outgoing key expressions will be automatically prefixed with specified string,
@@ -335,38 +337,40 @@
   // /// will put a message into 1/my/keyexpr. Same applies to all other operations within this session.
   // namespace: "my/namespace",
 
-  //  /// The downsampling declaration.
-  //  downsampling: [
-  //    {
-  //      /// Optional Id, has to be unique
-  //      "id": "wlan0egress",
-  //      /// Optional list of network interfaces messages will be processed on, the rest will be passed as is.
-  //      /// If absent, the rules will be applied to all interfaces. An empty list is invalid.
-  //      interfaces: [ "wlan0" ],
-  //      /// Optional list of link protocols. Transports with at least one of these links will have their messages filtered.
-  //      /// If absent, the rules will be applied to all transports. An empty list is invalid.
-  //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
-  //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
-  //      /// If absent, the rules will be applied to both flows.
-  //      flows: ["ingress", "egress"],
-  //      /// List of message type on which downsampling will be applied. Must not be empty.
-  //      messages: [
-  //        /// Publication (Put and Delete)
-  //        "push",
-  //        /// Get
-  //        "query",
-  //        /// Queryable Reply to a Query
-  //        "reply"
-  //      ],
-  //      /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
-  //      rules: [
-  //        { key_expr: "demo/example/zenoh-rs-pub", freq: 0.1 },
-  //      ],
-  //    },
-  //  ],
+  // /// The downsampling declaration.
+  // downsampling: [
+  //   {
+  //     /// Optional Id, has to be unique
+  //     id: "wlan0egress",
+  //     /// Optional list of network interfaces messages will be processed on, the rest will be passed as is.
+  //     /// If absent, the rules will be applied to all interfaces. An empty list is invalid.
+  //     interfaces: [ "wlan0" ],
+  //     /// Optional list of link protocols. Transports with at least one of these links will have their messages filtered.
+  //     /// If absent, the rules will be applied to all transports. An empty list is invalid.
+  //     link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //     /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
+  //     /// If absent, the rules will be applied to both flows.
+  //     flows: ["ingress", "egress"],
+  //     /// List of message type on which downsampling will be applied. Must not be empty.
+  //     messages: [
+  //       /// Delete
+  //       "delete",
+  //       /// Put
+  //       "put",
+  //       /// Get
+  //       "query",
+  //       /// Queryable Reply to a Query
+  //       "reply",
+  //     ],
+  //     /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
+  //     rules: [
+  //       { key_expr: "demo/example/zenoh-rs-pub", freq: 0.1 },
+  //     ],
+  //   },
+  // ],
 
-  //  /// Configure access control (ACL) rules
-  //  access_control: {
+  // /// Configure access control (ACL) rules
+  // access_control: {
   //   /// [true/false] acl will be activated only if this is set to true
   //   "enabled": false,
   //   /// [deny/allow] default permission is deny (even if this is left empty or not specified)
@@ -446,62 +450,62 @@
   //     },
   //     {
   //       "id": "subject4",
-  //      /// link protocols can also be used to identify transports to filter messages on.
-  //      /// If absent, the rules will be applied to all transports. An empty list is invalid.
-  //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
-  //      /// ZIDs can also be used to identify transports to filter messages on.
-  //      /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
-  //      ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
-  //      ///       If managed manually in ACL config, can be useful for prototyping but should not be used in production!
-  //      zids: ["38a4829bce9166ee"],
+  //       /// link protocols can also be used to identify transports to filter messages on.
+  //       /// If absent, the rules will be applied to all transports. An empty list is invalid.
+  //       link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //       /// ZIDs can also be used to identify transports to filter messages on.
+  //       /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
+  //       ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
+  //       ///       If managed manually in ACL config, can be useful for prototyping but should not be used in production!
+  //       zids: ["38a4829bce9166ee"],
   //     },
   //   ],
   //   /// The policies list associates rules to subjects
   //   "policies":
   //   [
-  //      /// Each policy associates one or multiple rules to one or multiple subject combinations
-  //      {
-  //         /// Id is optional. If provided, it has to be unique within the policies list
-  //         "id": "policy1",
-  //         /// Rules and Subjects are identified with their unique IDs declared above
-  //         "rules": ["rule1"],
-  //         "subjects": ["subject1", "subject2"],
-  //      },
-  //      {
-  //         "rules": ["rule2"],
-  //         "subjects": ["subject3", "subject4"],
-  //      },
+  //     /// Each policy associates one or multiple rules to one or multiple subject combinations
+  //     {
+  //       /// Id is optional. If provided, it has to be unique within the policies list
+  //       "id": "policy1",
+  //       /// Rules and Subjects are identified with their unique IDs declared above
+  //       "rules": ["rule1"],
+  //       "subjects": ["subject1", "subject2"],
+  //     },
+  //     {
+  //       "rules": ["rule2"],
+  //       "subjects": ["subject3", "subject4"],
+  //     },
   //   ]
-  //},
+  // },
 
-  //  low_pass_filter: [
-  //    {
-  //      /// Optional Id, has to be unique
-  //      "id": "filter1",
-  //      /// Optional list of network interfaces messages will be processed on, the rest will not be filtered.
-  //      /// If absent, the filter will be applied to all interfaces.
-  //      interfaces: [ "wlan0" ],
-  //      /// Optional list of link protocols. Transports with at least one of these links will have their messages filtered.
-  //      /// If absent, the rule will be applied to all transports. An empty list is invalid.
-  //      link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
-  //      /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
-  //      /// If absent, the filter will be applied to both flows.
-  //      flows: ["ingress", "egress"],
-  //      /// List of message type on which the filter will be applied. Must not be empty.
-  //      messages: [
-  //        "put",
-  //        "delete",
-  //        "query",
-  //        "reply"
-  //      ],
-  //      /// List of key_expressions which matching messages will be filtered
-  //      key_exprs: [
-  //        "demo/**",
-  //      ],
-  //      /// Inclusive max size of serialized payload + serialized attachment
-  //      size_limit: 8192,
-  //    },
-  //  ],
+  // low_pass_filter: [
+  //   {
+  //     /// Optional Id, has to be unique
+  //     "id": "filter1",
+  //     /// Optional list of network interfaces messages will be processed on, the rest will not be filtered.
+  //     /// If absent, the filter will be applied to all interfaces.
+  //     interfaces: [ "wlan0" ],
+  //     /// Optional list of link protocols. Transports with at least one of these links will have their messages filtered.
+  //     /// If absent, the rule will be applied to all transports. An empty list is invalid.
+  //     link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //     /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
+  //     /// If absent, the filter will be applied to both flows.
+  //     flows: ["ingress", "egress"],
+  //     /// List of message type on which the filter will be applied. Must not be empty.
+  //     messages: [
+  //       "put",
+  //       "delete",
+  //       "query",
+  //       "reply"
+  //     ],
+  //     /// List of key_expressions which matching messages will be filtered
+  //     key_exprs: [
+  //       "demo/**",
+  //     ],
+  //     /// Inclusive max size of serialized payload + serialized attachment
+  //     size_limit: 8192,
+  //   },
+  // ],
 
   /// Configure internal transport parameters
   transport: {
@@ -669,14 +673,14 @@
         connect_private_key: null,
         /// Path to the TLS connecting side certificate
         connect_certificate: null,
-        // Whether or not to verify the matching between hostname/dns and certificate when connecting,
-        // if set to false zenoh will disregard the common names of the certificates when verifying servers.
-        // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
-        // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
+        /// Whether or not to verify the matching between hostname/dns and certificate when connecting,
+        /// if set to false zenoh will disregard the common names of the certificates when verifying servers.
+        /// This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
+        /// ca to verify that the server at baz.com is actually baz.com, let this be true (default).
         verify_name_on_connect: true,
-        // Whether or not to close links when remote certificates expires.
-        // If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
-        // note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
+        /// Whether or not to close links when remote certificates expires.
+        /// If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
+        /// note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
         close_link_on_expiration: false,
         /// Optional configuration for TCP system buffers sizes for TLS links
         ///
@@ -685,15 +689,15 @@
         /// Configure TCP write buffer size (bytes)
         // so_sndbuf: 123456,
       },
-    // // Configure optional TCP link specific parameters
-    // tcp: {
-    //   /// Optional configuration for TCP system buffers sizes for TCP links
-    //   ///
-    //   /// Configure TCP read buffer size (bytes)
-    //   // so_rcvbuf: 123456,
-    //   /// Configure TCP write buffer size (bytes)
-    //   // so_sndbuf: 123456,
-    // }
+      // // Configure optional TCP link specific parameters
+      // tcp: {
+      //   /// Optional configuration for TCP system buffers sizes for TCP links
+      //   ///
+      //   /// Configure TCP read buffer size (bytes)
+      //   // so_rcvbuf: 123456,
+      //   /// Configure TCP write buffer size (bytes)
+      //   // so_sndbuf: 123456,
+      // },
     },
     /// Shared memory configuration.
     /// NOTE: shared memory can be used only if zenoh is compiled with "shared-memory" feature, otherwise
@@ -713,6 +717,15 @@
       /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
       /// startup time, but guarantees no latency impact when first SHM buffer is processed.
       mode: "lazy",
+      transport_optimization: {
+          /// Enables transport optimization for large messages (default `true`).
+          /// Implicitly puts large messages into shared memory for transports with SHM-compatible connection.
+          enabled: true,
+          /// SHM memory size in bytes used for transport optimization (default `16 * 1024 * 1024`).
+          pool_size: 16777216,
+          /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
+          message_size_threshold: 3072,
+      },
     },
     auth: {
       /// The configuration of authentication.
@@ -746,10 +759,9 @@
     },
   },
 
-  ///
-  /// Plugins configurations
-  ///
-  //
+  //  ///
+  //  /// Plugins configurations
+  //  ///
   //  plugins_loading: {
   //    /// Enable plugins loading.
   //    enabled: false,

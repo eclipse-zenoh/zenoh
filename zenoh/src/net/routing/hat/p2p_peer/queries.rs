@@ -19,10 +19,7 @@ use std::{
 
 use zenoh_protocol::{
     core::{
-        key_expr::{
-            include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
-        },
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI,
     },
     network::{
@@ -30,7 +27,7 @@ use zenoh_protocol::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
         },
-        interest::{InterestId, InterestMode},
+        interest::{InterestId, InterestMode, InterestOptions},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -199,8 +196,8 @@ impl Hat {
         profile: InterestProfile,
     ) {
         self.register_simple_queryable(ctx.reborrow(), id, res, qabl_info);
-        let src_face = Some(&ctx.src_face.clone());
-        self.propagate_simple_queryable(ctx, src_face, res, profile);
+        let src_face = ctx.src_face.clone();
+        self.propagate_simple_queryable(ctx, Some(&src_face), res, profile);
     }
 
     #[inline]
@@ -619,7 +616,7 @@ impl HatQueriesTrait for Hat {
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
@@ -628,50 +625,62 @@ impl HatQueriesTrait for Hat {
         }
 
         let mut route = QueryTargetQablSet::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
-        }
+        };
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return EMPTY_ROUTE.clone();
+
+        let matches = expr
+            .resource()
+            .as_ref()
+            .and_then(|res| res.ctx.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
+            for face_ctx @ (_, ctx) in &mres.face_ctxs {
+                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
+                    {
+                        route.push(qabl);
+                    }
+                }
             }
-        };
+        }
 
         if source_type == WhatAmI::Client {
             // TODO: BestMatching: What if there is a local compete ?
-            for face in self
-                .faces(tables)
-                .values()
-                .filter(|f| f.whatami == WhatAmI::Router)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
-                            .unwrap_or(true)
-                }) || self
-                    .face_hat(face)
-                    .remote_qabls
-                    .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
+            for face in self.faces(tables).values() {
+                if face.whatami == WhatAmI::Router {
+                    if face.local_interests.values().all(|interest| {
+                        !interest.finalized_includes(InterestOptions::queryables, key_expr)
+                    }) {
+                        let wire_expr = expr.get_best_key(face.id);
+                        route.push(QueryTargetQabl {
+                            dir: Direction {
+                                dst_face: face.clone(),
+                                wire_expr: wire_expr.to_owned(),
+                                node_id: NodeId::default(),
+                            },
+                            info: None,
+                            bound: self.bound,
+                        });
+                    }
+                } else if face.whatami == WhatAmI::Peer
+                    && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                    let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         dir: Direction {
                             dst_face: face.clone(),
-                            wire_expr: key_expr.to_owned(),
+                            wire_expr: wire_expr.to_owned(),
                             node_id: NodeId::default(),
                         },
                         info: None,
@@ -679,54 +688,8 @@ impl HatQueriesTrait for Hat {
                     });
                 }
             }
-
-            for face in self.faces(tables).values().filter(|f| {
-                f.whatami == WhatAmI::Peer
-                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
-            }) {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.push(QueryTargetQabl {
-                    dir: Direction {
-                        dst_face: face.clone(),
-                        wire_expr: key_expr.to_owned(),
-                        node_id: NodeId::default(),
-                    },
-                    info: None,
-                    bound: self.bound,
-                });
-            }
         }
 
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for (fid, ctx) in &mres.face_ctxs {
-                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *fid);
-                    if let Some(qabl_info) = ctx.qabl.as_ref() {
-                        route.push(QueryTargetQabl {
-                            dir: Direction {
-                                dst_face: ctx.face.clone(),
-                                wire_expr: key_expr.to_owned(),
-                                node_id: NodeId::default(),
-                            },
-                            info: Some(QueryableInfoType {
-                                complete: complete && qabl_info.complete,
-                                distance: 1,
-                            }),
-                            bound: self.bound,
-                        });
-                    }
-                }
-            }
-        }
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }

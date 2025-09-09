@@ -19,6 +19,8 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
+#![allow(deprecated)]
+
 pub mod defaults;
 mod include;
 pub mod qos;
@@ -33,7 +35,7 @@ use std::{
     fmt,
     io::Read,
     net::SocketAddr,
-    num::NonZeroU16,
+    num::{NonZeroU16, NonZeroUsize},
     ops::{self, Bound, RangeBounds},
     path::Path,
     sync::Weak,
@@ -108,7 +110,10 @@ pub enum InterceptorFlow {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum DownsamplingMessage {
+    Delete,
+    #[deprecated = "Use `Put` or `Delete` instead."]
     Push,
+    Put,
     Query,
     Reply,
 }
@@ -140,6 +145,19 @@ pub struct DownsamplingItemConf {
     pub rules: NEVec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress
     pub flows: Option<NEVec<InterceptorFlow>>,
+}
+
+fn downsampling_validator(d: &Vec<DownsamplingItemConf>) -> bool {
+    for item in d {
+        if item
+            .messages
+            .iter()
+            .any(|m| *m == DownsamplingMessage::Push)
+        {
+            tracing::warn!("In 'downsampling/messages' configuration: 'push' is deprecated and may not be supported in future versions, use 'put' and/or 'delete' instead");
+        }
+    }
+    true
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -773,6 +791,16 @@ validated_struct::validator! {
                 /// - "init": SHM subsystem internals will be initialized upon Session opening. This setting sacrifices
                 /// startup time, but guarantees no latency impact when first SHM buffer is processed.
                 mode: ShmInitMode,
+                pub transport_optimization:
+                LargeMessageTransportOpt {
+                    /// Enables transport optimization for large messages (default `true`).
+                    /// Implicitly puts large messages into shared memory for transports with SHM-compatible connection.
+                    enabled: bool,
+                    /// SHM arena size in bytes used for transport optimization (default `16 * 1024 * 1024`).
+                    pool_size: NonZeroUsize,
+                    /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
+                    message_size_threshold: usize,
+                },
             },
             pub auth: #[derive(Default)]
             AuthConf {
@@ -832,7 +860,7 @@ validated_struct::validator! {
         pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
-        downsampling: Vec<DownsamplingItemConf>,
+        downsampling: Vec<DownsamplingItemConf> where (downsampling_validator),
 
         /// Configuration of the access control (ACL)
         pub access_control: AclConfig {
