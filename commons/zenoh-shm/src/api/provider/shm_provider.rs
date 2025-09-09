@@ -13,7 +13,6 @@
 //
 
 use std::{
-    collections::VecDeque,
     error::Error,
     future::{Future, IntoFuture},
     marker::PhantomData,
@@ -146,70 +145,6 @@ where
             _phantom: PhantomData,
         })
     }
-}
-/// Trait for deallocation policies.
-#[zenoh_macros::unstable_doc]
-pub trait ForceDeallocPolicy<Backend> {
-    fn dealloc(&self, provider: &ShmProvider<Backend>) -> bool;
-}
-
-/// Try to dealloc optimal (currently eldest+1) chunk
-#[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct DeallocOptimal;
-impl<Backend: ShmProviderBackend> ForceDeallocPolicy<Backend> for DeallocOptimal {
-    fn dealloc(&self, provider: &ShmProvider<Backend>) -> bool {
-        let chunk_to_dealloc = {
-            let mut guard = zlock!(provider.busy_list);
-            match (guard.pop_front(), guard.pop_front()) {
-                (Some(eldest), Some(optimal)) => {
-                    guard.push_front(eldest);
-                    optimal
-                }
-                (Some(eldest), None) => eldest,
-                _ => return false,
-            }
-        };
-        provider.backend.free(&chunk_to_dealloc.descriptor());
-        true
-    }
-}
-impl ConstPolicy for DeallocOptimal {
-    const NEW: Self = Self;
-}
-
-/// Try to dealloc youngest chunk
-#[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct DeallocYoungest;
-impl<Backend: ShmProviderBackend> ForceDeallocPolicy<Backend> for DeallocYoungest {
-    fn dealloc(&self, provider: &ShmProvider<Backend>) -> bool {
-        let Some(chunk_to_dealloc) = zlock!(provider.busy_list).pop_back() else {
-            return false;
-        };
-        provider.backend.free(&chunk_to_dealloc.descriptor());
-        true
-    }
-}
-impl ConstPolicy for DeallocYoungest {
-    const NEW: Self = Self;
-}
-
-/// Try to dealloc eldest chunk
-#[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct DeallocEldest;
-impl<Backend: ShmProviderBackend> ForceDeallocPolicy<Backend> for DeallocEldest {
-    fn dealloc(&self, provider: &ShmProvider<Backend>) -> bool {
-        let Some(chunk_to_dealloc) = zlock!(provider.busy_list).pop_front() else {
-            return false;
-        };
-        provider.backend.free(&chunk_to_dealloc.descriptor());
-        true
-    }
-}
-impl ConstPolicy for DeallocEldest {
-    const NEW: Self = Self;
 }
 
 /// Trait for allocation policies
@@ -411,74 +346,51 @@ impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> ConstPolicy
 /// This policy is unsafe as it may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
 #[derive(Clone, Copy)]
-pub struct Deallocate<
-    Limit,
-    InnerPolicy = JustAlloc,
-    AltPolicy = InnerPolicy,
-    DeallocatePolicy = DeallocOptimal,
-> {
+pub struct Deallocate<Limit, InnerPolicy = JustAlloc, AltPolicy = InnerPolicy> {
     limit: Limit,
     inner_policy: InnerPolicy,
     alt_policy: AltPolicy,
-    deallocate_policy: DeallocatePolicy,
 }
-impl<Limit, InnerPolicy, AltPolicy, DeallocatePolicy>
-    Deallocate<Limit, InnerPolicy, AltPolicy, DeallocatePolicy>
-{
+impl<Limit, InnerPolicy, AltPolicy> Deallocate<Limit, InnerPolicy, AltPolicy> {
     /// Creates a new `Deallocate` policy.
-    pub fn new(
-        limit: Limit,
-        inner_policy: InnerPolicy,
-        alt_policy: AltPolicy,
-        deallocate_policy: DeallocatePolicy,
-    ) -> Self {
+    pub fn new(limit: Limit, inner_policy: InnerPolicy, alt_policy: AltPolicy) -> Self {
         Self {
             limit,
             inner_policy,
             alt_policy,
-            deallocate_policy,
         }
     }
 }
-impl<Backend, Limit, InnerPolicy, AltPolicy, DeallocatePolicy> AllocPolicy<Backend>
-    for Deallocate<Limit, InnerPolicy, AltPolicy, DeallocatePolicy>
+impl<Backend, Limit, InnerPolicy, AltPolicy> AllocPolicy<Backend>
+    for Deallocate<Limit, InnerPolicy, AltPolicy>
 where
     Backend: ShmProviderBackend,
     Limit: PolicyValue<usize>,
     InnerPolicy: AllocPolicy<Backend>,
     AltPolicy: AllocPolicy<Backend>,
-    DeallocatePolicy: ForceDeallocPolicy<Backend>,
 {
     fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
-        let mut result = self.inner_policy.alloc(layout, provider);
         for _ in 0..self.limit.get() {
-            match result {
-                Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
-                    if !self.deallocate_policy.dealloc(provider) {
-                        return result;
-                    }
+            match self.inner_policy.alloc(layout, provider) {
+                res @ (Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory)) => {
+                    let Some(chunk) = zlock!(provider.busy_list).pop() else {
+                        return res;
+                    };
+                    provider.backend.free(&chunk.descriptor());
                 }
-                _ => {
-                    return result;
-                }
+                res => return res,
             }
-            result = self.alt_policy.alloc(layout, provider);
         }
-        result
+        self.alt_policy.alloc(layout, provider)
     }
 }
-impl<
-        Limit: ConstPolicy,
-        InnerPolicy: ConstPolicy,
-        AltPolicy: ConstPolicy,
-        DeallocatePolicy: ConstPolicy,
-    > ConstPolicy for Deallocate<Limit, InnerPolicy, AltPolicy, DeallocatePolicy>
+impl<Limit: ConstPolicy, InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> ConstPolicy
+    for Deallocate<Limit, InnerPolicy, AltPolicy>
 {
     const NEW: Self = Self {
         limit: Limit::NEW,
         inner_policy: InnerPolicy::NEW,
         alt_policy: AltPolicy::NEW,
-        deallocate_policy: DeallocatePolicy::NEW,
     };
 }
 
@@ -835,7 +747,7 @@ impl BusyChunk {
 #[derive(Debug)]
 pub struct ShmProvider<Backend> {
     backend: Backend,
-    busy_list: Mutex<VecDeque<BusyChunk>>,
+    busy_list: Mutex<Vec<BusyChunk>>,
 }
 
 impl<Backend: Default> Default for ShmProvider<Backend> {
@@ -892,9 +804,21 @@ where
 
     #[zenoh_macros::unstable_doc]
     fn garbage_collect_impl<const SAFE: bool>(&self) -> usize {
+        fn retain_unordered<T>(vec: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) {
+            let mut i = 0;
+            while i < vec.len() {
+                if f(&vec[i]) {
+                    i += 1;
+                } else {
+                    vec.swap_remove(i); // move last into place of vec[i]
+                                        // don't increment i: need to test the swapped-in element
+                }
+            }
+        }
+
         tracing::trace!("Running Garbage Collector");
         let mut largest = 0usize;
-        zlock!(self.busy_list).retain(|chunk| {
+        retain_unordered(&mut zlock!(self.busy_list), |chunk| {
             let header = chunk.metadata.header();
             if header.refcount.load(Ordering::SeqCst) == 0
                 || (!SAFE && header.watchdog_invalidated.load(Ordering::SeqCst))
@@ -1026,7 +950,7 @@ where
         };
 
         // Create and store busy chunk
-        zlock!(self.busy_list).push_back(BusyChunk::new(allocated_metadata));
+        zlock!(self.busy_list).push(BusyChunk::new(allocated_metadata));
 
         shmb
     }
