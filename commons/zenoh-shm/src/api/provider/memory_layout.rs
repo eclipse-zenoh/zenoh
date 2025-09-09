@@ -12,34 +12,22 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Display, marker::PhantomData, num::NonZeroUsize};
+use std::{fmt::Display, marker::PhantomData, mem, num::NonZeroUsize};
 
 use crate::api::provider::types::{AllocAlignment, ZLayoutError};
 
-/// A trait for types that can represent an allocation layout to be used for buffer allocation requests.
-#[zenoh_macros::unstable_doc]
-pub trait BufferLayout {}
-impl<T: MemLayout> BufferLayout for T {}
-impl<T> BufferLayout for LayoutForType<T> {}
-
-/// A trait for types that can represent a memory layout.
-#[zenoh_macros::unstable_doc]
-pub trait MemLayout {}
-impl<T: TryIntoMemoryLayout> MemLayout for T {}
-impl MemLayout for MemoryLayout {}
-impl MemLayout for &MemoryLayout {}
-impl<T> MemLayout for StaticLayout<T> {}
-
-#[zenoh_macros::unstable_doc]
-pub trait TryIntoMemoryLayout: TryInto<MemoryLayout, Error = ZLayoutError> {}
-impl<T> TryIntoMemoryLayout for T where T: TryInto<MemoryLayout, Error = ZLayoutError> {}
-
 /// Memory layout representation: alignment and size aligned for this alignment
 #[zenoh_macros::unstable_doc]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryLayout {
     size: NonZeroUsize,
     alignment: AllocAlignment,
+}
+
+impl From<&MemoryLayout> for MemoryLayout {
+    fn from(other: &MemoryLayout) -> Self {
+        *other
+    }
 }
 
 impl Display for MemoryLayout {
@@ -75,8 +63,29 @@ impl MemoryLayout {
 
     /// #SAFETY: this is safe if size is a multiply of alignment
     /// Note: not intended for public APIs as it is really very unsafe
-    unsafe fn new_unchecked(size: NonZeroUsize, alignment: AllocAlignment) -> Self {
+    const unsafe fn new_unchecked(size: NonZeroUsize, alignment: AllocAlignment) -> Self {
         Self { size, alignment }
+    }
+
+    /// Creates a new `MemoryLayout` for type.
+    #[allow(path_statements)]
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_type<T: Sized>() -> Self {
+        struct ZstCheck<T>(PhantomData<T>);
+        impl<T> ZstCheck<T> {
+            const NOT_ZST: () = assert!(mem::size_of::<T>() != 0, "`T` must not be a ZST");
+        }
+        ZstCheck::<T>::NOT_ZST;
+        // SAFETY: invariant checked above
+        let size = unsafe { NonZeroUsize::new_unchecked(mem::size_of::<T>()) };
+        let alignment = AllocAlignment::for_type::<T>();
+        unsafe { Self::new_unchecked(size, alignment) }
+    }
+
+    /// Creates a new `MemoryLayout` for value type.
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_value<T: Sized>(_: &T) -> Self {
+        Self::for_type::<T>()
     }
 
     #[zenoh_macros::unstable_doc]
@@ -109,11 +118,11 @@ impl MemoryLayout {
     /// ```
     #[zenoh_macros::unstable_doc]
     pub fn extend(&self, new_alignment: AllocAlignment) -> Result<MemoryLayout, ZLayoutError> {
-        if self.alignment <= new_alignment {
-            let new_size = new_alignment.align_size(self.size);
-            return MemoryLayout::new(new_size, new_alignment);
+        if new_alignment < self.alignment {
+            return Err(ZLayoutError::IncorrectLayoutArgs);
         }
-        Err(ZLayoutError::IncorrectLayoutArgs)
+        let new_size = new_alignment.align_size(self.size);
+        MemoryLayout::new(new_size, new_alignment)
     }
 }
 
@@ -149,87 +158,36 @@ impl TryFrom<(usize, AllocAlignment)> for MemoryLayout {
     }
 }
 
-/// Helper type to build LayoutForType
-#[zenoh_macros::unstable_doc]
-pub struct BuildLayout;
-
-impl BuildLayout {
-    /// Create a new AllocAlignment for value type
-    #[zenoh_macros::unstable_doc]
-    pub fn for_val<T>(_: &T) -> LayoutForType<T> {
-        Self::for_type::<T>()
-    }
-
-    /// Create a new AllocAlignment for type
-    #[zenoh_macros::unstable_doc]
-    pub fn for_type<T>() -> LayoutForType<T> {
-        LayoutForType::<T> {
-            inner: StaticLayout::<T> {
-                _phantom: PhantomData,
-            },
-        }
-    }
-}
-
 /// A statically-known layout with type information.
 ///
 /// Used in context of typed operations.
 ///
 /// Statically-known layouts are always correct, zero-sized & zero-cost.
 #[zenoh_macros::unstable_doc]
-pub struct LayoutForType<T> {
-    inner: StaticLayout<T>,
-}
-
-impl<T> Clone for LayoutForType<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for LayoutForType<T> {}
-
-impl<T> LayoutForType<T> {
-    pub fn layout(&self) -> StaticLayout<T> {
-        self.inner
-    }
-}
-
-impl<T> From<LayoutForType<T>> for MemoryLayout {
-    fn from(value: LayoutForType<T>) -> Self {
-        value.layout().into()
-    }
-}
-
-/// A statically-known layout WITHOUT type information.
-///
-/// Statically-known layouts are always correct, zero-sized & zero-cost.
-#[zenoh_macros::unstable_doc]
-pub struct StaticLayout<T> {
+pub struct TypedLayout<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T> Clone for StaticLayout<T> {
+impl<T> TypedLayout<T> {
+    /// Creates a new `TypedLayout` for type
+    #[zenoh_macros::unstable_doc]
+    pub fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Creates a new `TypedLayout` for value type
+    #[zenoh_macros::unstable_doc]
+    pub fn for_value(_: &T) -> Self {
+        Self::new()
+    }
+}
+
+impl<T> Clone for TypedLayout<T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T> Copy for StaticLayout<T> {}
-
-impl<T> StaticLayout<T> {
-    pub const fn size(&self) -> NonZeroUsize {
-        // SAFETY: this is safe because std::mem::size_of should always return >0 for T: Sized
-        unsafe { NonZeroUsize::new_unchecked(std::mem::size_of::<T>()) }
-    }
-
-    pub const fn alignment(&self) -> AllocAlignment {
-        AllocAlignment::for_type::<T>()
-    }
-}
-impl<T> From<StaticLayout<T>> for MemoryLayout {
-    fn from(value: StaticLayout<T>) -> Self {
-        // SAFETY: this is safe as StaticLayout always gives correct layout arguments
-        unsafe { MemoryLayout::new_unchecked(value.size(), value.alignment()) }
-    }
-}
+impl<T> Copy for TypedLayout<T> {}
