@@ -168,6 +168,12 @@ pub struct TypedLayout<T> {
     _phantom: PhantomData<T>,
 }
 
+impl<T> Default for TypedLayout<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> TypedLayout<T> {
     /// Creates a new `TypedLayout` for type
     #[zenoh_macros::unstable_doc]
