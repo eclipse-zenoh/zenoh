@@ -123,20 +123,21 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        self.get_mut_socket().write(buffer).await.map_err(|e| {
-            let e = zerror!("Write error on vsock link {}: {}", self, e);
-            tracing::trace!("{}", e);
-            e.into()
-        })
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
             e.into()
         })
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.get_mut_socket().is_write_vectored()
+    }
+
+    async fn write_vectored_all(&self, bufs: &mut [IoSlice<'_>]) -> ZResult<()> {
+        write_all_vectored(self.get_mut_socket(), bufs).await?;
+        Ok(())
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {

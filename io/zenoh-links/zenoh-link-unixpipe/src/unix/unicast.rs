@@ -194,6 +194,7 @@ impl PipeW {
         Ok(Self { pipe })
     }
 
+    #[allow(dead_code)]
     async fn write<'a>(&'a mut self, buf: &'a [u8]) -> ZResult<usize> {
         let result = self
             .pipe
@@ -476,10 +477,6 @@ impl LinkUnicastTrait for UnicastPipe {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing Unix Pipe link: {}", self);
         Ok(())
-    }
-
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        self.get_w_mut().write(buffer).await
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
