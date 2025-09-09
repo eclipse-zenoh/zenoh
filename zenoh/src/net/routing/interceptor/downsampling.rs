@@ -195,7 +195,10 @@ impl DownsamplingFilters {
             },
             NetworkBodyMut::Request(_) => self.query,
             NetworkBodyMut::Response(_) => self.reply,
-            _ => false,
+            NetworkBodyMut::ResponseFinal(_) => false,
+            NetworkBodyMut::Interest(_) => false,
+            NetworkBodyMut::Declare(_) => false,
+            NetworkBodyMut::OAM(_) => false,
         }
     }
 }
