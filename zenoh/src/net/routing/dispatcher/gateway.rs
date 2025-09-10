@@ -1,7 +1,9 @@
 use std::{
+    collections::HashMap,
     fmt::Debug,
     ops::{Index, IndexMut},
     sync::Arc,
+    usize,
 };
 
 use tokio_util::sync::CancellationToken;
@@ -13,13 +15,13 @@ use zenoh_protocol::{
 use crate::net::routing::dispatcher::face::FaceState;
 
 /// Region identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum Bound {
     /// The region entry/exit point; there is only one such bound.
     North,
     /// A sub-region within the south region; there is zero or more such bound.
     South { index: usize },
-    /// A special bound for faces that neither belong to the south region nor the
+    /// A special bound for "unbound" faces that neither belong to the south region nor the
     /// north region; there is zero or more such bound.
     Eastwest { index: usize },
 }
@@ -27,7 +29,12 @@ pub(crate) enum Bound {
 impl Bound {
     /// Returns a gateway [`Bound`] for session clients.
     pub(crate) const fn session() -> Self {
-        Self::North
+        Self::south(usize::MAX)
+    }
+
+    /// Returns a gateway [`Bound`] for unbound faces.
+    pub(crate) const fn unbound() -> Self {
+        Self::eastwest(0)
     }
 
     pub(crate) const fn south(index: usize) -> Self {
@@ -36,14 +43,6 @@ impl Bound {
 
     pub(crate) const fn eastwest(index: usize) -> Self {
         Bound::Eastwest { index }
-    }
-
-    pub(crate) fn is_south(&self) -> bool {
-        matches!(self, Bound::South { .. })
-    }
-
-    pub(crate) fn is_eastwest(&self) -> bool {
-        matches!(self, Bound::Eastwest { .. })
     }
 
     pub(crate) fn is_north(&self) -> bool {
@@ -82,6 +81,20 @@ impl<D> BoundMap<D> {
         north
     }
 
+    pub(crate) fn partition_north_mut(&mut self) -> (&mut D, BoundMap<&mut D>) {
+        let (mut north, south) = self
+            .0
+            .iter_mut()
+            .map(|(b, d)| (*b, d))
+            .partition::<hashbrown::HashMap<_, _>, _>(|(b, _)| b.is_north());
+
+        let Some(north) = north.remove(&Bound::North) else {
+            unreachable!()
+        };
+
+        (north, BoundMap(south))
+    }
+
     pub(crate) fn non_north_iter(&self) -> impl Iterator<Item = (&Bound, &D)> {
         self.iter().filter(|(b, _)| !b.is_north())
     }
@@ -107,6 +120,10 @@ impl<D> BoundMap<D> {
         F: Fn(&D) -> E,
     {
         BoundMap(self.iter().map(|(b, d)| (*b, f(d))).collect())
+    }
+
+    pub(crate) fn into_iter(self) -> impl Iterator<Item = (Bound, D)> {
+        self.0.into_iter()
     }
 }
 

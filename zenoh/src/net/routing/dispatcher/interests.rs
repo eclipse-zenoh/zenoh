@@ -32,7 +32,7 @@ use zenoh_util::Timed;
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, gateway::Bound, tables::Tables},
-    hat::{BaseContext, SendDeclare},
+    hat::{BaseContext, HatTrait, SendDeclare},
     router::{register_expr_interest, unregister_expr_interest, Resource},
     RoutingContext,
 };
@@ -324,10 +324,7 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        let [upstream_hat, downstream_hat] = tables
-            .hats
-            .get_many_mut([&Bound::North, &self.state.bound])
-            .unwrap();
+        let (upstream_hat, downstream_hats) = tables.hats.partition_north_mut();
 
         let ctx = BaseContext {
             tables_lock: &self.tables,
@@ -336,6 +333,13 @@ impl Face {
             send_declare,
         };
 
-        upstream_hat.unregister_current_interest(ctx, id, &mut **downstream_hat);
+        upstream_hat.unregister_current_interest(
+            ctx,
+            id,
+            downstream_hats
+                .into_iter()
+                .map(|(b, d)| (b, &mut **d as &mut dyn HatTrait))
+                .collect(),
+        );
     }
 }

@@ -37,7 +37,9 @@ use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, ModeDependent, ZenohId};
+use zenoh_config::{
+    gateway::BoundFilterConf, unwrap_or_default, Interface, ModeDependent, ZenohId,
+};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
@@ -390,7 +392,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .collect();
 
                 // FIXME(regions): implement manual gateway config and use it here
-                let bound = Bound::North;
+                let bound = compute_bound(&peer, &runtime.config().lock())?;
 
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
@@ -419,7 +421,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
 
-                // FIXME(regions): implement manual gateway config and use it here
+                // FIXME(regions): multicast support
                 let bound = Bound::North;
 
                 runtime
@@ -579,4 +581,67 @@ impl Closeable for Runtime {
     fn get_closee(&self) -> Self::TClosee {
         self.state.clone()
     }
+}
+
+fn compute_bound(peer: &TransportPeer, config: &Config) -> ZResult<Bound> {
+    let gateway_config = config
+        .gateway
+        .get(zenoh_config::unwrap_or_default!(config.mode()))
+        .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
+
+    fn matches(peer: &TransportPeer, filter: &BoundFilterConf) -> bool {
+        filter
+            .zids
+            .as_ref()
+            .map(|zid| zid.contains(&peer.zid.into()))
+            .unwrap_or(true)
+            && filter
+                .interfaces
+                .as_ref()
+                .map(|ifaces| {
+                    peer.links
+                        .iter()
+                        .flat_map(|link| {
+                            link.interfaces
+                                .iter()
+                                .map(|iface| Interface(iface.to_owned()))
+                        })
+                        .all(|iface| ifaces.contains(&iface))
+                })
+                .unwrap_or(true)
+            && filter
+                .modes
+                .as_ref()
+                .map(|mode| mode.matches(peer.whatami))
+                .unwrap_or(true)
+    }
+
+    let north = gateway_config
+        .north
+        .filters
+        .as_ref()
+        .map(|filters| filters.iter().any(|filter| matches(peer, filter)))
+        .unwrap_or(true);
+
+    let south = gateway_config.south.iter().position(|south| {
+        south
+            .filters
+            .as_ref()
+            .map(|filters| filters.iter().any(|filter| matches(peer, filter)))
+            .unwrap_or(true)
+    });
+
+    Ok(match (north, south) {
+        (true, None) => Bound::North,
+        (false, Some(index)) => Bound::eastwest(index),
+        (false, None) => Bound::unbound(),
+        (true, Some(_)) => {
+            tracing::warn!(
+                zid = %peer.zid,
+                "Transport peer matches north and south bound filters. \
+                Using eastwest region instead"
+            );
+            Bound::unbound()
+        }
+    })
 }

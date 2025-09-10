@@ -27,6 +27,7 @@ use super::Hat;
 use crate::net::routing::{
     dispatcher::{
         face::{FaceState, InterestState},
+        gateway::BoundMap,
         interests::{
             finalize_pending_interest, CurrentInterest, CurrentInterestCleanup,
             PendingCurrentInterest, RemoteInterest,
@@ -197,7 +198,7 @@ impl HatInterestTrait for Hat {
         &mut self,
         mut ctx: BaseContext,
         id: InterestId,
-        downstream_hat: &mut dyn HatTrait,
+        mut downstream_hats: BoundMap<&mut dyn HatTrait>,
     ) {
         if self.owns(ctx.src_face) {
             if let Some(interest) = get_mut_unchecked(&mut ctx.src_face.clone())
@@ -220,7 +221,9 @@ impl HatInterestTrait for Hat {
                     .remove(&id)
                 {
                     pending_interest.cancellation_token.cancel();
-                    downstream_hat.finalize_current_interest(
+
+                    let hat = &mut downstream_hats[pending_interest.interest.src_face.bound];
+                    hat.finalize_current_interest(
                         ctx.reborrow(),
                         id,
                         &pending_interest.interest.src_face.zid,

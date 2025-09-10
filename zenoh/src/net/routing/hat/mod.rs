@@ -45,7 +45,10 @@ use super::{
 use crate::key_expr::KeyExpr;
 use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-    routing::dispatcher::{gateway::Bound, interests::RemoteInterest},
+    routing::dispatcher::{
+        gateway::{Bound, BoundMap},
+        interests::RemoteInterest,
+    },
     runtime::Runtime,
 };
 
@@ -241,13 +244,13 @@ pub(crate) trait HatInterestTrait {
 
     /// Handles interest finalization where this hat is the exit relay.
     ///
-    /// Will use the downstream hat reference to call
+    /// Will use the downstream hat references to call
     /// [`HatInterestTrait::finalize_current_interest`].
     fn unregister_current_interest(
         &mut self,
         ctx: BaseContext,
         id: InterestId,
-        downstream_hat: &mut dyn HatTrait,
+        downstream_hats: BoundMap<&mut dyn HatTrait>,
     );
 
     /// Informs the interest source that all declarations have been transmitted.

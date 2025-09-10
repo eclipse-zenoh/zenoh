@@ -18,7 +18,7 @@ use std::{
 
 use arc_swap::ArcSwap;
 use uhlc::HLC;
-use zenoh_config::Config;
+use zenoh_config::{Config, ModeDependent};
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
@@ -52,9 +52,27 @@ pub struct Router {
 
 impl Router {
     pub fn new(zid: ZenohIdProto, hlc: Option<Arc<HLC>>, config: &Config) -> ZResult<Self> {
-        let hats = [(Bound::North, config.mode().unwrap_or_default())];
+        let mode = zenoh_config::unwrap_or_default!(config.mode());
 
-        // TODO(regions): add gateway config and use it here
+        let gateway_config = config
+            .gateway
+            .get(mode)
+            .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
+
+        if mode != gateway_config.north.mode {
+            bail!("Config options `mode` and `gateway.north.mode` don't match");
+        }
+
+        // REVIEW(regions): impact of using three hats at minimum
+        let mut hats = vec![
+            (Bound::North, mode),
+            (Bound::unbound(), WhatAmI::Router),
+            (Bound::session(), WhatAmI::Client),
+        ];
+
+        for (index, south) in gateway_config.south.iter().enumerate() {
+            hats.push((Bound::south(index), south.mode));
+        }
 
         tracing::trace!(?hats, "new router");
 
