@@ -428,12 +428,10 @@ impl HatQueriesTrait for HatCode {
                 continue;
             }
             for (sid, context) in &mres.session_ctxs {
-                if context.face.whatami == WhatAmI::Client
-                    && match complete {
-                        true => context.qabl.is_some_and(|q| q.complete),
-                        false => context.qabl.is_some(),
-                    }
-                {
+                if match complete {
+                    true => context.qabl.is_some_and(|q| q.complete),
+                    false => context.qabl.is_some(),
+                } {
                     matching_queryables
                         .entry(*sid)
                         .or_insert_with(|| context.face.clone());
