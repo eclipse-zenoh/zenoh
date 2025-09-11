@@ -63,7 +63,7 @@ pub struct StorageConfig {
     pub complete: bool,
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
-    pub volume_cfg: Value,
+    pub volume_cfg: String,
     pub garbage_collection_config: GarbageCollectionConfig,
     // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
     pub replication: Option<ReplicaConfig>,
@@ -409,12 +409,16 @@ impl StorageConfig {
         if let Some(s) = &self.strip_prefix {
             result.insert("strip_prefix".into(), Value::String(s.to_string()));
         }
+        let volume_value = match serde_json::from_str::<serde_json::Value>(&self.volume_cfg) {
+            Ok(value) => value,
+            Err(_) => Value::Null,
+        };
+
         result.insert(
             "volume".into(),
-            match &self.volume_cfg {
+            match volume_value {
                 Value::Null => Value::String(self.volume_id.clone()),
-                Value::Object(v) => {
-                    let mut v = v.clone();
+                Value::Object(mut v) => {
                     v.insert("id".into(), self.volume_id.clone().into());
                     Value::Object(v)
                 }
@@ -640,7 +644,7 @@ impl StorageConfig {
             complete,
             strip_prefix,
             volume_id,
-            volume_cfg,
+            volume_cfg: volume_cfg.to_string(),
             garbage_collection_config,
             replication,
         })
