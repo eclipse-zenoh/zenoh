@@ -19,22 +19,44 @@
 //! storage, queries and computations, while retaining a level of time and space efficiency
 //! that is well beyond any of the mainstream stacks.
 //!
-//! Before delving into the examples, we need to introduce few **Zenoh** concepts.
-//! First off, in Zenoh you will deal with **Resources**, where a resource is made up of a
-//! key and a value.  The other concept you'll have to familiarize yourself with are
-//! **key expressions**, such as ```robot/sensor/temp```, ```robot/sensor/*```, ```robot/**```, etc.
-//! As you can gather, the above key expression denotes set of keys, while the ```*``` and ```**```
-//! are wildcards representing respectively (1) an arbitrary string of characters, with the exclusion of the ```/```
-//! separator, and (2) an arbitrary sequence of characters including separators.
+//! # Concepts and components
 //!
-//! Below are some examples that highlight these key concepts and show how easy it is to get
-//! started with.
+//! Zenoh protocol allows to communicate data between nodes connected in the graph of arbitrary topology. 
+//! I.e. depending of the network configuration the data can be send directly or routed through intermediate nodes.
 //!
-//! # Examples
-//! ### Publishing Data
-//! The example below shows how to produce a value for a key expression.
-//! ```
+//! Each Zenoh node is the [Session](crate::Session) object. This is the main object which maintains the state of
+//! the connection to the Zenoh network and is used to declare publishers, subscribers, queriers, queryables, etc. 
+//! A session is created by the [open](crate::open) function, which takes a [Config](crate::config::Config) object as argument.
 //!
+//! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
+//!
+//! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher) and consumed by [Subscribers](crate::pubsub::Subscriber).
+//!
+//! In the query/reply paradigm, data is available on [Queryables](crate::query::Queryable) and requested by [Queriers](crate::query::Querier) or directly by [Session::get](crate::Session::get) operations.
+//!
+//! The data on producing side is associated with keys in format of a `/`-separated path, e.g., `robot/sensor/temp`. The requesting side uses the [Key expressions](crate::key_expr)
+//! to address the data of interest. The key expressions can contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
+//!
+//! The data is received as [Samples](crate::sample::Sample) which contain the payload and all the metadata associated with the data. 
+//! The raw bytes payload is represented as [ZBytes](crate::bytes::ZBytes) which provides mechanisms for zero-copy creation and access. 
+//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate provides also serialization and deserialization of basic types and structures for ZBytes.
+//!
+//! Sample can be received by callback function or read from a channel. The [handlers](crate::handlers) API is responsible for this.
+//!
+//! The other important elements of Zenoh are:
+//! - Scouting support to discover Zenoh nodes in the network, provided by the [scout](crate::scouting::scout) function. Notice that it's not necessary to explicitly discover other nodes just to publish or subscribe data
+//! - Liveliness API to declare and monitor session liveliness tokens, provided by the [liveliness](crate::liveliness) module.
+//! - Matching listener API in the [matching](crate::matching) module. It allows the active side of communication (publisher, querier) to know if there are any interested parties on the other side (subscriber, queryable).
+//!
+//! # Usage examples
+//! 
+//! Below are the basic examples of using Zenoh. More examples are available in the documentation of each module and in the [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
+//! 
+//! ## Publishing/Subscribing
+//! The example below shows how to publish and subscribe data using Zenoh.
+//! 
+//! Publishing data:
+//! ```no_run
 //! #[tokio::main]
 //! async fn main() {
 //!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -42,9 +64,8 @@
 //!     session.close().await.unwrap();
 //! }
 //! ```
-//!
-//! ### Subscribe
-//! The example below shows how to consume values for a key expressions.
+//! 
+//! Subscribing to data: 
 //! ```no_run
 //! use futures::prelude::*;
 //!
@@ -58,9 +79,21 @@
 //! }
 //! ```
 //!
-//! ### Query
-//! The example below shows how to make a distributed query to collect the values associated with the
-//! resources whose key match the given *key expression*.
+//! ## Query/Reply
+//! 
+//! Declare a queryable:
+//! ```
+//! #[tokio::main]
+//! async fn main() {
+//!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+//!     let queryable = session.declare_queryable("key/expression").await.unwrap();
+//!     while let Ok(query) = queryable.recv_async().await {
+//!         let reply = query.reply("key/expression", "value").await.unwrap();
+//!     }
+//! }
+//! ```
+//!
+//! Request data:
 //! ```
 //! use futures::prelude::*;
 //!
