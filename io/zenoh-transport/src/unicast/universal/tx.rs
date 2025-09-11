@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
     network::{NetworkMessageExt, NetworkMessageMut, NetworkMessageRef},
@@ -69,7 +72,7 @@ impl TransportUnicastUniversal {
         match_.full.or(match_.partial).or(match_.any)
     }
 
-    fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<bool> {
+    fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<()> {
         let transport_links = self
             .links
             .read()
@@ -92,9 +95,10 @@ impl TransportUnicastUniversal {
                 "Message dropped because the transport has no links: {}",
                 msg
             );
-
             // No Link found
-            return Ok(false);
+            #[cfg(feature = "stats")]
+            self.stats.inc_tx_n_dropped(1);
+            return Ok(());
         };
 
         let transport_link = transport_links
@@ -132,31 +136,48 @@ impl TransportUnicastUniversal {
                 }
             });
         }
-        Ok(push)
+        #[cfg(feature = "stats")]
+        if push {
+            self.stats.inc_tx_n_msgs(1);
+        } else {
+            self.stats.inc_tx_n_dropped(1);
+        }
+        Ok(())
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
-        {
-            if let Err(e) = map_zmsg_to_partner(&mut msg, &self.config.shm) {
-                tracing::trace!("Failed SHM conversion: {}", e);
-                return Ok(false);
-            }
+        if let Some(shm_context) = &self.shm_context {
+            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
 
-        let res = self.schedule_on_link(msg.as_ref())?;
-
-        #[cfg(feature = "stats")]
-        if res {
-            self.stats.inc_tx_n_msgs(1);
+        #[cfg(feature = "unstable")]
+        if msg.congestion_control() == CongestionControl::BlockFirst {
+            if self
+                .block_first_waiter
+                .wait_timeout(self.manager.config.wait_before_drop)
+                .is_err()
+            {
+                #[cfg(feature = "stats")]
+                self.stats.inc_tx_n_dropped(1);
+                return Ok(());
+            };
+            let transport = self.clone();
+            let msg = msg.to_owned();
+            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
+                let _ = transport.schedule_on_link(msg.as_ref());
+                let _ = transport.block_first_notifier.notify();
+            });
+            Ok(())
         } else {
-            self.stats.inc_tx_n_dropped(1);
+            self.schedule_on_link(msg.as_ref())
         }
 
-        Ok(res)
+        #[cfg(not(feature = "unstable"))]
+        self.schedule_on_link(msg.as_ref())
     }
 }
 

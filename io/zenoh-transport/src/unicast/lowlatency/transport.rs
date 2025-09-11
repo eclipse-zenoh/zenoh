@@ -30,6 +30,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::{zerror, ZResult};
 
+#[cfg(feature = "shared-memory")]
+use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -64,12 +66,16 @@ pub(crate) struct TransportUnicastLowlatency {
     // The handles for TX/RX tasks
     pub(crate) token: CancellationToken,
     pub(crate) tracker: TaskTracker,
+
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_context: Option<UnicastTransportShmContext>,
 }
 
 impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
         #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> Arc<dyn TransportUnicastTrait> {
         Arc::new(TransportUnicastLowlatency {
@@ -82,6 +88,8 @@ impl TransportUnicastLowlatency {
             stats,
             token: CancellationToken::new(),
             tracker: TaskTracker::new(),
+            #[cfg(feature = "shared-memory")]
+            shm_context,
         }) as Arc<dyn TransportUnicastTrait>
     }
 
@@ -183,7 +191,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn get_auth_ids(&self) -> TransportAuthId {
         // Convert LinkUnicast auth id to AuthId
-        let mut transport_auth_id = TransportAuthId::default();
+        let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         let handle = tokio::runtime::Handle::current();
         let guard =
             tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));

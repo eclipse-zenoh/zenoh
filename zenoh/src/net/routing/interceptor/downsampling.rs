@@ -32,7 +32,10 @@ use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
     impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
 };
-use zenoh_protocol::network::NetworkBodyMut;
+use zenoh_protocol::{
+    network::{NetworkBodyMut, Push},
+    zenoh::PushBody,
+};
 use zenoh_result::ZResult;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -131,24 +134,24 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         );
         (
             self.flows.ingress.then(|| {
-                Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                Box::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
                     #[cfg(feature = "stats")]
                     InterceptorFlow::Ingress,
                     #[cfg(feature = "stats")]
                     transport.get_stats().unwrap_or_default(),
-                ))) as IngressInterceptor
+                )) as IngressInterceptor
             }),
             self.flows.egress.then(|| {
-                Box::new(ComputeOnMiss::new(DownsamplingInterceptor::new(
+                Box::new(DownsamplingInterceptor::new(
                     self.messages.clone(),
                     &self.rules,
                     #[cfg(feature = "stats")]
                     InterceptorFlow::Egress,
                     #[cfg(feature = "stats")]
                     transport.get_stats().unwrap_or_default(),
-                ))) as EgressInterceptor
+                )) as EgressInterceptor
             }),
         )
     }
@@ -167,7 +170,8 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct DownsamplingFilters {
-    push: bool,
+    delete: bool,
+    put: bool,
     query: bool,
     reply: bool,
 }
@@ -177,7 +181,13 @@ impl From<&NEVec<DownsamplingMessage>> for DownsamplingFilters {
         let mut res = Self::default();
         for v in value {
             match v {
-                DownsamplingMessage::Push => res.push = true,
+                DownsamplingMessage::Delete => res.put = true,
+                #[allow(deprecated)]
+                DownsamplingMessage::Push => {
+                    res.put = true;
+                    res.delete = true;
+                }
+                DownsamplingMessage::Put => res.put = true,
                 DownsamplingMessage::Query => res.query = true,
                 DownsamplingMessage::Reply => res.reply = true,
             }
@@ -202,9 +212,16 @@ pub(crate) struct DownsamplingInterceptor {
 }
 
 impl DownsamplingInterceptor {
-    fn is_msg_filtered(&self, ctx: &RoutingContext<NetworkMessageMut>) -> bool {
-        match ctx.msg.body {
-            NetworkBodyMut::Push(_) => self.filtered_messages.push,
+    fn is_msg_filtered(&self, msg: &mut NetworkMessageMut) -> bool {
+        match msg.body {
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => self.filtered_messages.delete,
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => self.filtered_messages.put,
             NetworkBodyMut::Request(_) => self.filtered_messages.query,
             NetworkBodyMut::Response(_) => self.filtered_messages.reply,
             NetworkBodyMut::ResponseFinal(_) => false,
@@ -213,6 +230,11 @@ impl DownsamplingInterceptor {
             NetworkBodyMut::OAM(_) => false,
         }
     }
+    fn compute_id(&self, key_expr: &keyexpr) -> Option<usize> {
+        let ke_id = zlock!(self.ke_id);
+        let node = ke_id.intersecting_keys(key_expr).next()?;
+        ke_id.weight_at(&node).copied()
+    }
 }
 
 // The flag is used to print a message only once
@@ -220,63 +242,53 @@ static INFO_FLAG: AtomicBool = AtomicBool::new(false);
 
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
-        let ke_id = zlock!(self.ke_id);
-        if let Some(node) = ke_id.intersecting_keys(key_expr).next() {
-            if let Some(id) = ke_id.weight_at(&node) {
-                return Some(Box::new(Some(*id)));
-            }
-        }
-        Some(Box::new(None::<usize>))
+        Some(Box::new(self.compute_id(key_expr)))
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
-        cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
-        if self.is_msg_filtered(ctx) {
-            if let Some(cache) = cache {
-                if let Some(id) = cache.downcast_ref::<Option<usize>>() {
-                    if let Some(id) = id {
-                        let mut ke_state = zlock!(self.ke_state);
-                        if let Some(state) = ke_state.get_mut(id) {
-                            let timestamp = tokio::time::Instant::now();
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        if !self.is_msg_filtered(msg) {
+            return true;
+        }
+        let Some(id) = ctx
+            .get_cache(msg)
+            .and_then(|c| c.downcast_ref::<Option<usize>>())
+            .cloned()
+            .unwrap_or_else(|| self.compute_id(&ctx.full_keyexpr(msg)?))
+        else {
+            return true;
+        };
 
-                            if timestamp - state.latest_message_timestamp >= state.threshold {
-                                state.latest_message_timestamp = timestamp;
-                                return true;
-                            } else {
-                                if !INFO_FLAG.swap(true, Ordering::Relaxed) {
-                                    tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
-                                }
-                                tracing::trace!(
-                                    "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
-                                    ctx.msg,
-                                    ctx.full_expr().unwrap_or_default(),
-                                    ctx.inface().map(|f| f.to_string()).unwrap_or_default(),
-                                    ctx.outface().map(|f| f.to_string()).unwrap_or_default(),
-                                );
-                                #[cfg(feature = "stats")]
-                                match self.flow {
-                                    InterceptorFlow::Egress => {
-                                        self.stats.inc_tx_downsampler_dropped_msgs(1);
-                                    }
-                                    InterceptorFlow::Ingress => {
-                                        self.stats.inc_rx_downsampler_dropped_msgs(1);
-                                    }
-                                }
-                                return false;
-                            }
-                        } else {
-                            tracing::debug!("unexpected cache ID {}", id);
-                        }
-                    }
-                } else {
-                    tracing::debug!("unexpected cache type {:?}", ctx.full_expr());
+        let mut ke_state = zlock!(self.ke_state);
+        let Some(state) = ke_state.get_mut(&id) else {
+            tracing::debug!("unexpected cache ID {}", id);
+            return true;
+        };
+        let timestamp = tokio::time::Instant::now();
+        if timestamp - state.latest_message_timestamp >= state.threshold {
+            state.latest_message_timestamp = timestamp;
+            true
+        } else {
+            if !INFO_FLAG.swap(true, Ordering::Relaxed) {
+                tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
+            }
+            tracing::trace!(
+                "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
+                msg,
+                ctx.full_expr(msg).unwrap_or_default(),
+                ctx.face().map(|f| f.to_string()).unwrap_or_default(),
+                ctx.face().map(|f| f.to_string()).unwrap_or_default(),
+            );
+            #[cfg(feature = "stats")]
+            match self.flow {
+                InterceptorFlow::Egress => {
+                    self.stats.inc_tx_downsampler_dropped_msgs(1);
+                }
+                InterceptorFlow::Ingress => {
+                    self.stats.inc_rx_downsampler_dropped_msgs(1);
                 }
             }
+            false
         }
-        true
     }
 }
 

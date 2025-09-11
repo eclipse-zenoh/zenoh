@@ -155,12 +155,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         client01_pub_key.clone().into(),
         client01_pri_key.into(),
     )));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth);
+    let unicast = make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client01_id)
@@ -214,12 +209,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         client02_pub_key.clone().into(),
         client02_pri_key.clone().into(),
     )));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth);
+    let unicast = make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client02_id)
@@ -234,12 +224,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         client02_pub_key.clone().into(),
         client02_pri_key.clone().into(),
     )));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth);
+    let unicast = make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth);
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client03_id)
@@ -292,12 +277,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     ztimeout!(auth_pubkey.add_pubkey(client01_pub_key.into())).unwrap();
     let mut auth = Auth::empty();
     auth.set_pubkey(Some(auth_pubkey));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth);
+    let unicast = make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
@@ -437,12 +417,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     let mut auth_router = Auth::empty();
     auth_router.set_usrpwd(Some(auth_usrpwd_router));
 
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth_router);
+    let unicast =
+        make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth_router);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
@@ -455,12 +431,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         AuthUsrPwd::new(Some((user01.clone().into(), password01.clone().into())));
     let mut auth_client01 = Auth::empty();
     auth_client01.set_usrpwd(Some(auth_usrpwdr_client01));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth_client01);
+    let unicast =
+        make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth_client01);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client01_id)
@@ -473,12 +445,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         AuthUsrPwd::new(Some((user02.clone().into(), password02.clone().into())));
     let mut auth_client02 = Auth::empty();
     auth_client02.set_usrpwd(Some(auth_usrpwdr_client02));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth_client02);
+    let unicast =
+        make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth_client02);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client02_id)
@@ -491,12 +459,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         AuthUsrPwd::new(Some((user03.clone().into(), password03.clone().into())));
     let mut auth_client03 = Auth::empty();
     auth_client03.set_usrpwd(Some(auth_usrpwdr_client03));
-    let unicast = make_basic_transport_manager_builder(
-        #[cfg(feature = "shared-memory")]
-        false,
-        lowlatency_transport,
-    )
-    .authenticator(auth_client03);
+    let unicast =
+        make_basic_transport_manager_builder(lowlatency_transport).authenticator(auth_client03);
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client03_id)
@@ -710,7 +674,7 @@ async fn authenticator_unix() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tls() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
 
@@ -810,7 +774,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_quic() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
 

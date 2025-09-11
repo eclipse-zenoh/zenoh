@@ -1,93 +1,300 @@
-/**
- * Configuration file for the Eclipse zenoh router (service "zenohd").
- *
- * This file presents only the main settings. For a complete example of configuration file,
- * see https://github.com/eclipse-zenoh/zenoh/blob/master/EXAMPLE_CONFIG.json5
- */
+/// 
+/// Configuration file for the Eclipse zenoh router (service "zenohd").
+/// 
+/// This file presents only the main settings. For a complete example of configuration file,
+/// see https://github.com/eclipse-zenoh/zenoh/blob/main/DEFAULT_CONFIG.json5
+/// 
 {
-  /**
-   * The identifier (as hex-string) that zenohd must use.
-   * If not set, a random unsigned 128bit integer will be used.
-   * WARNING: this id must be unique in your zenoh network.
-   */
-  // id: "123456789ABCDEF",
+  /// The identifier (as unsigned 128bit integer in hexadecimal lowercase - leading zeros are not accepted)
+  /// that zenoh runtime will use.
+  /// If not set, a random unsigned 128bit integer will be used.
+  /// WARNING: this id must be unique in your zenoh network.
+  // id: "1234567890abcdef",
 
-  /**
-   * Which endpoints to listen on. E.g. tcp/localhost:7447.
-   * By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
-   * peers, or client can use to establish a zenoh session.
-   * If none are specified, "tcp/[::]:7447" will be used (i.e. any interface)
-   */
-  listen: {
-    endpoints: [
-      // "<proto>/<address>"
-    ],
-  },
-
-  /**
-   * Which endpoints to connect to. E.g. tcp/localhost:7447.
-   * By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
-   */
+  /// Which endpoints to connect to. E.g. tcp/localhost:7447.
+  /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
+  ///
+  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be connected to:
+  /// E.g. tcp/192.168.0.1:7447#iface=eth0, for connect only if the IP address is reachable via the interface eth0
+  ///
+  /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
+  /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
+  ///
+  /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
+  /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
+  /// For TCP, UDP, Quic and TLS links, it is possible to specify a `bind` address for the local socket:
+  /// E.g. tcp/192.168.0.1:7447#bind=192.168.0.1:0
+  ///  Note!: Currently it is unsupported to specify both `bind` and `iface`.
+  ///
+  /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
+  /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   connect: {
+    /// The list of endpoints to connect to.
+    /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
+    /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/10.10.10.10:7447"], peer: ["tcp/11.11.11.11:7447"] }).
+    ///
+    /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
     endpoints: [
       // "<proto>/<address>"
     ],
   },
 
-  /**
-   * Configuration of the scouting protocol (for discovery of other routers, peers or clients)
-   * Uncoment to change the default values.
-   */
+  /// Which endpoints to listen on. E.g. tcp/0.0.0.0:7447.
+  /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
+  /// peers, or client can use to establish a zenoh session.
+  ///
+  /// For TCP/UDP on Linux, it is possible additionally specify the interface to be listened to:
+  /// E.g. tcp/0.0.0.0:7447#iface=eth0, for listen connection only on eth0
+  ///
+  /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
+  /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
+  ///
+  /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
+  /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
+  ///
+  /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
+  /// E.g. tcp/192.168.0.1:7447#dscp=0x08
+  listen: {
+    /// The list of endpoints to listen on.
+    /// Accepts a single list (e.g. endpoints: ["tcp/[::]:7447", "udp/[::]:7447"])
+    /// or different lists for router, peer and client (e.g. endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] }).
+    ///
+    /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
+    endpoints: { router: ["tcp/[::]:7447"], peer: ["tcp/[::]:0"] },
+  },
+
+  // /// Configure the scouting mechanisms and their behaviours
   // scouting: {
-  //   /* How multicast should behave */
+  //   /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
+  //   timeout: 3000,
+  //   /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
+  //   delay: 500,
+  //   /// The multicast scouting configuration.
   //   multicast: {
-  //     /* Whether multicast scouting is enabled or not */
+  //     /// Whether multicast scouting is enabled or not
   //     enabled: true,
-  //     /* The socket which should be used for multicast scouting */
+  //     /// The socket which should be used for multicast scouting
   //     address: "224.0.0.224:7446",
-  //     /* The network interface which should be used for multicast scouting */
-  //     interface: "auto", // auto selection of interface
-  //     /**
-  //      * An autoconnection mask (accepted values are bit-or-like combinations of peer, router and client).
-  //      * If the configured instance's mode intersects with this field, zenoh will automatically establish a connection with other nodes discovered through this method of scouting.
-  //      */
-  //     autoconnect: "peer|client",
+  //     /// The network interface which should be used for multicast scouting
+  //     interface: "auto", // If not set or set to "auto" the interface if picked automatically
+  //     /// The time-to-live on multicast scouting packets
+  //     ttl: 1,
+  //     /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
+  //     /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
+  //     /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+  //     /// Each value is a list of: "peer", "router" and/or "client".
+  //     autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
+  //     /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+  //     /// Possible options are:
+  //     /// - "always": always attempt to autoconnect, may result in redundant connections.
+  //     /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
+  //     ///   If both nodes use this strategy, only one will attempt the connection.
+  //     ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
+  //     ///   because of a private IP.
+  //     /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
+  //     /// or different values for router and/or peer depending on the type of node detected
+  //     /// (e.g. autoconnect_strategy : { to_router:  "always", to_peer: "greater-zid" }),
+  //     /// or different values for router or peer mode
+  //     /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
+  //     autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
+  //     /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+  //     listen: true,
+  //   },
+  //   /// The gossip scouting configuration. Note that instances in "client" mode do not participate in gossip.
+  //   gossip: {
+  //     /// Whether gossip scouting is enabled or not
+  //     enabled: true,
+  //     /// When true, gossip scouting information are propagated multiple hops to all nodes in the local network.
+  //     /// When false, gossip scouting information are only propagated to the next hop.
+  //     /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+  //     /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+  //     /// direct connectivity with each other.
+  //     multihop: false,
+  //     /// Which type of Zenoh instances to send gossip messages to.
+  //     /// Accepts a single value (e.g. target: ["router", "peer"]) which applies whatever the configured "mode" is,
+  //     /// or different values for router or peer mode (e.g. target: { router: ["router", "peer"], peer: ["router"] }).
+  //     /// Each value is a list of "peer" and/or "router".
+  //     target: { router: ["router", "peer"], peer: ["router", "peer"]},
+  //     /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
+  //     /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
+  //     /// or different values for router or peer mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
+  //     /// Each value is a list of: "peer" and/or "router".
+  //     autoconnect: { router: [], peer: ["router", "peer"] },
+  //     /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
+  //     /// Possible options are:
+  //     /// - "always": always attempt to autoconnect, may result in redundant connections.
+  //     /// - "greater-zid": attempt to connect to another node only if its own zid is greater than the other's.
+  //     ///   If both nodes use this strategy, only one will attempt the connection.
+  //     ///   This strategy may not be suited if one of the nodes is not reachable by the other one, for example
+  //     ///   because of a private IP.
+  //     /// Accepts a single value (e.g. autoconnect: "always") which applies whatever node would be auto-connected to,
+  //     /// or different values for router and/or peer depending on the type of node detected
+  //     /// (e.g. autoconnect_strategy : { to_router:  "always", to_peer: "greater-zid" }),
+  //     /// or different values for router or peer mode
+  //     /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
+  //     autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
   //   },
   // },
 
-  /**
-   * Directories where plugins configured by name should be looked for.
-   * Plugins configured by __path__ are not subject to lookup
-   */
-  plugins_search_dirs: ["/usr/lib"],
+  ///
+  /// Plugins configurations
+  ///
+  //
+  //  plugins_loading: {
+  //    /// Enable plugins loading.
+  //    enabled: false,
+  //    /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup.
+  //    /// Directories are specified as object with fields `kind` and `value` is accepted.
+  //    ///   1. If `kind` is `current_exe_parent`, then the parent of the current executable's directory is searched and `value` should be `null`.
+  //    ///      In Bash notation, `{ "kind": "current_exe_parent" }` equals `$(dirname $(which zenohd))` while `"."` equals `$PWD`.
+  //    ///   2. If `kind` is `path`, then `value` is interpreted as a filesystem path. Simply supplying a string instead of a object is equivalent to this.
+  //    /// If `enabled: true` and `search_dirs` is not specified then `search_dirs` falls back to the default value:
+  //    search_dirs: [{ "kind": "current_exe_parent" }, ".", "~/.zenoh/lib", "/opt/homebrew/lib", "/usr/local/lib", "/usr/lib"],
+  //  },
+  //  /// Plugins are only loaded if `plugins_loading: { enabled: true }` and present in the configuration when starting.
+  //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
+  //  plugins: {
+  //    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
+  //
+  //    /// Plugin settings may contain field `__config__`
+  //    /// - If `__config__` is specified, it's content is merged into plugin configuration
+  //    /// - Properties loaded from `__config__` file overrides existing properties
+  //    /// - If json objects in loaded file contains `__config__` properties, they are processed recursively
+  //    ///   This is used in the 'storage_manager' which supports subplugins, each with it's own config
+  //    ///
+  //    /// See below example of plugin configuration using `__config__` property
+  //
+  //    /// Configure the REST API plugin
+  //    rest: {
+  //      /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
+  //      __required__: true, // defaults to false
+  //      /// load configuration from the file
+  //      __config__: "./plugins/zenoh-plugin-rest/config.json5",
+  //      /// http port to answer to rest requests
+  //      http_port: 8000,
+  //      /// The number of worker thread in TOKIO runtime (default: 2)
+  //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
+  //      work_thread_num: 2,
+  //      /// The number of blocking thread in TOKIO runtime (default: 50)
+  //      /// The configuration only takes effect if running as a dynamic plugin, which can not reuse the current runtime.
+  //      max_block_thread_num: 50,
+  //    },
+  //
+  //    /// Configure the storage manager plugin
+  //    storage_manager: {
+  //      /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
+  //      __path__: [
+  //        "./target/release/libzenoh_plugin_storage_manager.so",
+  //        "./target/release/libzenoh_plugin_storage_manager.dylib",
+  //      ],
+  //      /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup
+  //      backend_search_dirs: [],
+  //      /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
+  //      volumes: {
+  //        /// An influxdb backend is also available at https://github.com/eclipse-zenoh/zenoh-backend-influxdb
+  //        influxdb: {
+  //          url: "https://myinfluxdb.example",
+  //          /// Some plugins may need passwords in their configuration.
+  //          /// To avoid leaking them through the adminspace, they may be masked behind a privacy barrier.
+  //          /// any value held at the key "private" will not be shown in the adminspace.
+  //          private: {
+  //            username: "user1",
+  //            password: "pw1",
+  //          },
+  //        },
+  //        influxdb2: {
+  //          /// A second backend of the same type can be spawned using `__path__`, for examples when different DBs are needed.
+  //          backend: "influxdb",
+  //          private: {
+  //            username: "user2",
+  //            password: "pw2",
+  //          },
+  //          url: "https://localhost:8086",
+  //        },
+  //      },
+  //
+  //      /// Configure the storages supported by the volumes
+  //      storages: {
+  //        demo: {
+  //          /// Storages always need to know what set of keys they must work with. These sets are defined by a key expression.
+  //          key_expr: "demo/memory/**",
+  //          /// Storages also need to know which volume will be used to actually store their key-value pairs.
+  //          /// The "memory" volume is always available, and doesn't require any per-storage options, so requesting "memory" by string is always sufficient.
+  //          volume: "memory",
+  //        },
+  //        demo2: {
+  //          key_expr: "demo/memory2/**",
+  //          /// This prefix will be stripped of the received keys when storing.
+  //          /// ⚠️ If you replicate this Storage then THIS VALUE SHOULD BE THE SAME FOR ALL THE REPLICAS YOU WANT TO
+  //          ///    KEEP ALIGNED.
+  //          strip_prefix: "demo/memory2",
+  //          volume: "memory",
+  //          /// Storage manager plugin handles metadata in order to ensure convergence of distributed storages configured in Zenoh.
+  //          /// Metadata includes the set of wild card updates and deletions (tombstones).
+  //          /// Once the samples are guaranteed to be delivered, the metadata can be garbage collected.
+  //          garbage_collection: {
+  //            /// The garbage collection event will be periodic with this duration.
+  //            /// The duration is specified in seconds.
+  //            period: 30,
+  //            /// Metadata older than this parameter will be garbage collected.
+  //            /// The duration is specified in seconds.
+  //            lifespan: 86400,
+  //          },
+  //          /// If multiple storages subscribing to the same key_expr should be synchronized, declare them as replicas.
+  //          /// In the absence of this configuration, a normal storage is initialized
+  //          /// Note: all the samples to be stored in replicas should be timestamped
+  //          ///
+  //          /// ⚠️ THESE VALUE SHOULD BE THE SAME FOR ALL THE REPLICAS YOU WANT TO KEEP ALIGNED.
+  //          replication: {
+  //            /// Specifying the parameters is optional, by default the values provided will be used.
+  //            /// Time interval between different synchronization attempts in SECONDS.
+  //            interval: 10.0,
+  //            /// Number of sub-intervals, of equal duration, within an interval.
+  //            sub_intervals: 5,
+  //            /// Number of intervals that compose the "hot" era.
+  //            hot: 6,
+  //            /// Number of intervals that compose the "warm" era.
+  //            warm: 30,
+  //            /// The average time, expressed in MILLISECONDS, it takes a publication to reach the Storage.
+  //            propagation_delay: 250,
+  //          }
+  //        },
+  //        demo3: {
+  //          key_expr: "demo/memory3/**",
+  //          volume: "memory",
+  //          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
+  //          /// If not configured, complete defaults to false.
+  //          complete: "true",
+  //        },
+  //        influx_demo: {
+  //          key_expr: "demo/influxdb/**",
+  //          /// This prefix will be stripped of the received keys when storing.
+  //          strip_prefix: "demo/influxdb",
+  //          /// influxdb-backed volumes need a bit more configuration, which is passed like-so:
+  //          volume: {
+  //            id: "influxdb",
+  //            db: "example",
+  //          },
+  //        },
+  //        influx_demo2: {
+  //          key_expr: "demo/influxdb2/**",
+  //          strip_prefix: "demo/influxdb2",
+  //          volume: {
+  //            id: "influxdb2",
+  //            db: "example",
+  //          },
+  //        },
+  //      },
+  //    },
+  //  },
 
-  plugins: {
-    /**
-     * REST plugin configuration. Uncomment to activate it.
-     */
-    // rest: {
-    //   /* Setting this option to true allows zenohd to panic should it detect issues with this plugin.
-    //    * Setting it to false politely asks the plugin not to panic. */
-    //   __required__: true,
-    //   http_port: 8000,
-    // },
-    /**
-     * Storages plugin configuration . Uncomment to activate it and configure backends/storages
-     */
-    // storages: {
-    //   /* Storages are grouped by backend, which may implement the storage function in various ways. */
-    //   backends: {
-    //     /* The memory backend is always available, and stores values in RAM. */
-    //     memory: {
-    //       /* Each backend may manage several storages */
-    //       storages: {
-    //         /* Each storage must be named */
-    //         demo: {
-    //           key_expr: "demo/example/**",
-    //         },
-    //       },
-    //     },
-    //   },
-    // },
-  },
+  // /// Plugin configuration example using `__config__` property
+  // plugins: {
+  //   rest: {
+  //     __config__: "./plugins/zenoh-plugin-rest/config.json5",
+  //   },
+  //   storage_manager: {
+  //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
+  //   }
+  // },
 }

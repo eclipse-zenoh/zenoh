@@ -97,8 +97,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         2,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -117,8 +115,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         2,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -133,8 +129,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -559,7 +553,7 @@ async fn openclose_unix_only() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
 
@@ -585,7 +579,7 @@ async fn openclose_tls_only() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     let (ca, cert, key) = get_tls_certs();
 
@@ -695,7 +689,7 @@ async fn openclose_vsock() {
 #[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_connect_with_interface_restriction() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
@@ -728,7 +722,7 @@ async fn openclose_quic_only_connect_with_interface_restriction() {
 #[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_listen_with_interface_restriction() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
@@ -761,7 +755,7 @@ async fn openclose_quic_only_listen_with_interface_restriction() {
 #[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_connect_with_interface_restriction() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
@@ -794,7 +788,7 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_listen_with_interface_restriction() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);

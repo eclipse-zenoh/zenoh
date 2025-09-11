@@ -25,15 +25,11 @@ use std::{
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
+    core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
     network::{
-        push::{
-            ext::{NodeIdType, QoSType},
-            Push,
-        },
+        push::{ext::QoSType, Push},
         NetworkMessage, NetworkMessageMut,
     },
-    zenoh::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -154,8 +150,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(3);
@@ -176,8 +170,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(3);
@@ -192,8 +184,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -208,8 +198,6 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         1,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -302,24 +290,11 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let rt = tokio::runtime::Handle::current();
     let _ = ztimeout!(tokio::task::spawn_blocking(move || rt.block_on(async {
         // Create the message to send
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: NodeIdType::DEFAULT,
-            payload: Put {
-                payload: vec![0u8; MSG_SIZE].into(),
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-            }
-            .into(),
-        }
-        .into();
+            ..Push::from(vec![0u8; MSG_SIZE])
+        });
 
         let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();
         ticks.remove(0);

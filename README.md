@@ -42,7 +42,8 @@ Unzip it where you want, and run the extracted `zenohd` binary.
 Add Eclipse Zenoh private repository to the sources list, and install the `zenoh` package:
 
 ```bash
-echo "deb [trusted=yes] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee -a /etc/apt/sources.list.d/zenoh.list > /dev/null
+curl -L https://download.eclipse.org/zenoh/debian-repo/zenoh-public-key | sudo gpg --dearmor --yes --output /etc/apt/keyrings/zenoh-public-key.gpg
+echo "deb [signed-by=/etc/apt/keyrings/zenoh-public-key.gpg] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee /etc/apt/sources.list.d/zenoh.list > /dev/null
 sudo apt update
 sudo apt install zenoh
 ```
@@ -80,6 +81,12 @@ To build Zenoh, just type the following command after having followed the previo
 
 ```bash
 cargo build --release --all-targets
+```
+
+Building all targets may cause an out-of-memory error if memory is limited. Reducing the number of parallel build jobs can help, though it may increase build time. You can fine-tune the job count to balance performance and resource usage.
+
+```bash
+cargo build --release --all-targets --jobs=1
 ```
 
 Zenoh's router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.

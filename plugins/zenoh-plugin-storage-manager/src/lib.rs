@@ -304,7 +304,7 @@ impl PluginControl for StorageRuntime {
     fn report(&self) -> PluginReport {
         PluginReport::default()
     }
-    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
         let guard = self.0.lock().unwrap();
         guard
             .plugins_manager

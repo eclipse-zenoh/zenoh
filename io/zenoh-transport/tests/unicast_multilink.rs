@@ -530,7 +530,7 @@ mod tests {
     #[cfg(feature = "transport_tls")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn multilink_tls_only() {
-        use zenoh_link::tls::config::*;
+        use zenoh_link_commons::tls::config::*;
 
         zenoh_util::init_log_from_env_or("error");
 
@@ -629,7 +629,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     #[cfg(feature = "transport_quic")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn multilink_quic_only() {
-        use zenoh_link::quic::config::*;
+        use zenoh_link_commons::tls::config::*;
 
         // NOTE: this an auto-generated pair of certificate and key.
         //       The target domain is localhost, so it has no real

@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[zenoh_macros::unstable]
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
@@ -27,13 +25,15 @@ use zenoh_sync::get_mut_unchecked;
 use super::{
     face::FaceState,
     resource::{Direction, Resource},
-    tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
+    tables::{NodeId, Route, Tables, TablesLock},
 };
-#[zenoh_macros::unstable]
-use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::get_or_set_route,
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::tables::RoutingExpr,
+        hat::{HatTrait, SendDeclare},
+        router::get_or_set_route,
+    },
 };
 
 #[derive(Copy, Clone)]
@@ -215,14 +215,13 @@ fn get_data_route(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &Tables,
     face: &FaceState,
-    res: &Option<Arc<Resource>>,
-    expr: &mut RoutingExpr,
+    expr: &RoutingExpr,
     routing_context: NodeId,
 ) -> Arc<Route> {
     let local_context = hat_code.map_routing_context(tables, face, routing_context);
-    let mut compute_route =
-        || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
-    if let Some(data_routes) = res
+    let compute_route = || hat_code.compute_data_route(tables, expr, local_context, face.whatami);
+    if let Some(data_routes) = expr
+        .resource()
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| &ctx.data_routes)
@@ -238,7 +237,6 @@ fn get_data_route(
     compute_route()
 }
 
-#[zenoh_macros::unstable]
 #[inline]
 pub(crate) fn get_matching_subscriptions(
     hat_code: &(dyn HatTrait + Send + Sync),
@@ -282,9 +280,6 @@ macro_rules! inc_stats {
     };
 }
 
-// having all the arguments instead of an intermediate struct seems to enable a better inlining
-// see https://github.com/eclipse-zenoh/zenoh/pull/1713#issuecomment-2590130026
-#[allow(clippy::too_many_arguments)]
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
@@ -292,10 +287,7 @@ pub fn route_data(
     reliability: Reliability,
 ) {
     let tables = zread!(tables_ref.tables);
-    match tables
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        .cloned()
-    {
+    match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::trace!(
                 "{} Route data for res {}{}",
@@ -303,10 +295,10 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-            let mut expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
+            let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let admin = expr.full_expr().starts_with("@/");
+            let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
             #[cfg(feature = "stats")]
             if !admin {
                 inc_stats!(face, rx, user, msg.payload);
@@ -314,15 +306,12 @@ pub fn route_data(
                 inc_stats!(face, rx, admin, msg.payload);
             }
 
-            if tables_ref.hat_code.ingress_filter(&tables, face, &mut expr) {
-                let res = Resource::get_resource(&prefix, expr.suffix);
-
+            if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
                 let route = get_data_route(
                     tables_ref.hat_code.as_ref(),
                     &tables,
                     face,
-                    &res,
-                    &mut expr,
+                    &expr,
                     msg.ext_nodeid.node_id,
                 );
 
@@ -330,10 +319,10 @@ pub fn route_data(
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
-                        let (outface, key_expr, context) = route.values().next().unwrap();
+                        let (outface, key_expr, context) = route.iter().next().unwrap();
                         if tables_ref
                             .hat_code
-                            .egress_filter(&tables, face, outface, &mut expr)
+                            .egress_filter(&tables, face, outface, &expr)
                         {
                             drop(tables);
                             #[cfg(feature = "stats")]
@@ -344,15 +333,17 @@ pub fn route_data(
                             }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            outface.primitives.send_push(msg, reliability)
+                            outface.primitives.send_push(msg, reliability);
+                            // Reset the wire_expr to indicate the message has been consumed
+                            msg.wire_expr = WireExpr::empty();
                         }
                     } else {
                         let route = route
-                            .values()
+                            .iter()
                             .filter(|(outface, _key_expr, _context)| {
                                 tables_ref
                                     .hat_code
-                                    .egress_filter(&tables, face, outface, &mut expr)
+                                    .egress_filter(&tables, face, outface, &expr)
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();

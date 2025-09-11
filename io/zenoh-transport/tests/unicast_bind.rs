@@ -97,8 +97,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         2,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -116,8 +114,6 @@ async fn openclose_transport(
     let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         2,
-        #[cfg(feature = "shared-memory")]
-        false,
         lowlatency_transport,
     )
     .max_sessions(1);
@@ -412,7 +408,7 @@ async fn openclose_udp_only_connect_with_bind_restriction() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_connect_with_bind_restriction() {
-    use zenoh_link::quic::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     let bind_addr_str = format!("localhost:{}", 13012);
@@ -461,7 +457,7 @@ async fn openclose_quic_only_connect_with_bind_restriction() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_connect_with_bind_restriction() {
-    use zenoh_link::tls::config::*;
+    use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
     let bind_addr_str = format!("localhost:{}", 13014);

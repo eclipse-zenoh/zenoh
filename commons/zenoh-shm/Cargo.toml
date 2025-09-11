@@ -12,20 +12,20 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-shm"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
 ]
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-shm"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -33,21 +33,23 @@ test = ["num_cpus"]
 
 [dependencies]
 async-trait = { workspace = true }
-tracing = { workspace = true }
-tokio = { workspace = true }
-zenoh-result = { workspace = true }
-zenoh-core = { workspace = true }
-zenoh-macros = { workspace = true }
-zenoh-buffers = { workspace = true }
-rand = { workspace = true, features = ["std", "std_rng"] }
-static_init = { workspace = true }
+buddy_system_allocator = { workspace = true }
+crossbeam-channel = { workspace = true }
+crossbeam-queue = { workspace = true }
 num-traits = { workspace = true }
 num_cpus = { workspace = true, optional = true }
-thread-priority = { workspace = true }
+rand = { workspace = true, features = ["std", "std_rng"] }
 stabby = { workspace = true }
-crossbeam-queue = { workspace = true }
-crossbeam-channel = { workspace = true }
 static_assertions = { workspace = true }
+static_init = { workspace = true }
+talc = { workspace = true }
+thread-priority = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+zenoh-buffers = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-macros = { workspace = true }
+zenoh-result = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = { workspace = true }

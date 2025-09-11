@@ -13,5 +13,6 @@
 //
 
 pub mod traits;
+pub mod typed;
 pub mod zshm;
 pub mod zshmmut;

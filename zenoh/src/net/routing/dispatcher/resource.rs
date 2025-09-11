@@ -14,15 +14,14 @@
 use std::{
     any::Any,
     borrow::{Borrow, Cow},
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     convert::TryInto,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
     sync::{Arc, RwLock, Weak},
 };
 
-use ahash::HashMapExt;
-use zenoh_collections::SingleOrBoxHashSet;
+use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
@@ -40,7 +39,10 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::{
+        face::{Face, FaceId},
+        tables::RoutingExpr,
+    },
     hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
@@ -50,14 +52,73 @@ use crate::net::routing::{
 pub(crate) type NodeId = u16;
 
 pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
-pub(crate) type Route = HashMap<usize, Direction>;
+pub(crate) type Route = Vec<Direction>;
 
-pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) direction: Direction,
     pub(crate) info: Option<QueryableInfoType>,
 }
+
+impl QueryTargetQabl {
+    pub(crate) fn new(
+        (&fid, ctx): (&FaceId, &Arc<SessionContext>),
+        expr: &RoutingExpr,
+        complete: bool,
+    ) -> Option<Self> {
+        let qabl = ctx.qabl?;
+        let wire_expr = expr.get_best_key(fid);
+        Some(Self {
+            direction: (ctx.face.clone(), wire_expr.to_owned(), NodeId::default()),
+            info: Some(QueryableInfoType {
+                complete: complete && qabl.complete,
+                // NOTE: local client faces are nearer than remote client faces
+                distance: if ctx.face.is_local { 0 } else { 1 },
+            }),
+        })
+    }
+}
+
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
+
+/// Helper struct to build route, handling face deduplication.
+pub(crate) struct RouteBuilder<T = Direction> {
+    /// The route built.
+    route: Vec<T>,
+    /// The faces' id already inserted.
+    faces: IntHashSet<usize>,
+}
+
+impl<T> RouteBuilder<T> {
+    /// Creates a new empty builder.
+    pub(crate) fn new() -> Self {
+        Self {
+            route: Vec::new(),
+            faces: IntHashSet::new(),
+        }
+    }
+
+    /// Inserts a new direction if it has not been registered for the given face.
+    pub(crate) fn insert(&mut self, face_id: usize, direction: impl FnOnce() -> T) {
+        if self.faces.insert(face_id) {
+            self.route.push(direction());
+        }
+    }
+
+    pub(crate) fn try_insert(&mut self, face_id: usize, direction: impl FnOnce() -> Option<T>) {
+        if !self.faces.contains(&face_id) {
+            if let Some(direction) = direction() {
+                self.faces.insert(face_id);
+                self.route.push(direction);
+            }
+        }
+    }
+
+    /// Build the route, consuming the builder.
+    pub(crate) fn build(self) -> Vec<T> {
+        self.route
+    }
+}
+pub(crate) type QueryRouteBuilder = RouteBuilder<(Direction, RequestId)>;
 
 pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
 pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
@@ -237,7 +298,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) context: Option<Box<ResourceContext>>,
-    pub(crate) session_ctxs: ahash::HashMap<usize, Arc<SessionContext>>,
+    pub(crate) session_ctxs: IntHashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -314,7 +375,7 @@ impl Resource {
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
             context: context.map(Box::new),
-            session_ctxs: ahash::HashMap::new(),
+            session_ctxs: IntHashMap::new(),
         }
     }
 
@@ -379,7 +440,7 @@ impl Resource {
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
             context: None,
-            session_ctxs: ahash::HashMap::new(),
+            session_ctxs: IntHashMap::new(),
         })
     }
 
@@ -470,17 +531,25 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_resource(mut from: &Arc<Resource>, mut suffix: &str) -> Option<Arc<Resource>> {
+    pub fn get_resource_ref<'a>(
+        mut from: &'a Arc<Resource>,
+        mut suffix: &str,
+    ) -> Option<&'a Arc<Resource>> {
         if !suffix.is_empty() && !suffix.starts_with('/') {
             if let Some(parent) = &from.parent {
-                return Resource::get_resource(parent, &[from.suffix(), suffix].concat());
+                return Resource::get_resource_ref(parent, &[from.suffix(), suffix].concat());
             }
         }
         // do not use recursion as the tree may have arbitrary depth
         while let Some((chunk, rest)) = Self::split_first_chunk(suffix) {
             (from, suffix) = (from.children.get(chunk)?, rest);
         }
-        Some(from.clone())
+        Some(from)
+    }
+
+    #[inline]
+    pub fn get_resource(from: &Arc<Resource>, suffix: &str) -> Option<Arc<Resource>> {
+        Self::get_resource_ref(from, suffix).cloned()
     }
 
     /// Split the suffix at the next '/' (after leading one), returning None if the suffix is empty.

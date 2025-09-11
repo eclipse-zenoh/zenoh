@@ -27,17 +27,14 @@ mod tests {
     use zenoh_core::{ztimeout, Wait};
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohIdProto},
-        network::{
-            push::ext::{NodeIdType, QoSType},
-            NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push,
-        },
+        core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohIdProto},
+        network::{push::ext::QoSType, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push},
         zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
     use zenoh_shm::{
         api::{
-            protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+            protocol_implementations::posix::posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
             provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
         },
         ShmBufInner,
@@ -155,8 +152,7 @@ mod tests {
         let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
-        let backend = PosixShmProviderBackend::builder()
-            .with_size(2 * MSG_SIZE)
+        let backend = PosixShmProviderBackendBinaryHeap::builder(2 * MSG_SIZE)
             .wait()
             .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();
@@ -168,7 +164,6 @@ mod tests {
             .zid(peer_shm01)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(true)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
@@ -182,21 +177,23 @@ mod tests {
             .zid(peer_shm02)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(true)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
             .build(peer_shm02_handler.clone())
             .unwrap();
 
+        let mut shm = zenoh_config::ShmConf::default();
+        let _ = shm.set_enabled(false);
+
         // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
+            .shm(shm)
             .unicast(
                 TransportManager::config_unicast()
-                    .shm(false)
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
@@ -241,23 +238,14 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let mut message: NetworkMessage = Push {
+            let mut message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
+                ..Push::from(Put {
                     payload: sbuf.into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                    ..Put::default()
+                })
+            });
 
             peer_shm02_transport.schedule(message.as_mut()).unwrap();
         }
@@ -282,23 +270,14 @@ mod tests {
                 ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
             sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let mut message: NetworkMessage = Push {
+            let mut message = NetworkMessage::from(Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::DEFAULT,
-                payload: Put {
+                ..Push::from(Put {
                     payload: sbuf.into(),
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
-            }
-            .into();
+                    ..Put::default()
+                })
+            });
 
             peer_net01_transport.schedule(message.as_mut()).unwrap();
         }
@@ -354,7 +333,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14002).parse().unwrap();
         run(&endpoint, false).await;
     }
 

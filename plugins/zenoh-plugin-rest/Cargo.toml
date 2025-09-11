@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-plugin-rest"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-plugin-rest"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [features]
 default = ["dynamic_plugin", "zenoh/default"]
@@ -29,37 +29,37 @@ dynamic_plugin = []
 static_plugin = ['async-std']
 
 [lib]
-name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
+name = "zenoh_plugin_rest"
 
 [dependencies]
-async-std = { workspace = true, features = ["tokio1"], optional = true}
 anyhow = { workspace = true, features = ["default"] }
+async-std = { workspace = true, features = ["tokio1"], optional = true }
 base64 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 http-types = { workspace = true }
 lazy_static = { workspace = true }
-tracing = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 tide = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 zenoh = { workspace = true, default-features = false, features = [
-    "plugins",
-    "internal",
-    "unstable",
+  "internal",
+  "plugins",
+  "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
 
 [build-dependencies]
+jsonschema = { workspace = true }
 rustc_version = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
-jsonschema = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true }
@@ -69,12 +69,12 @@ name = "z_serve_sse"
 path = "examples/z_serve_sse.rs"
 
 [package.metadata.deb]
-name = "zenoh-plugin-rest"
-maintainer = "zenoh-dev@eclipse.org"
 copyright = "2024 ZettaScale Technology"
-section = "net"
+depends = "zenohd (=1.5.1)"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=1.4.0)"
+maintainer = "zenoh-dev@eclipse.org"
+name = "zenoh-plugin-rest"
+section = "net"
 
 [package.metadata.cargo-machete]
 ignored = ["async-std"]

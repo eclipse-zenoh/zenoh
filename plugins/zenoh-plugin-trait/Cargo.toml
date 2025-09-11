@@ -12,28 +12,28 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-plugin-trait"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-plugin-trait"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 
 [lib]
 name = "zenoh_plugin_trait"
 
 [dependencies]
-libloading = { workspace = true }
-tracing = { workspace = true }
-stabby = { workspace = true }
-serde = { workspace = true }
 git-version = { workspace = true }
+libloading = { workspace = true }
+serde = { workspace = true }
+stabby = { workspace = true }
+tracing = { workspace = true }
+zenoh-config = { workspace = true }
+zenoh-keyexpr = { workspace = true, features = ["internal", "unstable"] }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-config = { workspace = true }
-zenoh-keyexpr = { workspace = true, features = ["internal", "unstable"] }

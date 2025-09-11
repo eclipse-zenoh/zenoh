@@ -27,7 +27,11 @@ use zenoh_protocol::{
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
+#[cfg(feature = "unstable")]
+use zenoh_sync::{event, Notifier, Waiter};
 
+#[cfg(feature = "shared-memory")]
+use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -48,13 +52,15 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct TransportUnicastUniversal {
     // Transport Manager
-    pub(crate) manager: TransportManager,
+    pub(crate) manager: Arc<TransportManager>,
     // Transport config
-    pub(super) config: TransportConfigUnicast,
+    pub(super) config: Arc<TransportConfigUnicast>,
     // Tx priorities
     pub(super) priority_tx: Arc<[TransportPriorityTx]>,
     // Rx priorities
     pub(super) priority_rx: Arc<[TransportPriorityRx]>,
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_context: Option<UnicastTransportShmContext>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
     // The callback
@@ -63,6 +69,13 @@ pub(crate) struct TransportUnicastUniversal {
     add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
     pub(super) alive: Arc<AsyncMutex<bool>>,
+    #[cfg(feature = "unstable")]
+    // Notifier for a BlockFirst message to be ready to be sent
+    // (after the previous one has been sent)
+    pub block_first_notifier: Notifier,
+    #[cfg(feature = "unstable")]
+    // Waiter for a BlockFirst message to be ready to be sent
+    pub block_first_waiter: Waiter,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
@@ -72,6 +85,7 @@ impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
         #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
@@ -96,10 +110,15 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
+        #[cfg(feature = "unstable")]
+        let (block_first_notifier, block_first_waiter) = event::new();
+        // notify to be make the BlockFirst "slot" available
+        #[cfg(feature = "unstable")]
+        block_first_notifier.notify().unwrap();
 
         let t = Arc::new(TransportUnicastUniversal {
-            manager,
-            config,
+            manager: Arc::new(manager),
+            config: Arc::new(config),
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
@@ -108,6 +127,12 @@ impl TransportUnicastUniversal {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "unstable")]
+            block_first_notifier,
+            #[cfg(feature = "unstable")]
+            block_first_waiter,
+            #[cfg(feature = "shared-memory")]
+            shm_context,
         });
 
         Ok(t)
@@ -389,7 +414,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_auth_ids(&self) -> TransportAuthId {
-        let mut transport_auth_id = TransportAuthId::default();
+        let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
         zread!(self.links)
             .iter()
@@ -405,7 +430,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
-        self.internal_schedule(msg).map(|_| ())
+        self.internal_schedule(msg)
     }
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(

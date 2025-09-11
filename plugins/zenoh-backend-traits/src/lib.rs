@@ -197,7 +197,7 @@ pub trait Volume: Send + Sync {
 pub type VolumeInstance = Box<dyn Volume + 'static>;
 
 impl PluginControl for VolumeInstance {
-    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
         Vec::new()
     }
 }

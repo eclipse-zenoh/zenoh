@@ -24,7 +24,7 @@ use zenoh_protocol::{
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use crate::net::routing::{interceptor::*, RoutingContext};
+use crate::net::routing::interceptor::*;
 
 #[derive(Clone)]
 struct TestInterceptorConf {
@@ -94,17 +94,14 @@ impl InterceptorTrait for TestInterceptor {
         Some(Box::new(self.data.clone()))
     }
 
-    fn intercept(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut<'_>>,
-        cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let cache_hit = ctx.get_cache(msg).is_some();
         if let NetworkBodyMut::Push(&mut Push {
             payload: PushBody::Put(ref mut p),
             ..
-        }) = &mut ctx.msg.body
+        }) = &mut msg.body
         {
-            let out = format!("Cache hit: {}, data: {}", cache.is_some(), &self.data);
+            let out = format!("Cache hit: {cache_hit}, data: {}", &self.data);
             p.payload = ZBuf::from(out.as_bytes().to_owned());
         }
         true

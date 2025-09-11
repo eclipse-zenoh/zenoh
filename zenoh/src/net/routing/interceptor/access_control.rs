@@ -23,6 +23,7 @@ use std::{any::Any, collections::HashSet, iter, sync::Arc};
 use itertools::Itertools;
 use zenoh_config::{
     AclConfig, AclMessage, CertCommonName, InterceptorFlow, Interface, Permission, Username,
+    ZenohId,
 };
 use zenoh_keyexpr::keyexpr;
 use zenoh_link::LinkAuthId;
@@ -41,7 +42,10 @@ use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
     InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait,
 };
-use crate::net::routing::{interceptor::authorization::SubjectQuery, RoutingContext};
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::interceptor::{authorization::SubjectQuery, InterceptorContext},
+};
 pub struct AclEnforcer {
     enforcer: Arc<PolicyEnforcer>,
 }
@@ -64,7 +68,7 @@ impl EgressAclEnforcer {
         cached_permission: Option<Permission>,
         action: AclMessage,
         log_msg: &str,
-        key_expr: &keyexpr,
+        key_expr: KeyExpr,
     ) -> Permission {
         match cached_permission {
             Some(p) => {
@@ -84,7 +88,7 @@ impl EgressAclEnforcer {
                 }
                 p
             }
-            None => self.action(action, log_msg, key_expr),
+            None => self.action(action, log_msg, &key_expr),
         }
     }
 }
@@ -102,7 +106,7 @@ impl IngressAclEnforcer {
         cached_permission: Option<Permission>,
         action: AclMessage,
         log_msg: &str,
-        key_expr: &keyexpr,
+        key_expr: KeyExpr,
     ) -> Permission {
         match cached_permission {
             Some(p) => {
@@ -122,7 +126,7 @@ impl IngressAclEnforcer {
                 }
                 p
             }
-            None => self.action(action, log_msg, key_expr),
+            None => self.action(action, log_msg, &key_expr),
         }
     }
 
@@ -132,7 +136,7 @@ impl IngressAclEnforcer {
         cached_permission: Option<Permission>,
         action: AclMessage,
         log_msg: &str,
-        key_expr: Option<&keyexpr>,
+        key_expr: Option<KeyExpr>,
     ) -> Permission {
         match cached_permission {
             Some(p) => {
@@ -157,7 +161,7 @@ impl IngressAclEnforcer {
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
                 match key_expr {
-                    Some(ke) => self.action(action, log_msg, ke),
+                    Some(ke) => self.action(action, log_msg, &ke),
                     None => Permission::Allow,
                 }
             }
@@ -204,6 +208,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
         let mut cert_common_names = Vec::new();
         let mut link_protocols = Vec::new();
         let username = auth_ids.username().cloned().map(Username);
+        let zid: ZenohId = (*auth_ids.zid()).into();
 
         for auth_id in auth_ids.link_auth_ids() {
             match auth_id {
@@ -244,16 +249,19 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         let mut auth_subjects = HashSet::new();
 
-        for (((username, interface), cert_common_name), link_protocol) in iter::once(username)
-            .cartesian_product(interfaces.into_iter())
-            .cartesian_product(cert_common_names.into_iter())
-            .cartesian_product(link_protocols.into_iter())
+        for ((((username, interface), cert_common_name), link_protocol), zid) in
+            iter::once(username)
+                .cartesian_product(interfaces.into_iter())
+                .cartesian_product(cert_common_names.into_iter())
+                .cartesian_product(link_protocols.into_iter())
+                .cartesian_product(iter::once(Some(zid)))
         {
             let query = SubjectQuery {
                 interface,
                 cert_common_name,
                 username,
                 link_protocol,
+                zid,
             };
 
             if let Some(entry) = self.enforcer.subject_store.query(&query) {
@@ -363,25 +371,23 @@ impl InterceptorTrait for IngressAclEnforcer {
         }))
     }
 
-    fn intercept<'a>(
-        &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
-        cache: Option<&Box<dyn Any + Send + Sync>>,
-    ) -> bool {
-        let cache = cache.and_then(|i| match i.downcast_ref::<Cache>() {
-            Some(c) => Some(c),
-            None => {
-                tracing::debug!("Cache content type is incorrect");
-                None
-            }
-        });
+    fn intercept<'a>(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let cache = ctx
+            .get_cache(msg)
+            .and_then(|i| match i.downcast_ref::<Cache>() {
+                Some(c) => Some(c),
+                None => {
+                    tracing::debug!("Cache content type is incorrect");
+                    None
+                }
+            });
 
-        match &ctx.msg.body {
+        match &msg.body {
             NetworkBodyMut::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -395,7 +401,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 }
             }
             NetworkBodyMut::Response(Response { .. }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -412,7 +418,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -429,7 +435,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -446,7 +452,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -471,7 +477,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Undeclare Subscriber (ingress)",
-                    ctx.full_keyexpr(),
+                    ctx.full_keyexpr(msg),
                 ) == Permission::Deny
                 {
                     return false;
@@ -481,7 +487,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -506,7 +512,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Undeclare Queryable (ingress)",
-                    ctx.full_keyexpr(),
+                    ctx.full_keyexpr(msg),
                 ) == Permission::Deny
                 {
                     return false;
@@ -516,7 +522,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -542,7 +548,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (ingress)",
-                    ctx.full_keyexpr(),
+                    ctx.full_keyexpr(msg),
                 ) == Permission::Deny
                 {
                     return false;
@@ -553,7 +559,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -571,7 +577,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -653,23 +659,25 @@ impl InterceptorTrait for EgressAclEnforcer {
     fn intercept(
         // String, Arc<str>, Box<str>, etc... & -> &str
         &self,
-        ctx: &mut RoutingContext<NetworkMessageMut>,
-        cache: Option<&Box<dyn Any + Send + Sync>>,
+        msg: &mut NetworkMessageMut,
+        ctx: &mut dyn InterceptorContext,
     ) -> bool {
-        let cache = cache.and_then(|i| match i.downcast_ref::<Cache>() {
-            Some(c) => Some(c),
-            None => {
-                tracing::debug!("Cache content type is incorrect");
-                None
-            }
-        });
+        let cache = ctx
+            .get_cache(msg)
+            .and_then(|i| match i.downcast_ref::<Cache>() {
+                Some(c) => Some(c),
+                None => {
+                    tracing::debug!("Cache content type is incorrect");
+                    None
+                }
+            });
 
-        match &ctx.msg.body {
+        match &msg.body {
             NetworkBodyMut::Request(Request {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -683,7 +691,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 }
             }
             NetworkBodyMut::Response(Response { .. }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -700,7 +708,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -717,7 +725,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -734,7 +742,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -751,7 +759,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::UndeclareSubscriber(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
@@ -770,7 +778,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -787,7 +795,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::UndeclareQueryable(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
@@ -806,7 +814,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -823,7 +831,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 body: DeclareBody::UndeclareToken(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
@@ -843,7 +851,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -861,7 +869,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
@@ -879,7 +887,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr() else {
+                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Note: options are set for InterestMode::Final for internal use only by egress interceptors.

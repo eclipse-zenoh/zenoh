@@ -12,22 +12,22 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
-name = "zenoh-examples"
-version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-examples"
 readme = "README.md"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 publish = false
 
 [features]
-default = ["zenoh/default", "zenoh-ext/default"]
+default = ["zenoh-ext/default", "zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 
@@ -36,9 +36,11 @@ clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 prost = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "time", "io-std"] }
+tokio = { workspace = true, features = ["io-std", "rt-multi-thread", "time"] }
 zenoh = { workspace = true, default-features = false }
-zenoh-ext = { workspace = true, default-features = false, features = ["unstable"] }
+zenoh-ext = { workspace = true, default-features = false, features = [
+  "unstable",
+] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -78,7 +80,7 @@ path = "examples/z_pub.rs"
 [[example]]
 name = "z_pub_shm"
 path = "examples/z_pub_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_sub"
@@ -87,7 +89,7 @@ path = "examples/z_sub.rs"
 [[example]]
 name = "z_sub_shm"
 path = "examples/z_sub_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_pull"
@@ -96,7 +98,6 @@ path = "examples/z_pull.rs"
 [[example]]
 name = "z_querier"
 path = "examples/z_querier.rs"
-required-features = ["unstable"]
 
 [[example]]
 name = "z_queryable"
@@ -105,7 +106,7 @@ path = "examples/z_queryable.rs"
 [[example]]
 name = "z_queryable_shm"
 path = "examples/z_queryable_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_storage"
@@ -118,7 +119,7 @@ path = "examples/z_get.rs"
 [[example]]
 name = "z_get_shm"
 path = "examples/z_get_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_forward"
@@ -147,7 +148,7 @@ path = "examples/z_sub_thr.rs"
 [[example]]
 name = "z_pub_shm_thr"
 path = "examples/z_pub_shm_thr.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_ping"
@@ -156,7 +157,7 @@ path = "examples/z_ping.rs"
 [[example]]
 name = "z_ping_shm"
 path = "examples/z_ping_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_pong"
@@ -165,14 +166,14 @@ path = "examples/z_pong.rs"
 [[example]]
 name = "z_alloc_shm"
 path = "examples/z_alloc_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_bytes_shm"
 path = "examples/z_bytes_shm.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_posix_shm_provider"
 path = "examples/z_posix_shm_provider.rs"
-required-features = ["unstable", "shared-memory"]
+required-features = ["shared-memory", "unstable"]

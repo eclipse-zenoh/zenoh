@@ -41,6 +41,7 @@ use crate::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
         encoding::Encoding,
+        handlers::CallbackParameter,
         key_expr::KeyExpr,
         sample::{Locality, Sample, SampleKind},
         selector::Selector,
@@ -247,6 +248,14 @@ impl fmt::Display for Query {
     }
 }
 
+impl CallbackParameter for Query {
+    type Message<'a> = Self;
+
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
+
 #[zenoh_macros::internal]
 pub struct ReplySample<'a> {
     query: &'a Query,
@@ -330,7 +339,7 @@ impl Query {
 }
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) key_expr: WireExpr<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) complete: bool,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<Query>,

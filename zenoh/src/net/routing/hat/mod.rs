@@ -39,11 +39,12 @@ use super::{
     },
     RoutingContext,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-    runtime::Runtime,
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+        runtime::Runtime,
+    },
 };
 
 mod client;
@@ -121,14 +122,14 @@ pub(crate) trait HatBaseTrait {
         routing_context: NodeId,
     ) -> NodeId;
 
-    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool;
+    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &RoutingExpr) -> bool;
 
     fn egress_filter(
         &self,
         tables: &Tables,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
     ) -> bool;
 
     fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
@@ -214,12 +215,11 @@ pub(crate) trait HatPubSubTrait {
     fn compute_data_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route>;
 
-    #[zenoh_macros::unstable]
     fn get_matching_subscriptions(
         &self,
         tables: &Tables,
@@ -256,12 +256,11 @@ pub(crate) trait HatQueriesTrait {
     fn compute_query_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
 
-    #[zenoh_macros::unstable]
     fn get_matching_queryables(
         &self,
         tables: &Tables,

@@ -212,7 +212,7 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
         // TODO(fuzzypixelz): refactor this function's interface to get access to the configuration
         // source, this we can support spec syntax in the lib search dir.
         let backend_search_dirs = match value.get("backend_search_dirs") {
-            Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.clone()]),
+            Some(serde_json::Value::String(path)) => LibSearchDirs::from_paths(&[path.as_str()]),
             Some(serde_json::Value::Array(paths)) => {
                 let mut specs = Vec::with_capacity(paths.len());
                 for path in paths {
@@ -391,7 +391,7 @@ impl VolumeConfig {
                 required,
                 rest: config
                     .iter()
-                    .filter(|&(k, _v)| (!["__path__", "__required__"].contains(&k.as_str())))
+                    .filter(|&(k, _v)| !["__path__", "__required__"].contains(&k.as_str()))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect(),
             })
@@ -443,18 +443,24 @@ impl StorageConfig {
                 )
             }
         };
-        let complete = match config.get("complete").and_then(|x| x.as_str()) {
-            Some(s) => match s {
+        let complete = match config.get("complete") {
+            Some(Value::Bool(b)) => *b,
+            Some(Value::String(s)) => match s.as_str() {
                 "true" => true,
                 "false" => false,
                 e => {
                     bail!(
-                        "complete='{}' is not a valid value. Accepted values: ['true', 'false']",
+                        r#"complete='{}' is not a valid value. Only booleans or strings ('true','false') are accepted"#,
                         e
                     )
                 }
             },
             None => false,
+            _ => bail!(
+                "Invalid type for field `complete` of storage `{}`. Only booleans or strings ('true','false') \
+                 are accepted.",
+                storage_name
+            ),
         };
         let strip_prefix: Option<OwnedKeyExpr> = match config.get("strip_prefix") {
             Some(Value::String(s)) => {

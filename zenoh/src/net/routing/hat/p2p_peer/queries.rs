@@ -19,10 +19,7 @@ use std::{
 
 use zenoh_protocol::{
     core::{
-        key_expr::{
-            include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
-        },
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI,
     },
     network::{
@@ -30,7 +27,7 @@ use zenoh_protocol::{
             common::ext::WireExprType, ext, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
         },
-        interest::{InterestId, InterestMode},
+        interest::{InterestId, InterestMode, InterestOptions},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -554,15 +551,20 @@ impl HatQueriesTrait for HatCode {
     fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
-        for src_face in tables.faces.values() {
-            for qabl in face_hat!(src_face).remote_qabls.values() {
+        for face in tables.faces.values() {
+            for qabl in face_hat!(face).remote_qabls.values() {
                 // Insert the key in the list of known queryables
                 let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
                 // Append src_face as a queryable source in the proper list
-                match src_face.whatami {
-                    WhatAmI::Router => srcs.routers.push(src_face.zid),
-                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
-                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                let whatami = if face.is_local {
+                    tables.whatami
+                } else {
+                    face.whatami
+                };
+                match whatami {
+                    WhatAmI::Router => srcs.routers.push(face.zid),
+                    WhatAmI::Peer => srcs.peers.push(face.zid),
+                    WhatAmI::Client => srcs.clients.push(face.zid),
                 }
             }
         }
@@ -576,7 +578,12 @@ impl HatQueriesTrait for HatCode {
                 if interest.options.queryables() {
                     if let Some(res) = interest.res.as_ref() {
                         let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
+                        let whatami = if face.is_local {
+                            tables.whatami
+                        } else {
+                            face.whatami
+                        };
+                        match whatami {
                             WhatAmI::Router => sources.routers.push(face.zid),
                             WhatAmI::Peer => sources.peers.push(face.zid),
                             WhatAmI::Client => sources.clients.push(face.zid),
@@ -591,103 +598,69 @@ impl HatQueriesTrait for HatCode {
     fn compute_query_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
-        }
+        };
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return EMPTY_ROUTE.clone();
-            }
-        };
 
-        if source_type == WhatAmI::Client {
-            // TODO: BestMatching: What if there is a local compete ?
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami == WhatAmI::Router)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
-                            .unwrap_or(true)
-                }) || face_hat!(face)
-                    .remote_qabls
-                    .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
-                {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    route.push(QueryTargetQabl {
-                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                        info: None,
-                    });
-                }
-            }
-
-            for face in tables.faces.values().filter(|f| {
-                f.whatami == WhatAmI::Peer
-                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
-            }) {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.push(QueryTargetQabl {
-                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
-                });
-            }
-        }
-
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.context.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for (sid, context) in &mres.session_ctxs {
-                if source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                    if let Some(qabl_info) = context.qabl.as_ref() {
-                        route.push(QueryTargetQabl {
-                            direction: (
-                                context.face.clone(),
-                                key_expr.to_owned(),
-                                NodeId::default(),
-                            ),
-                            info: Some(QueryableInfoType {
-                                complete: complete && qabl_info.complete,
-                                distance: 1,
-                            }),
-                        });
+            for face_ctx @ (_, ctx) in &mres.session_ctxs {
+                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete) {
+                        route.push(qabl);
                     }
                 }
             }
         }
+
+        if source_type == WhatAmI::Client {
+            // TODO: BestMatching: What if there is a local compete ?
+            for face in tables.faces.values() {
+                if face.whatami == WhatAmI::Router {
+                    if face.local_interests.values().all(|interest| {
+                        !interest.finalized_includes(InterestOptions::queryables, key_expr)
+                    }) {
+                        let wire_expr = expr.get_best_key(face.id);
+                        route.push(QueryTargetQabl {
+                            direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                            info: None,
+                        });
+                    }
+                } else if face.whatami == WhatAmI::Peer
+                    && initial_interest(face).is_some_and(|i| !i.finalized)
+                {
+                    let wire_expr = expr.get_best_key(face.id);
+                    route.push(QueryTargetQabl {
+                        direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                        info: None,
+                    });
+                }
+            }
+        }
+
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }
 
-    #[cfg(feature = "unstable")]
     fn get_matching_queryables(
         &self,
         tables: &Tables,

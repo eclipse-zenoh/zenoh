@@ -49,12 +49,16 @@ use super::{
 };
 use crate::common::batch::BatchConfig;
 
+// Batches are moved all over the pipeline and are quite big (56B+), so they are boxed to optimize
+// the moves. They are always reused, so there is no allocation performance penalty.
+type BoxedWBatch = Box<WBatch>;
+
 const RBLEN: usize = QueueSizeConf::MAX;
 
 // Inner structure to reuse serialization batches
 struct StageInRefill {
     n_ref_r: Waiter,
-    s_ref_r: RingBufferReader<WBatch, RBLEN>,
+    s_ref_r: RingBufferReader<BoxedWBatch, RBLEN>,
     batch_config: (usize, BatchConfig),
     batch_allocs: usize,
 }
@@ -69,12 +73,12 @@ impl fmt::Display for TransportClosed {
 impl std::error::Error for TransportClosed {}
 
 impl StageInRefill {
-    fn pull(&mut self) -> Option<WBatch> {
+    fn pull(&mut self) -> Option<BoxedWBatch> {
         match self.s_ref_r.pull() {
             Some(b) => Some(b),
             None if self.batch_allocs < self.batch_config.0 => {
                 self.batch_allocs += 1;
-                Some(WBatch::new(self.batch_config.1))
+                Some(Box::new(WBatch::new(self.batch_config.1)))
             }
             None => None,
         }
@@ -109,7 +113,7 @@ struct AtomicBackoff {
 // Inner structure to link the initial stage with the final stage of the pipeline
 struct StageInOut {
     n_out_w: Notifier,
-    s_out_w: RingBufferWriter<WBatch, RBLEN>,
+    s_out_w: RingBufferWriter<BoxedWBatch, RBLEN>,
     atomic_backoff: Arc<AtomicBackoff>,
 }
 
@@ -123,25 +127,40 @@ impl StageInOut {
     }
 
     #[inline]
-    fn move_batch(&mut self, batch: WBatch) {
+    fn move_batch(&mut self, batch: BoxedWBatch) {
         let _ = self.s_out_w.push(batch);
         self.atomic_backoff.bytes.store(0, Ordering::Relaxed);
         let _ = self.n_out_w.notify();
     }
 }
 
+struct Current {
+    batch: Option<BoxedWBatch>,
+    status: Arc<TransmissionPipelineStatus>,
+    prioflag: u8,
+}
+
+impl Current {
+    fn notify_pending(&mut self) {
+        self.status
+            .pending
+            .fetch_or(self.prioflag, Ordering::Relaxed);
+    }
+
+    fn reset_pending(&mut self) {
+        self.status
+            .pending
+            .fetch_and(!self.prioflag, Ordering::Relaxed);
+    }
+}
+
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
-    current: Arc<Mutex<Option<WBatch>>>,
+    current: Arc<Mutex<Current>>,
     priority: TransportPriorityTx,
 }
 
 impl StageInMutex {
-    #[inline]
-    fn current(&self) -> MutexGuard<'_, Option<WBatch>> {
-        zlock!(self.current)
-    }
-
     #[inline]
     fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
         if is_reliable {
@@ -278,12 +297,13 @@ impl StageIn {
         deadline: &mut Deadline,
     ) -> Result<bool, TransportClosed> {
         // Lock the current serialization batch.
-        let mut c_guard = self.mutex.current();
+        let mut c_guard = zlock!(self.mutex.current);
+        c_guard.notify_pending();
 
         macro_rules! zgetbatch_rets {
             ($($restore_sn:stmt)?) => {
                 loop {
-                    match c_guard.take() {
+                    match c_guard.batch.take() {
                         Some(batch) => break batch,
                         None => match self.s_ref.pull() {
                             Some(mut batch) => {
@@ -321,7 +341,7 @@ impl StageIn {
                     return Ok(true);
                 } else {
                     let bytes = $batch.len();
-                    *c_guard = Some($batch);
+                    c_guard.batch = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
                     return Ok(true);
@@ -371,7 +391,7 @@ impl StageIn {
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
         // Reinsert the current batch for fragmentation.
-        *c_guard = Some(batch);
+        c_guard.batch = Some(batch);
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
@@ -398,7 +418,7 @@ impl StageIn {
                     tch.sn.set(sn).unwrap()
                 // Otherwise, an ephemeral batch is created to send the stop fragment
                 } else {
-                    let mut batch = WBatch::new_ephemeral(self.batch_config);
+                    let mut batch = Box::new(WBatch::new_ephemeral(self.batch_config));
                     self.fragbuf.clear();
                     fragment.ext_drop = Some(fragment::ext::Drop::new());
                     let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
@@ -419,7 +439,7 @@ impl StageIn {
                     // Restore the sequence number
                     tch.sn.set(sn).unwrap();
                     // Reinsert the batch
-                    *c_guard = Some(batch);
+                    c_guard.batch = Some(batch);
                     tracing::warn!(
                         "Zenoh message dropped because it can not be fragmented: {:?}",
                         msg
@@ -441,12 +461,13 @@ impl StageIn {
     #[inline]
     fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
         // Lock the current serialization batch.
-        let mut c_guard = self.mutex.current();
+        let mut c_guard = zlock!(self.mutex.current);
+        c_guard.notify_pending();
 
         macro_rules! zgetbatch_rets {
             () => {
                 loop {
-                    match c_guard.take() {
+                    match c_guard.batch.take() {
                         Some(batch) => break batch,
                         None => match self.s_ref.pull() {
                             Some(mut batch) => {
@@ -476,7 +497,7 @@ impl StageIn {
                     return true;
                 } else {
                     let bytes = $batch.len();
-                    *c_guard = Some($batch);
+                    c_guard.batch = Some($batch);
                     drop(c_guard);
                     self.s_out.notify(bytes);
                     return true;
@@ -505,7 +526,7 @@ impl StageIn {
 
 // The result of the pull operation
 enum Pull {
-    Some(WBatch),
+    Some(BoxedWBatch),
     None,
     Backoff(MicroSeconds),
 }
@@ -532,8 +553,8 @@ impl Backoff {
 
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
-    s_out_r: RingBufferReader<WBatch, RBLEN>,
-    current: Arc<Mutex<Option<WBatch>>>,
+    s_out_r: RingBufferReader<BoxedWBatch, RBLEN>,
+    current: Arc<Mutex<Current>>,
     backoff: Backoff,
 }
 
@@ -587,7 +608,8 @@ impl StageOutIn {
                 }
 
                 // An incomplete (non-empty) batch may be available in the state IN pipeline.
-                match g.take() {
+                g.reset_pending();
+                match g.batch.take() {
                     Some(batch) => {
                         return Pull::Some(batch);
                     }
@@ -608,11 +630,11 @@ impl StageOutIn {
 
 struct StageOutRefill {
     n_ref_w: Notifier,
-    s_ref_w: RingBufferWriter<WBatch, RBLEN>,
+    s_ref_w: RingBufferWriter<BoxedWBatch, RBLEN>,
 }
 
 impl StageOutRefill {
-    fn refill(&mut self, batch: WBatch) {
+    fn refill(&mut self, batch: BoxedWBatch) {
         assert!(self.s_ref_w.push(batch).is_none());
         let _ = self.n_ref_w.notify();
     }
@@ -630,18 +652,18 @@ impl StageOut {
     }
 
     #[inline]
-    fn refill(&mut self, batch: WBatch) {
+    fn refill(&mut self, batch: BoxedWBatch) {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<BoxedWBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
             batches.push(batch);
         }
         // Take the current batch
-        if let Some(batch) = guard.take() {
+        if let Some(batch) = guard.batch.take() {
             batches.push(batch);
         }
         batches
@@ -652,7 +674,8 @@ impl StageOut {
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
-    pub(crate) wait_before_drop: (Duration, Duration),
+    pub(crate) wait_before_drop: Duration,
+    pub(crate) max_wait_before_drop_fragments: Duration,
     pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
@@ -667,6 +690,17 @@ impl TransmissionPipeline {
         config: TransmissionPipelineConf,
         priority: &[TransportPriorityTx],
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
+        let status = Arc::new(TransmissionPipelineStatus {
+            disabled: AtomicBool::new(false),
+            congested: AtomicU8::new(0),
+            pending: AtomicU8::new(0),
+            waits: Waits {
+                wait_before_drop: config.wait_before_drop,
+                max_wait_before_drop_fragments: config.max_wait_before_drop_fragments,
+                wait_before_close: config.wait_before_close,
+            },
+        });
+
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
@@ -686,12 +720,12 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
+            let (mut s_ref_w, s_ref_r) = RingBuffer::<BoxedWBatch, RBLEN>::init();
             let mut batch_allocs = 0;
             if *config.queue_alloc.mode() == QueueAllocMode::Init {
                 // Fill the refill ring buffer with batches
                 for _ in 0..*num {
-                    let batch = WBatch::new(config.batch);
+                    let batch = Box::new(WBatch::new(config.batch));
                     batch_allocs += 1;
                     assert!(s_ref_w.push(batch).is_none());
                 }
@@ -702,8 +736,12 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
-            let current = Arc::new(Mutex::new(None));
+            let (s_out_w, s_out_r) = RingBuffer::<BoxedWBatch, RBLEN>::init();
+            let current = Arc::new(Mutex::new(Current {
+                batch: None,
+                status: status.clone(),
+                prioflag: 1 << (prio as u8),
+            }));
             let bytes = Arc::new(AtomicBackoff {
                 active: CachePadded::new(AtomicBool::new(false)),
                 bytes: CachePadded::new(AtomicBatchSize::new(0)),
@@ -744,20 +782,14 @@ impl TransmissionPipeline {
             });
         }
 
-        let active = Arc::new(TransmissionPipelineStatus {
-            disabled: AtomicBool::new(false),
-            congested: AtomicU8::new(0),
-        });
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
-            status: active.clone(),
-            wait_before_drop: config.wait_before_drop,
-            wait_before_close: config.wait_before_close,
+            status: status.clone(),
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
             n_out_r,
-            status: active,
+            status,
         };
 
         (producer, consumer)
@@ -769,6 +801,11 @@ struct TransmissionPipelineStatus {
     disabled: AtomicBool,
     // Bitflags to indicate the given priority queue is congested
     congested: AtomicU8,
+    // Bitflags to indicate the given priority queue has messages waiting to be sent
+    pending: AtomicU8,
+    // wait parameters
+    // Note: this is placed here to optimize TransmissionPipelineProducer memory layout and improve performance
+    waits: Waits,
 }
 
 impl TransmissionPipelineStatus {
@@ -793,6 +830,24 @@ impl TransmissionPipelineStatus {
         let prioflag = 1 << priority as u8;
         self.congested.load(Ordering::Relaxed) & prioflag != 0
     }
+
+    fn get_pending(&self) -> Option<Priority> {
+        let pending = self.pending.load(Ordering::Relaxed);
+        let prio = pending.trailing_zeros();
+        // Don't use try_from directly because it unfortunately returns a costly error
+        if prio as usize >= Priority::NUM {
+            return None;
+        }
+        Some(Priority::try_from(prio as u8).unwrap())
+    }
+}
+
+#[derive(Clone)]
+struct Waits {
+    wait_before_drop: Duration,
+    max_wait_before_drop_fragments: Duration,
+
+    wait_before_close: Duration,
 }
 
 #[derive(Clone)]
@@ -800,8 +855,6 @@ pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
     status: Arc<TransmissionPipelineStatus>,
-    wait_before_drop: (Duration, Duration),
-    wait_before_close: Duration,
 }
 
 impl TransmissionPipelineProducer {
@@ -824,9 +877,12 @@ impl TransmissionPipelineProducer {
             if self.status.is_congested(priority) {
                 return Ok(false);
             }
-            (self.wait_before_drop.0, Some(self.wait_before_drop.1))
+            (
+                self.status.waits.wait_before_drop,
+                Some(self.status.waits.max_wait_before_drop_fragments),
+            )
         } else {
-            (self.wait_before_close, None)
+            (self.status.waits.wait_before_close, None)
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
@@ -896,11 +952,12 @@ pub(crate) struct TransmissionPipelineConsumer {
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(WBatch, Priority)> {
+    pub(crate) async fn pull(&mut self) -> Option<(BoxedWBatch, Priority)> {
         while !self.status.is_disabled() {
             let mut backoff = MicroSeconds::MAX;
             // Calculate the backoff maximum
-            for (prio, queue) in self.stage_out.iter_mut().enumerate() {
+            while let Some(prio) = self.status.get_pending() {
+                let queue = &mut self.stage_out[prio as usize];
                 match queue.try_pull() {
                     Pull::Some(batch) => {
                         let prio = Priority::try_from(prio as u8).unwrap();
@@ -943,14 +1000,14 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: WBatch, priority: Priority) {
+    pub(crate) fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
         if !batch.is_ephemeral() {
             self.stage_out[priority as usize].refill(batch);
             self.status.set_congested(priority, false);
         }
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
+    pub(crate) fn drain(&mut self) -> Vec<(BoxedWBatch, usize)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -961,8 +1018,7 @@ impl TransmissionPipelineConsumer {
             .iter()
             .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
-        let mut currents: Vec<MutexGuard<'_, Option<WBatch>>> =
-            locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
+        let mut currents: Vec<_> = locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
 
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
             let mut bs = s_out.drain(&mut currents[prio]);
@@ -987,17 +1043,13 @@ mod tests {
     };
 
     use tokio::{task, time::timeout};
-    use zenoh_buffers::{
-        reader::{DidntRead, HasReader},
-        ZBuf,
-    };
+    use zenoh_buffers::reader::{DidntRead, HasReader};
     use zenoh_codec::{network::NetworkMessageIter, RCodec, Zenoh080};
     use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
-        core::{Bits, CongestionControl, Encoding, Priority, Reliability},
+        core::{Bits, CongestionControl, Priority, Reliability},
         network::{ext, NetworkMessage, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
-        zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
 
@@ -1015,7 +1067,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_drop: Duration::from_millis(1),
+        max_wait_before_drop_fragments: Duration::from_millis(1024),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
         queue_alloc: QueueAllocConf {
@@ -1032,7 +1085,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_drop: Duration::from_millis(1),
+        max_wait_before_drop_fragments: Duration::from_millis(1024),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
         queue_alloc: QueueAllocConf {
@@ -1045,25 +1099,12 @@ mod tests {
         fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; payload_size]);
 
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                payload: PushBody::Put(Put {
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                    payload,
-                }),
-            }
-            .into();
+                ..Push::from(vec![0_u8; payload_size])
+            });
 
             println!(
                 "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
@@ -1175,25 +1216,12 @@ mod tests {
 
             // Send reliable messages
             let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; payload_size]);
 
-            let message: NetworkMessage = Push {
+            let message = NetworkMessage::from(Push {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                payload: PushBody::Put(Put {
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment: None,
-                    ext_unknown: vec![],
-                    payload,
-                }),
-            }
-            .into();
+                ..Push::from(vec![0_u8; payload_size])
+            });
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
@@ -1289,29 +1317,16 @@ mod tests {
 
                     // Send reliable messages
                     let key = "pipeline/thr".into();
-                    let payload = ZBuf::from(vec![0_u8; *size]);
 
-                    let message: NetworkMessage = Push {
+                    let message = NetworkMessage::from(Push {
                         wire_expr: key,
                         ext_qos: ext::QoSType::new(
                             Priority::Control,
                             CongestionControl::Block,
                             false,
                         ),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        payload: PushBody::Put(Put {
-                            timestamp: None,
-                            encoding: Encoding::empty(),
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment: None,
-                            ext_unknown: vec![],
-                            payload,
-                        }),
-                    }
-                    .into();
+                        ..Push::from(vec![0_u8; *size])
+                    });
 
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
@@ -1354,23 +1369,11 @@ mod tests {
         // Drop consumer to close the pipeline
         drop(consumer);
 
-        let message: NetworkMessage = Push {
+        let message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
             ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, true),
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::DEFAULT,
-            payload: PushBody::Put(Put {
-                timestamp: None,
-                encoding: Encoding::empty(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
-                payload: vec![42u8].into(),
-            }),
-        }
-        .into();
+            ..Push::from(vec![42u8])
+        });
         // First message should not be rejected as the is one batch available in the queue
         assert!(producer.push_network_message(message.as_ref()).is_ok());
         // Second message should be rejected
