@@ -21,10 +21,10 @@
 //!
 //! # Concepts and components
 //!
-//! The Zenoh protocol allows nodes to communicate data across a graph with an arbitrary topology.
+//! The Zenoh protocol connects nodes to a graph with an arbitrary topology and routes data between them.
 //! Depending on the network configuration, data can be sent directly or routed through intermediate nodes.
 //!
-//! Each Zenoh node is represented by a [Session](crate::Session) object. This is the main object that maintains the state of
+//! Each Zenoh node is a [Session](crate::Session) object. This is the main object that maintains the state of
 //! the connection to the Zenoh network and is used to declare publishers, subscribers, queriers, queryables, etc.
 //! A session is created by the [open](crate::open) function, which takes a [Config](crate::config::Config) object as an argument.
 //!
@@ -34,7 +34,7 @@
 //!
 //! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable) and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
 //!
-//! On the producing side, data is associated with keys in the format of a `/`-separated path, e.g., `robot/sensor/temp`.
+//! Data is associated with keys in the format of a slash-separated path, e.g., `robot/sensor/temp`.
 //! The requesting side uses [key expressions](crate::key_expr) to address the data of interest. Key expressions can
 //! contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
 //!
@@ -42,19 +42,19 @@
 //! The raw byte payload is represented as [ZBytes](crate::bytes::ZBytes), which provides mechanisms for zero-copy creation and access.
 //! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization of basic types and structures for `ZBytes`.
 //!
-//! Samples can be received via a callback function or read from a channel. Use the [handlers](crate::handlers) API for this.
+//! Samples can be received via a callback function or read from a channel. See the [handlers](crate::handlers) API for details.
 //!
-//! Other important elements of Zenoh are:
-//! - Support for scouting to discover Zenoh nodes in the network, provided by the [scout](crate::scouting::scout) function. Note that it's not necessary to explicitly discover other nodes just to publish or subscribe to data.
-//! - Liveliness API to declare and monitor session liveliness tokens, provided by the [liveliness](crate::liveliness) module.
-//! - Matching listener API in the [matching](crate::matching) module. It allows the active side of communication (publisher, querier) to know whether there are any interested parties on the other side (subscriber, queryable).
+//! Other important functionalities of Zenoh are:
+//! - Scouting to discover Zenoh nodes in the network using the [scout](crate::scouting::scout) function. Note that it's not necessary to explicitly discover other nodes just to publish, subscribe, or query data.
+//! - Monitor [liveliness](crate::liveliness) to get notified when a specified resource appears or disappears in the network.
+//! - The [Matching](crate::matching) API allows the active side of communication (publisher, querier) to know whether there are any interested parties on the other side (subscriber, queryable).
 //!
 //! # Usage examples
 //! 
 //! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
 //! 
 //! ## Publishing/Subscribing
-//! The example below shows how to publish and subscribe data using Zenoh.
+//! The example below shows how to publish and subscribe to data using Zenoh.
 //! 
 //! Publishing data:
 //! ```no_run
@@ -159,9 +159,9 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
 );
 
 pub use zenoh_core::{Resolvable, Resolve, Wait};
-/// A zenoh error.
+/// A Zenoh error.
 pub use zenoh_result::Error;
-/// A zenoh result.
+/// A Zenoh result.
 pub use zenoh_result::ZResult as Result;
 #[doc(inline)]
 pub use zenoh_util::{init_log_from_env_or, try_init_log_from_env};
@@ -181,7 +181,7 @@ pub use crate::{
 /// These semantics can be a bit difficult to implement, so this module provides the following facilities:
 ///
 /// # Storing Key Expressions
-/// This module provides three flavors to store strings that have been validated to respect the KE syntax:
+/// This module provides three ways to store strings that have been validated to respect the KE syntax:
 /// - [`keyexpr`](crate::key_expr::keyexpr) is the equivalent of a [`str`],
 /// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
 /// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
