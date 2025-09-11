@@ -15,42 +15,43 @@
 #![cfg_attr(doc_auto_cfg, feature(doc_auto_cfg))]
 
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
-//! rest and computations. It elegantly blends traditional pub/sub with geo distributed
-//! storage, queries and computations, while retaining a level of time and space efficiency
+//! rest, and computations. It elegantly blends traditional pub/sub with geo-distributed
+//! storage, queries, and computations, while retaining a level of time and space efficiency
 //! that is well beyond any of the mainstream stacks.
 //!
 //! # Concepts and components
 //!
-//! Zenoh protocol allows to communicate data between nodes connected in the graph of arbitrary topology. 
-//! I.e. depending of the network configuration the data can be send directly or routed through intermediate nodes.
+//! The Zenoh protocol allows nodes to communicate data across a graph with an arbitrary topology.
+//! Depending on the network configuration, data can be sent directly or routed through intermediate nodes.
 //!
-//! Each Zenoh node is the [Session](crate::Session) object. This is the main object which maintains the state of
-//! the connection to the Zenoh network and is used to declare publishers, subscribers, queriers, queryables, etc. 
-//! A session is created by the [open](crate::open) function, which takes a [Config](crate::config::Config) object as argument.
+//! Each Zenoh node is represented by a [Session](crate::Session) object. This is the main object that maintains the state of
+//! the connection to the Zenoh network and is used to declare publishers, subscribers, queriers, queryables, etc.
+//! A session is created by the [open](crate::open) function, which takes a [Config](crate::config::Config) object as an argument.
 //!
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
 //!
 //! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher) and consumed by [Subscribers](crate::pubsub::Subscriber).
 //!
-//! In the query/reply paradigm, data is available on [Queryables](crate::query::Queryable) and requested by [Queriers](crate::query::Querier) or directly by [Session::get](crate::Session::get) operations.
+//! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable) and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
 //!
-//! The data on producing side is associated with keys in format of a `/`-separated path, e.g., `robot/sensor/temp`. The requesting side uses the [Key expressions](crate::key_expr)
-//! to address the data of interest. The key expressions can contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
+//! On the producing side, data is associated with keys in the format of a `/`-separated path, e.g., `robot/sensor/temp`.
+//! The requesting side uses [key expressions](crate::key_expr) to address the data of interest. Key expressions can
+//! contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
 //!
-//! The data is received as [Samples](crate::sample::Sample) which contain the payload and all the metadata associated with the data. 
-//! The raw bytes payload is represented as [ZBytes](crate::bytes::ZBytes) which provides mechanisms for zero-copy creation and access. 
-//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate provides also serialization and deserialization of basic types and structures for ZBytes.
+//! Data is received as [Samples](crate::sample::Sample), which contain the payload and all metadata associated with the data.
+//! The raw byte payload is represented as [ZBytes](crate::bytes::ZBytes), which provides mechanisms for zero-copy creation and access.
+//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization of basic types and structures for `ZBytes`.
 //!
-//! Sample can be received by callback function or read from a channel. The [handlers](crate::handlers) API is responsible for this.
+//! Samples can be received via a callback function or read from a channel. Use the [handlers](crate::handlers) API for this.
 //!
-//! The other important elements of Zenoh are:
-//! - Scouting support to discover Zenoh nodes in the network, provided by the [scout](crate::scouting::scout) function. Notice that it's not necessary to explicitly discover other nodes just to publish or subscribe data
+//! Other important elements of Zenoh are:
+//! - Support for scouting to discover Zenoh nodes in the network, provided by the [scout](crate::scouting::scout) function. Note that it's not necessary to explicitly discover other nodes just to publish or subscribe to data.
 //! - Liveliness API to declare and monitor session liveliness tokens, provided by the [liveliness](crate::liveliness) module.
-//! - Matching listener API in the [matching](crate::matching) module. It allows the active side of communication (publisher, querier) to know if there are any interested parties on the other side (subscriber, queryable).
+//! - Matching listener API in the [matching](crate::matching) module. It allows the active side of communication (publisher, querier) to know whether there are any interested parties on the other side (subscriber, queryable).
 //!
 //! # Usage examples
 //! 
-//! Below are the basic examples of using Zenoh. More examples are available in the documentation of each module and in the [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
+//! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
 //! 
 //! ## Publishing/Subscribing
 //! The example below shows how to publish and subscribe data using Zenoh.
@@ -65,7 +66,7 @@
 //! }
 //! ```
 //! 
-//! Subscribing to data: 
+//! Subscribing to data:
 //! ```no_run
 //! use futures::prelude::*;
 //!
@@ -172,36 +173,36 @@ pub use crate::{
     session::{open, Session},
 };
 
-/// [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
+/// [Key expressions](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
-/// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, we use Key Expressions (KE).
-/// KEs are a small language that express sets of keys through a glob-like language.
+/// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, Zenoh uses Key Expressions (KEs).
+/// KEs are a small language that expresses sets of keys through a glob-like syntax.
 ///
 /// These semantics can be a bit difficult to implement, so this module provides the following facilities:
 ///
 /// # Storing Key Expressions
-/// This module provides 3 flavours to store strings that have been validated to respect the KE syntax:
+/// This module provides three flavors to store strings that have been validated to respect the KE syntax:
 /// - [`keyexpr`](crate::key_expr::keyexpr) is the equivalent of a [`str`],
 /// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
 /// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
 ///   routing and network usage.
 ///
-/// All of these types [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given [`intersects`](crate::key_expr::keyexpr::includes) with another,
-/// or even if a [`includes`](crate::key_expr::keyexpr::includes) another.
+/// All of these types implement [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given key expression
+/// [`intersects`](crate::key_expr::keyexpr::intersects) with another, or whether it [`includes`](crate::key_expr::keyexpr::includes) another.
 ///
 /// # Tying values to Key Expressions
-/// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) if you want to respect
-/// the Key Expression semantics with high performance.
+/// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) to respect
+/// Key Expression semantics with high performance.
 ///
-/// Enter [KeTrees](crate::key_expr::keyexpr_tree). These are data-structures specially built to store KE-value pairs in a manner that supports the set-semantics of KEs.
+/// Enter [KeTrees](crate::key_expr::keyexpr_tree). These are data structures built to store KE–value pairs in a manner that supports the set semantics of KEs.
 ///
 /// # Building and parsing Key Expressions
-/// A common issue in REST API is the association of meaning to sections of the URL, and respecting that API in a convenient manner.
-/// The same issue arises naturally when designing a KE space, and [`KeFormat`](crate::key_expr::format::KeFormat) was designed to help you with this,
-/// both in constructing and in parsing KEs that fit the formats you've defined.
+/// A common issue in REST APIs is assigning meaning to sections of the URL and respecting that API in a convenient manner.
+/// The same issue arises naturally when designing a KE space, and [`KeFormat`](crate::key_expr::format::KeFormat) was designed to help with this,
+/// both in constructing and parsing KEs that fit the formats you've defined.
 ///
-/// [`kedefine`](crate::key_expr::format::kedefine) also allows you to define formats at compile time, allowing a more performant, but more importantly safer and more convenient use of said formats,
-/// as the [`keformat`](crate::key_expr::format::keformat) and [`kewrite`](crate::key_expr::format::kewrite) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
+/// [`kedefine`](crate::key_expr::format::kedefine) also lets you define formats at compile time, enabling a more performant—and, more importantly, safer and more convenient—use of said formats,
+/// as the [`keformat`](crate::key_expr::format::keformat) and [`kewrite`](crate::key_expr::format::kewrite) macros will tell you if you're attempting to set fields of the format that do not exist.
 pub mod key_expr {
     #[zenoh_macros::unstable]
     pub mod keyexpr_tree {
@@ -231,7 +232,7 @@ pub mod key_expr {
 
 /// Zenoh [`Session`] and associated types
 ///
-/// The [`Session`] is the main component of the Zenoh.
+/// The [`Session`] is the main component of Zenoh.
 pub mod session {
     #[zenoh_macros::unstable]
     pub use zenoh_config::wrappers::EntityGlobalId;
@@ -257,7 +258,7 @@ pub mod session {
 /// Sample primitives
 ///
 /// The [`Sample`](crate::sample::Sample) structure is the data unit received from [`Subscriber`](crate::pubsub::Subscriber)
-/// or [`Queryable`](crate::query::Queryable) instances. It contains the payload and all the metadata associated with the data.
+/// or [`Queryable`](crate::query::Queryable) instances. It contains the payload and all metadata associated with the data.
 pub mod sample {
     #[zenoh_macros::unstable]
     pub use crate::api::sample::{SourceInfo, SourceSn};
@@ -276,8 +277,8 @@ pub mod sample {
 /// [`ZBytes::slices`](crate::bytes::ZBytes::slices)), as well as methods for sequential
 /// reading/writing ([`ZBytes::reader`](crate::bytes::ZBytes::reader), [`ZBytes::writer`](crate::bytes::ZBytes::writer)).
 ///
-/// The`zenoh_ext` crate provides serialization and deserialization of basic types and structures for `ZBytes`
-/// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) /
+/// The `zenoh_ext` crate provides serialization and deserialization of basic types and structures for `ZBytes` via
+/// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) and
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
 pub mod bytes {
     pub use crate::api::{
@@ -288,12 +289,11 @@ pub mod bytes {
 
 /// Pub/sub primitives
 ///
-/// The [`Publisher`](crate::pubsub::Publisher) instance is declared by a
+/// A [`Publisher`](crate::pubsub::Publisher) is declared by the
 /// [`Session::declare_publisher`](crate::Session::declare_publisher) method.
 ///
-/// The data [`Sample`](crate::sample::Sample)s
-/// are received by [`Subscriber`](crate::pubsub::Subscriber)s
-/// declared by a [`Session::declare_subscriber`](crate::Session::declare_subscriber)
+/// [`Sample`](crate::sample::Sample) data is received by [`Subscriber`](crate::pubsub::Subscriber)s
+/// declared with [`Session::declare_subscriber`](crate::Session::declare_subscriber).
 ///
 pub mod pubsub {
     pub use crate::api::{
@@ -311,10 +311,9 @@ pub mod pubsub {
 
 /// Query/reply primitives
 ///
-/// The [`Queryable`](crate::query::Queryable) instance is declared by a
+/// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
-/// It is requested by a [`Session::get`](crate::Session::get) operation which
-/// receives data in [`Reply`](crate::query::Reply) structures.
+/// Data is requested via [`Session::get`](crate::Session::get) and received in [`Reply`](crate::query::Reply) structures.
 ///
 pub mod query {
     pub use zenoh_protocol::core::Parameters;
@@ -349,30 +348,30 @@ pub mod matching {
 ///
 /// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber),
 /// [`Query`](crate::query::Query), etc.) have a
-/// [`with`](crate::pubsub::SubscriberBuilder::with) method which accepts a handler for the data.
+/// [`with`](crate::pubsub::SubscriberBuilder::with) method that accepts a handler for the data.
 ///
 /// The handler is a pair of a [`Callback`](crate::handlers::Callback) and an arbitrary `Handler`
-/// object used to access data received by the callback. When the data is processed by the callback itself
+/// object used to access data received by the callback. When the data is processed by the callback itself,
 /// the handler type can be `()`. For convenience, the
 /// [`callback`](crate::pubsub::SubscriberBuilder::callback) method, which accepts
-/// a `Fn(T)` only can be used in this case.
+/// only an `Fn(T)`, can be used in this case.
 ///
 /// The [`with`](crate::pubsub::SubscriberBuilder::with) method accepts any type that
 /// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a
 /// conversion to a pair of [`Callback`](crate::handlers::Callback) and handler.
 ///
-/// The `IntoHandler` for channels [`FifoChannel`](crate::handlers::FifoChannel) and
+/// The `IntoHandler` implementations for channels [`FifoChannel`](crate::handlers::FifoChannel) and
 /// [`RingChannel`](crate::handlers::RingChannel)
 /// return a pair of ([`Callback`](crate::handlers::Callback), channel_handler).
 ///
-/// The callback pushes data to the channel, the
-/// channel handler [`FifoChannelHandler`](crate::handlers::FifoChannelHandler) or
-/// [`RingChannelHandler`](crate::handlers::RingChannelHandler) allows to take data
+/// The callback pushes data to the channel; the
+/// channel handler ([`FifoChannelHandler`](crate::handlers::FifoChannelHandler) or
+/// [`RingChannelHandler`](crate::handlers::RingChannelHandler)) allows taking data
 /// from the channel.
 ///
 /// The channel handler is stored
-/// in the Zenoh object (e.g., [`Subscriber`](crate::pubsub::Subscriber)). It can be accessed
-/// by [`handler`](crate::pubsub::Subscriber::handler) method or just directly by dereferencing the
+/// in the Zenoh object (e.g., a [`Subscriber`](crate::pubsub::Subscriber)). It can be accessed
+/// via the [`handler`](crate::pubsub::Subscriber::handler) method or by dereferencing the
 /// Zenoh object.
 pub mod handlers {
     #[zenoh_macros::internal]
@@ -402,7 +401,7 @@ pub mod qos {
 /// Scouting primitives
 ///
 /// Scouting is the process of discovering Zenoh nodes in the network.
-/// The scouting process depends on the transport layer and on the zenoh configuration.
+/// The scouting process depends on the transport layer and the Zenoh configuration.
 /// See more details at <https://zenoh.io/docs/getting-started/deployment/#scouting>.
 ///
 pub mod scouting {
@@ -416,7 +415,7 @@ pub mod scouting {
 
 /// Liveliness primitives
 ///
-/// A [`LivelinessToken`](liveliness::LivelinessToken) is a token which liveliness is tied
+/// A [`LivelinessToken`](liveliness::LivelinessToken) is a token whose liveliness is tied
 /// to the Zenoh [`Session`] and can be monitored by remote applications.
 ///
 /// # Examples
@@ -479,14 +478,14 @@ pub mod time {
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants.
 ///
-/// The zenoh configurattion is stored in a JSON file. The [`Config`] can be constructed from it using
+/// The Zenoh configuration is stored in a JSON file. A [`Config`] can be constructed from it using
 /// the corresponding `from_...` methods. It's also possible to read or
-/// modify individual elements of the [`Config`] with [`Config::insert_json5`](crate::config::Config::insert_json5)
+/// modify individual elements of the [`Config`] with the [`Config::insert_json5`](crate::config::Config::insert_json5)
 /// and [`Config::get_json`](crate::config::Config::get_json) methods.
 ///
-/// The example of the configuration file is
+/// An example configuration file is
 /// [available](https://github.com/eclipse-zenoh/zenoh/blob/release/1.0.0/DEFAULT_CONFIG.json5)
-/// in the zenoh repository.
+/// in the Zenoh repository.
 ///
 pub mod config {
     pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
@@ -501,7 +500,7 @@ pub mod config {
     not(all(feature = "unstable", feature = "internal"))
 ))]
 compile_error!(
-    "The plugins support is internal and unstable. The `unstable` and `internal` features must be enabled to use `plugins`."
+    "Plugin support is internal and unstable. The `unstable` and `internal` features must be enabled to use `plugins`."
 );
 
 #[zenoh_macros::internal]
