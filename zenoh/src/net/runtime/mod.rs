@@ -119,7 +119,6 @@ pub trait IRuntime: Send + Sync {
         e_primitives: Arc<dyn EPrimitives + Send + Sync>,
     ) -> (usize, Arc<dyn Primitives>);
 
-    #[zenoh_macros::unstable]
     fn matching_status_remote(
         &self,
         key_expr: &crate::key_expr::KeyExpr,
@@ -217,7 +216,6 @@ impl IRuntime for RuntimeState {
             .collect::<Vec<_>>()
     }
 
-    #[cfg(feature = "unstable")]
     fn matching_status_remote(
         &self,
         key_expr: &crate::key_expr::KeyExpr,
@@ -225,8 +223,6 @@ impl IRuntime for RuntimeState {
         matching_type: crate::api::matching::MatchingStatusType,
         face_id: usize,
     ) -> crate::matching::MatchingStatus {
-        use std::ops::Deref;
-
         use crate::matching::MatchingStatus;
 
         let ns_key_expr = self

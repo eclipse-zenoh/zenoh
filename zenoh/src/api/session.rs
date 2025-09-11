@@ -70,6 +70,8 @@ use zenoh_task::TaskController;
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
+#[cfg(feature = "unstable")]
+use crate::net::runtime::IConfig;
 use crate::{
     api::{
         admin,
@@ -105,7 +107,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        runtime::{DynamicRuntime, IConfig, Runtime, RuntimeBuilder},
+        runtime::{DynamicRuntime, Runtime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,
@@ -685,7 +687,6 @@ impl Session {
             let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
-            #[cfg(feature = "unstable")]
             session.0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
 
             admin::init(session.downgrade());
