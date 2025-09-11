@@ -468,34 +468,34 @@ pub(super) fn declare_sub_interest(
                 for src_face in tables
                     .faces
                     .values()
+                    .filter(|f| f.id != face.id)
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
-                    if src_face.id != face.id {
-                        for sub in face_hat!(src_face).remote_subs.values() {
-                            if sub.context.is_some() && sub.matches(res) {
-                                let id = make_sub_id(sub, face, mode);
-                                let wire_expr = Resource::decl_key(
-                                    sub,
-                                    face,
-                                    super::push_declaration_profile(face),
-                                );
-                                send_declare(
-                                    &face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id,
-                                            ext_qos: ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareSubscriber(
-                                                DeclareSubscriber { id, wire_expr },
-                                            ),
-                                        },
-                                        sub.expr().to_string(),
-                                    ),
-                                );
-                            }
+                    for sub in face_hat!(src_face).remote_subs.values() {
+                        if sub.context.is_some() && sub.matches(res) {
+                            let id = make_sub_id(sub, face, mode);
+                            let wire_expr = Resource::decl_key(
+                                sub,
+                                face,
+                                super::push_declaration_profile(face),
+                            );
+                            send_declare(
+                                &face.primitives,
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id,
+                                        ext_qos: ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                            id,
+                                            wire_expr,
+                                        }),
+                                    },
+                                    sub.expr().to_string(),
+                                ),
+                            );
                         }
                     }
                 }
