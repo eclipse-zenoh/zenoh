@@ -217,11 +217,11 @@ impl HatInterestTrait for HatCode {
                     .filter(|f| f.whatami != WhatAmI::Client)
                     .map(get_mut_unchecked)
                 {
-                    dst_face.local_interests.retain(|_, local_interest| {
+                    dst_face.local_interests.retain(|id, local_interest| {
                         if *local_interest == interest {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
                                 &mut Interest {
-                                    id,
+                                    id: *id,
                                     mode: InterestMode::Final,
                                     // Note: InterestMode::Final options are undefined in the current protocol specification,
                                     //       they are initialized here for internal use by local egress interceptors.
