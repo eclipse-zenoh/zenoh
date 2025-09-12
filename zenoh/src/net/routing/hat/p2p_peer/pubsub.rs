@@ -24,7 +24,7 @@ use zenoh_protocol::{
             self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
             UndeclareSubscriber,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -493,34 +493,33 @@ impl Hat {
                     for src_face in self
                         .faces(tables)
                         .values()
+                        .filter(|f| f.id != face.id)
                         .cloned()
                         .collect::<Vec<Arc<FaceState>>>()
                     {
-                        if src_face.id != face.id {
-                            for sub in self.face_hat(&src_face).remote_subs.values() {
-                                if sub.ctx.is_some() && sub.matches(res) {
-                                    let id = self.make_sub_id(sub, face, mode);
-                                    let wire_expr = Resource::decl_key(
-                                        sub,
-                                        face,
-                                        super::push_declaration_profile(face),
-                                    );
-                                    send_declare(
-                                        &face.primitives,
-                                        RoutingContext::with_expr(
-                                            Declare {
-                                                interest_id,
-                                                ext_qos: declare::ext::QoSType::DECLARE,
-                                                ext_tstamp: None,
-                                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                                body: DeclareBody::DeclareSubscriber(
-                                                    DeclareSubscriber { id, wire_expr },
-                                                ),
-                                            },
-                                            sub.expr().to_string(),
-                                        ),
-                                    );
-                                }
+                        for sub in self.face_hat(&src_face).remote_subs.values() {
+                            if sub.ctx.is_some() && sub.matches(res) {
+                                let id = self.make_sub_id(sub, face, mode);
+                                let wire_expr = Resource::decl_key(
+                                    sub,
+                                    face,
+                                    super::push_declaration_profile(face),
+                                );
+                                send_declare(
+                                    &face.primitives,
+                                    RoutingContext::with_expr(
+                                        Declare {
+                                            interest_id,
+                                            ext_qos: declare::ext::QoSType::DECLARE,
+                                            ext_tstamp: None,
+                                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                            body: DeclareBody::DeclareSubscriber(
+                                                DeclareSubscriber { id, wire_expr },
+                                            ),
+                                        },
+                                        sub.expr().to_string(),
+                                    ),
+                                );
                             }
                         }
                     }
@@ -685,19 +684,18 @@ impl HatPubSubTrait for Hat {
             for face in self.faces(tables).values() {
                 if face.whatami == WhatAmI::Router {
                     route.try_insert(face.id, || {
-                        face.local_interests
-                            .values()
-                            .all(|interest| {
-                                !interest.finalized_includes(InterestOptions::subscribers, key_expr)
-                            })
-                            .then(|| {
-                                let wire_expr = expr.get_best_key(face.id);
-                                Direction {
-                                    dst_face: face.clone(),
-                                    wire_expr: wire_expr.to_owned(),
-                                    node_id: NodeId::default(),
-                                }
-                            })
+                        let has_interest_finalized = expr
+                            .resource()
+                            .and_then(|res| res.face_ctxs.get(&face.id))
+                            .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                        (!has_interest_finalized).then(|| {
+                            let wire_expr = expr.get_best_key(face.id);
+                            Direction {
+                                dst_face: face.clone(),
+                                wire_expr: wire_expr.to_owned(),
+                                node_id: NodeId::default(),
+                            }
+                        })
                     });
                 } else if face.whatami == WhatAmI::Peer
                     && initial_interest(face).is_some_and(|i| !i.finalized)

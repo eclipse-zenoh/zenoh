@@ -218,13 +218,10 @@ impl HatBaseTrait for Hat {
             }
         }
         if ctx.src_face.whatami == WhatAmI::Peer {
+            let face_id = ctx.src_face.id;
             get_mut_unchecked(ctx.src_face).local_interests.insert(
                 INITIAL_INTEREST_ID,
-                InterestState {
-                    options: InterestOptions::ALL,
-                    res: None,
-                    finalized: false,
-                },
+                InterestState::new(face_id, InterestOptions::ALL, None, false),
             );
         }
 

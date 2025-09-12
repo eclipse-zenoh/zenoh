@@ -50,13 +50,10 @@ impl Hat {
                             .face_hat(ctx.src_face)
                             .next_id
                             .fetch_add(1, Ordering::SeqCst);
+                        let face_id = ctx.src_face.id;
                         get_mut_unchecked(ctx.src_face).local_interests.insert(
                             id,
-                            InterestState {
-                                options: *options,
-                                res: res.as_ref().map(|res| (*res).clone()),
-                                finalized: false,
-                            },
+                            InterestState::new(face_id, *options, res.clone(), false),
                         );
                         let wire_expr = res.as_ref().map(|res| {
                             Resource::decl_key(
@@ -101,7 +98,7 @@ impl HatInterestTrait for Hat {
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
+                res.as_deref().cloned().as_mut(),
                 msg.mode,
                 msg.options.aggregate(),
                 ctx.send_declare,
@@ -112,7 +109,7 @@ impl HatInterestTrait for Hat {
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
+                res.as_deref().cloned().as_mut(),
                 msg.mode,
                 msg.options.aggregate(),
                 ctx.send_declare,
@@ -123,20 +120,22 @@ impl HatInterestTrait for Hat {
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
+                res.as_deref().cloned().as_mut(),
                 msg.mode,
                 msg.options.aggregate(),
                 ctx.send_declare,
             )
         }
-        self.face_hat_mut(ctx.src_face).remote_interests.insert(
-            msg.id,
-            RemoteInterest {
-                res: res.as_deref().cloned(),
-                options: msg.options,
-                mode: msg.mode,
-            },
-        );
+        if msg.mode.future() {
+            self.face_hat_mut(ctx.src_face).remote_interests.insert(
+                msg.id,
+                RemoteInterest {
+                    res: res.as_deref().cloned(),
+                    options: msg.options,
+                    mode: msg.mode,
+                },
+            );
+        }
 
         let src_zid = ctx.src_face.zid;
 
@@ -189,13 +188,15 @@ impl HatInterestTrait for Hat {
                 .face_hat(&dst_face)
                 .next_id
                 .fetch_add(1, Ordering::SeqCst);
+            let dst_face_id = dst_face.id;
             get_mut_unchecked(&mut dst_face).local_interests.insert(
                 id,
-                InterestState {
-                    options: msg.options,
-                    res: res.as_ref().map(|res| (*res).clone()),
-                    finalized: false,
-                },
+                InterestState::new(
+                    dst_face_id,
+                    msg.options,
+                    res.as_deref().cloned(),
+                    propagated_mode == InterestMode::Future,
+                ),
             );
             if msg.mode.current() {
                 let dst_face_mut = get_mut_unchecked(&mut dst_face);
@@ -343,15 +344,13 @@ impl HatInterestTrait for Hat {
             .faces_mut(ctx.tables)
             .values_mut()
             .find(|f| self.face_hat(f).is_gateway)
+            .map(get_mut_unchecked)
         {
-            for id in dst_face.local_interests.keys().cloned().collect::<Vec<_>>() {
-                let local_interest = dst_face.local_interests.get(&id).unwrap();
-                if local_interest.res == inbound_interest.res
-                    && local_interest.options == inbound_interest.options
-                {
+            dst_face.local_interests.retain(|id, local_interest| {
+                if *local_interest == inbound_interest {
                     dst_face.primitives.send_interest(RoutingContext::with_expr(
                         &mut Interest {
-                            id,
+                            id: *id,
                             mode: InterestMode::Final,
                             // NOTE: InterestMode::Final options are undefined in the current protocol specification,
                             // they are initialized here for internal use by local egress interceptors.
@@ -367,9 +366,10 @@ impl HatInterestTrait for Hat {
                             .map(|res| res.expr().to_string())
                             .unwrap_or_default(),
                     ));
-                    get_mut_unchecked(dst_face).local_interests.remove(&id);
+                    return false;
                 }
-            }
+                true
+            });
         }
     }
 }

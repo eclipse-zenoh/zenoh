@@ -513,11 +513,11 @@ pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
 }
 
 pub fn get_quic_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
-    address
+    Ok(address
         .as_str()
-        .split(':')
-        .next()
-        .ok_or_else(|| zerror!("Invalid QUIC address").into())
+        .rsplit_once(':')
+        .ok_or_else(|| zerror!("Invalid QUIC address"))?
+        .0)
 }
 
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {

@@ -302,6 +302,7 @@ impl Hat {
                     ),
                 );
             } else if src_face.id != face.id
+                && (src_face.whatami == WhatAmI::Client || face.whatami == WhatAmI::Client)
                 && self
                     .face_hat(&face)
                     .remote_interests

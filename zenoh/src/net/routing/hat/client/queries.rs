@@ -22,12 +22,9 @@ use zenoh_protocol::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI,
     },
-    network::{
-        declare::{
-            self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
-            DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
-        },
-        interest::InterestOptions,
+    network::declare::{
+        self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare, DeclareBody,
+        DeclareQueryable, QueryableId, UndeclareQueryable,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -397,9 +394,11 @@ impl HatQueriesTrait for Hat {
                 .values()
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
-                if face.local_interests.values().all(|interest| {
-                    !interest.finalized_includes(InterestOptions::queryables, key_expr)
-                }) {
+                let has_interest_finalized = expr
+                    .resource()
+                    .and_then(|res| res.face_ctxs.get(&face.id))
+                    .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                if !has_interest_finalized {
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         info: None,
@@ -433,37 +432,6 @@ impl HatQueriesTrait for Hat {
             key_expr,
             complete
         );
-        for face in self
-            .faces(tables)
-            .values()
-            .filter(|f| f.whatami != WhatAmI::Client)
-        {
-            if face.local_interests.values().any(|interest| {
-                interest.finalized
-                    && interest.options.queryables()
-                    && interest
-                        .res
-                        .as_ref()
-                        .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
-                        .unwrap_or(true)
-            }) && self
-                .face_hat(face)
-                .remote_qabls
-                .values()
-                .any(|qbl| match complete {
-                    true => {
-                        qbl.face_ctxs
-                            .get(&face.id)
-                            .and_then(|ctx| ctx.qabl)
-                            .is_some_and(|q| q.complete)
-                            && KeyExpr::keyexpr_include(qbl.expr(), key_expr)
-                    }
-                    false => KeyExpr::keyexpr_intersect(qbl.expr(), key_expr),
-                })
-            {
-                matching_queryables.insert(face.id, face.clone());
-            }
-        }
 
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
@@ -478,12 +446,10 @@ impl HatQueriesTrait for Hat {
                 continue;
             }
             for (sid, ctx) in &mres.face_ctxs {
-                if ctx.face.whatami == WhatAmI::Client
-                    && match complete {
-                        true => ctx.qabl.is_some_and(|q| q.complete),
-                        false => ctx.qabl.is_some(),
-                    }
-                {
+                if match complete {
+                    true => ctx.qabl.is_some_and(|q| q.complete),
+                    false => ctx.qabl.is_some(),
+                } {
                     matching_queryables
                         .entry(*sid)
                         .or_insert_with(|| ctx.face.clone());

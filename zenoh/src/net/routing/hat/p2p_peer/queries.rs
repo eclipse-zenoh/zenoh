@@ -27,7 +27,7 @@ use zenoh_protocol::{
             self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare,
             DeclareBody, DeclareQueryable, QueryableId, UndeclareQueryable,
         },
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{InterestId, InterestMode},
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -502,37 +502,36 @@ impl Hat {
                 for src_face in self
                     .faces(tables)
                     .values()
+                    .filter(|f| f.id != face.id)
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
-                    if src_face.id != face.id {
-                        for qabl in self.face_hat(&src_face).remote_qabls.values() {
-                            if qabl.ctx.is_some() {
-                                let info = self.local_qabl_info(tables, qabl, face);
-                                let id = self.make_qabl_id(qabl, face, mode, info);
-                                let key_expr = Resource::decl_key(
-                                    qabl,
-                                    face,
-                                    super::push_declaration_profile(face),
-                                );
-                                send_declare(
-                                    &face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id,
-                                            ext_qos: declare::ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                                id,
-                                                wire_expr: key_expr,
-                                                ext_info: info,
-                                            }),
-                                        },
-                                        qabl.expr().to_string(),
-                                    ),
-                                );
-                            }
+                    for qabl in self.face_hat(&src_face).remote_qabls.values() {
+                        if qabl.ctx.is_some() {
+                            let info = self.local_qabl_info(tables, qabl, face);
+                            let id = self.make_qabl_id(qabl, face, mode, info);
+                            let key_expr = Resource::decl_key(
+                                qabl,
+                                face,
+                                super::push_declaration_profile(face),
+                            );
+                            send_declare(
+                                &face.primitives,
+                                RoutingContext::with_expr(
+                                    Declare {
+                                        interest_id,
+                                        ext_qos: declare::ext::QoSType::DECLARE,
+                                        ext_tstamp: None,
+                                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                            id,
+                                            wire_expr: key_expr,
+                                            ext_info: info,
+                                        }),
+                                    },
+                                    qabl.expr().to_string(),
+                                ),
+                            );
                         }
                     }
                 }
@@ -659,9 +658,11 @@ impl HatQueriesTrait for Hat {
             // TODO: BestMatching: What if there is a local compete ?
             for face in self.faces(tables).values() {
                 if face.whatami == WhatAmI::Router {
-                    if face.local_interests.values().all(|interest| {
-                        !interest.finalized_includes(InterestOptions::queryables, key_expr)
-                    }) {
+                    let has_interest_finalized = expr
+                        .resource()
+                        .and_then(|res| res.face_ctxs.get(&face.id))
+                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    if !has_interest_finalized {
                         let wire_expr = expr.get_best_key(face.id);
                         route.push(QueryTargetQabl {
                             dir: Direction {

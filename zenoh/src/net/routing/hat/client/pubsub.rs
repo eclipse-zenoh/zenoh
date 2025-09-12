@@ -19,12 +19,9 @@ use std::{
 
 use zenoh_protocol::{
     core::WhatAmI,
-    network::{
-        declare::{
-            self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
-            UndeclareSubscriber,
-        },
-        interest::InterestOptions,
+    network::declare::{
+        self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+        UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -397,19 +394,18 @@ impl HatPubSubTrait for Hat {
                 .filter(|f| f.whatami != WhatAmI::Client)
             {
                 route.try_insert(face.id, || {
-                    face.local_interests
-                        .values()
-                        .all(|interest| {
-                            !interest.finalized_includes(InterestOptions::subscribers, key_expr)
-                        })
-                        .then(|| {
-                            let wire_expr = expr.get_best_key(face.id);
-                            Direction {
-                                dst_face: face.clone(),
-                                wire_expr: wire_expr.to_owned(),
-                                node_id: NodeId::default(),
-                            }
-                        })
+                    let has_interest_finalized = expr
+                        .resource()
+                        .and_then(|res| res.face_ctxs.get(&face.id))
+                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    (!has_interest_finalized).then(|| {
+                        let wire_expr = expr.get_best_key(face.id);
+                        Direction {
+                            dst_face: face.clone(),
+                            wire_expr: wire_expr.to_owned(),
+                            node_id: NodeId::default(),
+                        }
+                    })
                 });
             }
         }
@@ -428,29 +424,6 @@ impl HatPubSubTrait for Hat {
         }
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
 
-        for face in self
-            .faces(tables)
-            .values()
-            .filter(|f| f.whatami != WhatAmI::Client)
-        {
-            if face.local_interests.values().any(|interest| {
-                interest.finalized
-                    && interest.options.subscribers()
-                    && interest
-                        .res
-                        .as_ref()
-                        .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
-                        .unwrap_or(true)
-            }) && self
-                .face_hat(face)
-                .remote_subs
-                .values()
-                .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), key_expr))
-            {
-                matching_subscriptions.insert(face.id, face.clone());
-            }
-        }
-
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
             .as_ref()
@@ -462,7 +435,7 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for (sid, ctx) in &mres.face_ctxs {
-                if ctx.subs.is_some() && ctx.face.whatami == WhatAmI::Client {
+                if ctx.subs.is_some() {
                     matching_subscriptions
                         .entry(*sid)
                         .or_insert_with(|| ctx.face.clone());
