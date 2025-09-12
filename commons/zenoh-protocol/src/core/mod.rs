@@ -83,6 +83,13 @@ impl ZenohIdProto {
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }
+
+    pub fn short(&self) -> String {
+        const MAX_ZID_LEN: usize = 8;
+        let mut string = self.to_string();
+        string.truncate(MAX_ZID_LEN);
+        string
+    }
 }
 
 impl Default for ZenohIdProto {

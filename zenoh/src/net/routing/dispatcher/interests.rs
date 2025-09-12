@@ -182,7 +182,7 @@ impl Face {
     ) {
         if self.state.bound.is_north() {
             tracing::error!(
-                src_face = ?self.state,
+                id = msg.id,
                 "Received interest from north-bound face. \
                 Interests should only flow upstream"
             );
@@ -279,7 +279,7 @@ impl Face {
     pub(crate) fn undeclare_interest(&self, tables: &TablesLock, msg: &Interest) {
         if self.state.bound.is_north() {
             tracing::error!(
-                src_face = ?self.state,
+                id = msg.id,
                 "Received interest finalization from north-bound face. \
                 This message should only flow downstream"
             );
@@ -315,7 +315,7 @@ impl Face {
     ) {
         if !self.state.bound.is_north() {
             tracing::error!(
-                src_face = ?self.state,
+                id,
                 "Received current interest finalization from south/eastwest-bound face. \
                 This message should only flow downstream"
             );

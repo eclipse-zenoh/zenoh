@@ -1,9 +1,7 @@
 use std::{
-    collections::HashMap,
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::{Index, IndexMut},
     sync::Arc,
-    usize,
 };
 
 use tokio_util::sync::CancellationToken;
@@ -24,6 +22,22 @@ pub(crate) enum Bound {
     /// A special bound for "unbound" faces that neither belong to the south region nor the
     /// north region; there is zero or more such bound.
     Eastwest { index: usize },
+}
+
+impl Display for Bound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Bound::North => f.write_str("N"),
+            Bound::South { index } => {
+                if index == &usize::MAX {
+                    write!(f, "L")
+                } else {
+                    write!(f, "S{index}")
+                }
+            }
+            Bound::Eastwest { index } => write!(f, "EW{index}"),
+        }
+    }
 }
 
 impl Bound {

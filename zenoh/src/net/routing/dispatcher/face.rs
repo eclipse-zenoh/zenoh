@@ -290,22 +290,18 @@ impl FaceState {
 }
 
 impl fmt::Display for FaceState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Face{{{}, {}}}", self.id, self.zid)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}:{}", self.id, self.zid.short(), self.bound)
     }
 }
 
 impl fmt::Debug for FaceState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const MAX_ZID_LEN: usize = 8;
-        let zid = self.zid.into_keyexpr();
-        write!(
-            f,
-            "{}/{}/{}",
-            self.id,
-            &zid[..usize::min(MAX_ZID_LEN, zid.len())],
-            self.whatami
-        )
+        f.debug_struct("FaceState")
+            .field("id", &self.id)
+            .field("zid", &self.zid)
+            .field("bound", &self.bound)
+            .finish()
     }
 }
 
@@ -360,7 +356,7 @@ impl Face {
 }
 
 impl Primitives for Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
@@ -375,7 +371,7 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
@@ -494,12 +490,12 @@ impl Primitives for Face {
     }
 
     #[inline]
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         route_data(&self.tables, &self.state, msg, reliability);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -508,17 +504,17 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = ?self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
     fn send_close(&self) {
         tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();

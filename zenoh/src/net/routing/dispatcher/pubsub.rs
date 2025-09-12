@@ -362,8 +362,6 @@ pub fn route_data(
         if hat.ingress_filter(&rtables.data, face, &expr) {
             let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
 
-            tracing::trace!(?bound, ?route, "route_data");
-
             for dir in route.iter() {
                 if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
                     dirs.insert(dir.dst_face.id, || dir.clone());
