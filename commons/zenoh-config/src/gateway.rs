@@ -50,37 +50,37 @@ impl Default for ModeDependentValue<GatewayConf> {
             router: Some(GatewayConf {
                 north: BoundConf {
                     mode: WhatAmI::Router,
-                    filters: Some(NEVec::new(BoundFilterConf {
+                    filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().router()),
                         interfaces: None,
                         zids: None,
-                    })),
+                    }]),
                 },
                 south: vec![BoundConf {
                     mode: WhatAmI::Peer,
-                    filters: Some(NEVec::new(BoundFilterConf {
+                    filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().peer().client()),
                         interfaces: None,
                         zids: None,
-                    })),
+                    }]),
                 }],
             }),
             peer: Some(GatewayConf {
                 north: BoundConf {
                     mode: WhatAmI::Peer,
-                    filters: Some(NEVec::new(BoundFilterConf {
+                    filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().peer().router()),
                         interfaces: None,
                         zids: None,
-                    })),
+                    }]),
                 },
                 south: vec![BoundConf {
                     mode: WhatAmI::Client,
-                    filters: Some(NEVec::new(BoundFilterConf {
+                    filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().client()),
                         interfaces: None,
                         zids: None,
-                    })),
+                    }]),
                 }],
             }),
             client: Some(GatewayConf {
@@ -103,7 +103,7 @@ pub struct GatewayConf {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundConf {
     pub mode: WhatAmI,
-    pub filters: Option<NEVec<BoundFilterConf>>,
+    pub filters: Option<Vec<BoundFilterConf>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

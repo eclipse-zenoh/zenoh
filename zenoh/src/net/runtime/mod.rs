@@ -632,13 +632,26 @@ fn compute_bound(peer: &TransportPeer, config: &Config) -> ZResult<Bound> {
     });
 
     Ok(match (north, south) {
-        (true, None) => Bound::North,
-        (false, Some(index)) => Bound::eastwest(index),
-        (false, None) => Bound::unbound(),
+        (true, None) => {
+            tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
+            Bound::North
+        }
+        (false, Some(index)) => {
+            tracing::debug!(zid = %peer.zid, "Transport peer is south-bound");
+            Bound::south(index)
+        }
+        (false, None) => {
+            tracing::info!(
+                zid = %peer.zid,
+                "Transport peer matches neither north nor south filters. \
+                Using eastwest region instead"
+            );
+            Bound::unbound()
+        }
         (true, Some(_)) => {
             tracing::warn!(
                 zid = %peer.zid,
-                "Transport peer matches north and south bound filters. \
+                "Transport peer matches north and south filters. \
                 Using eastwest region instead"
             );
             Bound::unbound()
