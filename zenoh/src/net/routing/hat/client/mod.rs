@@ -45,8 +45,9 @@ use super::{
 };
 use crate::net::{
     routing::{
-        dispatcher::{gateway::Bound, interests::RemoteInterest},
+        dispatcher::{face::FaceId, gateway::Bound, interests::RemoteInterest},
         hat::BaseContext,
+        router::FaceContext,
     },
     runtime::Runtime,
 };
@@ -101,6 +102,18 @@ impl Hat {
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
         self.bound == face.bound
+    }
+
+    /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
+    pub(crate) fn owned_face_contexts<'a>(
+        &'a self,
+        res: &'a Resource,
+    ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
+        // TODO(regions): move this method to a Hat trait
+        res.face_ctxs.iter().filter(move |(_, ctx)| {
+            tracing::debug!(%ctx.face, %self.bound, "owned_face_contexts");
+            self.owns(&ctx.face)
+        })
     }
 }
 

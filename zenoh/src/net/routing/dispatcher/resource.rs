@@ -336,7 +336,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) ctx: Option<Box<ResourceContext>>,
-    pub(crate) face_ctxs: IntHashMap<FaceId, Arc<FaceContext>>,
+    pub(crate) face_ctxs: IntHashMap<FaceId, Arc<FaceContext>>, // REVIEW(regions): should this be per-hat?
 }
 
 impl PartialEq for Resource {

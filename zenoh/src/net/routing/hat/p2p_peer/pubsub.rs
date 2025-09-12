@@ -665,7 +665,7 @@ impl HatPubSubTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
-            for (fid, ctx) in &mres.face_ctxs {
+            for (fid, ctx) in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some()
                     && (source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client)
                 {

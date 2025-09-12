@@ -1273,7 +1273,7 @@ impl HatQueriesTrait for Hat {
                 complete,
             );
 
-            for (fid, ctx) in &mres.face_ctxs {
+            for (fid, ctx) in self.owned_face_contexts(&mres) {
                 if ctx.face.whatami != WhatAmI::Router {
                     let wire_expr = expr.get_best_key(*fid);
                     if let Some(qabl_info) = ctx.qabl.as_ref() {

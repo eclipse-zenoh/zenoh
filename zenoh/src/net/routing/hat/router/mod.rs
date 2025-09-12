@@ -57,11 +57,12 @@ use crate::net::{
     },
     routing::{
         dispatcher::{
-            face::InterestState,
+            face::{FaceId, InterestState},
             gateway::{Bound, GatewayPendingCurrentInterest},
             interests::RemoteInterest,
         },
         hat::{BaseContext, InterestProfile, TREES_COMPUTATION_DELAY_MS},
+        router::FaceContext,
     },
     runtime::Runtime,
 };
@@ -230,6 +231,17 @@ impl Hat {
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
         self.bound == face.bound
+    }
+
+    /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
+    pub(crate) fn owned_face_contexts<'a>(
+        &'a self,
+        res: &'a Resource,
+    ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
+        // TODO(regions): move this method to a Hat trait
+        res.face_ctxs
+            .iter()
+            .filter(move |(_, ctx)| self.owns(&ctx.face))
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {

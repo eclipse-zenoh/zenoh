@@ -54,8 +54,13 @@ use crate::net::{
     codec::Zenoh080Routing,
     protocol::{gossip::Gossip, linkstate::LinkStateList},
     routing::{
-        dispatcher::{face::InterestState, gateway::Bound, interests::RemoteInterest},
+        dispatcher::{
+            face::{FaceId, InterestState},
+            gateway::Bound,
+            interests::RemoteInterest,
+        },
         hat::{BaseContext, InterestProfile},
+        router::FaceContext,
         RoutingContext,
     },
     runtime::Runtime,
@@ -124,6 +129,17 @@ impl Hat {
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
         self.bound == face.bound
+    }
+
+    /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
+    pub(crate) fn owned_face_contexts<'a>(
+        &'a self,
+        res: &'a Resource,
+    ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
+        // TODO(regions): move this method to a Hat trait
+        res.face_ctxs
+            .iter()
+            .filter(move |(_, ctx)| self.owns(&ctx.face))
     }
 }
 

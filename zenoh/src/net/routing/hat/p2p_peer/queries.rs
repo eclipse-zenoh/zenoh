@@ -645,7 +645,7 @@ impl HatQueriesTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for face_ctx @ (_, ctx) in &mres.face_ctxs {
+            for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
                 if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {

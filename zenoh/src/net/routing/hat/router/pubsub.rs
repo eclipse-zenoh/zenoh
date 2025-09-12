@@ -1173,7 +1173,7 @@ impl HatPubSubTrait for Hat {
                 &self.res_hat(&mres).router_subs,
             );
 
-            for (fid, ctx) in &mres.face_ctxs {
+            for (fid, ctx) in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some() && ctx.face.whatami != WhatAmI::Router {
                     route.insert(*fid, || {
                         let wire_expr = expr.get_best_key(*fid);
