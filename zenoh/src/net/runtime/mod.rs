@@ -43,8 +43,9 @@ use zenoh_config::{
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, ZenohIdProto},
-    network::NetworkMessageMut,
+    common::ZExtBody,
+    core::{Locator, Reliability, WhatAmI, ZenohIdProto},
+    network::{oam, NetworkBodyMut, NetworkMessageMut, Oam},
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
@@ -391,8 +392,19 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                // FIXME(regions): implement manual gateway config and use it here
                 let bound = compute_bound(&peer, &runtime.config().lock())?;
+
+                if !bound.is_north() && peer.whatami == WhatAmI::Peer {
+                    transport.schedule(NetworkMessageMut {
+                        body: NetworkBodyMut::OAM(&mut Oam {
+                            id: oam::id::OAM_IS_GATEWAY,
+                            body: ZExtBody::Unit,
+                            ext_qos: oam::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                        }),
+                        reliability: Reliability::Reliable,
+                    })?;
+                }
 
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),

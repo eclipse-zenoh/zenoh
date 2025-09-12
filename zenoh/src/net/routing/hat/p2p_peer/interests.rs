@@ -42,7 +42,7 @@ impl Hat {
     pub(super) fn interests_new_face(&self, ctx: BaseContext) {
         if ctx.src_face.whatami != WhatAmI::Client {
             for mut face in self.faces(ctx.tables).values().cloned().collect::<Vec<_>>() {
-                if ctx.src_face.whatami == WhatAmI::Router {
+                if self.face_hat(&face).is_gateway {
                     for RemoteInterest { res, options, .. } in
                         self.face_hat_mut(&mut face).remote_interests.values()
                     {
@@ -176,7 +176,7 @@ impl HatInterestTrait for Hat {
             .faces_mut(ctx.tables)
             .values()
             .filter(|f| {
-                f.whatami == WhatAmI::Router // NOTE(regions): these routers are peers in disguise
+                self.face_hat(f).is_gateway
                     || (f.whatami == WhatAmI::Peer
                         && msg.options.tokens()
                         && msg.mode == InterestMode::Current
@@ -254,12 +254,11 @@ impl HatInterestTrait for Hat {
             }
         } else {
             // REVIEW(regions): not sure
-            for mut face in self
+            if let Some(mut face) = self
                 .faces(ctx.tables)
                 .values()
-                .filter(|face| face.whatami == WhatAmI::Router)
+                .find(|f| self.face_hat(f).is_gateway)
                 .cloned()
-                .collect::<Vec<_>>()
             {
                 if let Some(pending_interest) = get_mut_unchecked(&mut face)
                     .pending_current_interests
@@ -340,10 +339,10 @@ impl HatInterestTrait for Hat {
         msg: &Interest,
         inbound_interest: RemoteInterest,
     ) {
-        for dst_face in self
+        if let Some(dst_face) = self
             .faces_mut(ctx.tables)
             .values_mut()
-            .filter(|f| f.whatami == WhatAmI::Router)
+            .find(|f| self.face_hat(f).is_gateway)
         {
             for id in dst_face.local_interests.keys().cloned().collect::<Vec<_>>() {
                 let local_interest = dst_face.local_interests.get(&id).unwrap();

@@ -35,7 +35,7 @@ use zenoh_protocol::{
             QueryableId, SubscriberId, TokenId,
         },
         interest::{InterestId, InterestOptions},
-        oam::id::OAM_LINKSTATE,
+        oam::id::{OAM_IS_GATEWAY, OAM_LINKSTATE},
         Declare, DeclareBody, DeclareFinal, Oam,
     },
 };
@@ -341,7 +341,7 @@ impl HatBaseTrait for Hat {
 
     fn handle_oam(
         &mut self,
-        _tables: &mut TablesData,
+        tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
         transport: &TransportUnicast,
@@ -365,6 +365,28 @@ impl HatBaseTrait for Hat {
                         }
                     };
                 }
+            }
+        } else if oam.id == OAM_IS_GATEWAY {
+            let zid = transport.get_zid()?;
+            let Some(face) = self.face(tables, &zid) else {
+                bail!("Could not find transport face for ZID {zid}",)
+            };
+
+            self.face_hat_mut(&mut face.clone()).is_gateway = true;
+
+            let gwy_count = self
+                .faces(tables)
+                .iter()
+                .filter(|(_, f)| self.face_hat(f).is_gateway)
+                .count();
+
+            if gwy_count > 1 {
+                tracing::error!(
+                    bound = ?self.bound,
+                    total = gwy_count,
+                    "Multiple gateways found in peer subregion. \
+                    Only one gateway per subregion is supported."
+                );
             }
         }
 
@@ -429,6 +451,7 @@ struct HatFace {
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    is_gateway: bool,
 }
 
 impl HatFace {
@@ -442,6 +465,7 @@ impl HatFace {
             remote_tokens: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),
+            is_gateway: false,
         }
     }
 }

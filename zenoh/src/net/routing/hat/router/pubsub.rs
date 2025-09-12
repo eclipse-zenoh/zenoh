@@ -243,6 +243,7 @@ impl Hat {
                 self.router_subs.insert(res.clone());
             }
 
+            // REVIEW(regions): not sure
             if profile.is_push()
                 || self.router_remote_interests.values().any(|interest| {
                     interest.options.subscribers()
@@ -588,6 +589,7 @@ impl Hat {
     ) {
         if self.res_hat(res).router_subs.contains(router) {
             self.unregister_router_subscription(tables, res, router, send_declare);
+            // REVIEW(regions): not sure
             if profile.is_push()
                 || self.router_remote_interests.values().any(|interest| {
                     interest.options.subscribers()
