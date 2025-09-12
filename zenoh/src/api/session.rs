@@ -50,7 +50,7 @@ use zenoh_protocol::{
             SubscriberId, TokenId, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
         },
         ext,
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{self, InterestId, InterestMode, InterestOptions},
         push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
         Response, ResponseFinal,
     },
@@ -103,7 +103,7 @@ use crate::{
     net::{
         primitives::Primitives,
         routing::{
-            dispatcher::face::Face,
+            dispatcher::{face::Face, gateway::Bound},
             namespace::{ENamespace, Namespace},
         },
         runtime::{Runtime, RuntimeBuilder},
@@ -686,15 +686,16 @@ impl Session {
 
             let primitives: Arc<dyn Primitives> = match namespace {
                 Some(ns) => {
-                    let face = router.new_primitives(Arc::new(ENamespace::new(
-                        ns.clone(),
-                        Arc::new(session.downgrade()),
-                    )));
+                    let face = router.new_primitives(
+                        Arc::new(ENamespace::new(ns.clone(), Arc::new(session.downgrade()))),
+                        Bound::session(),
+                    );
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     Arc::new(Namespace::new(ns, face))
                 }
                 None => {
-                    let face = router.new_primitives(Arc::new(session.downgrade()));
+                    let face =
+                        router.new_primitives(Arc::new(session.downgrade()), Bound::session());
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     face
                 }
@@ -1373,7 +1374,7 @@ impl SessionInner {
                 wire_expr: Some(res.to_wire(self).to_owned()),
                 ext_qos: network::ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
             });
         }
         Ok(id)
@@ -1400,9 +1401,9 @@ impl SessionInner {
                         //       they are initialized here for internal use by local egress interceptors.
                         options: InterestOptions::SUBSCRIBERS,
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -1429,9 +1430,9 @@ impl SessionInner {
                 mode: InterestMode::CurrentFuture,
                 options: InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
                 wire_expr: Some(res.to_wire(self).to_owned()),
-                ext_qos: network::ext::QoSType::DEFAULT,
+                ext_qos: interest::ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
             });
         }
         Ok(id)
@@ -1457,9 +1458,9 @@ impl SessionInner {
                         mode: InterestMode::Final,
                         options: InterestOptions::empty(),
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -1595,9 +1596,9 @@ impl SessionInner {
                             //       they are initialized here for internal use by local egress interceptors.
                             options: InterestOptions::TOKENS,
                             wire_expr: None,
-                            ext_qos: declare::ext::QoSType::DEFAULT,
+                            ext_qos: interest::ext::QoSType::DEFAULT,
                             ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                         });
                     }
                 }
@@ -1807,9 +1808,9 @@ impl SessionInner {
             },
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(key_expr.to_wire(self).to_owned()),
-            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_qos: interest::ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
 
         Ok(sub_state)
@@ -1918,27 +1919,23 @@ impl SessionInner {
         matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
         let router = self.runtime.router();
-        let tables = zread!(router.tables.tables);
+        let rtables = zread!(router.tables.tables);
+        let tables = &*rtables;
 
         let matches = match matching_type {
             MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    key_expr,
+                crate::net::routing::dispatcher::pubsub::get_session_matching_subscriptions(
+                    tables, key_expr,
                 )
             }
             MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    key_expr,
-                    complete,
+                crate::net::routing::dispatcher::queries::get_session_matching_queryables(
+                    tables, key_expr, complete,
                 )
             }
         };
 
-        drop(tables);
+        drop(rtables);
         let matching = match destination {
             Locality::Any => !matches.is_empty(),
             Locality::Remote => matches
@@ -2374,9 +2371,9 @@ impl SessionInner {
             mode: InterestMode::Current,
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(wexpr.clone()),
-            ext_qos: request::ext::QoSType::DEFAULT,
+            ext_qos: interest::ext::QoSType::DEFAULT,
             ext_tstamp: None,
-            ext_nodeid: request::ext::NodeIdType::DEFAULT,
+            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
 
         Ok(())

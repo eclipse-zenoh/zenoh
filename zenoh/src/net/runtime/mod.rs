@@ -37,12 +37,15 @@ use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, ModeDependent, ZenohId};
+use zenoh_config::{
+    gateway::BoundFilterConf, unwrap_or_default, Interface, ModeDependent, ZenohId,
+};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, ZenohIdProto},
-    network::NetworkMessageMut,
+    common::ZExtBody,
+    core::{Locator, Reliability, WhatAmI, ZenohIdProto},
+    network::{oam, NetworkBodyMut, NetworkMessageMut, Oam},
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
@@ -69,6 +72,7 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
+    net::routing::dispatcher::gateway::Bound,
     GIT_VERSION, LONG_VERSION,
 };
 
@@ -147,7 +151,7 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
+        let router = Arc::new(Router::new(zid, hlc.clone(), &config)?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -196,7 +200,7 @@ impl RuntimeBuilder {
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone())?;
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_hats(runtime.clone())?;
 
         // Admin space
         if start_admin_space {
@@ -387,13 +391,28 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
+
+                let bound = compute_bound(&peer, &runtime.config().lock())?;
+
+                if !bound.is_north() && peer.whatami == WhatAmI::Peer {
+                    transport.schedule(NetworkMessageMut {
+                        body: NetworkBodyMut::OAM(&mut Oam {
+                            id: oam::id::OAM_IS_GATEWAY,
+                            body: ZExtBody::Unit,
+                            ext_qos: oam::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                        }),
+                        reliability: Reliability::Reliable,
+                    })?;
+                }
+
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoint: std::sync::RwLock::new(None),
                     main_handler: runtime
                         .state
                         .router
-                        .new_transport_unicast(transport)
+                        .new_transport_unicast(transport, bound)
                         .unwrap(),
                     slave_handlers,
                 }))
@@ -413,10 +432,14 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
+
+                // FIXME(regions): multicast support
+                let bound = Bound::North;
+
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone())?;
+                    .new_transport_multicast(transport.clone(), bound)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -480,12 +503,16 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .iter()
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
+
+        // FIXME(regions): implement manual gateway config and use it here
+        let bound = Bound::North;
+
         Ok(Arc::new(RuntimeMulticastSession {
-            main_handler: self
-                .runtime
-                .state
-                .router
-                .new_peer_multicast(self.transport.clone(), peer)?,
+            main_handler: self.runtime.state.router.new_peer_multicast(
+                self.transport.clone(),
+                peer,
+                bound,
+            )?,
             slave_handlers,
         }))
     }
@@ -553,8 +580,10 @@ impl Closee for Arc<RuntimeState> {
         // This should be resolved by identfying correspodning task, and placing
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
-        tables.root_res.close();
-        tables.faces.clear();
+        tables.data.root_res.close();
+        for hat in tables.data.hats.values_mut() {
+            hat.faces.clear();
+        }
     }
 }
 
@@ -564,4 +593,80 @@ impl Closeable for Runtime {
     fn get_closee(&self) -> Self::TClosee {
         self.state.clone()
     }
+}
+
+fn compute_bound(peer: &TransportPeer, config: &Config) -> ZResult<Bound> {
+    let gateway_config = config
+        .gateway
+        .get(zenoh_config::unwrap_or_default!(config.mode()))
+        .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
+
+    fn matches(peer: &TransportPeer, filter: &BoundFilterConf) -> bool {
+        filter
+            .zids
+            .as_ref()
+            .map(|zid| zid.contains(&peer.zid.into()))
+            .unwrap_or(true)
+            && filter
+                .interfaces
+                .as_ref()
+                .map(|ifaces| {
+                    peer.links
+                        .iter()
+                        .flat_map(|link| {
+                            link.interfaces
+                                .iter()
+                                .map(|iface| Interface(iface.to_owned()))
+                        })
+                        .all(|iface| ifaces.contains(&iface))
+                })
+                .unwrap_or(true)
+            && filter
+                .modes
+                .as_ref()
+                .map(|mode| mode.matches(peer.whatami))
+                .unwrap_or(true)
+    }
+
+    let north = gateway_config
+        .north
+        .filters
+        .as_ref()
+        .map(|filters| filters.iter().any(|filter| matches(peer, filter)))
+        .unwrap_or(true);
+
+    let south = gateway_config.south.iter().position(|south| {
+        south
+            .filters
+            .as_ref()
+            .map(|filters| filters.iter().any(|filter| matches(peer, filter)))
+            .unwrap_or(true)
+    });
+
+    Ok(match (north, south) {
+        (true, None) => {
+            tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
+            Bound::North
+        }
+        (false, Some(index)) => {
+            tracing::debug!(zid = %peer.zid, "Transport peer is south-bound");
+            Bound::south(index)
+        }
+        (false, None) => {
+            tracing::info!(
+                zid = %peer.zid,
+                "Transport peer matches neither north nor south filters. \
+                Using eastwest region instead"
+            );
+            Bound::unbound()
+        }
+        (true, Some(_)) => {
+            tracing::warn!(
+                zid = %peer.zid,
+                "Transport peer matches north and south filters. \
+                Using eastwest region instead"
+            );
+            Bound::unbound()
+        }
+    })
 }

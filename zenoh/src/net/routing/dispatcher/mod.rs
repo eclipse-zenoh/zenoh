@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 pub mod face;
+pub mod gateway;
 pub mod interests;
 pub mod pubsub;
 pub mod queries;
