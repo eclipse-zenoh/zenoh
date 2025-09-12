@@ -26,7 +26,7 @@ fn shm_bytes_single_buf() {
     let provider = ShmProviderBuilder::backend(backend).wait();
 
     // Prepare a layout for allocations
-    let layout = provider.alloc(1024).into_layout().unwrap();
+    let layout = provider.alloc_layout(1024).unwrap();
 
     // allocate an SHM buffer (ZShmMut)
     let owned_shm_buf_mut = layout.alloc().wait().unwrap();

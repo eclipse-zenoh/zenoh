@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::mem::MaybeUninit;
+
 use zenoh_core::Wait;
 use zenoh_shm::api::{
     buffer::{
@@ -20,7 +22,7 @@ use zenoh_shm::api::{
         zshm::ZShm,
         zshmmut::ZShmMut,
     },
-    provider::{memory_layout::BuildLayout, shm_provider::ShmProviderBuilder},
+    provider::{memory_layout::TypedLayout, shm_provider::ShmProviderBuilder},
 };
 
 #[repr(C, align(1))]
@@ -34,9 +36,9 @@ fn make_shm_buffer() -> ZShmMut {
     provider.alloc(64).wait().unwrap()
 }
 
-fn make_typed_shm_buffer<T: ResideInShm>() -> Typed<T, ZShmMut> {
+fn make_typed_shm_buffer<T: ResideInShm>() -> Typed<MaybeUninit<T>, ZShmMut> {
     let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
-    provider.alloc(BuildLayout::for_type::<T>()).wait().unwrap()
+    provider.alloc(TypedLayout::<T>::new()).wait().unwrap()
 }
 
 fn fill_and_check(buf: &mut [u8], val: u8) {
@@ -56,17 +58,17 @@ fn validate_raw_buffer_consistency(buffer: &mut ZShmMut) {
     validate_shm_slice(buffer.as_mut());
 }
 
-fn validate_typed_buffer_consistency(buffer: &mut impl AsMut<SharedByteData>) {
-    validate_shm_slice(&mut buffer.as_mut().data);
+fn validate_typed_buffer_consistency(buffer: &mut impl AsMut<MaybeUninit<SharedByteData>>) {
+    validate_shm_slice(&mut buffer.as_mut().write(SharedByteData { data: [0; 64] }).data);
 }
 
-fn validate_typed_to_raw_buffer_consistency(buffer: &mut Typed<SharedByteData, ZShm>) {
-    let mut raw = buffer.inner().clone();
+fn validate_typed_to_raw_buffer_consistency(buffer: &mut Typed<MaybeUninit<SharedByteData>, ZShm>) {
+    let mut raw = Typed::inner(buffer).clone();
 
     let raw_mut = unsafe { raw.as_mut_unchecked() };
     for i in 0..10 {
         raw_mut.fill(i);
-        for val in &buffer.data {
+        for val in &unsafe { buffer.assume_init_ref() }.data {
             assert!(*val == i)
         }
     }
@@ -77,10 +79,10 @@ fn shm_buffer_alloc_typed() {
     let mut buffer = make_typed_shm_buffer::<SharedByteData>();
     validate_typed_buffer_consistency(&mut buffer);
 
-    let mut buffer = buffer.into_inner();
+    let mut buffer = Typed::into_inner(buffer);
     validate_raw_buffer_consistency(&mut buffer);
 
-    let mut buffer: Typed<SharedByteData, _> = buffer.try_into().unwrap();
+    let mut buffer = Typed::<MaybeUninit<SharedByteData>, _>::new(buffer).unwrap();
     validate_typed_buffer_consistency(&mut buffer);
 }
 
@@ -95,9 +97,9 @@ fn shm_buffer_morph() {
     let mut buffer = make_shm_buffer();
     validate_raw_buffer_consistency(&mut buffer);
 
-    let mut buffer: Typed<SharedByteData, _> = buffer.try_into().unwrap();
+    let mut buffer = Typed::<MaybeUninit<SharedByteData>, _>::new(buffer).unwrap();
     validate_typed_buffer_consistency(&mut buffer);
 
-    let mut buffer = buffer.into_inner();
+    let mut buffer = Typed::into_inner(buffer);
     validate_raw_buffer_consistency(&mut buffer);
 }
