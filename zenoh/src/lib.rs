@@ -19,39 +19,46 @@
 //! storage, queries, and computations, while retaining a level of time and space efficiency
 //! that is well beyond any of the mainstream stacks.
 //!
-//! # Concepts and components
+//! # Components overview
 //!
-//! The Zenoh protocol connects nodes to a graph with an arbitrary topology and routes data between them.
-//! Depending on the network configuration, data can be sent directly or routed through intermediate nodes.
+//! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
+//! The data can be sent directly between nodes or routed through intermediate nodes.
 //!
-//! Each Zenoh node is a [Session](crate::Session) object. This is the main object that maintains the state of
+//! Each Zenoh node is a [Session](crate::session) object. This is the main object that maintains the state of
 //! the connection to the Zenoh network and is used to declare publishers, subscribers, queriers, queryables, etc.
-//! A session is created by the [open](crate::open) function, which takes a [Config](crate::config::Config) object as an argument.
+//! A session is created by the [open](crate::open) function, which takes a [Config](crate::config) object as an argument.
 //!
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
 //!
-//! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher) and consumed by [Subscribers](crate::pubsub::Subscriber).
+//! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher) 
+//! and consumed by [Subscribers](crate::pubsub::Subscriber). See the [pubsub](crate::pubsub) API for details.
 //!
-//! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable) and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
+//! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable) 
+//! and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
+//! More details are available in the [query](crate::query) API.
 //!
 //! Data is associated with keys in the format of a slash-separated path, e.g., `robot/sensor/temp`.
 //! The requesting side uses [key expressions](crate::key_expr) to address the data of interest. Key expressions can
 //! contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
 //!
-//! Data is received as [Samples](crate::sample::Sample), which contain the payload and all metadata associated with the data.
-//! The raw byte payload is represented as [ZBytes](crate::bytes::ZBytes), which provides mechanisms for zero-copy creation and access.
-//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization of basic types and structures for `ZBytes`.
+//! Data is received as [Samples](crate::sample), which contain the payload and all metadata associated with the data.
+//! The raw byte payload is represented as [ZBytes](crate::bytes), which provides mechanisms for zero-copy creation and access.
+//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization 
+//! of basic types and structures for `ZBytes`.
 //!
 //! Samples can be received via a callback function or read from a channel. See the [handlers](crate::handlers) API for details.
 //!
 //! Other important functionalities of Zenoh are:
-//! - Scouting to discover Zenoh nodes in the network using the [scout](crate::scouting::scout) function. Note that it's not necessary to explicitly discover other nodes just to publish, subscribe, or query data.
+//! - [Scouting](crate::scouting) to discover Zenoh nodes in the network. Note that it's not necessary to explicitly 
+//!   discover other nodes just to publish, subscribe, or query data.
 //! - Monitor [liveliness](crate::liveliness) to get notified when a specified resource appears or disappears in the network.
-//! - The [Matching](crate::matching) API allows the active side of communication (publisher, querier) to know whether there are any interested parties on the other side (subscriber, queryable).
+//! - The [Matching](crate::matching) API allows the active side of communication (publisher, querier) to know whether 
+//!   there are any interested parties on the other side (subscriber, queryable) which allows to save bandwidth and CPU resources.
 //!
 //! # Usage examples
 //! 
-//! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
+//! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in 
+//! [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
 //! 
 //! ## Publishing/Subscribing
 //! The example below shows how to publish and subscribe to data using Zenoh.
