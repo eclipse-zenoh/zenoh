@@ -484,37 +484,33 @@ pub(super) fn declare_qabl_interest(
             for src_face in tables
                 .faces
                 .values()
+                .filter(|f| f.id != face.id)
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
-                if src_face.id != face.id {
-                    for qabl in face_hat!(src_face).remote_qabls.values() {
-                        if qabl.context.is_some() {
-                            let info = local_qabl_info(tables, qabl, face);
-                            let id = make_qabl_id(qabl, face, mode, info);
-                            let key_expr = Resource::decl_key(
-                                qabl,
-                                face,
-                                super::push_declaration_profile(face),
-                            );
-                            send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                            id,
-                                            wire_expr: key_expr,
-                                            ext_info: info,
-                                        }),
-                                    },
-                                    qabl.expr().to_string(),
-                                ),
-                            );
-                        }
+                for qabl in face_hat!(src_face).remote_qabls.values() {
+                    if qabl.context.is_some() {
+                        let info = local_qabl_info(tables, qabl, face);
+                        let id = make_qabl_id(qabl, face, mode, info);
+                        let key_expr =
+                            Resource::decl_key(qabl, face, super::push_declaration_profile(face));
+                        send_declare(
+                            &face.primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id,
+                                        wire_expr: key_expr,
+                                        ext_info: info,
+                                    }),
+                                },
+                                qabl.expr().to_string(),
+                            ),
+                        );
                     }
                 }
             }

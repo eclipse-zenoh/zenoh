@@ -127,14 +127,16 @@ impl HatInterestTrait for HatCode {
                 send_declare,
             )
         }
-        face_hat_mut!(face).remote_interests.insert(
-            id,
-            RemoteInterest {
-                res: res.as_ref().map(|res| (*res).clone()),
-                options,
-                mode,
-            },
-        );
+        if mode.future() {
+            face_hat_mut!(face).remote_interests.insert(
+                id,
+                RemoteInterest {
+                    res: res.as_ref().map(|res| (*res).clone()),
+                    options,
+                    mode,
+                },
+            );
+        }
 
         let interest = Arc::new(CurrentInterest {
             src_face: face.clone(),
