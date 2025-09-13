@@ -19,7 +19,6 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
 use crate::{
@@ -198,8 +197,13 @@ impl<'a> Liveliness<'a> {
     {
         let key_expr = key_expr.try_into().map_err(Into::into);
         let timeout = {
-            let conf = &self.session.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
+            Duration::from_millis(
+                self.session
+                    .0
+                    .runtime
+                    .get_config()
+                    .queries_default_timeout_ms(),
+            )
         };
         LivelinessGetBuilder {
             session: self.session,

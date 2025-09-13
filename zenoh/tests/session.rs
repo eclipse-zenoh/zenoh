@@ -397,11 +397,11 @@ async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) 
 async fn zenoh_2sessions_1runtime_init() {
     let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.0.1:17449"]).await;
     println!("[RI][02a] Creating peer01 session from runtime 1");
-    let peer01 = zenoh::session::init(r1.clone()).await.unwrap();
+    let peer01 = zenoh::session::init(r1.clone().into()).await.unwrap();
     println!("[RI][02b] Creating peer02 session from runtime 2");
-    let peer02 = zenoh::session::init(r2.clone()).await.unwrap();
+    let peer02 = zenoh::session::init(r2.clone().into()).await.unwrap();
     println!("[RI][02c] Creating peer01a session from runtime 1");
-    let peer01a = zenoh::session::init(r1.clone()).await.unwrap();
+    let peer01a = zenoh::session::init(r1.clone().into()).await.unwrap();
     println!("[RI][03c] Closing peer01a session");
     drop(peer01a);
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;

@@ -27,13 +27,14 @@ use std::{
 };
 
 use memory_backend::MemoryBackend;
+use serde_json::Value;
 use storages_mgt::StorageMessage;
 use tokio::sync::broadcast::Sender;
 use zenoh::{
     internal::{
         bail,
         plugins::{Response, RunningPlugin, RunningPluginTrait, ZenohPlugin},
-        runtime::Runtime,
+        runtime::DynamicRuntime,
         zlock, LibLoader,
     },
     key_expr::{keyexpr, KeyExpr, OwnedKeyExpr},
@@ -75,14 +76,15 @@ impl Plugin for StoragesPlugin {
     const PLUGIN_VERSION: &'static str = plugin_version!();
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
-    type StartArgs = Runtime;
+    type StartArgs = DynamicRuntime;
     type Instance = RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         zenoh::init_log_from_env_or("error");
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
-        let config =
-            { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
+        let conf_json = runtime.get_config().get(&format!("plugins/{name}"))?;
+        let conf: Value = serde_json::from_str(&conf_json)?;
+        let config = PluginConfig::try_from((name, &conf))?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
             runtime.clone(),
             config,
@@ -95,7 +97,7 @@ type PluginsManager = zenoh_plugin_trait::PluginsManager<VolumeConfig, VolumeIns
 struct StorageRuntime(Arc<Mutex<StorageRuntimeInner>>);
 struct StorageRuntimeInner {
     name: String,
-    runtime: Runtime,
+    runtime: DynamicRuntime,
     session: Arc<Session>,
     storages: HashMap<String, HashMap<String, Sender<StorageMessage>>>,
     plugins_manager: PluginsManager,
@@ -109,7 +111,7 @@ impl StorageRuntimeInner {
             &self.name
         )
     }
-    fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
+    fn new(runtime: DynamicRuntime, config: PluginConfig) -> ZResult<Self> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
@@ -240,7 +242,7 @@ impl StorageRuntimeInner {
         };
         let loaded = declared
             .load()?
-            .expect("Volumes should not loaded if if the storage-manager plugin is not loaded");
+            .expect("Volumes should not be loaded if the storage-manager plugin is not loaded");
         loaded.start(config)?;
 
         Ok(())
@@ -314,15 +316,12 @@ impl PluginControl for StorageRuntime {
 }
 
 impl RunningPluginTrait for StorageRuntime {
-    fn config_checker(
-        &self,
-        _: &str,
-        old: &serde_json::Map<String, serde_json::Value>,
-        new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+    fn config_checker(&self, _: &str, old: &str, new: &str) -> ZResult<Option<String>> {
+        let old = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(old)?;
+        let new = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(new)?;
         let name = { zlock!(self.0).name.clone() };
-        let old = PluginConfig::try_from((&name, old))?;
-        let new = PluginConfig::try_from((&name, new))?;
+        let old = PluginConfig::try_from((&name, &old))?;
+        let new = PluginConfig::try_from((&name, &new))?;
         tracing::debug!("config change requested for plugin '{}'", name);
         tracing::debug!("old config: {:?}", &old);
         tracing::debug!("new config: {:?}", &new);
@@ -379,7 +378,7 @@ impl RunningPluginTrait for StorageRuntime {
                                     rx.recv().await
                                 })
                             }) {
-                                responses.push(Response::new(key.clone(), value))
+                                responses.push(Response::new(key.clone(), value.to_string()))
                             }
                         }
                     })

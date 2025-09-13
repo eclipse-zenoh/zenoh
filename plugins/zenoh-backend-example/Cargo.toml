@@ -31,7 +31,6 @@ crate-type = ["cdylib"]
 [dependencies]
 async-trait = { workspace = true }
 git-version = { workspace = true }
-serde_json = { workspace = true }
 tokio = { workspace = true }
 zenoh = { workspace = true, default-features = false }
 zenoh-plugin-trait = { workspace = true, default-features = false }
