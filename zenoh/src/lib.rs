@@ -578,8 +578,10 @@ pub mod time {
 
 /// Configuration to pass to [`open`] and [`scout`] functions and associated constants.
 ///
-/// The Zenoh configuration is stored in a JSON file. A [`Config`] can be constructed from it using
-/// the corresponding `from_...` methods. It's also possible to read or
+/// The [`Config`](crate::config::Config) object contains all parameters necessary to configure
+/// a Zenoh session or the scouting process. Usually a configuration file is stored in the json or
+/// yaml format and loaded using the [`Config::from_file`](crate::config::Config::from_file) method.
+/// It's also possible to read or
 /// modify individual elements of the [`Config`] with the [`Config::insert_json5`](crate::config::Config::insert_json5)
 /// and [`Config::get_json`](crate::config::Config::get_json) methods.
 ///
