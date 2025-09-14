@@ -69,7 +69,7 @@
 //!
 //! ## Builders
 //! 
-//! Zenoh extensively uses the builder pattern. E.g. to create a publisher, you first create a
+//! Zenoh extensively uses the builder pattern. E.g., to create a publisher, you first create a
 //! [PublisherBuilder](crate::pubsub::PublisherBuilder) 
 //! using the [declare_publisher](crate::session::Session::declare_publisher) method. The builder is
 //! resolved to the [Publisher](crate::pubsub::Publisher) instance by awaiting it in an async context
@@ -81,9 +81,9 @@
 //! [Sample](crate::sample::Sample) from [Subscriber](crate::pubsub::Subscriber) 
 //! or [Reply](crate::query::Reply) from [Query](crate::query::Query)): by channel or by callback. 
 //! 
-//! In the channel mode the methods like [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async) 
-//! becomes available on the subscriber or query object (through Deref coercion to the corresponding channel 
-//! handler type). By default the [FifoChannel](crate::handlers::fifo::FifoChannel) is used.
+//! In channel mode, methods like [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
+//! become available on the subscriber or query object (through Deref coercion to the corresponding channel
+//! handler type). By default, the [FifoChannel](crate::handlers::fifo::FifoChannel) is used.
 //! 
 //! The builders provide methods [with](crate::pubsub::SubscriberBuilder::with) to assign an arbitrary channel instead of
 //! the default one, and [callback](crate::pubsub::SubscriberBuilder::callback) to assign a callback function.
@@ -494,13 +494,13 @@ pub mod scouting {
 
 /// Liveliness primitives
 ///
-/// Sometimes it's necessary to know whether a zenoh node is available in the network or not.
-/// It's possible to achieve this by declaring special publishers and queryables,
-/// but this task is not very easy and common enough to warrant a dedicated API.
+/// Sometimes it's necessary to know whether a Zenoh node is available on the network.
+/// It's possible to achieve this by declaring special publishers and queryables, but this task is
+/// common and not straightforward, so a dedicated API is warranted.
 ///
-/// The liveliness API allows node to declare a [LivelinessToken](liveliness::LivelinessToken)
-/// with key expression assigned to it. Other nodes can use liveliness API to query for this 
-/// key expression or subscribe to it to get notified when the token appears or disappears in the network.
+/// The liveliness API allows a node to declare a [LivelinessToken](liveliness::LivelinessToken)
+/// with a key expression assigned to it. Other nodes can use the liveliness API to query this
+/// key expression or subscribe to it to get notified when the token appears or disappears on the network.
 /// 
 /// # Examples
 /// ### Declaring a token
@@ -610,7 +610,7 @@ pub mod internal {
         zenoh_home, LibLoader, Timed, TimedEvent, TimedHandle, Timer, ZENOH_HOME_ENV_VAR,
     };
 
-    /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
+    /// A collection of useful buffers used by Zenoh internally and exposed to the user to facilitate
     /// reading and writing data.
     pub mod buffers {
         pub use zenoh_buffers::{
