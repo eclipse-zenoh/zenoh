@@ -605,4 +605,19 @@ impl Network {
         }
         vec![]
     }
+
+    pub(super) fn update_locators(&mut self) {
+        self.graph[self.idx].sn += 1;
+        self.send_on_links(
+            vec![(
+                self.idx,
+                Details {
+                    zid: false,
+                    locators: true,
+                    links: self.router_peers_failover_brokering,
+                },
+            )],
+            |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
+        );
+    }
 }
