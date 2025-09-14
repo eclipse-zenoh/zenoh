@@ -30,7 +30,7 @@
 //! A session is created by the [open](crate::open) function, which takes a [Config](crate::config) object as an argument.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
-//! The data can be sent directly between nodes or routed through intermediate nodes.
+//! Data can be sent directly between nodes or routed through intermediate nodes.
 //!
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
 //!
@@ -69,7 +69,7 @@
 //!
 //! ## Builders
 //! 
-//! Zenoh extensively uses the builder pattern. E.g., to create a publisher, you first create a
+//! Zenoh extensively uses the builder pattern. For example, to create a publisher, you first create a
 //! [PublisherBuilder](crate::pubsub::PublisherBuilder) 
 //! using the [declare_publisher](crate::session::Session::declare_publisher) method. The builder is
 //! resolved to the [Publisher](crate::pubsub::Publisher) instance by awaiting it in an async context
@@ -77,9 +77,9 @@
 //!
 //! ## Channels and callbacks
 //! 
-//! There are two ways to get sequential data from Zenoh primitives (e.g., series of 
-//! [Sample](crate::sample::Sample) from [Subscriber](crate::pubsub::Subscriber) 
-//! or [Reply](crate::query::Reply) from [Query](crate::query::Query)): by channel or by callback. 
+//! There are two ways to get sequential data from Zenoh primitives (e.g., a series of
+//! [Sample](crate::sample::Sample)s from a [Subscriber](crate::pubsub::Subscriber)
+//! or [Reply](crate::query::Reply)s from a [Query](crate::query::Query)): by channel or by callback.
 //! 
 //! In channel mode, methods like [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
 //! become available on the subscriber or query object (through Deref coercion to the corresponding channel
@@ -496,11 +496,15 @@ pub mod scouting {
 ///
 /// Sometimes it's necessary to know whether a Zenoh node is available on the network.
 /// It's possible to achieve this by declaring special publishers and queryables, but this task is
-/// common and not straightforward, so a dedicated API is warranted.
+/// not straightforward, so a dedicated API is warranted.
 ///
-/// The liveliness API allows a node to declare a [LivelinessToken](liveliness::LivelinessToken)
-/// with a key expression assigned to it. Other nodes can use the liveliness API to query this
-/// key expression or subscribe to it to get notified when the token appears or disappears on the network.
+/// The [liveliness](Session::liveliness) API allows a node to declare a 
+/// [LivelinessToken](liveliness::LivelinessToken)
+/// with a key expression assigned to it by [declare_token](liveliness::Liveliness::declare_token).
+/// Other nodes can use the liveliness API to query this
+/// key expression or subscribe to it to get notified when the token appears or disappears on the network
+/// using corresponding functions [get](liveliness::Liveliness::get) and 
+/// [declare_subscriber](liveliness::Liveliness::declare_subscriber).
 /// 
 /// # Examples
 /// ### Declaring a token
@@ -556,6 +560,18 @@ pub mod liveliness {
 }
 
 /// Timestamp support
+/// 
+/// Each [`Sample`](crate::sample::Sample) has an optional [`Timestamp`](crate::time::Timestamp) associated with it.
+/// The timestamp can be set using the 
+/// [PublicationBuilder::timestamp](crate::pubsub::PublicationBuilder::timestamp) method when performing a
+/// [`put`](crate::pubsub::Publisher::put) operation or by
+/// [ReplyBuilder::timestamp](crate::query::ReplyBuilder::timestamp) when replying to a query with 
+/// [reply](crate::query::Query::reply).
+/// 
+/// The timestamp consists of the time value itself and unique
+/// [clock](https://docs.rs/uhlc/latest/uhlc/) identifier. Each
+/// [Session](crate::session::Session) has its own clock, so the [new_timestamp](crate::session::Session::new_timestamp)
+/// method can be used to create a new timestamp with the session's identifier.
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
