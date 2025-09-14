@@ -379,7 +379,10 @@ pub mod pubsub {
 ///
 /// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
-/// Data is requested via [`Session::get`](crate::Session::get) and received in [`Reply`](crate::query::Reply) structures.
+/// Data is requested via [`Session::get`](crate::Session::get) function or by
+/// [Querier](crate::query::Querier) object. Each request returns zero or more
+/// [`Reply`](crate::query::Reply) or [`ReplyError`](crate::query::ReplyError) structures,
+/// each one from each queryable that matches the request.
 ///
 pub mod query {
     pub use zenoh_protocol::core::Parameters;
@@ -437,8 +440,9 @@ pub mod matching {
 ///
 /// The channel handler is stored
 /// in the Zenoh object (e.g., a [`Subscriber`](crate::pubsub::Subscriber)). It can be accessed
-/// via the [`handler`](crate::pubsub::Subscriber::handler) method or by dereferencing the
-/// Zenoh object.
+/// via the [`handler`](crate::pubsub::Subscriber::handler) method or directly, by dereferencing the
+/// Zenoh object. In practice this means that e.g. [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
+/// can be called directly on the `Subscriber` object.
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
@@ -456,6 +460,14 @@ pub mod handlers {
 }
 
 /// Quality of service primitives
+/// 
+/// This module provides types and enums to configure the quality of service (QoS) of Zenoh
+/// operations, such as reliability and congestion control.
+/// These parameters can be set via the corresponding builder methods, e.g.,
+/// [reliability](crate::pubsub::PublisherBuilder::reliability), 
+/// [priority](crate::pubsub::PublisherBuilder::priority) or
+/// [congestion_control](crate::pubsub::PublisherBuilder::congestion_control).
+///
 pub mod qos {
     pub use zenoh_protocol::core::CongestionControl;
     #[zenoh_macros::unstable]
@@ -468,8 +480,9 @@ pub mod qos {
 ///
 /// Scouting is the process of discovering Zenoh nodes in the network.
 /// The scouting process depends on the transport layer and the Zenoh configuration.
+/// 
 /// See more details at <https://zenoh.io/docs/getting-started/deployment/#scouting>.
-///
+/// 
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
 
@@ -481,9 +494,14 @@ pub mod scouting {
 
 /// Liveliness primitives
 ///
-/// A [`LivelinessToken`](liveliness::LivelinessToken) is a token whose liveliness is tied
-/// to the Zenoh [`Session`] and can be monitored by remote applications.
+/// Sometimes it's necessary to know whether a zenoh node is available in the network or not.
+/// It's possible to achieve this by declaring special publishers and queryables,
+/// but this task is not very easy and common enough to warrant a dedicated API.
 ///
+/// The liveliness API allows node to declare a [LivelinessToken](liveliness::LivelinessToken)
+/// with key expression assigned to it. Other nodes can use liveliness API to query for this 
+/// key expression or subscribe to it to get notified when the token appears or disappears in the network.
+/// 
 /// # Examples
 /// ### Declaring a token
 /// ```
