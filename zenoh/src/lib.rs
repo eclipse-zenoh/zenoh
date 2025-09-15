@@ -557,9 +557,8 @@ pub mod shm {
             memory_layout::{MemoryLayout, TypedLayout},
             shm_provider::{
                 AllocBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, ConstBool, ConstPolicy,
-                ConstUsize, DeallocEldest, DeallocOptimal, DeallocYoungest, Deallocate, Defragment,
-                ForceDeallocPolicy, GarbageCollect, JustAlloc, PolicyValue, PrecomputedLayout,
-                SafePolicy, ShmProvider, ShmProviderBuilder,
+                ConstUsize, Deallocate, Defragment, GarbageCollect, JustAlloc, PolicyValue,
+                PrecomputedLayout, SafePolicy, ShmProvider, ShmProviderBuilder,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{
