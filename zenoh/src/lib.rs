@@ -125,7 +125,7 @@
 //! ## Query/Reply
 //! 
 //! Declare a queryable:
-//! ```
+//! ```no_run
 //! #[tokio::main]
 //! async fn main() {
 //!     let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -137,7 +137,7 @@
 //! ```
 //!
 //! Request data:
-//! ```
+//! ```no_run
 //! use futures::prelude::*;
 //!
 //! #[tokio::main]
@@ -215,6 +215,8 @@ pub use crate::{
     session::{open, Session},
 };
 
+/// # Key Expressions
+///
 /// [Key expressions](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) are Zenoh's address space.
 ///
 /// In Zenoh, operations are performed on keys. To allow addressing multiple keys with a single operation, Zenoh uses Key Expressions (KEs).
@@ -272,7 +274,7 @@ pub mod key_expr {
     }
 }
 
-/// Zenoh [`Session`] and associated types
+/// # Zenoh [`Session`] and associated types
 ///
 /// The [`Session`] is the main component of Zenoh.
 ///
@@ -321,7 +323,7 @@ pub mod session {
     };
 }
 
-/// Sample primitives
+/// # Sample primitives
 ///
 /// The [`Sample`](crate::sample::Sample) structure is the data unit received from [`Subscriber`](crate::pubsub::Subscriber)
 /// or [`Queryable`](crate::query::Queryable) instances. It contains the payload and all metadata associated with the data.
@@ -336,7 +338,7 @@ pub mod sample {
     };
 }
 
-/// Payload primitives
+/// # Payload primitives
 ///
 /// The [`ZBytes`](crate::bytes::ZBytes) type is Zenoh's representation of raw byte data.
 /// It provides mechanisms for zero-copy creation and access (`From<Vec<u8>>` and
@@ -346,6 +348,37 @@ pub mod sample {
 /// The `zenoh_ext` crate provides serialization and deserialization of basic types and structures for `ZBytes` via
 /// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) and
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
+/// 
+/// # Examples
+/// 
+/// ### Creating ZBytes
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// let zbytes = zenoh::bytes::ZBytes::from("Hello, world!");
+/// # assert_eq!(zbytes.try_to_string().unwrap(), "Hello, world!");
+/// # }
+/// ```
+/// 
+/// ### Converting ZBytes to String
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let zbytes = zenoh::bytes::ZBytes::from("Hello, world!");
+/// let s = zbytes.try_to_string().unwrap();
+/// assert_eq!(s, "Hello, world!");
+/// # }
+/// ```
+/// 
+/// ### Converting ZBytes to Vec<u8>
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let zbytes = zenoh::bytes::ZBytes::from("Hello, world!");
+/// let vec = zbytes.to_bytes();
+/// assert_eq!(vec.as_ref(), b"Hello, world!");
+/// # }
+/// ```
 pub mod bytes {
     pub use crate::api::{
         bytes::{OptionZBytes, ZBytes, ZBytesReader, ZBytesSliceIterator, ZBytesWriter},
@@ -353,7 +386,9 @@ pub mod bytes {
     };
 }
 
-/// Pub/sub primitives
+/// # Pub/sub primitives
+///
+/// This module provides the publish/subscribe API of Zenoh.
 ///
 /// A [`Publisher`](crate::pubsub::Publisher) is declared by the
 /// [`Session::declare_publisher`](crate::Session::declare_publisher) method.
@@ -361,6 +396,28 @@ pub mod bytes {
 /// [`Sample`](crate::sample::Sample) data is received by [`Subscriber`](crate::pubsub::Subscriber)s
 /// declared with [`Session::declare_subscriber`](crate::Session::declare_subscriber).
 ///
+/// # Examples:
+/// ### Declaring a publisher and publishing data
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").await.unwrap();
+/// publisher.put("value").await.unwrap();
+/// # }
+/// ```
+/// 
+/// ### Declaring a subscriber and receiving data
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let subscriber = session.declare_subscriber("key/expression").await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///     println!(">> Received {}", sample.payload().try_to_string().unwrap());
+/// }
+/// # }
+/// ```
 pub mod pubsub {
     pub use crate::api::{
         builders::{
@@ -375,15 +432,49 @@ pub mod pubsub {
     };
 }
 
-/// Query/reply primitives
+/// # Query/reply primitives
 ///
+/// This module provides the query/reply API of Zenoh.
+/// 
 /// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
 /// Data is requested via [`Session::get`](crate::Session::get) function or by
 /// [Querier](crate::query::Querier) object. Each request returns zero or more
-/// [`Reply`](crate::query::Reply) or [`ReplyError`](crate::query::ReplyError) structures,
-/// each one from each queryable that matches the request.
-///
+/// [`Reply`](crate::query::Reply) structures each one from each queryable that matches the request.
+/// Each reply contains either the [Sample](crate::sample::Sample)
+/// or [`ReplyError`](crate::query::ReplyError) structures.
+/// 
+/// # Examples:
+/// ### Declaring a queryable
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").await.unwrap();
+/// while let Ok(query) = queryable.recv_async().await {
+///     let reply = query.reply("key/expression", "value").await.unwrap();
+/// }
+/// # } 
+/// ```
+/// 
+/// ## Requesting data
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let replies = session.get("key/expression").await.unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     match reply.result() {
+///         Ok(sample) => {
+///             println!(">> Received {}", sample.payload().try_to_string().unwrap());
+///         }
+///         Err(err) => {
+///             println!(">> Error {}", err.payload().try_to_string().unwrap());
+///         }
+///     }
+/// # }
+/// # }
+/// ```
 pub mod query {
     pub use zenoh_protocol::core::Parameters;
     #[zenoh_macros::unstable]
@@ -406,7 +497,7 @@ pub mod query {
     pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
-/// Matching primitives
+/// # Matching primitives
 ///
 /// The matching API allows the active side of communication (publisher, querier) to know
 /// whether there are any interested parties on the other side (subscriber, queryable), which
@@ -420,6 +511,23 @@ pub mod query {
 /// yields [MatchingStatus](crate::matching::MatchingStatus) instances whenever the matching
 /// status changes, i.e., when the first matching subscriber or queryable appears, or when the
 /// last one disappears.
+/// 
+/// # Example
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").await.unwrap();
+/// let mut listener = publisher.matching_listener().await.unwrap();
+/// while let Ok(status) = listener.recv_async().await {
+///     if status.matching() {
+///         println!(">> Publisher has at least one matching subscriber");
+///     } else {
+///         println!(">> Publisher has no matching subscribers");
+///     }
+/// }
+/// # }
+/// ```
 pub mod matching {
     pub use crate::api::{
         builders::matching_listener::MatchingListenerBuilder,
@@ -427,7 +535,7 @@ pub mod matching {
     };
 }
 
-/// Callback handler trait.
+/// # Callback handler trait.
 ///
 /// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber),
 /// [`Query`](crate::query::Query), etc.) have a
@@ -457,6 +565,34 @@ pub mod matching {
 /// via the [`handler`](crate::pubsub::Subscriber::handler) method or directly, by dereferencing the
 /// Zenoh object. In practice this means that e.g. [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
 /// can be called directly on the `Subscriber` object.
+/// 
+/// # Examples
+/// 
+/// ### Using a callback in a queryable
+/// 
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let queryable = session.declare_queryable("key/expression")
+///    .callback(|query| {
+///         query.reply("key/expression", "value");
+///     }).await.unwrap();
+/// # }
+/// ```
+/// 
+/// ### Use RingChannel to keep only the last 10 samples in a subscriber
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// use zenoh::handlers::RingChannel;
+/// let subscriber = session.declare_subscriber("key/expression")
+///     .with(RingChannel::new(10))
+///     .await.unwrap();
+/// # }
+/// ```
+///
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
@@ -473,7 +609,7 @@ pub mod handlers {
     }
 }
 
-/// Quality of service primitives
+/// # Quality of service primitives
 /// 
 /// This module provides types and enums to configure the quality of service (QoS) of Zenoh
 /// operations, such as reliability and congestion control.
@@ -490,7 +626,7 @@ pub mod qos {
     pub use crate::api::publisher::Priority;
 }
 
-/// Scouting primitives
+/// # Scouting primitives
 ///
 /// Scouting is the process of discovering Zenoh nodes in the network.
 /// The scouting process depends on the transport layer and the Zenoh configuration.
@@ -506,7 +642,7 @@ pub mod scouting {
     };
 }
 
-/// Liveliness primitives
+/// # Liveliness primitives
 ///
 /// Sometimes it's necessary to know whether a Zenoh node is available on the network.
 /// It's possible to achieve this by declaring special publishers and queryables, but this task is
@@ -522,7 +658,7 @@ pub mod scouting {
 /// 
 /// # Examples
 /// ### Declaring a token
-/// ```
+/// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 ///
@@ -536,7 +672,7 @@ pub mod scouting {
 /// ```
 ///
 /// ### Querying tokens
-/// ```
+/// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 ///
