@@ -52,6 +52,7 @@ transport_ws = ["zenoh-link/transport_ws"]
 unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
 
 [dependencies]
+arc-swap = { workspace = true }
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
 flume = { workspace = true }

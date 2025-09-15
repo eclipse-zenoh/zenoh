@@ -886,6 +886,11 @@ validated_struct::validator! {
         /// Configuration of the low-pass filter
         pub low_pass_filter: Vec<LowPassFilterConf>,
 
+        /// Configuration of the stats per keyexpr
+        pub stats: #[derive(Default)] StatsConfig {
+            keys: Vec<OwnedKeyExpr>,
+        },
+
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
         pub plugins_loading: #[derive(Default)]

@@ -18,32 +18,36 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
-mod access_control;
-use access_control::acl_interceptor_factories;
-use nonempty_collections::NEVec;
-use zenoh_link::LinkAuthId;
-
-mod authorization;
 use std::any::Any;
 
-mod low_pass;
-use low_pass::low_pass_interceptor_factories;
+use nonempty_collections::NEVec;
 use zenoh_config::{Config, InterceptorFlow, InterceptorLink};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+use zenoh_link::LinkAuthId;
 use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-pub mod downsampling;
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::face::Face, interceptor::downsampling::downsampling_interceptor_factories,
+        dispatcher::face::Face,
+        interceptor::{
+            access_control::acl_interceptor_factories,
+            downsampling::downsampling_interceptor_factories,
+            low_pass::low_pass_interceptor_factories,
+            qos_overwrite::qos_overwrite_interceptor_factories,
+        },
     },
 };
 
-pub mod qos_overwrite;
-use crate::net::routing::interceptor::qos_overwrite::qos_overwrite_interceptor_factories;
+mod access_control;
+mod authorization;
+mod downsampling;
+mod low_pass;
+mod qos_overwrite;
+#[cfg(feature = "stats")]
+mod stats;
 
 #[derive(Default, Debug)]
 pub struct InterfaceEnabled {
@@ -134,6 +138,12 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     res.extend(acl_interceptor_factories(config.access_control())?);
     res.extend(qos_overwrite_interceptor_factories(config.qos().network())?);
     res.extend(low_pass_interceptor_factories(config.low_pass_filter())?);
+    #[cfg(feature = "stats")]
+    res.extend(stats::stats_interceptor_factories(config.stats())?);
+    #[cfg(not(feature = "stats"))]
+    if !config.stats().keys().is_empty() {
+        tracing::warn!("stats per keys requires \"stats\" compilation feature enabled");
+    }
     Ok(res)
 }
 

@@ -110,10 +110,17 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 parent: Option<std::sync::Weak<$parent_type>>,
                 children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
+                keys: arc_swap::ArcSwap<Vec<KeyStats<$struct_name>>>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
                 )*
+            }
+
+            $(#[$meta])*
+            $vis struct [<Key $struct_name Report>] {
+                key: OwnedKeyExpr,
+                stats: [<$struct_name Report>]
             }
 
             $(#[$meta])*
@@ -122,6 +129,8 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 #[serde(skip)]
                 children: std::vec::Vec<[<$struct_name Report>]>,
+                #[serde(default, skip_serializing_if = "Vec::is_empty")]
+                stats_keys: Vec<[<Key $struct_name Report>]>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@report_field_type $($field_type)?),
@@ -147,10 +156,15 @@ macro_rules! stats_struct {
                     a
                 }
 
+                $vis fn keys(&self) -> &arc_swap::ArcSwap<Vec<KeyStats<$struct_name>>> {
+                    &self.keys
+                }
+
                 $vis fn report(&self) -> [<$struct_name Report>] {
                     let report = [<$struct_name Report>] {
                         labels: self.labels.clone(),
                         children: self.children.lock().unwrap().iter().map(|c| c.report()).collect(),
+                        stats_keys: self.keys.load().iter().map(|k| [<Key $struct_name Report>] {key: k.key_expr.clone(), stats: k.stats.report()}).collect(),
                         $($field_name: self.[<get_ $field_name>](),)*
                     };
                     // remove already dropped children
@@ -168,10 +182,11 @@ macro_rules! stats_struct {
             impl Default for $struct_name {
                 fn default() -> Self {
                     Self {
-                        labels: std::collections::HashMap::default(),
-                        parent: None as Option<std::sync::Weak<$parent_type>>,
-                        children: std::sync::Arc::new(std::sync::Mutex::new(std::vec::Vec::new())),
-                        $($field_name: stats_struct!(@new(None, std::collections::HashMap::default()) $($field_type)?),)*
+                        labels: Default::default(),
+                        parent: Default::default(),
+                        children: Default::default(),
+                        keys: Default::default(),
+                        $($field_name: stats_struct!(@new(Default::default(), Default::default()) $($field_type)?),)*
                     }
                 }
             }
@@ -259,8 +274,9 @@ macro_rules! stats_struct {
             impl Default for [<$struct_name Report>] {
                 fn default() -> Self {
                     Self {
-                        labels: std::collections::HashMap::default(),
-                        children: std::vec::Vec::default(),
+                        labels: Default::default(),
+                        children: Default::default(),
+                        stats_keys: Default::default(),
                         $($field_name: stats_struct!(@report_default $($field_type)?),)*
                     }
                 }
@@ -272,6 +288,8 @@ macro_rules! stats_struct {
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
+
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct AdminStats {
@@ -424,5 +442,23 @@ stats_struct! {
         pub tx_t_msgs,
         pub rx_bytes,
         pub rx_t_msgs,
+    }
+}
+
+pub struct KeyStats<S = TransportStats> {
+    key_expr: OwnedKeyExpr,
+    stats: S,
+}
+
+impl KeyStats {
+    pub fn new(key_expr: OwnedKeyExpr) -> Self {
+        Self {
+            key_expr,
+            stats: TransportStats::default(),
+        }
+    }
+
+    pub fn stats(&self) -> &TransportStats {
+        &self.stats
     }
 }
