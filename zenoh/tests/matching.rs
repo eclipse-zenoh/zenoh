@@ -252,15 +252,19 @@ async fn zenoh_matching_listener_drop_deadlock() {
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     let session = ztimeout!(zenoh::open(config)).unwrap();
 
-    let querier = std::sync::Arc::new(session
-        .declare_querier("zenoh_matching_listener_drop_deadlock")
-        .await
-        .unwrap());
+    let querier = std::sync::Arc::new(
+        session
+            .declare_querier("zenoh_matching_listener_drop_deadlock")
+            .await
+            .unwrap(),
+    );
     let matching_listener = querier
         .matching_listener()
         .callback({
             let querier = querier.clone();
-            move |_| println!("{:?}", querier.id())
+            move |_| {
+                querier.key_expr();
+            }
         })
         .await
         .unwrap();
