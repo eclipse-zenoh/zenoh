@@ -618,6 +618,19 @@ pub mod handlers {
 /// [priority](crate::pubsub::PublisherBuilder::priority) or
 /// [congestion_control](crate::pubsub::PublisherBuilder::congestion_control).
 ///
+/// # Example
+/// 
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session.declare_publisher("key/expression")
+///   .reliability(zenoh::qos::Reliability::Reliable)
+///   .priority(zenoh::qos::Priority::InteractiveHigh)
+///   .congestion_control(zenoh::qos::CongestionControl::Block)
+///   .await.unwrap();
+/// # }
+/// 
 pub mod qos {
     pub use zenoh_protocol::core::CongestionControl;
     #[zenoh_macros::unstable]
