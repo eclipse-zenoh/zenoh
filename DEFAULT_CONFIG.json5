@@ -524,6 +524,13 @@
   //   },
   // ],
 
+  /// Enable stats gathering per key expression.
+  // stats: {
+  //   keys: [
+  //     "some/key/expression/**",
+  //   ],
+  // },
+
   /// Configure internal transport parameters
   transport: {
     unicast: {
