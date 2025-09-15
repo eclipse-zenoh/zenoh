@@ -406,6 +406,20 @@ pub mod query {
     pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
+/// Matching primitives
+///
+/// The matching API allows the active side of communication (publisher, querier) to know
+/// whether there are any interested parties on the other side (subscriber, queryable), which
+/// can save bandwidth and CPU resources.
+///
+/// A [MatchingListener](crate::matching::MatchingListener) can be declared via the
+/// [Publisher::matching_listener](crate::pubsub::Publisher::matching_listener) or
+/// [Querier::matching_listener](crate::query::Querier::matching_listener) methods.
+///
+/// The matching listener behaves like a subscriber, but instead of producing data samples it
+/// yields [MatchingStatus](crate::matching::MatchingStatus) instances whenever the matching
+/// status changes, i.e., when the first matching subscriber or queryable appears, or when the
+/// last one disappears.
 pub mod matching {
     pub use crate::api::{
         builders::matching_listener::MatchingListenerBuilder,
