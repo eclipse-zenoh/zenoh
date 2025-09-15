@@ -28,17 +28,16 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
 async fn create_session_pair(locator: &str) -> (Session, Session) {
-    let config1 = {
-        let mut config = zenoh::Config::default();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
-        config
-    };
+    let mut config1 = zenoh::Config::default();
+    config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config1
+        .listen
+        .endpoints
+        .set(vec![locator.parse().unwrap()])
+        .unwrap();
+
     let mut config2 = zenoh::Config::default();
+    config2.scouting.multicast.set_enabled(Some(false)).unwrap();
     config2.set_mode(Some(WhatAmI::Client)).unwrap();
     config2
         .connect
@@ -77,7 +76,9 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, same_se
     let (session1, session2) = match same_session {
         false => create_session_pair("tcp/127.0.0.1:18002").await,
         true => {
-            let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+            let mut config = zenoh::Config::default();
+            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            let s1 = ztimeout!(zenoh::open(config)).unwrap();
             let s2 = s1.clone();
             (s1, s2)
         }
@@ -182,7 +183,9 @@ async fn zenoh_publisher_matching_status_inner(publisher_locality: Locality, sam
     let (session1, session2) = match same_session {
         false => create_session_pair("tcp/127.0.0.1:18001").await,
         true => {
-            let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+            let mut config = zenoh::Config::default();
+            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            let s1 = ztimeout!(zenoh::open(config)).unwrap();
             let s2 = s1.clone();
             (s1, s2)
         }
