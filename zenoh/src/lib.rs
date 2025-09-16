@@ -243,7 +243,7 @@ pub use crate::{
 /// When storing values tied to Key Expressions, you might want something more specialized than a [`HashMap`](std::collections::HashMap) to respect
 /// Key Expression semantics with high performance.
 ///
-/// Enter [KeTrees](crate::key_expr::keyexpr_tree). These are data structures built to store KE–value pairs in a manner that supports the set semantics of KEs.
+/// Enter [`KeTrees`](crate::key_expr::keyexpr_tree). These are data structures built to store KE–value pairs in a manner that supports the set semantics of KEs.
 ///
 /// # Building and parsing Key Expressions
 /// A common issue in REST APIs is assigning meaning to sections of the URL and respecting that API in a convenient manner.
@@ -291,29 +291,26 @@ pub mod key_expr {
 }
 
 /// # Zenoh [`Session`] and associated types
+/// 
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, which maintains the state of the connection of the node to the Zenoh network.
+/// The session allows to declare other zenoh entities like publishers, subscribers, queriers, queryables, etc. and keeps them functionin. Closing
+/// the session will close all associated entities.
 ///
-/// The [`Session`] is the main component of Zenoh.
+/// All session parameters are specified in the [`Config`](crate::config) object passed to the
+/// [`open`](crate::open) function.
 ///
-/// Each Zenoh node is represented by a [Session](crate::session::Session) object. This object
-/// maintains the state of the connection to the Zenoh network and is used to declare publishers,
-/// subscribers, queriers, queryables, etc.
-///
-/// All session parameters are specified in the [Config](crate::config) object passed to the
-/// [open](crate::open) function.
-///
-/// Objects created by the session (for example, a [Publisher](crate::pubsub::Publisher) via
-/// [declare_publisher](crate::session::Session::declare_publisher) or a
-/// [Subscriber](crate::pubsub::Subscriber) via
-/// [declare_subscriber](crate::session::Session::declare_subscriber)) have lifetimes independent
+/// Objects created by the session (for example, a [`Publisher`](crate::pubsub::Publisher) via
+/// [`declare_publisher`](crate::session::Session::declare_publisher) or a
+/// [`Subscriber`](crate::pubsub::Subscriber) via
+/// [`declare_subscriber`](crate::session::Session::declare_subscriber)) have lifetimes independent
 /// of the session, but they stop functioning when the session is closed or dropped.
 ///
-/// Use the explicit [close](crate::session::Session::close) method to close the session and all
+/// Use the explicit [`close`](crate::session::Session::close) method to close the session and all
 /// associated objects.
 ///
-/// Because the session actually processes all instances of these objects, it is sometimes
-/// convenient not to keep a reference to an object (for example, a [Queryable]) solely to keep it
-/// alive, and instead run it in the background until the session is closed. To do this, create the
-/// object with the [background](crate::query::QueryableBuilder::background) method on the
+/// Sometimes it is convenient not to keep a reference to an object (for example, a [`Queryable`](crate::query::Queryable)) 
+/// solely to keep it alive, but instead run it in the background until the session is closed. To do this, create the
+/// object with the [`background`](crate::query::QueryableBuilder::background) method on the
 /// corresponding builder. This causes the builder to return `()` instead of the object instance and
 /// keeps the instance alive while the session is alive.
 ///
@@ -455,9 +452,9 @@ pub mod pubsub {
 /// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
 /// Data is requested via [`Session::get`](crate::Session::get) function or by
-/// [Querier](crate::query::Querier) object. Each request returns zero or more
+/// [`Querier`](crate::query::Querier) object. Each request returns zero or more
 /// [`Reply`](crate::query::Reply) structures each one from each queryable that matches the request.
-/// Each reply contains either the [Sample](crate::sample::Sample)
+/// Each reply contains either the [`Sample`](crate::sample::Sample)
 /// or [`ReplyError`](crate::query::ReplyError) structures.
 ///
 /// # Examples:
@@ -519,12 +516,12 @@ pub mod query {
 /// whether there are any interested parties on the other side (subscriber, queryable), which
 /// can save bandwidth and CPU resources.
 ///
-/// A [MatchingListener](crate::matching::MatchingListener) can be declared via the
-/// [Publisher::matching_listener](crate::pubsub::Publisher::matching_listener) or
-/// [Querier::matching_listener](crate::query::Querier::matching_listener) methods.
+/// A [`MatchingListener`](crate::matching::MatchingListener) can be declared via the
+/// [`Publisher::matching_listener`](crate::pubsub::Publisher::matching_listener) or
+/// [`Querier::matching_listener`](crate::query::Querier::matching_listener) methods.
 ///
 /// The matching listener behaves like a subscriber, but instead of producing data samples it
-/// yields [MatchingStatus](crate::matching::MatchingStatus) instances whenever the matching
+/// yields [`MatchingStatus`](crate::matching::MatchingStatus) instances whenever the matching
 /// status changes, i.e., when the first matching subscriber or queryable appears, or when the
 /// last one disappears.
 ///
@@ -635,9 +632,9 @@ pub mod handlers {
 /// This module provides types and enums to configure the quality of service (QoS) of Zenoh
 /// operations, such as reliability and congestion control.
 /// These parameters can be set via the corresponding builder methods, e.g.,
-/// [reliability](crate::pubsub::PublisherBuilder::reliability),
-/// [priority](crate::pubsub::PublisherBuilder::priority) or
-/// [congestion_control](crate::pubsub::PublisherBuilder::congestion_control).
+/// [`reliability`](crate::pubsub::PublisherBuilder::reliability),
+/// [`priority`](crate::pubsub::PublisherBuilder::priority) or
+/// [`congestion_control`](crate::pubsub::PublisherBuilder::congestion_control).
 ///
 /// # Example
 ///
@@ -691,7 +688,7 @@ pub mod scouting {
 ///
 /// Sometimes it's necessary to know whether a Zenoh node is available on the network.
 /// It's possible to achieve this by declaring special publishers and queryables, but this task is
-/// not straightforward, so a dedicated API is warranted.
+/// not straightforward, so a dedicated API is provided.
 ///
 /// The [liveliness](Session::liveliness) API allows a node to declare a
 /// [LivelinessToken](liveliness::LivelinessToken)
@@ -761,11 +758,11 @@ pub mod liveliness {
 /// [PublicationBuilder::timestamp](crate::pubsub::PublicationBuilder::timestamp) method when performing a
 /// [`put`](crate::pubsub::Publisher::put) operation or by
 /// [ReplyBuilder::timestamp](crate::query::ReplyBuilder::timestamp) when replying to a query with
-/// [reply](crate::query::Query::reply).
+/// [`reply`](crate::query::Query::reply).
 ///
 /// The timestamp consists of the time value itself and unique
 /// [clock](https://docs.rs/uhlc/latest/uhlc/) identifier. Each
-/// [Session](crate::session::Session) has its own clock, so the [new_timestamp](crate::session::Session::new_timestamp)
+/// [`Session`](crate::session::Session) has its own clock, so the [`new_timestamp`](crate::session::Session::new_timestamp)
 /// method can be used to create a new timestamp with the session's identifier.
 ///
 /// # Examples
