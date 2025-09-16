@@ -262,9 +262,7 @@ async fn zenoh_matching_listener_drop_deadlock() {
         .matching_listener()
         .callback({
             let querier = querier.clone();
-            move |_| {
-                querier.key_expr();
-            }
+            move |_| println!("{}", querier.key_expr())
         })
         .await
         .unwrap();
