@@ -22,7 +22,28 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::zenoh::ext::AttachmentType;
 
-/// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<ZBytes>` where `T` implements `Into<ZBytes>`.
+/// Technical wrapper type for API ergonomicity.
+///
+/// It allows any type `T` to be converted into `Option<ZBytes>`
+/// where `T` implements `Into<ZBytes>`.
+///
+/// This type is unlikely to be used explicitly by the user. It's purpose is to allow to pass types
+/// like `&str`, `String`, `&[u8]`, `Vec<u8]`, etc. both directly and wrapped to `Option` to API methods
+/// that accept an optional payload, like the [`attachment`](crate::pubsub::PublicationBuilder::attachment).
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").await.unwrap();
+/// // Set an attachment value directly
+/// publisher.put("value").attachment("metadata").await.unwrap();
+/// // Set an attachment value from the variable, which can contain the attachment data or not.
+/// let maybe_attachment: Option<String> = Some("metadata".to_string());
+/// publisher.put("value").attachment(maybe_attachment).await.unwrap();
+/// # }
+/// ```
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OptionZBytes(Option<ZBytes>);
@@ -66,7 +87,19 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// ZBytes contains the serialized bytes of user data.
+/// ZBytes contains the raw bytes data.
+///
+/// This type is intended to represent the data payload with minimize copying data. 
+/// Zenoh may construct single `ZBytes` instance from pointers to multiple buffers
+/// in case when data is received fragmented from the network.
+///
+/// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`] using [`to_bytes`](Self::to_bytes).
+/// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
+/// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
+///
+/// It is also possible to iterate over the raw data that may be scattered on different memory regions using [`slices`](Self::slices).
+/// 
+/// # Examples
 ///
 /// `ZBytes` can be converted from/to raw bytes:
 /// ```rust
@@ -77,17 +110,6 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// let payload = ZBytes::from(buf);
 /// assert_eq!(payload.to_bytes(), buf.as_slice());
 /// ```
-///
-/// `ZBytes` may store data in non-contiguous regions of memory.
-/// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
-///
-/// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`] using [`to_bytes`](Self::to_bytes).
-/// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
-/// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
-///
-/// It is also possible to iterate over the raw data that may be scattered on different memory regions using [`slices`](Self::slices).
-/// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`] nor on how many slices a given [`ZBytes`] will be composed of.
-/// The only provided guarantee is on the bytes order that is preserved.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
