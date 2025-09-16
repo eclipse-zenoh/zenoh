@@ -99,6 +99,13 @@ impl From<OptionZBytes> for Option<ZBytes> {
 ///
 /// It is also possible to iterate over the raw data that may be scattered on different memory regions using [`slices`](Self::slices).
 /// 
+/// Another way to access raw data is to use a [`ZBytesReader`] obtained from [`reader`](Self::reader) 
+/// that implements the standard [`std::io::Read`] trait. This is useful when deserializing data using 
+/// libraries that operate on `std::io::Read`.
+///
+/// The creation of a `ZBytes` instance using the [`std::io::Write`] trait is also possible using static
+/// the [`writer`](Self::writer) method that creates a [`ZBytesWriter`].
+/// 
 /// # Examples
 ///
 /// `ZBytes` can be converted from/to raw bytes:
@@ -109,6 +116,20 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// let buf = b"some raw bytes";
 /// let payload = ZBytes::from(buf);
 /// assert_eq!(payload.to_bytes(), buf.as_slice());
+/// ```
+/// 
+/// Create a `ZBytes` with a writer and read it back with a reader:
+/// ```rust
+/// use std::io::{Read, Write};
+/// use zenoh::bytes::ZBytes;
+///
+/// let mut writer = ZBytes::writer();
+/// writer.write_all(b"some raw bytes").unwrap();
+/// let payload = writer.finish();
+/// let mut reader = payload.reader();
+/// let mut buf = [0; 15];
+/// reader.read_exact(&mut buf).unwrap();
+/// assert_eq!(&buf, b"some raw bytes");
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
