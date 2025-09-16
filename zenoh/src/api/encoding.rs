@@ -17,15 +17,23 @@ use phf::phf_map;
 use zenoh_buffers::ZSlice;
 use zenoh_protocol::core::EncodingId;
 
-/// Default encoding values used by Zenoh.
+/// # Encoding information
 ///
-/// An encoding has a similar role to *Content-type* in HTTP: it indicates, when present, how data should be interpreted by the application.
+/// The [`Sample`](crate::sample::Sample) or [`ReplyError`](crate::query::ReplyError) 
+/// may contain the optional encoding value which indicates how the payload should be interpreted 
+/// by the application.
+///
+/// The encoding is represented as a string in MIME-like format: `type/subtype[;schema]`.
+///
+/// To optimize the network usage, Zenoh internally maps some predefined encoding strings to
+/// an integer identifier. These encodings are provided as associated constants of the [`Encoding`] struct,
+/// e.g. [`Encoding::ZENOH_BYTES`], [`Encoding::APPLICATION_JSON`], etc. This internal mapping
+/// is not exposed to the application layer and from the API point of view the encoding is always
+/// represented as a string. But it's useful to know that some encodings are much more efficient
+/// than others, especially considering that the encoding value is sent with each message. 
 ///
 /// Please note the Zenoh protocol does not impose any encoding value nor it operates on it.
 /// It can be seen as some optional metadata that is carried over by Zenoh in such a way the application may perform different operations depending on the encoding value.
-///
-/// A set of associated constants are provided to cover the most common encodings for user convenience.
-/// This is parcticular useful in helping Zenoh to perform additional wire-level optimizations.
 ///
 /// # Examples
 ///
