@@ -24,9 +24,14 @@
 //! The main Zenoh components and concepts are described below.
 //!  
 //! ## Session
-//! 
-//! Each Zenoh node is a [Session](crate::session) object. This is the main object that maintains the state of
-//! the connection to the Zenoh network and is used to declare publishers, subscribers, queriers, queryables, etc.
+//!
+//! The [Session](crate::session) is the main object. It creates and holds the zenoh runtime object,
+//! which maintains the state of the connection of the node to the Zenoh network. (There is a subtle difference
+//! between a session and the runtime: technically multiple sessions can share the same runtime and therefore
+//! have the same network identity [Session::zid](crate::session::Session::zid) which is the case for the plugins. But
+//! normally each session has its own runtime.)
+//!
+//! The session allows to declare publishers, subscribers, queriers, queryables, etc.
 //! A session is created by the [open](crate::open) function, which takes a [Config](crate::config) object as an argument.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
@@ -35,69 +40,69 @@
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
 //!
 //! ## Publish/Subscribe
-//! 
-//! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher) 
+//!
+//! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher)
 //! and consumed by [Subscribers](crate::pubsub::Subscriber). See the [pubsub](crate::pubsub) API for details.
 //!
 //! ## Query/Reply
-//! 
-//! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable) 
+//!
+//! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable)
 //! and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
 //! More details are available in the [query](crate::query) API.
 //!
 //! ## Key Expressions
-//! 
+//!
 //! Data is associated with keys in the format of a slash-separated path, e.g., `robot/sensor/temp`.
 //! The requesting side uses [key expressions](crate::key_expr) to address the data of interest. Key expressions can
 //! contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
 //!
 //! ## Data representation
-//! 
+//!
 //! Data is received as [Samples](crate::sample), which contain the payload and all metadata associated with the data.
 //! The raw byte payload is represented as [ZBytes](crate::bytes), which provides mechanisms for zero-copy creation and access.
-//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization 
+//! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization
 //! of basic types and structures for `ZBytes`.
 //!
 //! ## Other components
-//! 
+//!
 //! Other important functionalities of Zenoh are:
-//! - [Scouting](crate::scouting) to discover Zenoh nodes in the network. Note that it's not necessary to explicitly 
+//! - [Scouting](crate::scouting) to discover Zenoh nodes in the network. Note that it's not necessary to explicitly
 //!   discover other nodes just to publish, subscribe, or query data.
 //! - Monitor [liveliness](crate::liveliness) to get notified when a specified resource appears or disappears in the network.
-//! - The [matching](crate::matching) API allows the active side of communication (publisher, querier) to know whether 
+//! - The [matching](crate::matching) API allows the active side of communication (publisher, querier) to know whether
 //!   there are any interested parties on the other side (subscriber, queryable) which allows to save bandwidth and CPU resources.
 //!
 //! ## Builders
-//! 
+//!
 //! Zenoh extensively uses the builder pattern. For example, to create a publisher, you first create a
-//! [PublisherBuilder](crate::pubsub::PublisherBuilder) 
+//! [PublisherBuilder](crate::pubsub::PublisherBuilder)
 //! using the [declare_publisher](crate::session::Session::declare_publisher) method. The builder is
 //! resolved to the [Publisher](crate::pubsub::Publisher) instance by awaiting it in an async context
 //! or by calling the [wait](crate::Wait::wait) method in a synchronous context.
 //!
 //! ## Channels and callbacks
-//! 
+//!
 //! There are two ways to get sequential data from Zenoh primitives (e.g., a series of
 //! [Sample](crate::sample::Sample)s from a [Subscriber](crate::pubsub::Subscriber)
 //! or [Reply](crate::query::Reply)s from a [Query](crate::query::Query)): by channel or by callback.
-//! 
+//!
 //! In channel mode, methods like [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
 //! become available on the subscriber or query object (through Deref coercion to the corresponding channel
 //! handler type). By default, the [FifoChannel](crate::handlers::fifo::FifoChannel) is used.
-//! 
+//!
 //! The builders provide methods [with](crate::pubsub::SubscriberBuilder::with) to assign an arbitrary channel instead of
 //! the default one, and [callback](crate::pubsub::SubscriberBuilder::callback) to assign a callback function.
 //!
 //! See more details in the [handlers](crate::handlers) module documentation.
-//! 
+//!
 //! # Usage examples
-//! 
-//! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in 
+//!
+//! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in
 //! [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
-//! 
+//!
 //! ## Publishing/Subscribing
 //! The example below shows how to publish and subscribe to data using Zenoh.
-//! 
+//!
 //! Publishing data:
 //! ```no_run
 //! #[tokio::main]
@@ -107,7 +112,7 @@
 //!     session.close().await.unwrap();
 //! }
 //! ```
-//! 
+//!
 //! Subscribing to data:
 //! ```no_run
 //! use futures::prelude::*;
@@ -123,7 +128,7 @@
 //! ```
 //!
 //! ## Query/Reply
-//! 
+//!
 //! Declare a queryable:
 //! ```no_run
 //! #[tokio::main]
@@ -247,6 +252,17 @@ pub use crate::{
 ///
 /// [`kedefine`](crate::key_expr::format::kedefine) also lets you define formats at compile time, enabling a more performant—and, more importantly, safer and more convenient—use of said formats,
 /// as the [`keformat`](crate::key_expr::format::keformat) and [`kewrite`](crate::key_expr::format::kewrite) macros will tell you if you're attempting to set fields of the format that do not exist.
+/// 
+/// # Example
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// let sensor = zenoh::key_expr::KeyExpr::new("robot/sensor").unwrap();
+/// let sensor_temp = sensor.join("temp").unwrap();
+/// let sensors = sensor.join("**").unwrap();
+/// assert!(sensors.includes(&sensor_temp));
+/// # }
+/// ```
 pub mod key_expr {
     #[zenoh_macros::unstable]
     pub mod keyexpr_tree {
@@ -348,9 +364,9 @@ pub mod sample {
 /// The `zenoh_ext` crate provides serialization and deserialization of basic types and structures for `ZBytes` via
 /// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) and
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
-/// 
+///
 /// # Examples
-/// 
+///
 /// ### Creating ZBytes
 /// ```
 /// # #[tokio::main]
@@ -359,7 +375,7 @@ pub mod sample {
 /// # assert_eq!(zbytes.try_to_string().unwrap(), "Hello, world!");
 /// # }
 /// ```
-/// 
+///
 /// ### Converting ZBytes to String
 /// ```
 /// # #[tokio::main]
@@ -369,7 +385,7 @@ pub mod sample {
 /// assert_eq!(s, "Hello, world!");
 /// # }
 /// ```
-/// 
+///
 /// ### Converting ZBytes to Vec<u8>
 /// ```
 /// # #[tokio::main]
@@ -406,7 +422,7 @@ pub mod bytes {
 /// publisher.put("value").await.unwrap();
 /// # }
 /// ```
-/// 
+///
 /// ### Declaring a subscriber and receiving data
 /// ```no_run
 /// # #[tokio::main]
@@ -435,7 +451,7 @@ pub mod pubsub {
 /// # Query/reply primitives
 ///
 /// This module provides the query/reply API of Zenoh.
-/// 
+///
 /// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
 /// Data is requested via [`Session::get`](crate::Session::get) function or by
@@ -443,7 +459,7 @@ pub mod pubsub {
 /// [`Reply`](crate::query::Reply) structures each one from each queryable that matches the request.
 /// Each reply contains either the [Sample](crate::sample::Sample)
 /// or [`ReplyError`](crate::query::ReplyError) structures.
-/// 
+///
 /// # Examples:
 /// ### Declaring a queryable
 /// ```no_run
@@ -454,9 +470,9 @@ pub mod pubsub {
 /// while let Ok(query) = queryable.recv_async().await {
 ///     let reply = query.reply("key/expression", "value").await.unwrap();
 /// }
-/// # } 
+/// # }
 /// ```
-/// 
+///
 /// ## Requesting data
 /// ```no_run
 /// # #[tokio::main]
@@ -511,7 +527,7 @@ pub mod query {
 /// yields [MatchingStatus](crate::matching::MatchingStatus) instances whenever the matching
 /// status changes, i.e., when the first matching subscriber or queryable appears, or when the
 /// last one disappears.
-/// 
+///
 /// # Example
 /// ```no_run
 /// # #[tokio::main]
@@ -537,62 +553,67 @@ pub mod matching {
 
 /// # Callback handler trait.
 ///
-/// Zenoh primitives that receive data (e.g., [`Subscriber`](crate::pubsub::Subscriber),
-/// [`Query`](crate::query::Query), etc.) have a
-/// [`with`](crate::pubsub::SubscriberBuilder::with) method that accepts a handler for the data.
+/// Sequential data from a [`Subscriber`](crate::pubsub::Subscriber) or
+/// a [`Query`](crate::query::Query) is always passed to a callback function. However, to simplify
+/// using channels, Zenoh provides the [`IntoHandler`](crate::handlers::IntoHandler) trait,
+/// which returns a pair: a callback and a "handler" object.
 ///
-/// The handler is a pair of a [`Callback`](crate::handlers::Callback) and an arbitrary `Handler`
-/// object used to access data received by the callback. When the data is processed by the callback itself,
-/// the handler type can be `()`. For convenience, the
-/// [`callback`](crate::pubsub::SubscriberBuilder::callback) method, which accepts
-/// only an `Fn(T)`, can be used in this case.
+/// The callback object returned by the channel pushes data to the channel. The handler object
+/// in turn allows retrieving data from the channel.
 ///
-/// The [`with`](crate::pubsub::SubscriberBuilder::with) method accepts any type that
-/// implements the [`IntoHandler`](crate::handlers::IntoHandler) trait, which provides a
-/// conversion to a pair of [`Callback`](crate::handlers::Callback) and handler.
+/// The method [`with`](crate::pubsub::SubscriberBuilder::with) accepts any type that
+/// implements the `IntoHandler` trait and extracts the callback and handler from it.
+/// The Zenoh object calls the callback with each incoming sample. The handler is stored
+/// and made available via the [`handler`](crate::pubsub::Subscriber::handler) method
+/// or by dereferencing the Zenoh object, allowing the user not to care about the separate
+/// channel object.
 ///
-/// The `IntoHandler` implementations for channels [`FifoChannel`](crate::handlers::FifoChannel) and
-/// [`RingChannel`](crate::handlers::RingChannel)
-/// return a pair of ([`Callback`](crate::handlers::Callback), channel_handler).
-///
-/// The callback pushes data to the channel; the
-/// channel handler ([`FifoChannelHandler`](crate::handlers::FifoChannelHandler) or
-/// [`RingChannelHandler`](crate::handlers::RingChannelHandler)) allows taking data
-/// from the channel.
-///
-/// The channel handler is stored
-/// in the Zenoh object (e.g., a [`Subscriber`](crate::pubsub::Subscriber)). It can be accessed
-/// via the [`handler`](crate::pubsub::Subscriber::handler) method or directly, by dereferencing the
-/// Zenoh object. In practice this means that e.g. [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
-/// can be called directly on the `Subscriber` object.
-/// 
-/// # Examples
-/// 
-/// ### Using a callback in a queryable
-/// 
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression")
-///    .callback(|query| {
-///         query.reply("key/expression", "value");
-///     }).await.unwrap();
-/// # }
-/// ```
-/// 
-/// ### Use RingChannel to keep only the last 10 samples in a subscriber
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// use zenoh::handlers::RingChannel;
 /// let subscriber = session.declare_subscriber("key/expression")
-///     .with(RingChannel::new(10))
-///     .await.unwrap();
+///    .with(zenoh::handlers::RingChannel::new(10))
+///   .await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///    println!("Received: {:?}", sample);
+/// }
+/// # }
+/// ```
+/// 
+/// is equivalent to
+/// 
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// use zenoh::handlers::IntoHandler;
+/// let (callback, mut ring_channel_handler) 
+///    = zenoh::handlers::RingChannel::new(10).into_handler();
+/// let subscriber = session.declare_subscriber("key/expression")
+///    .with((callback, ())) // or simply .callback(callback)
+///   .await.unwrap();
+/// while let Ok(sample) = ring_channel_handler.recv_async().await {
+///    println!("Received: {:?}", sample);
+/// }
 /// # }
 /// ```
 ///
+/// Obviously, the callback can also be defined manually, without using a channel, and passed
+/// to the [`callback`](crate::pubsub::SubscriberBuilder::callback) method.
+/// In this case the handler type is `()` and no additional methods are available on the
+/// subscriber object.
+///
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let subscriber = session.declare_subscriber("key/expression")
+///    .callback(|sample| {
+///        println!("Received: {:?}", sample);
+///    }).await.unwrap();
+/// # }
+/// ```
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
@@ -610,16 +631,16 @@ pub mod handlers {
 }
 
 /// # Quality of service primitives
-/// 
+///
 /// This module provides types and enums to configure the quality of service (QoS) of Zenoh
 /// operations, such as reliability and congestion control.
 /// These parameters can be set via the corresponding builder methods, e.g.,
-/// [reliability](crate::pubsub::PublisherBuilder::reliability), 
+/// [reliability](crate::pubsub::PublisherBuilder::reliability),
 /// [priority](crate::pubsub::PublisherBuilder::priority) or
 /// [congestion_control](crate::pubsub::PublisherBuilder::congestion_control).
 ///
 /// # Example
-/// 
+///
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
@@ -630,7 +651,7 @@ pub mod handlers {
 ///   .congestion_control(zenoh::qos::CongestionControl::Block)
 ///   .await.unwrap();
 /// # }
-/// 
+///
 pub mod qos {
     pub use zenoh_protocol::core::CongestionControl;
     #[zenoh_macros::unstable]
@@ -643,9 +664,20 @@ pub mod qos {
 ///
 /// Scouting is the process of discovering Zenoh nodes in the network.
 /// The scouting process depends on the transport layer and the Zenoh configuration.
-/// 
+///
 /// See more details at <https://zenoh.io/docs/getting-started/deployment/#scouting>.
-/// 
+///
+/// # Example
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::config::WhatAmI;
+/// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, zenoh::Config::default()).await.unwrap();
+/// while let Ok(hello) = scout.recv_async().await {
+///     println!("Discovered node: {}", hello);
+/// }
+/// # }
+/// ```
 pub mod scouting {
     pub use zenoh_config::wrappers::Hello;
 
@@ -661,14 +693,14 @@ pub mod scouting {
 /// It's possible to achieve this by declaring special publishers and queryables, but this task is
 /// not straightforward, so a dedicated API is warranted.
 ///
-/// The [liveliness](Session::liveliness) API allows a node to declare a 
+/// The [liveliness](Session::liveliness) API allows a node to declare a
 /// [LivelinessToken](liveliness::LivelinessToken)
 /// with a key expression assigned to it by [declare_token](liveliness::Liveliness::declare_token).
 /// Other nodes can use the liveliness API to query this
 /// key expression or subscribe to it to get notified when the token appears or disappears on the network
-/// using corresponding functions [get](liveliness::Liveliness::get) and 
+/// using corresponding functions [get](liveliness::Liveliness::get) and
 /// [declare_subscriber](liveliness::Liveliness::declare_subscriber).
-/// 
+///
 /// # Examples
 /// ### Declaring a token
 /// ```no_run
@@ -723,23 +755,50 @@ pub mod liveliness {
 }
 
 /// Timestamp support
-/// 
+///
 /// Each [`Sample`](crate::sample::Sample) has an optional [`Timestamp`](crate::time::Timestamp) associated with it.
-/// The timestamp can be set using the 
+/// The timestamp can be set using the
 /// [PublicationBuilder::timestamp](crate::pubsub::PublicationBuilder::timestamp) method when performing a
 /// [`put`](crate::pubsub::Publisher::put) operation or by
-/// [ReplyBuilder::timestamp](crate::query::ReplyBuilder::timestamp) when replying to a query with 
+/// [ReplyBuilder::timestamp](crate::query::ReplyBuilder::timestamp) when replying to a query with
 /// [reply](crate::query::Query::reply).
-/// 
+///
 /// The timestamp consists of the time value itself and unique
 /// [clock](https://docs.rs/uhlc/latest/uhlc/) identifier. Each
 /// [Session](crate::session::Session) has its own clock, so the [new_timestamp](crate::session::Session::new_timestamp)
 /// method can be used to create a new timestamp with the session's identifier.
+///
+/// # Examples
+/// Sending a value with a timestamp
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # use zenoh::time::Timestamp;
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// # let publisher = session.declare_publisher("key/expression").await.unwrap();
+/// let timestamp = session.new_timestamp();
+/// publisher.put("value").timestamp(timestamp).await.unwrap();
+/// # }
+/// ```
+///
+/// Receiving a value with a timestamp
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// # let subscriber = session.declare_subscriber("key/expression").await.unwrap();
+/// while let Ok(sample) = subscriber.recv_async().await {
+///     if let Some(timestamp) = sample.timestamp() {
+///         println!("Received value with timestamp: {}", timestamp.to_string_rfc3339_lossy());
+///     }
+/// }
+/// # }
+/// ```
 pub mod time {
     pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 }
 
-/// Configuration to pass to [`open`] and [`scout`] functions and associated constants.
+/// # Configuration to pass to [`open`] and [`scout`] functions and associated constants.
 ///
 /// The [`Config`](crate::config::Config) object contains all parameters necessary to configure
 /// a Zenoh session or the scouting process. Usually a configuration file is stored in the json or
@@ -752,6 +811,16 @@ pub mod time {
 /// [available](https://github.com/eclipse-zenoh/zenoh/blob/release/1.0.0/DEFAULT_CONFIG.json5)
 /// in the Zenoh repository.
 ///
+/// # Example
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::config::Config;
+/// use serde_json::json;
+/// let mut config = Config::from_file("path/to/config.json5").unwrap();
+/// config.insert_json5("scouting/multicast/enabled", &json!(false).to_string()).unwrap();
+/// let session = zenoh::open(config).await.unwrap();
+/// # }
 pub mod config {
     pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
