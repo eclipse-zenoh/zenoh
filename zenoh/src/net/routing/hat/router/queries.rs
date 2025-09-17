@@ -250,10 +250,6 @@ fn propagate_simple_queryable(
             .map(|src_face| dst_face.id != src_face.id)
             .unwrap_or(true)
             && (current.is_none() || current.unwrap().1 != info)
-            && face_hat!(dst_face)
-                .remote_interests
-                .values()
-                .any(|i| i.options.queryables() && i.matches(res))
             && if full_peers_net {
                 dst_face.whatami == WhatAmI::Client
             } else {
@@ -267,6 +263,10 @@ fn propagate_simple_queryable(
                         })
                         .unwrap_or(true)
             }
+            && face_hat!(dst_face)
+                .remote_interests
+                .values()
+                .any(|i| i.options.queryables() && i.matches(res))
         {
             let id = current
                 .map(|c| c.0)
