@@ -32,7 +32,7 @@
 //! normally each session has its own runtime.)
 //!
 //! The session allows to declare publishers, subscribers, queriers, queryables, etc.
-//! A session is created by the [open](crate::open) function, which takes a [Config](crate::config) object as an argument.
+//! A session is created by the [open] function, which takes a [config] as an argument.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
 //! Data can be sent directly between nodes or routed through intermediate nodes.
@@ -42,13 +42,13 @@
 //! ## Publish/Subscribe
 //!
 //! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher)
-//! and consumed by [Subscribers](crate::pubsub::Subscriber). See the [pubsub](crate::pubsub) API for details.
+//! and consumed by [Subscribers](crate::pubsub::Subscriber). See the [pubsub] API for details.
 //!
 //! ## Query/Reply
 //!
 //! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable)
 //! and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
-//! More details are available in the [query](crate::query) API.
+//! More details are available in the [query] API.
 //!
 //! ## Key Expressions
 //!
@@ -58,18 +58,19 @@
 //!
 //! ## Data representation
 //!
-//! Data is received as [Samples](crate::sample), which contain the payload and all metadata associated with the data.
-//! The raw byte payload is represented as [ZBytes](crate::bytes), which provides mechanisms for zero-copy creation and access.
+//! Data is received as [sample] which contain the payload and all metadata associated with the data.
+//! The raw byte payload object [`ZBytes`](crate::bytes) which provides mechanisms for zero-copy creation and access
+//! is available in [bytes] module.
 //! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization
 //! of basic types and structures for `ZBytes`.
 //!
 //! ## Other components
 //!
 //! Other important functionalities of Zenoh are:
-//! - [Scouting](crate::scouting) to discover Zenoh nodes in the network. Note that it's not necessary to explicitly
+//! - [scouting] to discover Zenoh nodes in the network. Note that it's not necessary to explicitly
 //!   discover other nodes just to publish, subscribe, or query data.
-//! - Monitor [liveliness](crate::liveliness) to get notified when a specified resource appears or disappears in the network.
-//! - The [matching](crate::matching) API allows the active side of communication (publisher, querier) to know whether
+//! - Monitor [liveliness] to get notified when a specified resource appears or disappears in the network.
+//! - The [matching] API allows the active side of communication (publisher, querier) to know whether
 //!   there are any interested parties on the other side (subscriber, queryable) which allows to save bandwidth and CPU resources.
 //!
 //! ## Builders
@@ -93,7 +94,7 @@
 //! The builders provide methods [with](crate::pubsub::SubscriberBuilder::with) to assign an arbitrary channel instead of
 //! the default one, and [callback](crate::pubsub::SubscriberBuilder::callback) to assign a callback function.
 //!
-//! See more details in the [handlers](crate::handlers) module documentation.
+//! See more details in the [handlers] module documentation.
 //!
 //! # Usage examples
 //!
@@ -297,7 +298,7 @@ pub mod key_expr {
 /// the session will close all associated entities.
 ///
 /// All session parameters are specified in the [`Config`](crate::config) object passed to the
-/// [`open`](crate::open) function.
+/// [`open`] function.
 ///
 /// Objects created by the session (for example, a [`Publisher`](crate::pubsub::Publisher) via
 /// [`declare_publisher`](crate::session::Session::declare_publisher) or a
@@ -351,7 +352,7 @@ pub mod sample {
     };
 }
 
-/// # Payload primitives
+/// # Payload primitives and encoding
 ///
 /// The [`ZBytes`](crate::bytes::ZBytes) type is Zenoh's representation of raw byte data.
 /// It provides mechanisms for zero-copy creation and access (`From<Vec<u8>>` and
@@ -362,6 +363,8 @@ pub mod sample {
 /// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) and
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
 ///
+/// The module also provides the [`Encoding`](crate::bytes::Encoding) enum to specify the encoding of the payload.
+/// 
 /// # Examples
 ///
 /// ### Creating ZBytes
@@ -373,7 +376,7 @@ pub mod sample {
 /// # }
 /// ```
 ///
-/// ### Converting ZBytes to String
+/// ### Converting `ZBytes` to `String`
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
@@ -383,7 +386,7 @@ pub mod sample {
 /// # }
 /// ```
 ///
-/// ### Converting ZBytes to Vec<u8>
+/// ### Converting `ZBytes` to `Vec<u8>`
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
@@ -762,7 +765,7 @@ pub mod liveliness {
 ///
 /// The timestamp consists of the time value itself and unique
 /// [clock](https://docs.rs/uhlc/latest/uhlc/) identifier. Each
-/// [`Session`](crate::session::Session) has its own clock, so the [`new_timestamp`](crate::session::Session::new_timestamp)
+/// [`Session`] has its own clock, the [`new_timestamp`](crate::session::Session::new_timestamp)
 /// method can be used to create a new timestamp with the session's identifier.
 ///
 /// # Examples
@@ -797,16 +800,17 @@ pub mod time {
 
 /// # Configuration to pass to [`open`] and [`scout`] functions and associated constants.
 ///
-/// The [`Config`](crate::config::Config) object contains all parameters necessary to configure
+/// The [`Config`] object contains all parameters necessary to configure
 /// a Zenoh session or the scouting process. Usually a configuration file is stored in the json or
 /// yaml format and loaded using the [`Config::from_file`](crate::config::Config::from_file) method.
 /// It's also possible to read or
-/// modify individual elements of the [`Config`] with the [`Config::insert_json5`](crate::config::Config::insert_json5)
+/// modify individual elements of the `Config` with the 
+/// [`Config::insert_json5`](crate::config::Config::insert_json5)
 /// and [`Config::get_json`](crate::config::Config::get_json) methods.
 ///
-/// An example configuration file is
-/// [available](https://github.com/eclipse-zenoh/zenoh/blob/release/1.0.0/DEFAULT_CONFIG.json5)
-/// in the Zenoh repository.
+/// An example configuration file is available in the [`Config`] documentation section
+/// and in the Zenoh repository as 
+/// [DEFAULT_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/blob/release/1.0.0/DEFAULT_CONFIG.json5)
 ///
 /// # Example
 /// ```no_run
