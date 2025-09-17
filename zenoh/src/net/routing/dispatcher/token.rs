@@ -26,12 +26,11 @@ use zenoh_protocol::{
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
     dispatcher::face::Face,
-    hat::{BaseContext, InterestProfile, SendDeclare},
+    hat::{BaseContext, HatTrait, InterestProfile, SendDeclare},
     router::Resource,
 };
 
 impl Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(id = id, expr = %expr, node_id = node_id))]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_token(
         &self,
@@ -80,8 +79,19 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                for (bound, hat) in tables.hats.iter_mut() {
-                    hat.declare_token(
+                if let Some(interest_id) = interest_id {
+                    if !self.state.bound.is_north() {
+                        tracing::error!(
+                            id,
+                            "Received current token from south/eastwest-bound face. \
+                            This message should only flow downstream"
+                        );
+                        return;
+                    }
+
+                    let (upstream_hat, downstream_hats) = tables.hats.partition_north_mut();
+
+                    upstream_hat.declare_current_token(
                         BaseContext {
                             tables_lock: &self.tables,
                             tables: &mut tables.data,
@@ -92,8 +102,27 @@ impl Face {
                         &mut res,
                         node_id,
                         interest_id,
-                        InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                        downstream_hats
+                            .into_iter()
+                            .map(|(b, d)| (b, &mut **d as &mut dyn HatTrait))
+                            .collect(),
                     );
+                } else {
+                    for (bound, hat) in tables.hats.iter_mut() {
+                        hat.declare_token(
+                            BaseContext {
+                                tables_lock: &self.tables,
+                                tables: &mut tables.data,
+                                src_face: &mut self.state.clone(),
+                                send_declare,
+                            },
+                            id,
+                            &mut res,
+                            node_id,
+                            interest_id,
+                            InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                        );
+                    }
                 }
             }
             None => tracing::error!(

@@ -76,15 +76,18 @@ impl Hat {
             .unwrap()
     }
 
-    pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
-        &tables.hats[self.bound].faces
+    pub(crate) fn faces<'tbl>(
+        &self,
+        tables: &'tbl TablesData,
+    ) -> &'tbl HashMap<usize, Arc<FaceState>> {
+        &tables.faces
     }
 
     pub(crate) fn faces_mut<'t>(
         &self,
         tables: &'t mut TablesData,
     ) -> &'t mut HashMap<usize, Arc<FaceState>> {
-        &mut tables.hats[self.bound].faces
+        &mut tables.faces
     }
 
     pub(crate) fn face<'t>(
@@ -92,10 +95,7 @@ impl Hat {
         tables: &'t TablesData,
         zid: &ZenohIdProto,
     ) -> Option<&'t Arc<FaceState>> {
-        tables.hats[self.bound]
-            .faces
-            .values()
-            .find(|face| face.zid == *zid)
+        tables.faces.values().find(|face| face.zid == *zid)
     }
 
     /// Returns `true` if `face` belongs to this [`Hat`].
@@ -114,6 +114,16 @@ impl Hat {
             tracing::debug!(%ctx.face, %self.bound, "owned_face_contexts");
             self.owns(&ctx.face)
         })
+    }
+
+    pub(crate) fn owned_faces<'hat, 'tbl>(
+        &'hat self,
+        tables: &'tbl TablesData,
+    ) -> impl Iterator<Item = &'tbl Arc<FaceState>> + 'hat
+    where
+        'tbl: 'hat,
+    {
+        tables.faces.values().filter(|face| self.owns(face))
     }
 }
 
@@ -139,6 +149,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.bound))]
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
@@ -283,6 +294,10 @@ impl HatBaseTrait for Hat {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn whatami(&self) -> WhatAmI {
+        WhatAmI::Client
     }
 }
 

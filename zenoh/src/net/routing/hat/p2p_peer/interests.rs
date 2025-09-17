@@ -34,7 +34,7 @@ use crate::net::routing::{
         },
         resource::Resource,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatInterestTrait, HatTrait},
+    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait},
     RoutingContext,
 };
 
@@ -86,6 +86,7 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
     fn propagate_declarations(
         &mut self,
         mut ctx: BaseContext,
@@ -142,10 +143,16 @@ impl HatInterestTrait for Hat {
         if !upstream_hat.propagate_interest(ctx.reborrow(), msg, res, &src_zid)
             && msg.mode.current()
         {
+            tracing::trace!(
+                id = msg.id,
+                src = %ctx.src_face,
+                "Finalizing current interest; it was not propagated upstream"
+            );
             self.finalize_current_interest(ctx, msg.id, &src_zid);
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
     fn propagate_interest(
         &mut self,
         ctx: BaseContext,
@@ -240,6 +247,7 @@ impl HatInterestTrait for Hat {
         Arc::strong_count(&interest) > 1
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
     fn unregister_current_interest(
         &mut self,
         mut ctx: BaseContext,
@@ -277,6 +285,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
     fn finalize_current_interest(
         &mut self,
         ctx: BaseContext,
@@ -310,6 +319,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
     fn unregister_interest(
         &mut self,
         ctx: BaseContext,
@@ -334,6 +344,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
     fn finalize_interest(
         &mut self,
         ctx: BaseContext,

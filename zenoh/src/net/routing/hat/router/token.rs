@@ -30,8 +30,16 @@ use super::Hat;
 use crate::net::{
     protocol::network::Network,
     routing::{
-        dispatcher::{face::FaceState, interests::RemoteInterest, tables::TablesData},
-        hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, InterestProfile, SendDeclare},
+        dispatcher::{
+            face::FaceState,
+            gateway::BoundMap,
+            interests::{CurrentInterest, RemoteInterest},
+            tables::TablesData,
+        },
+        hat::{
+            BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait,
+            InterestProfile, SendDeclare,
+        },
         router::{FaceContext, NodeId, Resource, DEFAULT_NODE_ID},
         RoutingContext,
     },
@@ -47,6 +55,7 @@ impl Hat {
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         routing_context: NodeId,
+        interest_id: Option<InterestId>,
     ) {
         for child in clildren {
             if net.graph.contains_node(*child) {
@@ -59,9 +68,15 @@ impl Hat {
                             let push_declaration = self.push_declaration_profile(&someface);
                             let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
 
+                            tracing::trace!(
+                                interest_id,
+                                keyexpr = %res.expr(),
+                                dst = %net.graph[*child].zid.short(),
+                                "Propagating token to tree child"
+                            );
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
-                                    interest_id: None,
+                                    interest_id,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType {
@@ -74,12 +89,22 @@ impl Hat {
                                 },
                                 res.expr().to_string(),
                             ));
+                        } else {
+                            tracing::trace!(
+                                face = %someface,
+                                "Will not propagate token to child face"
+                            );
                         }
                     }
                     None => {
                         tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid)
                     }
                 }
+            } else {
+                tracing::error!(
+                    node_id = child.index() as NodeId,
+                    "Network graph doesn't contain destination node"
+                );
             }
         }
     }
@@ -155,7 +180,7 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in self.faces(tables).values().cloned().collect::<Vec<_>>() {
+        for mut dst_face in self.owned_faces(tables).cloned().collect::<Vec<_>>() {
             self.propagate_simple_token_to(tables, &mut dst_face, res, src_face, send_declare);
         }
     }
@@ -166,11 +191,16 @@ impl Hat {
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
+        interest_id: Option<InterestId>,
     ) {
         let net = self.routers_net.as_ref().unwrap();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
+                    tracing::trace!(
+                        dst = ?&net.trees[tree_sid.index()].children,
+                        "Propagating token to tree children"
+                    );
                     self.send_sourced_token_to_net_clildren(
                         tables,
                         net,
@@ -178,6 +208,7 @@ impl Hat {
                         res,
                         src_face,
                         tree_sid.index() as NodeId,
+                        interest_id,
                     );
                 } else {
                     tracing::trace!(
@@ -202,6 +233,7 @@ impl Hat {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: ZenohIdProto,
+        interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
         profile: InterestProfile,
     ) {
@@ -218,13 +250,13 @@ impl Hat {
                         && interest
                             .res
                             .as_ref()
-                            .map(|r| r.matches(&res))
+                            .map(|r| r.matches(res))
                             .unwrap_or(true)
                 })
-                || router == tables.zid
+                || router != tables.zid
             {
                 // Propagate liveliness to routers
-                self.propagate_sourced_token(tables, res, Some(face), &router);
+                self.propagate_sourced_token(tables, res, Some(face), &router, None);
             }
         }
 
@@ -238,10 +270,19 @@ impl Hat {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: ZenohIdProto,
+        interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
         profile: InterestProfile,
     ) {
-        self.register_router_token(tables, face, res, router, send_declare, profile);
+        self.register_router_token(
+            tables,
+            face,
+            res,
+            router,
+            interest_id,
+            send_declare,
+            profile,
+        );
     }
 
     fn register_simple_token(
@@ -280,12 +321,13 @@ impl Hat {
         face: &mut Arc<FaceState>,
         id: TokenId,
         res: &mut Arc<Resource>,
+        interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
         profile: InterestProfile,
     ) {
         self.register_simple_token(tables, face, id, res);
         let zid = tables.zid;
-        self.register_router_token(tables, face, res, zid, send_declare, profile);
+        self.register_router_token(tables, face, res, zid, interest_id, send_declare, profile);
     }
 
     #[inline]
@@ -784,6 +826,7 @@ impl Hat {
                                     res,
                                     None,
                                     tree_sid as NodeId,
+                                    None,
                                 );
                             }
                         }
@@ -848,7 +891,11 @@ impl Hat {
         source: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        if mode.current() && (face.whatami == WhatAmI::Client || face.whatami == WhatAmI::Peer) {
+        if mode.current()
+            && (face.whatami == WhatAmI::Client
+                || face.whatami == WhatAmI::Peer
+                || !face.bound.is_north())
+        {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 if aggregate {
@@ -888,7 +935,8 @@ impl Hat {
                                     ctx.face.id != face.id
                                         && ctx.token
                                         && (ctx.face.whatami == WhatAmI::Client
-                                            || face.whatami == WhatAmI::Client)
+                                            || face.whatami == WhatAmI::Client
+                                            || !face.bound.is_north())
                                 }))
                         {
                             let id = self.make_token_id(token, face, mode);
@@ -927,7 +975,8 @@ impl Hat {
                             || token.face_ctxs.values().any(|ctx| {
                                 ctx.token
                                     && (ctx.face.whatami != WhatAmI::Peer
-                                        || face.whatami != WhatAmI::Peer)
+                                        || face.whatami != WhatAmI::Peer
+                                        || !face.bound.is_north())
                             }))
                     {
                         let id = self.make_token_id(token, face, mode);
@@ -954,14 +1003,14 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
-
-        _interest_id: Option<InterestId>,
+        interest_id: Option<InterestId>,
         profile: InterestProfile,
     ) {
         let router = if self.owns_router(ctx.src_face) {
@@ -977,12 +1026,12 @@ impl HatTokenTrait for Hat {
 
         match ctx.src_face.whatami {
             WhatAmI::Router => {
-                // FIXME(regions): InterestProfile is ignored
                 self.declare_router_token(
                     ctx.tables,
                     ctx.src_face,
                     res,
                     router,
+                    interest_id,
                     ctx.send_declare,
                     profile,
                 );
@@ -995,6 +1044,7 @@ impl HatTokenTrait for Hat {
                     ctx.src_face,
                     id,
                     res,
+                    interest_id,
                     ctx.send_declare,
                     profile,
                 );
@@ -1002,6 +1052,7 @@ impl HatTokenTrait for Hat {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
@@ -1037,5 +1088,57 @@ impl HatTokenTrait for Hat {
             }
             WhatAmI::Peer | WhatAmI::Client => self.forget_simple_token(ctx, id, profile),
         }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, interest_id))]
+    fn declare_current_token(
+        &mut self,
+        ctx: BaseContext,
+        id: TokenId,
+        res: &mut Arc<Resource>,
+        node_id: NodeId,
+        interest_id: InterestId,
+        mut downstream_hats: BoundMap<&mut dyn HatTrait>,
+    ) {
+        debug_assert!(self.bound.is_north());
+
+        if let Some(interest) = self
+            .gateway_pending_current_interests
+            .get(&interest_id)
+            .map(|p| &p.interest)
+        {
+            let hat = &mut downstream_hats[interest.src_face.bound];
+            hat.propagate_current_token(ctx, res, interest);
+        } else {
+            tracing::error!(
+                id = interest_id,
+                keyexpr = res.expr(),
+                src = %ctx.src_face,
+                "Received current token with unknown interest id"
+            );
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, interest_id = interest.src_interest_id))]
+    fn propagate_current_token(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        interest: &CurrentInterest,
+    ) {
+        debug_assert!(!self.bound.is_north());
+
+        if interest.mode == InterestMode::CurrentFuture {
+            unimplemented!()
+        }
+
+        // REVIEW(regions): router entities are broadcast
+        self.propagate_sourced_token(
+            ctx.tables,
+            res,
+            None,
+            &ctx.tables.zid,
+            Some(interest.src_interest_id),
+        );
     }
 }

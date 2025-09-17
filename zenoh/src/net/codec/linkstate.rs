@@ -52,6 +52,9 @@ where
         if x.link_weights.is_some() {
             options |= linkstate::WGT;
         }
+        if x.is_gateway {
+            options |= linkstate::GWY;
+        }
         codec.write(&mut *writer, options)?;
 
         // Body

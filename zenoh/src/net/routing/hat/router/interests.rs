@@ -29,15 +29,16 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState,
         gateway::{BoundMap, GatewayPendingCurrentInterest},
-        interests::{finalize_pending_interest, RemoteInterest},
+        interests::{finalize_pending_interest, CurrentInterest, RemoteInterest},
         resource::Resource,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait},
+    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, SendDeclare},
     router::NodeId,
     RoutingContext,
 };
 
 impl HatInterestTrait for Hat {
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn propagate_declarations(
         &mut self,
         mut ctx: BaseContext,
@@ -65,10 +66,16 @@ impl HatInterestTrait for Hat {
         if !upstream_hat.propagate_interest(ctx.reborrow(), msg, res, &src_zid)
             && msg.mode.current()
         {
+            tracing::trace!(
+                id = msg.id,
+                src = %ctx.src_face,
+                "Finalizing current interest; it was not propagated upstream"
+            );
             self.finalize_current_interest(ctx, msg.id, &src_zid);
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn propagate_interest(
         &mut self,
         mut ctx: BaseContext,
@@ -113,6 +120,7 @@ impl HatInterestTrait for Hat {
         false
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn unregister_current_interest(
         &mut self,
         ctx: BaseContext,
@@ -128,45 +136,58 @@ impl HatInterestTrait for Hat {
 
         if let Some(pending_interest) = self.gateway_pending_current_interests.remove(&id) {
             pending_interest.cancellation_token.cancel();
-            let hat = &mut downstream_hats[pending_interest.src_face.bound];
+            let hat = &mut downstream_hats[pending_interest.interest.src_face.bound];
             hat.finalize_current_interest(ctx, id, &pending_interest.src_zid);
         };
     }
 
-    fn finalize_current_interest(&mut self, ctx: BaseContext, id: InterestId, zid: &ZenohIdProto) {
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn finalize_current_interest(
+        &mut self,
+        mut ctx: BaseContext,
+        id: InterestId,
+        zid: &ZenohIdProto,
+    ) {
         if self.router_remote_interests.contains_key(&(*zid, id)) {
             let Some(dst_node_id) = self.net().get_idx(zid).map(|idx| idx.index() as NodeId) else {
                 return;
             };
 
-            self.send_point_to_point(ctx, dst_node_id, |next_hop| {
-                next_hop
-                    .primitives
-                    .send_declare(RoutingContext::new(&mut Declare {
-                        interest_id: Some(id),
-                        ext_qos: declare::ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType {
-                            node_id: dst_node_id,
-                        },
-                        body: DeclareBody::DeclareFinal(DeclareFinal),
-                    }));
-            });
+            self.send_declare_point_to_point(
+                ctx.reborrow(),
+                dst_node_id,
+                |send_declare, next_hop| {
+                    send_declare(
+                        &next_hop.primitives,
+                        RoutingContext::new(Declare {
+                            interest_id: Some(id),
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType {
+                                node_id: dst_node_id,
+                            },
+                            body: DeclareBody::DeclareFinal(DeclareFinal),
+                        }),
+                    );
+                },
+            );
         } else if let Some(src_face) = self.face(ctx.tables, zid) {
-            src_face
-                .primitives
-                .send_declare(RoutingContext::new(&mut Declare {
+            (ctx.send_declare)(
+                &src_face.primitives,
+                RoutingContext::new(Declare {
                     interest_id: Some(id),
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareFinal(DeclareFinal),
-                }));
+                }),
+            );
         } else {
             todo!()
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn unregister_interest(
         &mut self,
         mut ctx: BaseContext,
@@ -203,6 +224,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn finalize_interest(
         &mut self,
         mut ctx: BaseContext,
@@ -251,7 +273,7 @@ impl Hat {
     ) -> bool {
         let Some(gwy_node_id) = self.subregion_gateway() else {
             tracing::debug!(
-                bound = ?self.bound,
+                bnd = ?self.bound,
                 "No gateway found in router subregion. \
                 Will not forward sourced interest message"
             );
@@ -298,7 +320,7 @@ impl Hat {
     ) {
         let Some(gwy_node_id) = self.subregion_gateway() else {
             tracing::debug!(
-                bound = ?self.bound,
+                bnd = ?self.bound,
                 "No gateway found in router subregion. \
                 Will not forward sourced interest finalization message"
             );
@@ -358,14 +380,47 @@ impl Hat {
         send_message(next_hop);
     }
 
+    /// Sends a declare message to the router identified by `dst_node_id`.
+    fn send_declare_point_to_point(
+        &self,
+        ctx: BaseContext,
+        dst_node_id: NodeId,
+        mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
+    ) {
+        // FIXME(regions): refactor (send_point_to_point)
+        let net = self.net();
+        let Some(tree) = net.trees.get(dst_node_id as usize) else {
+            return;
+        };
+        let Some(Some(next_hop_node_id)) = tree.directions.get(dst_node_id as usize) else {
+            return;
+        };
+        let Some(next_hop) = net
+            .graph
+            .node_weight(*next_hop_node_id)
+            .map(|node| &node.zid)
+        else {
+            return;
+        };
+        let Some(next_hop) = self.face(ctx.tables, next_hop) else {
+            tracing::error!(zid = ?next_hop, "Unable to find next-hop face in point-to-point route");
+            return;
+        };
+        send_message(ctx.send_declare, next_hop)
+    }
+
     /// Identifies the gateway of this hat's subregion (if any).
     fn subregion_gateway(&self) -> Option<NodeId> {
         // TODO(regions2): elect the primary gateway
         let net = self.net();
-        let mut gwys = net
-            .graph
-            .node_indices()
-            .filter(|idx| net.graph[*idx].is_gateway);
+        let mut gwys = net.graph.node_indices().filter(|idx| {
+            tracing::trace!(
+                zid = %net.graph[*idx].zid.short(),
+                is_gwy = net.graph[*idx].is_gateway,
+                "Gateway candidate node"
+            );
+            net.graph[*idx].is_gateway
+        });
 
         let gwy = gwys.next()?;
 
@@ -415,7 +470,7 @@ impl Hat {
                     .as_any_mut()
                     .downcast_mut::<Self>()
                     .unwrap();
-                let Some(pending_interest) =
+                let Some(current_interest) =
                     this.gateway_pending_current_interests.remove(&interest_id)
                 else {
                     return;
@@ -432,9 +487,9 @@ impl Hat {
                 }
 
                 tracing::debug!(
-                    ?pending_interest.src_face,
-                    ?pending_interest.src_interest_id,
-                    ?pending_interest.src_zid,
+                    ?current_interest.interest.src_face,
+                    ?current_interest.interest.src_interest_id,
+                    ?current_interest.src_zid,
                     "Finalizing declarations to source face of current interest",
                 );
                 let tables = &mut *wtables;
@@ -445,8 +500,8 @@ impl Hat {
                         src_face: &mut src_face,
                         send_declare: &mut |p, m| m.with_mut(|m| p.send_declare(m)),
                     },
-                    pending_interest.src_interest_id,
-                    &pending_interest.src_zid,
+                    current_interest.interest.src_interest_id,
+                    &current_interest.src_zid,
                 );
             };
 
@@ -464,10 +519,12 @@ impl Hat {
         self.gateway_pending_current_interests.insert(
             interest_id,
             GatewayPendingCurrentInterest {
-                src_face: ctx.src_face.clone(),
-                src_interest_id: msg.id,
                 src_zid: *src_zid,
-                mode: msg.mode,
+                interest: CurrentInterest {
+                    mode: msg.mode,
+                    src_face: ctx.src_face.clone(),
+                    src_interest_id: msg.id,
+                },
                 cancellation_token,
                 rejection_token,
             },
@@ -534,9 +591,6 @@ impl Hat {
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
     ) {
-        let Some(src_zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
-            return;
-        };
         let src_node_id = self.net().idx.index() as NodeId;
 
         // FIXME(regions): send to the proper next-hop face in the tree centered at the source
@@ -579,6 +633,9 @@ impl Hat {
         }
 
         if msg.mode.future() {
+            let Some(src_zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
+                return;
+            };
             // state: src has an interest
             self.router_remote_interests.insert(
                 (src_zid, msg.id),

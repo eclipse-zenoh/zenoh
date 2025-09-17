@@ -253,7 +253,7 @@ impl Hat {
                             .map(|r| r.matches(&res))
                             .unwrap_or(true)
                 })
-                || router == tables.zid
+                || router != tables.zid
             {
                 // Propagate subscription to routers
                 self.propagate_sourced_subscription(tables, res, sub_info, Some(face), &router);
@@ -1093,7 +1093,7 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bound = %self.bound), ret)]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.bound), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,

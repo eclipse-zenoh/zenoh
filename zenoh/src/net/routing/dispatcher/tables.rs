@@ -121,6 +121,8 @@ pub(crate) struct TablesData {
     pub(crate) next_interceptor_version: AtomicUsize,
     pub(crate) interceptors: Vec<InterceptorFactory>,
 
+    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>, // REVIEW(regions): move under TablesData?
+
     pub(crate) hats: BoundMap<HatTablesData>,
 }
 
@@ -132,7 +134,6 @@ impl Debug for TablesData {
 
 pub(crate) struct HatTablesData {
     pub(crate) whatami: WhatAmI,
-    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>, // REVIEW(regions): move under TablesData?
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) routes_version: RoutesVersion,
@@ -142,7 +143,6 @@ impl HatTablesData {
     pub(crate) fn new(whatami: WhatAmI) -> Self {
         HatTablesData {
             whatami,
-            faces: HashMap::new(),
             mcast_groups: vec![],
             mcast_faces: vec![],
             routes_version: 0,
@@ -175,6 +175,7 @@ impl TablesData {
             next_interceptor_version: AtomicUsize::new(0),
             hats: hat,
             face_counter: 0,
+            faces: HashMap::default(),
         })
     }
 
@@ -226,6 +227,7 @@ pub struct TablesLock {
     pub tables: RwLock<Tables>,
     pub(crate) ctrl_lock: Mutex<()>,
     pub(crate) queries_lock: RwLock<()>,
+    pub(crate) zid: ZenohIdProto, // FIXME(regions): refactor/remove
 }
 
 pub struct Tables {
@@ -251,12 +253,7 @@ impl TablesLock {
             .next_interceptor_version
             .fetch_add(1, Ordering::SeqCst);
 
-        for face in tables
-            .data
-            .hats
-            .iter()
-            .flat_map(|(_, hat)| hat.faces.values())
-        {
+        for face in tables.data.faces.values() {
             face.set_interceptors_from_factories(&tables.data.interceptors, version + 1)
         }
         Ok(())

@@ -91,6 +91,7 @@ pub(crate) struct RuntimeState {
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
+    span: tracing::Span,
 }
 
 pub struct WeakRuntime {
@@ -181,6 +182,7 @@ impl RuntimeBuilder {
         let shm_init_mode = *config.transport.shared_memory.mode();
 
         let config = Notifier::new(crate::config::Config(config));
+        let span = tracing::trace_span!("rt", zid = %zid.short());
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid: zid.into(),
@@ -197,6 +199,7 @@ impl RuntimeBuilder {
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
+                span,
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -384,6 +387,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
@@ -427,6 +431,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
@@ -464,6 +469,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn new_link(&self, link: Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
@@ -471,6 +477,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn del_link(&self, link: Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -478,6 +485,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn closed(&self) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.closed();
         Runtime::closed_session(self);
         for handler in &self.slave_handlers {
@@ -581,9 +589,7 @@ impl Closee for Arc<RuntimeState> {
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
         tables.data.root_res.close();
-        for hat in tables.data.hats.values_mut() {
-            hat.faces.clear();
-        }
+        tables.data.faces.clear();
     }
 }
 

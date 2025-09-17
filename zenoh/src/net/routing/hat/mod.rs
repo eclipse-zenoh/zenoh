@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{any::Any, collections::HashMap, fmt::Display, sync::Arc};
 
 use zenoh_config::{Config, WhatAmI};
 use zenoh_protocol::{
@@ -47,7 +47,7 @@ use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
     routing::dispatcher::{
         gateway::{Bound, BoundMap},
-        interests::RemoteInterest,
+        interests::{CurrentInterest, RemoteInterest},
     },
     runtime::Runtime,
 };
@@ -99,6 +99,15 @@ impl InterestProfile {
             Self::Pull
         } else {
             Self::Push
+        }
+    }
+}
+
+impl Display for InterestProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InterestProfile::Push => f.write_str("push"),
+            InterestProfile::Pull => f.write_str("pull"),
         }
     }
 }
@@ -204,6 +213,8 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any(&self) -> &dyn Any;
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn whatami(&self) -> WhatAmI;
 }
 
 pub(crate) trait HatInterestTrait {
@@ -408,6 +419,27 @@ pub(crate) trait HatTokenTrait {
         node_id: NodeId,
         interest_id: Option<InterestId>,
         profile: InterestProfile,
+    );
+
+    /// Handles token declaration.
+    ///
+    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
+    /// or if `profile` is [`InterestProfile::Push`].
+    fn declare_current_token(
+        &mut self,
+        ctx: BaseContext,
+        id: TokenId,
+        res: &mut Arc<Resource>,
+        node_id: NodeId,
+        interest_id: InterestId,
+        downstream_hats: BoundMap<&mut dyn HatTrait>,
+    );
+
+    fn propagate_current_token(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        interest: &CurrentInterest,
     );
 
     /// Handles token undeclaration.

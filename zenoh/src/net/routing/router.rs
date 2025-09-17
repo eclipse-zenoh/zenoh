@@ -96,6 +96,7 @@ impl Router {
                 }),
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
+                zid,
             }),
         })
     }
@@ -125,7 +126,8 @@ impl Router {
         let zid = tables.data.zid;
         let fid = tables.data.face_counter;
         tables.data.face_counter += 1;
-        let newface = tables.data.hats[bound]
+        let newface = tables
+            .data
             .faces
             .entry(fid)
             .or_insert_with(|| {
@@ -188,7 +190,8 @@ impl Router {
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
 
-        let newface = tables.data.hats[bound]
+        let newface = tables
+            .data
             .faces
             .entry(fid)
             .or_insert_with(|| {

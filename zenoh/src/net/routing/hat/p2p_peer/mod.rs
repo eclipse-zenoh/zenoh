@@ -97,14 +97,14 @@ impl Hat {
     }
 
     pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
-        &tables.hats[self.bound].faces
+        &tables.faces
     }
 
     pub(crate) fn faces_mut<'t>(
         &self,
         tables: &'t mut TablesData,
     ) -> &'t mut HashMap<usize, Arc<FaceState>> {
-        &mut tables.hats[self.bound].faces
+        &mut tables.faces
     }
 
     pub(crate) fn mcast_groups<'t>(
@@ -119,10 +119,7 @@ impl Hat {
         tables: &'t TablesData,
         zid: &ZenohIdProto,
     ) -> Option<&'t Arc<FaceState>> {
-        tables.hats[self.bound]
-            .faces
-            .values()
-            .find(|face| face.zid == *zid)
+        tables.faces.values().find(|face| face.zid == *zid)
     }
 
     /// Returns `true` if `face` belongs to this [`Hat`].
@@ -140,6 +137,16 @@ impl Hat {
         res.face_ctxs
             .iter()
             .filter(move |(_, ctx)| self.owns(&ctx.face))
+    }
+
+    pub(crate) fn owned_faces<'hat, 'tbl>(
+        &'hat self,
+        tables: &'tbl TablesData,
+    ) -> impl Iterator<Item = &'tbl Arc<FaceState>> + 'hat
+    where
+        'tbl: 'hat,
+    {
+        tables.faces.values().filter(|face| self.owns(face))
     }
 }
 
@@ -203,6 +210,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.bound))]
     fn new_transport_unicast_face(
         &mut self,
         mut ctx: BaseContext,
@@ -336,6 +344,7 @@ impl HatBaseTrait for Hat {
         };
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
         tables: &mut TablesData,
@@ -358,6 +367,8 @@ impl HatBaseTrait for Hat {
                                 bail!("failed to decode link state");
                             };
 
+                            tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
+
                             net.link_states(list.link_states, zid, whatami);
                         }
                     };
@@ -366,8 +377,10 @@ impl HatBaseTrait for Hat {
         } else if oam.id == OAM_IS_GATEWAY {
             let zid = transport.get_zid()?;
             let Some(face) = self.face(tables, &zid) else {
-                bail!("Could not find transport face for ZID {zid}",)
+                bail!("Could not find transport face for ZID {zid}")
             };
+
+            tracing::trace!(id = %"OAM_IS_GATEWAY");
 
             self.face_hat_mut(&mut face.clone()).is_gateway = true;
 
@@ -428,6 +441,10 @@ impl HatBaseTrait for Hat {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn whatami(&self) -> WhatAmI {
+        WhatAmI::Peer
     }
 }
 

@@ -1,16 +1,12 @@
 use std::{
     fmt::{Debug, Display},
     ops::{Index, IndexMut},
-    sync::Arc,
 };
 
 use tokio_util::sync::CancellationToken;
-use zenoh_protocol::{
-    core::ZenohIdProto,
-    network::interest::{InterestId, InterestMode},
-};
+use zenoh_protocol::core::ZenohIdProto;
 
-use crate::net::routing::dispatcher::face::FaceState;
+use crate::net::routing::dispatcher::interests::CurrentInterest;
 
 /// Region identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -65,7 +61,7 @@ impl Bound {
 }
 
 // TODO(regions): optimization
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct BoundMap<D>(hashbrown::HashMap<Bound, D>);
 
 impl<D> BoundMap<D> {
@@ -180,12 +176,10 @@ impl<D> IndexMut<Bound> for BoundMap<D> {
 /// An interest of mode [`InterestMode::Current`] or [`InterestMode::CurrentFuture`]
 /// sent to the upstream region's gateway.
 pub(crate) struct GatewayPendingCurrentInterest {
-    pub(crate) src_face: Arc<FaceState>,
-    pub(crate) src_interest_id: InterestId,
+    pub(crate) interest: CurrentInterest,
     /// Source of the interest in the downstream region.
     /// Only necessary for router hats to enable point-to-point communication.
     pub(crate) src_zid: ZenohIdProto,
-    pub(crate) mode: InterestMode,
     pub(crate) cancellation_token: CancellationToken,
     pub(crate) rejection_token: CancellationToken,
 }

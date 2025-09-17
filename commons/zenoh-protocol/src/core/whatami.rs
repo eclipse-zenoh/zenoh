@@ -44,6 +44,14 @@ impl WhatAmI {
         }
     }
 
+    pub const fn short(self) -> &'static str {
+        match self {
+            Self::Router => "R",
+            Self::Peer => "P",
+            Self::Client => "C",
+        }
+    }
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;

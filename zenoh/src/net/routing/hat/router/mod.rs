@@ -181,14 +181,14 @@ impl Hat {
     }
 
     pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
-        &tables.hats[self.bound].faces
+        &tables.faces
     }
 
     pub(crate) fn faces_mut<'t>(
         &self,
         tables: &'t mut TablesData,
     ) -> &'t mut HashMap<usize, Arc<FaceState>> {
-        &mut tables.hats[self.bound].faces
+        &mut tables.faces
     }
 
     pub(crate) fn mcast_groups<'t>(
@@ -203,10 +203,7 @@ impl Hat {
         tables: &'t TablesData,
         zid: &ZenohIdProto,
     ) -> Option<&'t Arc<FaceState>> {
-        tables.hats[self.bound]
-            .faces
-            .values()
-            .find(|face| face.zid == *zid)
+        tables.faces.values().find(|face| face.zid == *zid)
     }
 
     pub(crate) fn face_mut<'t>(
@@ -214,10 +211,7 @@ impl Hat {
         tables: &'t mut TablesData,
         zid: &ZenohIdProto,
     ) -> Option<&'t mut Arc<FaceState>> {
-        tables.hats[self.bound]
-            .faces
-            .values_mut()
-            .find(|face| face.zid == *zid)
+        tables.faces.values_mut().find(|face| face.zid == *zid)
     }
 
     /// Returns `true` if `face` belongs to this [`Hat`]'s linkstate network.
@@ -242,6 +236,16 @@ impl Hat {
         res.face_ctxs
             .iter()
             .filter(move |(_, ctx)| self.owns(&ctx.face))
+    }
+
+    pub(crate) fn owned_faces<'hat, 'tbl>(
+        &'hat self,
+        tables: &'tbl TablesData,
+    ) -> impl Iterator<Item = &'tbl Arc<FaceState>> + 'hat
+    where
+        'tbl: 'hat,
+    {
+        tables.faces.values().filter(|face| self.owns(face))
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
@@ -337,6 +341,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.bound))]
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
@@ -453,6 +458,7 @@ impl HatBaseTrait for Hat {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
         tables: &mut TablesData,
@@ -473,6 +479,13 @@ impl HatBaseTrait for Hat {
                     };
 
                     let whatami = transport.get_whatami()?;
+
+                    tracing::trace!(
+                        id = %"OAM_LINKSTATE",
+                        wai = %transport.get_whatami()?.short(),
+                        linkstate = ?list
+                    );
+
                     match whatami {
                         WhatAmI::Router => {
                             let changes = self
@@ -609,6 +622,10 @@ impl HatBaseTrait for Hat {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn whatami(&self) -> WhatAmI {
+        WhatAmI::Router
     }
 }
 

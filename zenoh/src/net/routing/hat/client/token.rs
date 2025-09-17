@@ -25,8 +25,13 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
 use crate::net::routing::{
-    dispatcher::{face::FaceState, tables::TablesData},
-    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, InterestProfile, SendDeclare},
+    dispatcher::{
+        face::FaceState, gateway::BoundMap, interests::CurrentInterest, tables::TablesData,
+    },
+    hat::{
+        BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, InterestProfile,
+        SendDeclare,
+    },
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -78,12 +83,7 @@ impl Hat {
         src_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        for mut dst_face in self
-            .faces(tables)
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
+        for mut dst_face in self.owned_faces(tables).cloned().collect::<Vec<_>>() {
             self.propagate_simple_token_to(&mut dst_face, res, src_face, send_declare);
         }
     }
@@ -371,7 +371,6 @@ impl Hat {
                     for src_face in self
                         .faces(tables)
                         .values()
-                        .filter(|f| f.whatami == WhatAmI::Client)
                         .cloned()
                         .collect::<Vec<Arc<FaceState>>>()
                     {
@@ -403,7 +402,6 @@ impl Hat {
                 for src_face in self
                     .faces(tables)
                     .values()
-                    .filter(|f| f.whatami == WhatAmI::Client)
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
@@ -431,6 +429,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -438,7 +437,7 @@ impl HatTokenTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         interest_id: Option<InterestId>,
-        _profile: InterestProfile,
+        profile: InterestProfile,
     ) {
         // FIXME(regions): InterestProfile is ignored
         self.declare_simple_token(
@@ -451,14 +450,81 @@ impl HatTokenTrait for Hat {
         );
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        _profile: InterestProfile,
+        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_token(ctx, id, res)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, interest_id))]
+    fn declare_current_token(
+        &mut self,
+        ctx: BaseContext,
+        id: TokenId,
+        res: &mut Arc<Resource>,
+        node_id: NodeId,
+        interest_id: InterestId,
+        mut downstream_hats: BoundMap<&mut dyn HatTrait>,
+    ) {
+        debug_assert!(self.bound.is_north());
+
+        if let Some(interest) = ctx
+            .src_face
+            .clone()
+            .pending_current_interests
+            .get(&interest_id)
+            .map(|p| &p.interest)
+        {
+            let hat = &mut downstream_hats[interest.src_face.bound];
+            hat.propagate_current_token(ctx, res, interest);
+        } else {
+            tracing::error!(
+                id = interest_id,
+                keyexpr = res.expr(),
+                src = %ctx.src_face,
+                "Received current token with unknown interest id"
+            );
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, interest_id = interest.src_interest_id))]
+    fn propagate_current_token(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        interest: &CurrentInterest,
+    ) {
+        debug_assert!(!self.bound.is_north());
+
+        if interest.mode == InterestMode::CurrentFuture {
+            self.register_simple_token(
+                ctx.tables,
+                &mut ctx.src_face.clone(),
+                interest.src_interest_id,
+                res,
+            );
+        }
+
+        let id = self.make_token_id(res, &mut interest.src_face.clone(), interest.mode);
+        let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+        (ctx.send_declare)(
+            &interest.src_face.primitives,
+            RoutingContext::with_expr(
+                Declare {
+                    interest_id: Some(interest.src_interest_id),
+                    ext_qos: ext::QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                },
+                res.expr().to_string(),
+            ),
+        );
     }
 }

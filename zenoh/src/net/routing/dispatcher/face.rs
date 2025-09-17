@@ -382,7 +382,7 @@ impl Face {
 }
 
 impl Primitives for Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
@@ -397,7 +397,7 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
@@ -516,12 +516,12 @@ impl Primitives for Face {
     }
 
     #[inline]
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         route_data(&self.tables, &self.state, msg, reliability);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -530,17 +530,17 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
     fn send_close(&self) {
         tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
