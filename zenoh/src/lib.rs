@@ -25,14 +25,12 @@
 //!  
 //! ## Session
 //!
-//! The [Session](crate::session) is the main object. It creates and holds the zenoh runtime object,
-//! which maintains the state of the connection of the node to the Zenoh network. (There is a subtle difference
-//! between a session and the runtime: technically multiple sessions can share the same runtime and therefore
-//! have the same network identity [Session::zid](crate::session::Session::zid) which is the case for the plugins. But
-//! normally each session has its own runtime.)
-//!
+//! The root element of Zenoh API is the [session]. 
+//! A session is created by the [`open`] function, which takes a [config] as an argument.
+//! The [`Session`] holds the zenoh runtime object,
+//! which maintains the state of the connection of the node to the Zenoh network. 
+//! 
 //! The session allows to declare publishers, subscribers, queriers, queryables, etc.
-//! A session is created by the [open] function, which takes a [config] as an argument.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
 //! Data can be sent directly between nodes or routed through intermediate nodes.
@@ -41,13 +39,13 @@
 //!
 //! ## Publish/Subscribe
 //!
-//! In the publish/subscribe paradigm, data is produced by [Publishers](crate::pubsub::Publisher)
-//! and consumed by [Subscribers](crate::pubsub::Subscriber). See the [pubsub] API for details.
+//! In the publish/subscribe paradigm, data is produced by [`Publisher`](crate::pubsub::Publisher)
+//! and consumed by [`Subscriber`](crate::pubsub::Subscriber). See the [pubsub] API for details.
 //!
 //! ## Query/Reply
 //!
-//! In the query/reply paradigm, data is made available by [Queryables](crate::query::Queryable)
-//! and requested by [Queriers](crate::query::Querier) or directly via [Session::get](crate::Session::get) operations.
+//! In the query/reply paradigm, data is made available by [`Queryable`](crate::query::Queryable)
+//! and requested by [`Querier`](crate::query::Querier) or directly via [`Session::get`](crate::Session::get) operations.
 //! More details are available in the [query] API.
 //!
 //! ## Key Expressions
@@ -76,23 +74,23 @@
 //! ## Builders
 //!
 //! Zenoh extensively uses the builder pattern. For example, to create a publisher, you first create a
-//! [PublisherBuilder](crate::pubsub::PublisherBuilder)
-//! using the [declare_publisher](crate::session::Session::declare_publisher) method. The builder is
-//! resolved to the [Publisher](crate::pubsub::Publisher) instance by awaiting it in an async context
-//! or by calling the [wait](crate::Wait::wait) method in a synchronous context.
+//! [`PublisherBuilder`](crate::pubsub::PublisherBuilder)
+//! using the [`declare_publisher`](crate::session::Session::declare_publisher) method. The builder is
+//! resolved to the [`Publisher`](crate::pubsub::Publisher) instance by awaiting it in an async context
+//! or by calling the [`wait`](crate::Wait::wait) method in a synchronous context.
 //!
 //! ## Channels and callbacks
 //!
 //! There are two ways to get sequential data from Zenoh primitives (e.g., a series of
-//! [Sample](crate::sample::Sample)s from a [Subscriber](crate::pubsub::Subscriber)
-//! or [Reply](crate::query::Reply)s from a [Query](crate::query::Query)): by channel or by callback.
+//! [`Sample`](crate::sample::Sample)s from a [`Subscriber`](crate::pubsub::Subscriber)
+//! or [`Reply`](crate::query::Reply)s from a [`Query`](crate::query::Query)): by channel or by callback.
 //!
-//! In channel mode, methods like [recv_async](crate::handlers::fifo::FifoChannelHandler::recv_async)
+//! In channel mode, methods like [`recv_async`](crate::handlers::fifo::FifoChannelHandler::recv_async)
 //! become available on the subscriber or query object (through Deref coercion to the corresponding channel
-//! handler type). By default, the [FifoChannel](crate::handlers::fifo::FifoChannel) is used.
+//! handler type). By default, the [`FifoChannel`](crate::handlers::fifo::FifoChannel) is used.
 //!
-//! The builders provide methods [with](crate::pubsub::SubscriberBuilder::with) to assign an arbitrary channel instead of
-//! the default one, and [callback](crate::pubsub::SubscriberBuilder::callback) to assign a callback function.
+//! The builders provide methods [`with`](crate::pubsub::SubscriberBuilder::with) to assign an arbitrary channel instead of
+//! the default one, and [`callback`](crate::pubsub::SubscriberBuilder::callback) to assign a callback function.
 //!
 //! See more details in the [handlers] module documentation.
 //!
@@ -293,21 +291,26 @@ pub mod key_expr {
 
 /// # Zenoh [`Session`] and associated types
 /// 
-/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, which maintains the state of the connection of the node to the Zenoh network.
-/// The session allows to declare other zenoh entities like publishers, subscribers, queriers, queryables, etc. and keeps them functionin. Closing
-/// the session will close all associated entities.
-///
-/// All session parameters are specified in the [`Config`](crate::config) object passed to the
-/// [`open`] function.
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, 
+/// which maintains the state of the connection of the node to the Zenoh network.
+/// 
+/// The session allows to declare other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
+/// and keeps them functioning. Closing the session will close all associated entities.
+/// 
+/// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
+/// session is an `Arc` to the internal session object, so cloning is cheap and fast.
+/// 
+/// All session parameters are specified in the [`Config`] object
+/// which is passed to the [`open`] function.
 ///
 /// Objects created by the session (for example, a [`Publisher`](crate::pubsub::Publisher) via
 /// [`declare_publisher`](crate::session::Session::declare_publisher) or a
 /// [`Subscriber`](crate::pubsub::Subscriber) via
 /// [`declare_subscriber`](crate::session::Session::declare_subscriber)) have lifetimes independent
-/// of the session, but they stop functioning when the session is closed or dropped.
+/// of the session, but they stop functioning when the session is closed or all clones of the session 
+/// object are dropped.
 ///
-/// Use the explicit [`close`](crate::session::Session::close) method to close the session and all
-/// associated objects.
+/// There is an explicit [`close`](crate::session::Session::close) method to close the session
 ///
 /// Sometimes it is convenient not to keep a reference to an object (for example, a [`Queryable`](crate::query::Queryable)) 
 /// solely to keep it alive, but instead run it in the background until the session is closed. To do this, create the
@@ -315,6 +318,17 @@ pub mod key_expr {
 /// corresponding builder. This causes the builder to return `()` instead of the object instance and
 /// keeps the instance alive while the session is alive.
 ///
+/// ### Difference between session and runtime
+/// The session object holds all declared zenoh entities (publishers, subscribers, etc.) and
+/// a shared reference to the runtime object which maintains the state of the zenoh node.
+/// Closing the session will close all associated entities and drop the reference to the runtime.
+/// 
+/// Typically each session has its own runtime, but in some cases
+/// the session may share the runtime with other sessions. This is the case for the plugins
+/// where each plugin has its own session but all plugins share the same `zenohd` runtime
+/// for efficiency.
+/// In this case all these sessions will have the same network identity 
+/// [`Session::zid`](crate::session::Session::zid).
 pub mod session {
     #[zenoh_macros::unstable]
     pub use zenoh_config::wrappers::EntityGlobalId;
@@ -563,10 +577,14 @@ pub mod matching {
 ///
 /// The method [`with`](crate::pubsub::SubscriberBuilder::with) accepts any type that
 /// implements the `IntoHandler` trait and extracts the callback and handler from it.
-/// The Zenoh object calls the callback with each incoming sample. The handler is stored
+/// The Zenoh object calls the callback with each incoming sample. 
+/// 
+/// The handler is stored in the Zenoh object
 /// and made available via the [`handler`](crate::pubsub::Subscriber::handler) method
-/// or by dereferencing the Zenoh object, allowing the user not to care about the separate
-/// channel object.
+/// or by dereferencing the Zenoh object. This is a syntax sugar that allows the user
+/// not to care about the separate channel object.
+///
+/// The example of using channels is shown below.
 ///
 /// ```no_run
 /// # #[tokio::main]
@@ -581,7 +599,8 @@ pub mod matching {
 /// # }
 /// ```
 /// 
-/// is equivalent to
+/// Note that this code is equivalent to the following one, where the channel
+/// and the callback are created explicitly.
 /// 
 /// ```no_run
 /// # #[tokio::main]
@@ -601,7 +620,7 @@ pub mod matching {
 ///
 /// Obviously, the callback can also be defined manually, without using a channel, and passed
 /// to the [`callback`](crate::pubsub::SubscriberBuilder::callback) method.
-/// In this case the handler type is `()` and no additional methods are available on the
+/// In this case the handler type is `()` and no additional methods, like `recv_async` are available on the
 /// subscriber object.
 ///
 /// ```no_run
