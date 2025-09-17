@@ -94,17 +94,17 @@ fn propagate_simple_queryable_to(
         .map(|src_face| dst_face.id != src_face.id)
         .unwrap_or(true)
         && (current.is_none() || current.unwrap().1 != info)
-        && (dst_face.whatami != WhatAmI::Client
-            || face_hat!(dst_face)
-                .remote_interests
-                .values()
-                .any(|i| i.options.queryables() && i.matches(res)))
         && src_face
             .as_ref()
             .map(|src_face| {
                 src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
             })
             .unwrap_or(true)
+        && (dst_face.whatami != WhatAmI::Client
+            || face_hat!(dst_face)
+                .remote_interests
+                .values()
+                .any(|i| i.options.queryables() && i.matches(res)))
     {
         let id = current
             .map(|c| c.0)
