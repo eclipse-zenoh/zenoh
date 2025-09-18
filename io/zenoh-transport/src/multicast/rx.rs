@@ -13,7 +13,6 @@
 //
 use std::sync::MutexGuard;
 
-use zenoh_codec::network::NetworkMessageIter;
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
@@ -171,7 +170,7 @@ impl TransportMulticastInner {
             // Drop invalid message and continue
             return Ok(());
         }
-        for msg in NetworkMessageIter::new(reliability, &mut payload) {
+        for msg in payload.drain(..) {
             self.trigger_callback(msg, peer)?;
         }
 
