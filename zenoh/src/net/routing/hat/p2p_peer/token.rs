@@ -281,6 +281,7 @@ fn propagate_forget_simple_token(
                 ),
             );
         } else if src_face.id != face.id
+            && (src_face.whatami == WhatAmI::Client || face.whatami == WhatAmI::Client)
             && face_hat!(face)
                 .remote_interests
                 .values()
