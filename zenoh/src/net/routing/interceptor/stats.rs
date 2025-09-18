@@ -35,6 +35,9 @@ use crate::net::routing::interceptor::*;
 pub(crate) fn stats_interceptor_factories(
     config: &StatsConfig,
 ) -> ZResult<Vec<InterceptorFactory>> {
+    if config.keys().is_empty() {
+        return Ok(vec![]);
+    }
     Ok(vec![Box::new(StatsInterceptorFactory::new(config))])
 }
 
