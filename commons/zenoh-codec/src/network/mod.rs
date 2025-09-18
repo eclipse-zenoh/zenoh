@@ -19,7 +19,7 @@ mod request;
 mod response;
 
 use zenoh_buffers::{
-    reader::{DidntRead, Reader},
+    reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
@@ -130,7 +130,7 @@ impl<R> NetworkMessageIter<R> {
     }
 }
 
-impl<R: Reader> Iterator for NetworkMessageIter<R> {
+impl<R: BacktrackableReader> Iterator for NetworkMessageIter<R> {
     type Item = NetworkMessage;
 
     fn next(&mut self) -> Option<Self::Item> {
