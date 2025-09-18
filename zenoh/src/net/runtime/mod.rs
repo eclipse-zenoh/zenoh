@@ -38,7 +38,7 @@ use futures::{stream::StreamExt, Future};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, ModeDependent, ZenohId};
+use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -127,14 +127,7 @@ pub trait IRuntime: Send + Sync {
         face_id: usize,
     ) -> crate::matching::MatchingStatus;
 
-    fn get_config(&self) -> Arc<dyn IConfig>;
-}
-
-pub trait IConfig {
-    fn get(&self, key: &str) -> ZResult<String>;
-    fn queries_default_timeout_ms(&self) -> u64;
-    #[allow(dead_code)]
-    fn insert_json5(&self, key: &str, value: &str) -> ZResult<()>;
+    fn get_config(&self) -> GenericConfig;
 }
 
 impl IConfig for Notifier<Config> {
@@ -143,8 +136,8 @@ impl IConfig for Notifier<Config> {
     }
 
     fn queries_default_timeout_ms(&self) -> u64 {
-        let conf_guard = self.lock();
-        let config = &conf_guard.0;
+        let guard = self.lock();
+        let config = &guard.0;
         unwrap_or_default!(config.queries_default_timeout())
     }
 
@@ -284,8 +277,8 @@ impl IRuntime for RuntimeState {
         }
     }
 
-    fn get_config(&self) -> Arc<dyn IConfig> {
-        Arc::new(self.config.clone())
+    fn get_config(&self) -> GenericConfig {
+        GenericConfig::new(Arc::new(self.config.clone()))
     }
 }
 
@@ -833,5 +826,44 @@ impl Closeable for Runtime {
 
     fn get_closee(&self) -> Self::TClosee {
         self.state.clone()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct GenericRuntime {
+    dynamic_runtime: DynamicRuntime,
+    static_runtime: Option<Runtime>,
+}
+
+impl Deref for GenericRuntime {
+    type Target = DynamicRuntime;
+
+    fn deref(&self) -> &Self::Target {
+        &self.dynamic_runtime
+    }
+}
+
+impl GenericRuntime {
+    pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
+        self.static_runtime.as_ref()
+    }
+}
+
+impl From<Runtime> for GenericRuntime {
+    fn from(value: Runtime) -> Self {
+        let static_runtime = value.clone();
+        GenericRuntime {
+            dynamic_runtime: value.into(),
+            static_runtime: Some(static_runtime),
+        }
+    }
+}
+
+impl From<DynamicRuntime> for GenericRuntime {
+    fn from(value: DynamicRuntime) -> Self {
+        GenericRuntime {
+            dynamic_runtime: value,
+            static_runtime: None,
+        }
     }
 }

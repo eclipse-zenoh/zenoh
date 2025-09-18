@@ -27,7 +27,6 @@ use std::{
 };
 
 use memory_backend::MemoryBackend;
-use serde_json::Value;
 use storages_mgt::StorageMessage;
 use tokio::sync::broadcast::Sender;
 use zenoh::{
@@ -82,9 +81,9 @@ impl Plugin for StoragesPlugin {
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         zenoh::init_log_from_env_or("error");
         tracing::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
-        let conf_json = runtime.get_config().get(&format!("plugins/{name}"))?;
-        let conf: Value = serde_json::from_str(&conf_json)?;
-        let config = PluginConfig::try_from((name, &conf))?;
+        let config = {
+            PluginConfig::try_from((name, &runtime.get_config().get_plugin_config(name).unwrap()))
+        }?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
             runtime.clone(),
             config,

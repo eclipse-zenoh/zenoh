@@ -33,6 +33,8 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_collections::{IntHashMap, SingleOrVec};
+#[cfg(feature = "unstable")]
+use zenoh_config::GenericConfig;
 use zenoh_config::{
     qos::{PublisherQoSConfList, PublisherQoSConfig},
     wrappers::ZenohId,
@@ -70,8 +72,8 @@ use zenoh_task::TaskController;
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
-#[cfg(feature = "unstable")]
-use crate::net::runtime::IConfig;
+#[cfg(feature = "internal")]
+use crate::net::runtime::Runtime;
 use crate::{
     api::{
         admin,
@@ -107,7 +109,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        runtime::{DynamicRuntime, Runtime, RuntimeBuilder},
+        runtime::{GenericRuntime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,
@@ -510,10 +512,9 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
     weak_counter: Mutex<usize>,
-    pub(crate) runtime: DynamicRuntime,
+    pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
-    static_runtime: Option<Runtime>,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
 }
@@ -655,18 +656,14 @@ impl std::error::Error for SessionClosedError {}
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
-        runtime: DynamicRuntime,
+        runtime: GenericRuntime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        static_runtime: Option<Runtime>,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
             let publisher_qos = runtime
                 .get_config()
-                .get("qos/publication")
-                .and_then(|v| {
-                    serde_json::from_str::<PublisherQoSConfList>(&v).map_err(|e| e.into())
-                })
+                .get_typed::<PublisherQoSConfList>("qos/publication")
                 .unwrap();
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
@@ -678,7 +675,6 @@ impl Session {
                 runtime: runtime.clone(),
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                static_runtime,
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
             }));
@@ -797,7 +793,7 @@ impl Session {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn config(&self) -> Arc<dyn IConfig> {
+    pub fn config(&self) -> GenericConfig {
         self.0.runtime.get_config()
     }
 
@@ -842,7 +838,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            runtime: self.0.runtime.clone(),
+            runtime: self.0.runtime.deref().clone(),
         }
     }
 
@@ -1231,7 +1227,6 @@ impl Session {
                 runtime.clone().into(),
                 aggregated_subscribers,
                 aggregated_publishers,
-                Some(runtime.clone()),
             )
             .await;
             runtime.start().await?;
@@ -2124,10 +2119,10 @@ impl SessionInner {
         Ok(())
     }
 
-    #[cfg(test)]
     #[cfg(feature = "internal")]
+    #[allow(dead_code)]
     pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
-        self.static_runtime.as_ref()
+        self.runtime.static_runtime()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2940,7 +2935,7 @@ impl Closee for Arc<SessionInner> {
             return;
         };
 
-        if let Some(r) = &self.static_runtime {
+        if let Some(r) = self.runtime.static_runtime() {
             // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
             info!(zid = %self.zid(), "close session");
             self.task_controller.terminate_all_async().await;

@@ -159,10 +159,9 @@ impl Resolvable for InitBuilder {
 impl Wait for InitBuilder {
     fn wait(self) -> <Self as Resolvable>::To {
         Ok(Session::init(
-            self.runtime,
+            self.runtime.into(),
             self.aggregated_subscribers,
             self.aggregated_publishers,
-            None,
         )
         .wait())
     }

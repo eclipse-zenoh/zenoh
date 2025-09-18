@@ -24,7 +24,6 @@ use std::{
 };
 
 use futures::select;
-use serde_json::Value;
 use tracing::{debug, info};
 use zenoh::{
     internal::{
@@ -88,11 +87,10 @@ impl Plugin for ExamplePlugin {
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        let config_string = runtime.get_config().get(&format!("plugins/{name}"))?;
-        let config: Value = serde_json::from_str(&config_string)?;
-        let self_cfg = config.as_object().unwrap();
+        let config = runtime.get_config().get_plugin_config(name).unwrap();
+        let map_cfg = config.as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
-        let selector: KeyExpr = match self_cfg.get("storage-selector") {
+        let selector: KeyExpr = match map_cfg.get("storage-selector") {
             Some(serde_json::Value::String(s)) => KeyExpr::try_from(s)?,
             None => KeyExpr::try_from(DEFAULT_SELECTOR).unwrap(),
             _ => {
@@ -101,7 +99,6 @@ impl Plugin for ExamplePlugin {
         }
         .clone()
         .into_owned();
-        std::mem::drop(config);
 
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));

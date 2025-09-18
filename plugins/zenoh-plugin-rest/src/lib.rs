@@ -284,10 +284,10 @@ impl Plugin for RestPlugin {
 
         let plugin_conf = runtime
             .get_config()
-            .get(&format!("plugins/{name}"))
+            .get_plugin_config(name)
             .map_err(|_| zerror!("Plugin `{}`: missing config", name))?;
 
-        let conf = serde_json::from_str::<Config>(&plugin_conf)
+        let conf: Config = serde_json::from_value(plugin_conf)
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
         WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
         MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
