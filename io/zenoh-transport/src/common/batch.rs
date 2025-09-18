@@ -15,12 +15,15 @@ use std::num::NonZeroUsize;
 
 use zenoh_buffers::{
     buffer::Buffer,
-    reader::{DidntRead, HasReader},
+    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
     BBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
 use zenoh_codec::{
-    transport::batch::{BatchError, Zenoh080Batch},
+    transport::{
+        batch::{BatchError, Zenoh080Batch},
+        frame::FrameReader,
+    },
     RCodec, WCodec,
 };
 use zenoh_protocol::{
@@ -524,6 +527,67 @@ impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
         let msg = self.codec.read(&mut reader)?;
         let end = self.buffer.len() as BatchSize;
         Ok((msg, len - end))
+    }
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct ZSliceReader(ZSlice);
+
+impl Reader for ZSliceReader {
+    fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
+        Reader::read(&mut &mut self.0, into)
+    }
+
+    fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
+        Reader::read_exact(&mut &mut self.0, into)
+    }
+
+    fn remaining(&self) -> usize {
+        self.0.len()
+    }
+
+    fn read_zslices<F: FnMut(ZSlice)>(
+        &mut self,
+        len: usize,
+        for_each_slice: F,
+    ) -> Result<(), DidntRead> {
+        Reader::read_zslices(&mut &mut self.0, len, for_each_slice)
+    }
+
+    fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
+        Reader::read_zslice(&mut &mut self.0, len)
+    }
+
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
+        Reader::read_u8(&mut &mut self.0)
+    }
+
+    fn can_read(&self) -> bool {
+        !self.0.is_empty()
+    }
+}
+
+impl BacktrackableReader for ZSliceReader {
+    type Mark = <&'static mut ZSlice as BacktrackableReader>::Mark;
+
+    fn mark(&mut self) -> Self::Mark {
+        BacktrackableReader::mark(&mut &mut self.0)
+    }
+
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        BacktrackableReader::rewind(&mut &mut self.0, mark)
+    }
+}
+
+impl<'a> Decode<FrameReader<'a, ZSliceReader>> for &'a mut RBatch {
+    type Error = DidntRead;
+
+    fn decode(self) -> Result<FrameReader<'a, ZSliceReader>, Self::Error> {
+        self.codec.read(unsafe {
+            // SAFETY: `ZSliceReader` is repr(transparent)
+            std::mem::transmute::<&mut ZSlice, &mut ZSliceReader>(&mut self.buffer)
+        })
     }
 }
 

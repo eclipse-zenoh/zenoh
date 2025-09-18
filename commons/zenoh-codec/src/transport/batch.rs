@@ -26,7 +26,7 @@ use zenoh_protocol::{
     },
 };
 
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{transport::frame::FrameReader, RCodec, WCodec, Zenoh080};
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -262,5 +262,26 @@ where
         }
 
         Ok(x)
+    }
+}
+
+impl<'a, R: BacktrackableReader> RCodec<FrameReader<'a, R>, &'a mut R> for &mut Zenoh080Batch {
+    type Error = DidntRead;
+
+    fn read(self, reader: &'a mut R) -> Result<FrameReader<'a, R>, Self::Error> {
+        let mark = reader.mark();
+        let codec = Zenoh080::new();
+        let frame: FrameReader<R> = codec.read(reader)?;
+        match frame.reliability {
+            Reliability::Reliable => {
+                self.current_frame = CurrentFrame::Reliable;
+                self.latest_sn.reliable = Some(frame.sn);
+            }
+            Reliability::BestEffort => {
+                self.current_frame = CurrentFrame::BestEffort;
+                self.latest_sn.best_effort = Some(frame.sn);
+            }
+        }
+        Ok(frame)
     }
 }

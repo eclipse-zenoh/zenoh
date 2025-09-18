@@ -198,3 +198,42 @@ where
         })
     }
 }
+
+#[derive(Debug)]
+pub struct FrameReader<'a, R> {
+    pub reliability: Reliability,
+    pub sn: TransportSn,
+    pub ext_qos: ext::QoSType,
+    reader: &'a mut R,
+}
+
+impl<'a, R: BacktrackableReader> RCodec<FrameReader<'a, R>, &'a mut R> for Zenoh080 {
+    type Error = DidntRead;
+
+    fn read(self, reader: &'a mut R) -> Result<FrameReader<'a, R>, Self::Error> {
+        let mark = reader.mark();
+        let Ok(header): Result<FrameHeader, _> = self.read(&mut *reader) else {
+            reader.rewind(mark);
+            return Err(DidntRead);
+        };
+        Ok(FrameReader {
+            reliability: header.reliability,
+            sn: header.sn,
+            ext_qos: header.ext_qos,
+            reader,
+        })
+    }
+}
+
+impl<R: BacktrackableReader> Iterator for FrameReader<'_, R> {
+    type Item = NetworkMessage;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mark = self.reader.mark();
+        let msg = Zenoh080Reliability::new(self.reliability).read(self.reader);
+        if msg.is_err() {
+            self.reader.rewind(mark);
+        }
+        msg.ok()
+    }
+}
