@@ -488,44 +488,74 @@ pub mod pubsub {
 /// This module provides the query/reply API of Zenoh.
 ///
 /// A [`Queryable`](crate::query::Queryable) is declared by the
-/// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
-/// Data is requested via [`Session::get`](crate::Session::get) function or by
-/// [`Querier`](crate::query::Querier) object. Each request returns zero or more
-/// [`Reply`](crate::query::Reply) structures each one from each queryable that matches the request.
-/// Each reply contains either the [`Sample`](crate::sample::Sample)
+/// [`Session::declare_queryable`](crate::Session::declare_queryable) method
+/// and serves queries [`Query``](crate::query::Query) using callback
+/// or channel (see [handlers] module documentation for details).
+///
+/// The [`Query`](crate::query::Query) have the methods [`reply`](crate::query::Query::reply) 
+/// to reply with a data sample,
+/// and [reply_err](crate::query::Query::reply_err) to send an error reply.
+///
+/// The `reply` method sends a [`Sample`](crate::sample::Sample) with a [`kind`](crate::sample::Sample::kind)
+/// field set to [`Put`](crate::sample::SampleKind::Put). 
+/// If it's necessary to reply with a [`Delete`](crate::sample::SampleKind::Delete) sample,
+/// the [`reply_del`](crate::query::Query::reply_del) method should be used.
+/// 
+/// Data is requested from queryables via [`Session::get`](crate::Session::get) function or by
+/// [`Querier`](crate::query::Querier) object. Each request returns
+/// zero or more [`Reply`](crate::query::Reply) structures, each one from each queryable 
+/// that matches the request.
+/// The reply contains either the [`Sample`](crate::sample::Sample)
 /// or [`ReplyError`](crate::query::ReplyError) structures.
 ///
 /// # Query parameters
 /// 
 /// The query/reply API allows to specify additional parameters for the request.
-/// These parameters are passed to the get operation using the [`Selector`](crate::query::selector::Selector)
+/// These parameters are passed to the get operation using the [`Selector`](crate::query::Selector)
 /// syntax. The selector string have a syntax similar to the URL:
-/// it's a key expression followed by a question mark and the list of parameters in format "name=value" separated by ';'.
+/// it's a key expression followed by a question mark and the list of parameters in format 
+/// "name=value" separated by ';'.
 /// For example `key/expression?param1=value1;param2=value2`.
 /// 
 /// # Examples:
 /// ### Declaring a queryable
+/// 
+/// The example below shows a queryable that replies with temperature data for a given day.
+/// 
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").await.unwrap();
+/// # let temperature_data = std::collections::HashMap::<String, String>::new();
+/// let key_expr = "room/temperature/history";
+/// let queryable = session.declare_queryable(key_expr).await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
-///     let reply = query.reply("key/expression", "value").await.unwrap();
+///     if let Some(day)= query.selector().parameters().get("day") {
+///         if let Some(value) = temperature_data.get(day) {
+///             let reply = query.reply(key_expr, value).await.unwrap();
+///         } else {
+///             query.reply_err("no data for this day").await.unwrap();
+///         }
+///     } else {
+///         query.reply_err("missing day parameter").await.unwrap();
+///     }
 /// }
 /// # }
 /// ```
 ///
 /// ## Requesting data
+/// 
+/// The corresponding request for the above queryable requests the temperature for a given day.
+/// 
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let replies = session.get("key/expression").await.unwrap();
+/// let replies = session.get("room/temperature/history?day=2023-03-15").await.unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
 ///     match reply.result() {
 ///         Ok(sample) => {
-///             println!(">> Received {}", sample.payload().try_to_string().unwrap());
+///             println!(">> Temperature is {}", sample.payload().try_to_string().unwrap());
 ///         }
 ///         Err(err) => {
 ///             println!(">> Error {}", err.payload().try_to_string().unwrap());
