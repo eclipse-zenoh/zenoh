@@ -34,7 +34,7 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
-        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
+        memory_layout::MemoryLayout,
         shm_provider_backend::ShmProviderBackend,
         types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
@@ -66,44 +66,22 @@ impl PartialEq for Chunk {
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBinaryHeapBuilder<Layout: MemLayout> {
+pub struct PosixShmProviderBackendBinaryHeapBuilder<Layout> {
     layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: TryIntoMemoryLayout> Resolvable for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
+impl<Layout> Resolvable for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBinaryHeap>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
+impl<Layout: TryInto<MemoryLayout>> Wait for PosixShmProviderBackendBinaryHeapBuilder<Layout>
+where
+    Layout::Error: Into<ZLayoutError>,
+{
     fn wait(self) -> <Self as Resolvable>::To {
-        let layout: MemoryLayout = self.layout.try_into()?;
-        PosixShmProviderBackendBinaryHeap::new(&layout)
-    }
-}
-
-#[zenoh_macros::unstable_doc]
-impl Resolvable for PosixShmProviderBackendBinaryHeapBuilder<&MemoryLayout> {
-    type To = ZResult<PosixShmProviderBackendBinaryHeap>;
-}
-
-#[zenoh_macros::unstable_doc]
-impl Wait for PosixShmProviderBackendBinaryHeapBuilder<&MemoryLayout> {
-    fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackendBinaryHeap::new(self.layout)
-    }
-}
-
-#[zenoh_macros::unstable_doc]
-impl<T> Resolvable for PosixShmProviderBackendBinaryHeapBuilder<StaticLayout<T>> {
-    type To = ZResult<PosixShmProviderBackendBinaryHeap>;
-}
-
-#[zenoh_macros::unstable_doc]
-impl<T> Wait for PosixShmProviderBackendBinaryHeapBuilder<StaticLayout<T>> {
-    fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackendBinaryHeap::new(&self.layout.into())
+        PosixShmProviderBackendBinaryHeap::new(&self.layout.try_into().map_err(Into::into)?)
     }
 }
 
@@ -121,9 +99,7 @@ pub struct PosixShmProviderBackendBinaryHeap {
 impl PosixShmProviderBackendBinaryHeap {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder<Layout: MemLayout>(
-        layout: Layout,
-    ) -> PosixShmProviderBackendBinaryHeapBuilder<Layout> {
+    pub fn builder<Layout>(layout: Layout) -> PosixShmProviderBackendBinaryHeapBuilder<Layout> {
         PosixShmProviderBackendBinaryHeapBuilder { layout }
     }
 
