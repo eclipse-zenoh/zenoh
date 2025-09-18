@@ -265,8 +265,7 @@ impl QosInterceptor {
     ) -> bool {
         self.keys.is_none()
             || cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
-                ctx.full_keyexpr(msg)
-                    .as_ref()
+                ctx.full_expr(msg)
                     .map(|ke| self.is_ke_affected(ke))
                     .unwrap_or(false)
             })

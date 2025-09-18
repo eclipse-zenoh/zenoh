@@ -253,7 +253,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
             .get_cache(msg)
             .and_then(|c| c.downcast_ref::<Option<usize>>())
             .cloned()
-            .unwrap_or_else(|| self.compute_id(&ctx.full_keyexpr(msg)?))
+            .unwrap_or_else(|| self.compute_id(ctx.full_expr(msg)?))
         else {
             return true;
         };
@@ -274,7 +274,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
             tracing::trace!(
                 "Message dropped by the downsampling interceptor: {}({}) from:{} to:{}",
                 msg,
-                ctx.full_expr(msg).unwrap_or_default(),
+                ctx.full_expr(msg).map_or("", keyexpr::as_str),
                 ctx.face().map(|f| f.to_string()).unwrap_or_default(),
                 ctx.face().map(|f| f.to_string()).unwrap_or_default(),
             );

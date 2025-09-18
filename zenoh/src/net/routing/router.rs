@@ -91,6 +91,7 @@ impl Router {
                     primitives.clone(),
                     None,
                     None,
+                    None,
                     self.tables.hat_code.new_face(),
                     true,
                 )
@@ -128,7 +129,7 @@ impl Router {
         #[cfg(feature = "stats")]
         let stats = transport.get_stats()?;
 
-        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let ingress = Arc::new(ArcSwap::from_pointee(InterceptorsChain::empty()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
         let newface = tables
             .faces
@@ -143,6 +144,7 @@ impl Router {
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
+                    Some(mux.interceptor.clone()),
                     self.tables.hat_code.new_face(),
                     false,
                 )
@@ -193,6 +195,7 @@ impl Router {
             mux.clone(),
             Some(transport),
             None,
+            Some(mux.interceptor.clone()),
             self.tables.hat_code.new_face(),
             false,
         );
@@ -229,6 +232,7 @@ impl Router {
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),
+            None,
             self.tables.hat_code.new_face(),
             false,
         );

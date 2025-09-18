@@ -14,6 +14,7 @@
 use std::{any::Any, cell::OnceCell, sync::Arc};
 
 use arc_swap::ArcSwap;
+use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
 use zenoh_protocol::network::{
     ext, response, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageExt as _,
@@ -24,7 +25,7 @@ use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 
 use super::Primitives;
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::face::{Face, FaceState},
     interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     router::{InterceptorCacheValueType, Resource},
     RoutingContext,
@@ -72,11 +73,11 @@ impl DeMuxContext<'_> {
 }
 
 impl InterceptorContext for DeMuxContext<'_> {
-    fn face(&self) -> Option<Face> {
-        Some(self.demux.face.clone())
+    fn face(&self) -> Option<Arc<FaceState>> {
+        Some(self.demux.face.state.clone())
     }
 
-    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
+    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&keyexpr> {
         if self.expr.get().is_none() {
             if let Some(wire_expr) = msg.wire_expr() {
                 if let Some(prefix) = self.prefix(msg) {
@@ -86,13 +87,15 @@ impl InterceptorContext for DeMuxContext<'_> {
                 }
             }
         }
-        self.expr.get().map(|x| x.as_str())
+        self.expr
+            .get()
+            .map(|x| unsafe { keyexpr::from_str_unchecked(x.as_str()) })
     }
     fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
         if self.cache.get().is_none() && msg.wire_expr().is_some_and(|we| !we.has_suffix()) {
             if let Some(prefix) = self.prefix(msg) {
                 if let Some(cache) =
-                    prefix.get_ingress_cache(&self.demux.face, &self.demux.interceptor.load())
+                    prefix.get_ingress_cache(&self.demux.face.state, &self.demux.interceptor.load())
                 {
                     self.cache.set(cache).ok();
                 }
@@ -114,6 +117,7 @@ impl TransportPeerEventHandler for DeMux {
             };
 
             match &msg.body {
+                NetworkBodyMut::Push(_) => {}
                 NetworkBodyMut::Request(request) => {
                     let request_id = request.id;
                     if !interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext) {
@@ -154,7 +158,7 @@ impl TransportPeerEventHandler for DeMux {
         }
 
         match msg.body {
-            NetworkBodyMut::Push(m) => self.face.send_push(m, msg.reliability),
+            NetworkBodyMut::Push(m) => self.face.send_push_intercept(m, msg.reliability),
             NetworkBodyMut::Declare(m) => self.face.send_declare(m),
             NetworkBodyMut::Interest(m) => self.face.send_interest(m),
             NetworkBodyMut::Request(m) => self.face.send_request(m),

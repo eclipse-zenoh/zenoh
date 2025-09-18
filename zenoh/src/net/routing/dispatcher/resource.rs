@@ -39,10 +39,7 @@ use super::{
     tables::{Tables, TablesLock},
 };
 use crate::net::routing::{
-    dispatcher::{
-        face::{Face, FaceId},
-        tables::RoutingExpr,
-    },
+    dispatcher::{face::FaceId, tables::RoutingExpr},
     hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
@@ -843,21 +840,21 @@ impl Resource {
 
     pub(crate) fn get_ingress_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
-            .get(&face.state.id)
+            .get(&face.id)
             .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
     }
 
     pub(crate) fn get_egress_cache(
         &self,
-        face: &Face,
+        face: &FaceState,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
         self.session_ctxs
-            .get(&face.state.id)
+            .get(&face.id)
             .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
     }
 }
