@@ -24,7 +24,7 @@ use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
-use std::any::Any;
+use std::{any::Any, sync::Arc};
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -35,11 +35,8 @@ use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub mod downsampling;
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::face::Face, interceptor::downsampling::downsampling_interceptor_factories,
-    },
+use crate::net::routing::{
+    dispatcher::face::FaceState, interceptor::downsampling::downsampling_interceptor_factories,
 };
 
 pub mod qos_overwrite;
@@ -88,13 +85,8 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
 
 pub(crate) trait InterceptorContext {
     #[allow(dead_code)]
-    fn face(&self) -> Option<Face>;
-    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str>;
-    #[inline]
-    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
-        let full_expr = self.full_expr(msg)?;
-        KeyExpr::new(full_expr).ok()
-    }
+    fn face(&self) -> Option<Arc<FaceState>>;
+    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&keyexpr>;
     fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>>;
 }
 
@@ -143,7 +135,6 @@ pub(crate) struct InterceptorsChain {
 }
 
 impl InterceptorsChain {
-    #[allow(dead_code)]
     pub(crate) fn empty() -> Self {
         Self {
             interceptors: vec![],
@@ -174,13 +165,12 @@ impl InterceptorTrait for InterceptorsChain {
     }
 
     fn intercept<'a>(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        let mut ctx = ChainContext { ctx, index: 0 };
-        for interceptor in &self.interceptors {
+        for (index, interceptor) in self.interceptors.iter().enumerate() {
+            let mut ctx = ChainContext { ctx, index };
             if !interceptor.intercept(msg, &mut ctx as &mut dyn InterceptorContext) {
                 tracing::trace!("Msg intercepted!");
                 return false;
             }
-            ctx.index += 1;
         }
         true
     }
@@ -192,16 +182,12 @@ struct ChainContext<'a> {
 }
 
 impl InterceptorContext for ChainContext<'_> {
-    fn face(&self) -> Option<Face> {
+    fn face(&self) -> Option<Arc<FaceState>> {
         self.ctx.face()
     }
 
-    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
+    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&keyexpr> {
         self.ctx.full_expr(msg)
-    }
-
-    fn full_keyexpr(&self, msg: &NetworkMessageMut) -> Option<KeyExpr<'_>> {
-        self.ctx.full_keyexpr(msg)
     }
 
     fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
@@ -222,7 +208,7 @@ impl InterceptorTrait for IngressMsgLogger {
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         let expr = ctx
             .get_cache(msg)
-            .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
+            .and_then(|i| i.downcast_ref::<OwnedKeyExpr>().map(|e| &**e))
             .or_else(|| ctx.full_expr(msg));
 
         tracing::debug!(
@@ -248,7 +234,7 @@ impl InterceptorTrait for EgressMsgLogger {
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         let expr = ctx
             .get_cache(msg)
-            .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
+            .and_then(|i| i.downcast_ref::<OwnedKeyExpr>().map(|e| &**e))
             .or_else(|| ctx.full_expr(msg));
         tracing::debug!(
             "{} Send {} Expr:{:?}",

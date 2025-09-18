@@ -18,6 +18,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::Reliability,
     network::{
@@ -29,7 +30,7 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
-    dispatcher::face::{Face, WeakFace},
+    dispatcher::face::{Face, FaceState, WeakFace},
     interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     router::{InterceptorCacheValueType, Resource},
     RoutingContext,
@@ -38,7 +39,7 @@ use crate::net::routing::{
 pub struct Mux {
     pub handler: TransportUnicast,
     pub(crate) face: OnceLock<WeakFace>,
-    pub(crate) interceptor: ArcSwap<InterceptorsChain>,
+    pub(crate) interceptor: Arc<ArcSwap<InterceptorsChain>>,
 }
 
 impl Mux {
@@ -46,7 +47,7 @@ impl Mux {
         Mux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwap::new(interceptor.into()),
+            interceptor: Arc::new(ArcSwap::from_pointee(interceptor)),
         }
     }
 }
@@ -75,11 +76,11 @@ impl MuxContext<'_> {
 }
 
 impl InterceptorContext for MuxContext<'_> {
-    fn face(&self) -> Option<Face> {
-        self.mux.face.get().and_then(|f| f.upgrade())
+    fn face(&self) -> Option<Arc<FaceState>> {
+        Some(self.mux.face.get().and_then(|f| f.upgrade())?.state.clone())
     }
 
-    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
+    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&keyexpr> {
         if self.expr.get().is_none() {
             if let Some(wire_expr) = msg.wire_expr() {
                 if let Some(prefix) = self.prefix(msg) {
@@ -89,14 +90,16 @@ impl InterceptorContext for MuxContext<'_> {
                 }
             }
         }
-        self.expr.get().map(|x| x.as_str())
+        self.expr
+            .get()
+            .map(|x| unsafe { keyexpr::from_str_unchecked(x) })
     }
     fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
         if self.cache.get().is_none() && msg.wire_expr().is_some_and(|we| !we.has_suffix()) {
             if let Some(prefix) = self.prefix(msg) {
                 if let Some(face) = self.mux.face.get().and_then(|f| f.upgrade()) {
                     if let Some(cache) =
-                        prefix.get_egress_cache(&face, &self.mux.interceptor.load())
+                        prefix.get_egress_cache(&face.state, &self.mux.interceptor.load())
                     {
                         self.cache.set(cache).ok();
                     }
@@ -154,21 +157,11 @@ impl EPrimitives for Mux {
     }
 
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        let mut msg = NetworkMessageMut {
+        let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
         };
-        let mut ctx = MuxContext {
-            mux: self,
-            cache: OnceCell::new(),
-            expr: OnceCell::new(),
-        };
-        let interceptor = self.interceptor.load();
-        if interceptor.interceptors.is_empty()
-            || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
-        {
-            let _ = self.handler.schedule(msg);
-        }
+        let _ = self.handler.schedule(msg);
     }
 
     fn send_request(&self, msg: &mut Request) {
@@ -245,7 +238,7 @@ impl EPrimitives for Mux {
 pub struct McastMux {
     pub handler: TransportMulticast,
     pub(crate) face: OnceLock<Face>,
-    pub(crate) interceptor: ArcSwap<InterceptorsChain>,
+    pub(crate) interceptor: Arc<ArcSwap<InterceptorsChain>>,
 }
 
 impl McastMux {
@@ -253,7 +246,7 @@ impl McastMux {
         McastMux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwap::new(interceptor.into()),
+            interceptor: Arc::new(ArcSwap::from_pointee(interceptor)),
         }
     }
 }
@@ -282,11 +275,11 @@ impl McastMuxContext<'_> {
 }
 
 impl InterceptorContext for McastMuxContext<'_> {
-    fn face(&self) -> Option<Face> {
-        self.mux.face.get().cloned()
+    fn face(&self) -> Option<Arc<FaceState>> {
+        Some(self.mux.face.get()?.state.clone())
     }
 
-    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
+    fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&keyexpr> {
         if self.expr.get().is_none() {
             if let Some(wire_expr) = msg.wire_expr() {
                 if let Some(prefix) = self.prefix(msg) {
@@ -296,13 +289,16 @@ impl InterceptorContext for McastMuxContext<'_> {
                 }
             }
         }
-        self.expr.get().map(|x| x.as_str())
+        self.expr
+            .get()
+            .map(|x| unsafe { keyexpr::from_str_unchecked(x) })
     }
     fn get_cache(&self, msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
         if self.cache.get().is_none() && msg.wire_expr().is_some_and(|we| !we.has_suffix()) {
             if let Some(prefix) = self.prefix(msg) {
                 if let Some(face) = self.mux.face.get() {
-                    if let Some(cache) = prefix.get_egress_cache(face, &self.mux.interceptor.load())
+                    if let Some(cache) =
+                        prefix.get_egress_cache(&face.state, &self.mux.interceptor.load())
                     {
                         self.cache.set(cache).ok();
                     }
@@ -360,21 +356,11 @@ impl EPrimitives for McastMux {
     }
 
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        let mut msg = NetworkMessageMut {
+        let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
         };
-        let mut ctx = McastMuxContext {
-            mux: self,
-            cache: OnceCell::new(),
-            expr: OnceCell::new(),
-        };
-        let interceptor = self.interceptor.load();
-        if interceptor.interceptors.is_empty()
-            || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
-        {
-            let _ = self.handler.schedule(msg);
-        }
+        let _ = self.handler.schedule(msg);
     }
 
     fn send_request(&self, msg: &mut Request) {
