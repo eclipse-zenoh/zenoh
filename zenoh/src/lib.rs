@@ -420,12 +420,33 @@ pub mod bytes {
 ///
 /// This module provides the publish/subscribe API of Zenoh.
 ///
-/// A [`Publisher`](crate::pubsub::Publisher) is declared by the
-/// [`Session::declare_publisher`](crate::Session::declare_publisher) method.
+/// Data is published via the [`Publisher`](crate::pubsub::Publisher) which is declared by the
+/// [`Session::declare_publisher`](crate::Session::declare_publisher) method or directly
+/// from the session via the [`Session::put`](crate::Session::put) and
+/// [`Session::delete`](crate::Session::delete) methods.
 ///
 /// [`Sample`](crate::sample::Sample) data is received by [`Subscriber`](crate::pubsub::Subscriber)s
 /// declared with [`Session::declare_subscriber`](crate::Session::declare_subscriber).
 ///
+/// # Put and Delete operations
+///
+/// There are two operations in the publisher [`put`](crate::pubsub::Publisher::put) and
+/// [`delete`](crate::pubsub::Publisher::delete) (or in the session as mentioned above).
+/// 
+/// The publishing may express two different semantics: 
+/// - producing the sequence of values
+/// - updating the single value associated with a key expression
+/// 
+/// In the second case it's necessary to be able to declare that some key is no more associated with any value. The
+/// [`delete`](crate::pubsub::Publisher::delete) operation is used for this.
+/// 
+/// On the receiving side, the subscriber distinguishes between the [`Put`](crate::sample::SampleKind::Put)
+/// and [`Delete`](crate::sample::SampleKind::Delete) operations
+/// by the [`kind`](crate::sample::Sample::kind) field of the [`Sample`](crate::sample::Sample) structure.
+///
+/// The delete operation allows to subscriber to work in pair with a [`Queryable`](crate::query::Queryable)
+/// which caches the values associated with key expressions. 
+/// 
 /// # Examples:
 /// ### Declaring a publisher and publishing data
 /// ```no_run
@@ -474,6 +495,14 @@ pub mod pubsub {
 /// Each reply contains either the [`Sample`](crate::sample::Sample)
 /// or [`ReplyError`](crate::query::ReplyError) structures.
 ///
+/// # Query parameters
+/// 
+/// The query/reply API allows to specify additional parameters for the request.
+/// These parameters are passed to the get operation using the [`Selector`](crate::query::selector::Selector)
+/// syntax. The selector string have a syntax similar to the URL:
+/// it's a key expression followed by a question mark and the list of parameters in format "name=value" separated by ';'.
+/// For example `key/expression?param1=value1;param2=value2`.
+/// 
 /// # Examples:
 /// ### Declaring a queryable
 /// ```no_run
@@ -567,22 +596,32 @@ pub mod matching {
 
 /// # Callback handler trait.
 ///
-/// Sequential data from a [`Subscriber`](crate::pubsub::Subscriber) or
-/// a [`Query`](crate::query::Query) is always passed to a callback function. However, to simplify
-/// using channels, Zenoh provides the [`IntoHandler`](crate::handlers::IntoHandler) trait,
-/// which returns a pair: a callback and a "handler" object.
+/// Zenoh allows two ways to get sequential data from Zenoh primitives, like
+/// [`Subscriber`](crate::pubsub::Subscriber) or [`Query`](crate::query::Query)
 ///
-/// The callback object returned by the channel pushes data to the channel. The handler object
-/// in turn allows retrieving data from the channel.
+/// 1. **Callback functions**: the user provides a callback function that is called with each
+///     incoming sample.
+/// 
+/// 2. **Channels**: the user provides a channel that buffers incoming samples, and the user
+///     retrieves samples from the channel when needed.
+/// 
+/// Below there are the details how the channels works in Zenoh.
+///
+/// Under the hood the sequential data from a is always passed to a callback function.
+/// However, to simplify using channels, Zenoh provides the 
+/// [`IntoHandler`](crate::handlers::IntoHandler) trait,
+/// which returns a pair: a callback which pushes data to the channel and a "handler"
+/// which allows retrieving data from the channel.
 ///
 /// The method [`with`](crate::pubsub::SubscriberBuilder::with) accepts any type that
 /// implements the `IntoHandler` trait and extracts the callback and handler from it.
 /// The Zenoh object calls the callback with each incoming sample. 
 /// 
-/// The handler is stored in the Zenoh object
-/// and made available via the [`handler`](crate::pubsub::Subscriber::handler) method
-/// or by dereferencing the Zenoh object. This is a syntax sugar that allows the user
-/// not to care about the separate channel object.
+/// The handler is also stored in the Zenoh object. It's completely opaque to the Zenoh object,
+/// it's just made available to user via the [`handler`](crate::pubsub::Subscriber::handler) method
+/// or by dereferencing, allowing to call handler's methods directly on the
+/// `Subscriber` or `Query` object.
+/// This is a syntax sugar that allows the user not to care about the separate channel object.
 ///
 /// The example of using channels is shown below.
 ///
@@ -642,6 +681,7 @@ pub mod handlers {
         Callback, CallbackDrop, DefaultHandler, FifoChannel, FifoChannelHandler, IntoHandler,
         RingChannel, RingChannelHandler,
     };
+    /// The module contains helper types and traits necessary to work with FIFO channels
     pub mod fifo {
         pub use crate::api::handlers::{
             Drain, FifoChannel, FifoChannelHandler, IntoIter, Iter, RecvFut, RecvStream, TryIter,

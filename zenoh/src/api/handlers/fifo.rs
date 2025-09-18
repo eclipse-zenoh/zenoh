@@ -50,7 +50,8 @@ impl Default for FifoChannel {
     }
 }
 
-/// [`FifoChannel`] handler.
+/// [`FifoChannel`] handler. 
+/// This is receiver side of the channel which implement all data receiving methods.
 #[derive(Debug, Clone)]
 pub struct FifoChannelHandler<T>(flume::Receiver<T>);
 

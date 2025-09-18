@@ -35,7 +35,14 @@ pub trait IntoHandler<T: CallbackParameter> {
     fn into_handler(self) -> (Callback<T>, Self::Handler);
 }
 
-/// The default handler in Zenoh is a FIFO queue.
+/// The default handler type.
+///
+/// When no channel or callback is provided to [`Subscriber`](crate::pubsub::Subscriber) or [`Query`](crate::query::Query),
+/// Zenoh uses this type by default.
+/// 
+/// Currently, this type is an opaque wrapper over the [`FifoChannel`] with default settings. But the
+/// separate type is created to make possible to change default handler implementation
+/// without API breaking changes.
 #[repr(transparent)]
 #[derive(Default)]
 pub struct DefaultHandler(FifoChannel);

@@ -25,7 +25,7 @@ use ::{zenoh_result::ZResult, zenoh_util::time_range::TimeRange};
 use crate::api::{key_expr::KeyExpr, queryable::Query};
 
 /// A selector is the combination of a [Key Expression](crate::key_expr::KeyExpr), which defines the
-/// set of keys that are relevant to an operation, and a set of parameters
+/// set of keys that are relevant to an operation, and a set of [Parameters](crate::query::Parameters),
 /// with a few intended uses:
 /// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters
 /// - filtering by value,
