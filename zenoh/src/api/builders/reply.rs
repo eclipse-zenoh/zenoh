@@ -37,15 +37,19 @@ use crate::api::{
     sample::QoSBuilder,
 };
 
+/// The type modifier for a [`ReplyBuilder`] to create a reply with a [`Put`](crate::sample::SampleKind::Put) sample.
 #[derive(Debug)]
 pub struct ReplyBuilderPut {
     payload: ZBytes,
     encoding: Encoding,
 }
+
+/// The type modifier for a [`ReplyBuilder`] to create a reply with a [`Delete`](crate::sample::SampleKind::Delete) sample.
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;
 
-/// A builder returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
+/// A builder for [`Reply`](crate::query::Reply) 
+/// returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct ReplyBuilder<'a, 'b, T> {
@@ -214,7 +218,8 @@ impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
     }
 }
 
-/// A builder returned by [`Query::reply_err()`](Query::reply_err).
+/// A builder for [`ReplyError`](crate::query::ReplyError) 
+/// returned by [`Query::reply_err()`](Query::reply_err).
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
 pub struct ReplyErrBuilder<'a> {

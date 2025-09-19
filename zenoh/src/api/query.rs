@@ -81,7 +81,10 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// Error returned by a [`get`](crate::Session::get).
+/// Error reply returned from a [`Queryable`](crate::query::Queryable)
+/// 
+/// The `ReplyError` contains the payload with the error information (message or some structured data)
+/// and the encoding of this payload.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ReplyError {
     pub(crate) payload: ZBytes,
@@ -137,7 +140,13 @@ impl Display for ReplyError {
 
 impl Error for ReplyError {}
 
-/// Struct returned by a [`get`](crate::Session::get).
+/// Answer received from a [`Queryable`](crate::query::Queryable) 
+/// 
+/// The `Reply` contains the result of the request to a [`Queryable`](crate::query::Queryable) by
+/// [`Session::get`](crate::Session::get) or [`Querier::get`](crate::query::Querier::get).
+/// 
+/// It may be either a successful result with a [`Sample`](crate::sample::Sample) or an error with a [`ReplyError`].
+/// The method [`Reply::result`] is provided to access the result.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
