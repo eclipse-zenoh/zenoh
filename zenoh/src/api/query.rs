@@ -37,6 +37,16 @@ use crate::api::{
 };
 
 /// The replies consolidation strategy to apply on replies to a [`get`](crate::Session::get).
+/// 
+/// By default, the consolidation strategy is [`QueryConsolidation::AUTO`], which lets the implementation
+/// choose the best strategy depending on the query parameters and the number of responders.
+/// Other strategies can be selected with the associated constants or by using
+/// specific [`ConsolidationMode`] as a parameter of the 
+/// [`QuerierBuilder::consolidation`](crate::query::QuerierBuilder::consolidation)
+/// or [`SessionGetBuilder::consolidation`](crate::session::SessionGetBuilder::consolidation)
+/// methods.
+/// 
+/// See the documentation of [`ConsolidationMode`] for more details about each strategy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
     pub(crate) mode: ConsolidationMode,
