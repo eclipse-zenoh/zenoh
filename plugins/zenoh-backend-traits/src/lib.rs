@@ -32,6 +32,7 @@
 //! use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, bytes::{ZBytes, Encoding}};
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
+//! use zenoh_util::ffi::JsonValue;
 //!
 //! #[no_mangle]
 //! pub fn create_volume(config: VolumeConfig) -> zenoh::Result<Box<dyn Volume>> {
@@ -45,11 +46,11 @@
 //!
 //! #[async_trait]
 //! impl Volume for MyVolumeType {
-//!     fn get_admin_status(&self) -> String {
+//!     fn get_admin_status(&self) -> JsonValue {
 //!         // This operation is called on GET operation on the admin space for the Volume
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Volume monitoring.
-//!         self.config.to_json_value().to_string()
+//!         self.config.to_json_value().into())
 //!     }
 //!
 //!     fn get_capability(&self) -> Capability {
@@ -80,11 +81,11 @@
 //!
 //! #[async_trait]
 //! impl Storage for MyStorage {
-//!     fn get_admin_status(&self) -> String {
+//!     fn get_admin_status(&self) -> JsonValue {
 //!         // This operation is called on GET operation on the admin space for the Storage
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Storage monitoring.
-//!         self.config.to_json_value().to_string()
+//!         self.config.to_json_value().into()
 //!     }
 //!
 //!     async fn put(&mut self, key: Option<OwnedKeyExpr>, payload: ZBytes, encoding: Encoding, timestamp: Timestamp) -> zenoh::Result<StorageInsertionResult> {
