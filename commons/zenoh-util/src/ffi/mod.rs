@@ -85,6 +85,12 @@ impl Default for JsonValue {
     }
 }
 
+impl JsonValue {
+    pub fn into_serde_value(&self) -> serde_json::Value {
+        self.into()
+    }
+}
+
 /// Struct used to safely exchange data in json format in plugins.
 /// It is not entirely abi stable due to using String, but should do
 /// for now since we require plugins to use the same version of rustc and
@@ -131,3 +137,9 @@ impl PartialEq for JsonKeyValueMap {
 }
 
 impl Eq for JsonKeyValueMap {}
+
+impl JsonKeyValueMap {
+    pub fn into_serde_map(&self) -> serde_json::Map<String, serde_json::Value> {
+        self.into()
+    }
+}
