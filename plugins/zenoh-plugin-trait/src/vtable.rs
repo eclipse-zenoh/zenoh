@@ -16,7 +16,7 @@ use zenoh_result::ZResult;
 use crate::Plugin;
 
 pub type PluginLoaderVersion = u64;
-pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
+pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 2;
 
 type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
