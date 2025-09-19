@@ -150,32 +150,36 @@ impl<'a> Publisher<'a> {
         &self.encoding
     }
 
-    /// Get the `congestion_control` applied when routing the data.
+    /// Get the [`CongestionControl`] applied when routing the data.
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.congestion_control
     }
 
-    /// Get the priority of the written data.
+    /// Get the [`Priority`] of the written data.
     #[inline]
     pub fn priority(&self) -> Priority {
         self.priority
     }
 
-    /// Get the reliability applied when routing the data
+    /// Get the [`Reliability`] applied when routing the data
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(&self) -> Reliability {
         self.reliability
     }
 
-    /// Put data.
+    /// Publish the data. The subscribers matching the Publisher's key expression will receive the
+    /// [`Sample`] with [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Put`].
+    /// 
+    /// The builder allows to customize the publication: add the timestamp,
+    /// attachment, etc. Some fields are pre-filled with the Publisher's configuration and can
+    /// be overridden.
     ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.put("value").await.unwrap();
@@ -199,7 +203,11 @@ impl<'a> Publisher<'a> {
         }
     }
 
-    /// Delete data.
+    /// Declare that the data associated with the Publisher's key expression is deleted.
+    /// The subscribers will receive the [`Sample`] with
+    /// [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Delete`].
+    ///
+    /// The builder allows to customize the publication: add the timestamp, attachment, etc.
     ///
     /// # Examples
     /// ```
@@ -416,8 +424,10 @@ impl Sink<Sample> for Publisher<'_> {
 
 /// Message priority.
 ///
-/// If QoS is enabled, Zenoh keeps one transmission queue per [`Priority`] P, where all messages in
-/// the queue have [`Priority`] P. These queues are serviced in the order of their assigned
+/// If QoS is enabled in the [`Config`](crate::config::Config) (see the boolean 
+/// `transport.<transport_type>.qos` parameter), 
+/// Zenoh keeps one transmission queue per [`Priority`], where all messages in
+/// the queue have the same [`Priority`]. These queues are serviced in the order of their assigned
 /// [`Priority`] (i.e. from [`Priority::RealTime`] to [`Priority::Background`]).
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]

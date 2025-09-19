@@ -246,6 +246,7 @@ impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
     }
 }
 
+/// A [`Resolvable`] returned by [`MatchingListener::undeclare`](MatchingListener::undeclare)
 pub struct MatchingListenerUndeclaration<Handler>(MatchingListener<Handler>);
 
 impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {

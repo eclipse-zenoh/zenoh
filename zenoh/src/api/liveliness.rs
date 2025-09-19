@@ -293,7 +293,7 @@ pub struct LivelinessToken {
     undeclare_on_drop: bool,
 }
 
-/// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`].
+/// A [`Resolvable`] returned by [`LivelinessToken::undeclare`]
 ///
 /// # Examples
 /// ```
@@ -380,7 +380,10 @@ impl Drop for LivelinessToken {
     }
 }
 
-/// A builder for initializing a liveliness.
+/// A builder for initializing a liveliness subscription.
+/// 
+/// The builder is returned by the [`Liveliness::declare_subscriber`] method and
+/// resolves to the [`Subscriber`] receiving the liveliness samples.
 ///
 /// # Examples
 /// ```
@@ -616,7 +619,10 @@ impl IntoFuture for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> 
     }
 }
 
-/// A builder for initializing a liveliness `query`.
+/// builder for initializing a liveliness query.
+///
+/// The builder is returned by the [`Liveliness::get`] method and
+/// resolves to a handler which returns the [`Reply`]s from the liveliness tokens.
 ///
 /// # Examples
 /// ```
@@ -675,7 +681,8 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// Receive the replies for this liveliness query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`.
+    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) 
+    /// method, we suggest you use it instead of `callback_mut`.
     ///
     /// # Examples
     /// ```

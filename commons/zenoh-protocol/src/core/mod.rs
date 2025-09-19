@@ -455,10 +455,13 @@ impl TryFrom<u8> for Priority {
     }
 }
 
+/// Reliability guarantees for message delivery.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Reliability {
+    /// Messages may be lost.
     BestEffort = 0,
+    /// Messages are guaranteed to be delivered.
     #[default]
     Reliable = 1,
 }
