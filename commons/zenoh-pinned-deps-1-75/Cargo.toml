@@ -40,6 +40,8 @@ potential_utf = "=0.1.0"
 static_init = "=1.0.3"
 time = "=0.3.41"
 tinystr = "=0.8.0"
+toml_datetime = "=0.7.1"
+toml_parser = "=1.0.2"
 twox-hash = "=1.6.3"
 zerofrom = "=0.1.5"
 
@@ -58,6 +60,8 @@ ignored = [
   "static_init",
   "time",
   "tinystr",
+  "toml_datetime",
+  "toml_parser",
   "twox-hash",
   "zerofrom",
 ]
