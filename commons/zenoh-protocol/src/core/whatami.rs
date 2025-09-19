@@ -18,15 +18,6 @@ use const_format::formatcp;
 use serde::ser::SerializeSeq;
 use zenoh_result::{bail, ZError};
 
-#[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WhatAmI {
-    Router = 0b001,
-    #[default]
-    Peer = 0b010,
-    Client = 0b100,
-}
-
 /// The type of the node in the Zenoh network.
 /// 
 /// The zenoh application can work in three different modes: router, peer, and client.
@@ -43,7 +34,16 @@ pub enum WhatAmI {
 /// maintains predefined zenoh network topology. Unlike peers, routers do not
 /// discover other nodes by themselves, but rely on static configuration.
 /// 
-/// More detailed explanation of each mode is at https://zenoh.io/docs/getting-started/deployment/
+/// More detailed explanation of each mode is at [Zenoh Documentation](https://zenoh.io/docs/getting-started/deployment/)
+#[repr(u8)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WhatAmI {
+    Router = 0b001,
+    #[default]
+    Peer = 0b010,
+    Client = 0b100,
+}
+
 impl WhatAmI {
     const STR_R: &'static str = "router";
     const STR_P: &'static str = "peer";
@@ -115,7 +115,11 @@ impl From<WhatAmI> for u8 {
     }
 }
 
+/// The helper type allowing to match combinations of `WhatAmI` values in scouting.
 /// 
+/// The [`scout`](crate::scouting::scout) function accepts a `WhatAmIMatcher` to filter the nodes
+/// of the specified types. The `WhatAmIMatcher` can be constructed using from [`WhatAmI`] values
+/// with the `|` operator
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WhatAmIMatcher(NonZeroU8);
@@ -131,30 +135,38 @@ impl WhatAmIMatcher {
     const U8_R_C: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_C;
     const U8_R_P_C: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_P | WhatAmI::U8_C;
 
+    /// Creates an empty `WhatAmIMatcher`, which matches no `WhatAmI` values.
     pub const fn empty() -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(Self::U8_0) })
     }
 
+    /// Creates a `WhatAmIMatcher` matching all [`WhatAmI::Router`] values.
     pub const fn router(self) -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_R) })
     }
 
+    /// Creates a `WhatAmIMatcher` matching all [`WhatAmI::Peer`] values.
     pub const fn peer(self) -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_P) })
     }
 
+    /// Creates a `WhatAmIMatcher` matching all [`WhatAmI::Client`] values.
     pub const fn client(self) -> Self {
         Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_C) })
     }
 
+    /// Returns whether the `WhatAmIMatcher` is empty.
     pub const fn is_empty(&self) -> bool {
         self.0.get() == Self::U8_0
     }
 
+    /// Returns whether the `WhatAmIMatcher` matches the given `WhatAmI` value.
     pub const fn matches(&self, w: WhatAmI) -> bool {
         (self.0.get() & w as u8) != 0
     }
 
+    /// Returns a string representation of the `WhatAmIMatcher` as a combination of
+    /// `WhatAmI` string representations separated by `|`.
     pub const fn to_str(self) -> &'static str {
         match self.0.get() {
             Self::U8_0 => "",

@@ -46,6 +46,8 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
 }
 
 /// Callback type used by zenoh entities.
+///
+/// This type stores the callback function passed to zenoh entities.
 pub struct Callback<T: CallbackParameter>(Arc<dyn CallbackImpl<T>>);
 
 impl<T: CallbackParameter> Clone for Callback<T> {
