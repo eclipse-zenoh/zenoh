@@ -51,8 +51,8 @@ zenoh = { workspace = true, default-features = false, features = [
   "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
-zenoh_backend_traits = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
 jsonschema = { workspace = true }
