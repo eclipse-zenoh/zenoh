@@ -37,6 +37,7 @@ use zenoh::{
     Result as ZResult,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
+use zenoh_util::ffi::{JsonKeyValueMap, JsonValue};
 
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;
@@ -127,9 +128,14 @@ struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
 impl PluginControl for RunningPlugin {}
 
 impl RunningPluginTrait for RunningPlugin {
-    fn config_checker(&self, path: &str, old: &str, new: &str) -> ZResult<Option<String>> {
-        let old = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(old)?;
-        let new = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(new)?;
+    fn config_checker(
+        &self,
+        path: &str,
+        old: &JsonKeyValueMap,
+        new: &JsonKeyValueMap,
+    ) -> ZResult<Option<JsonKeyValueMap>> {
+        let old: serde_json::Map<String, serde_json::Value> = old.into();
+        let new: serde_json::Map<String, serde_json::Value> = new.into();
         let mut guard = zlock!(&self.0);
         const STORAGE_SELECTOR: &str = "storage-selector";
         if path == STORAGE_SELECTOR || path.is_empty() {

@@ -121,6 +121,7 @@
 //! ```
 
 use async_trait::async_trait;
+use serde_json::Value;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     key_expr::{keyexpr, OwnedKeyExpr},
@@ -128,7 +129,7 @@ use zenoh::{
     Result as ZResult,
 };
 use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec};
-use zenoh_util::concat_enabled_features;
+use zenoh_util::{concat_enabled_features, ffi::JsonValue};
 
 pub mod config;
 use config::StorageConfig;
@@ -183,9 +184,9 @@ pub struct StoredData {
 /// Trait to be implemented by a Backend.
 #[async_trait]
 pub trait Volume: Send + Sync {
-    /// Returns the status in the form of json string that will be sent as a reply to a query
+    /// Returns the status in the json format that will be sent as a reply to a query
     /// on the administration space for this backend.
-    fn get_admin_status(&self) -> String;
+    fn get_admin_status(&self) -> JsonValue;
 
     /// Returns the capability of this backend
     fn get_capability(&self) -> Capability;
@@ -209,7 +210,7 @@ impl PluginInstance for VolumeInstance {}
 pub trait Storage: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this storage.
-    fn get_admin_status(&self) -> String;
+    fn get_admin_status(&self) -> JsonValue;
 
     /// Function called for each incoming data ([`Sample`](zenoh::sample::Sample)) to be stored in this storage.
     /// A key can be `None` if it matches the `strip_prefix` exactly.

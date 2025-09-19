@@ -14,10 +14,12 @@
 
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
+use serde_json::Value;
 use zenoh_core::zconfigurable;
 use zenoh_plugin_trait::{Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec};
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
+use zenoh_util::ffi::{JsonKeyValueMap, JsonValue};
 
 use crate::{api::key_expr::KeyExpr, net::runtime::DynamicRuntime};
 
@@ -47,12 +49,15 @@ impl PluginInstance for RunningPlugin {}
 /// A Response for the administration space.
 pub struct Response {
     pub key: String,
-    pub json_value: String,
+    pub value: JsonValue,
 }
 
 impl Response {
-    pub fn new(key: String, json_value: String) -> Self {
-        Self { key, json_value }
+    pub fn new(key: String, value: Value) -> Self {
+        Self {
+            key,
+            value: value.into(),
+        }
     }
 }
 
@@ -69,7 +74,12 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     ///   Useful when the changes affect settings that aren't hot-configurable for your plugin.
     /// * `Ok(None)` indicates that the plugin has accepted the configuration change.
     /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
-    fn config_checker(&self, _path: &str, _current: &str, _new: &str) -> ZResult<Option<String>> {
+    fn config_checker(
+        &self,
+        _path: &str,
+        _current: &JsonKeyValueMap,
+        _new: &JsonKeyValueMap,
+    ) -> ZResult<Option<JsonKeyValueMap>> {
         bail!("Runtime configuration change not supported");
     }
     /// Used to request plugin's status for the administration space.

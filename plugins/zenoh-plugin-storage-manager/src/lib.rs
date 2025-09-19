@@ -52,6 +52,7 @@ mod memory_backend;
 mod replication;
 mod storages_mgt;
 use storages_mgt::*;
+use zenoh_util::ffi::JsonKeyValueMap;
 
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;
@@ -315,9 +316,14 @@ impl PluginControl for StorageRuntime {
 }
 
 impl RunningPluginTrait for StorageRuntime {
-    fn config_checker(&self, _: &str, old: &str, new: &str) -> ZResult<Option<String>> {
-        let old = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(old)?;
-        let new = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(new)?;
+    fn config_checker(
+        &self,
+        _: &str,
+        old: &JsonKeyValueMap,
+        new: &JsonKeyValueMap,
+    ) -> ZResult<Option<JsonKeyValueMap>> {
+        let old: serde_json::Map<String, serde_json::Value> = old.into();
+        let new: serde_json::Map<String, serde_json::Value> = new.into();
         let name = { zlock!(self.0).name.clone() };
         let old = PluginConfig::try_from((&name, &old))?;
         let new = PluginConfig::try_from((&name, &new))?;
@@ -359,7 +365,7 @@ impl RunningPluginTrait for StorageRuntime {
                     if keyexpr::new(key.as_str()).unwrap().intersects(key_expr) {
                         responses.push(Response::new(
                             key.clone(),
-                            plugin.instance().get_admin_status(),
+                            plugin.instance().get_admin_status().into(),
                         ))
                     }
                 });
@@ -377,7 +383,7 @@ impl RunningPluginTrait for StorageRuntime {
                                     rx.recv().await
                                 })
                             }) {
-                                responses.push(Response::new(key.clone(), value.to_string()))
+                                responses.push(Response::new(key.clone(), value.into()))
                             }
                         }
                     })
