@@ -595,11 +595,11 @@ pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
 }
 
 pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
-    address
+    Ok(address
         .as_str()
-        .split(':')
-        .next()
-        .ok_or_else(|| zerror!("Invalid TLS address").into())
+        .rsplit_once(':')
+        .ok_or_else(|| zerror!("Invalid TLS address"))?
+        .0)
 }
 
 pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
