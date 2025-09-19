@@ -198,8 +198,7 @@ impl StorageService {
                             },
                             StorageMessage::GetStatus(tx) => {
                                 let storage = self.storage.lock().await;
-                                std::mem::drop(tx.send(storage.get_admin_status()).await);
-                                drop(storage);
+                                std::mem::drop(tx.send(storage.get_admin_status().into()).await);
                             }
                         };
                     },

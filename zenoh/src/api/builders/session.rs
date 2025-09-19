@@ -25,7 +25,7 @@ use zenoh_shm::api::client_storage::ShmClientStorage;
 
 use crate::api::session::Session;
 #[cfg(feature = "internal")]
-use crate::net::runtime::Runtime;
+use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`crate::open`] used to open a zenoh [`Session`].
 ///
@@ -117,7 +117,7 @@ where
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[zenoh_macros::internal]
-pub fn init(runtime: Runtime) -> InitBuilder {
+pub fn init(runtime: DynamicRuntime) -> InitBuilder {
     InitBuilder {
         runtime,
         aggregated_subscribers: vec![],
@@ -130,7 +130,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 #[doc(hidden)]
 #[zenoh_macros::internal]
 pub struct InitBuilder {
-    runtime: Runtime,
+    runtime: DynamicRuntime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
 }
@@ -159,10 +159,9 @@ impl Resolvable for InitBuilder {
 impl Wait for InitBuilder {
     fn wait(self) -> <Self as Resolvable>::To {
         Ok(Session::init(
-            self.runtime,
+            self.runtime.into(),
             self.aggregated_subscribers,
             self.aggregated_publishers,
-            false,
         )
         .wait())
     }

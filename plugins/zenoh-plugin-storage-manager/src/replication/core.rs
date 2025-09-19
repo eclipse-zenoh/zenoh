@@ -97,9 +97,7 @@ impl Replication {
         let delay = self
             .zenoh_session
             .config()
-            .lock()
-            .scouting
-            .delay()
+            .get_typed::<u64>("scouting/delay")
             .unwrap_or(500);
         tokio::time::sleep(Duration::from_millis(delay)).await;
 

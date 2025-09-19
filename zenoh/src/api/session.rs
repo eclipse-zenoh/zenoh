@@ -33,9 +33,14 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_collections::{IntHashMap, SingleOrVec};
-use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
+#[cfg(feature = "unstable")]
+use zenoh_config::GenericConfig;
+use zenoh_config::{
+    qos::{PublisherQoSConfList, PublisherQoSConfig},
+    wrappers::ZenohId,
+};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
+use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -67,6 +72,8 @@ use zenoh_task::TaskController;
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
+#[cfg(feature = "internal")]
+use crate::net::runtime::Runtime;
 use crate::{
     api::{
         admin,
@@ -102,11 +109,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        routing::{
-            dispatcher::face::Face,
-            namespace::{ENamespace, Namespace},
-        },
-        runtime::{Runtime, RuntimeBuilder},
+        runtime::{GenericRuntime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,
@@ -509,12 +512,10 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
     weak_counter: Mutex<usize>,
-    pub(crate) runtime: Runtime,
+    pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
-    owns_runtime: bool,
     task_controller: TaskController,
-    namespace: Option<OwnedNonWildKeyExpr>,
     face_id: OnceCell<usize>,
 }
 
@@ -655,17 +656,15 @@ impl std::error::Error for SessionClosedError {}
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
-        runtime: Runtime,
+        runtime: GenericRuntime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
-            let router = runtime.router();
-            let config = runtime.config().lock();
-            let publisher_qos = config.0.qos().publication().clone();
-            let namespace = config.0.namespace().clone();
-            drop(config);
+            let publisher_qos = runtime
+                .get_config()
+                .get_typed::<PublisherQoSConfList>("qos/publication")
+                .unwrap();
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
@@ -676,31 +675,15 @@ impl Session {
                 runtime: runtime.clone(),
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                owns_runtime,
                 task_controller: TaskController::default(),
-                namespace: namespace.clone(),
                 face_id: OnceCell::new(),
             }));
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
-
-            let primitives: Arc<dyn Primitives> = match namespace {
-                Some(ns) => {
-                    let face = router.new_primitives(Arc::new(ENamespace::new(
-                        ns.clone(),
-                        Arc::new(session.downgrade()),
-                    )));
-                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
-                    Arc::new(Namespace::new(ns, face))
-                }
-                None => {
-                    let face = router.new_primitives(Arc::new(session.downgrade()));
-                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
-                    face
-                }
-            };
+            let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
+            session.0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
 
             admin::init(session.downgrade());
 
@@ -810,8 +793,8 @@ impl Session {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn config(&self) -> &crate::config::Notifier<Config> {
-        self.0.runtime.config()
+    pub fn config(&self) -> GenericConfig {
+        self.0.runtime.get_config()
     }
 
     /// Get a new Timestamp from a Zenoh [`Session`].
@@ -855,7 +838,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            runtime: self.0.runtime.clone(),
+            runtime: self.0.runtime.deref().clone(),
         }
     }
 
@@ -1005,10 +988,8 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        let timeout = {
-            let conf = &self.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
-        };
+        let timeout =
+            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         QuerierBuilder {
             session: self,
@@ -1204,10 +1185,8 @@ impl Session {
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
-        let timeout = {
-            let conf = &self.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
-        };
+        let timeout =
+            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         SessionGetBuilder {
             session: self,
@@ -1245,10 +1224,9 @@ impl Session {
             let mut runtime = runtime.build().await?;
 
             let session = Self::init(
-                runtime.clone(),
+                runtime.clone().into(),
                 aggregated_subscribers,
                 aggregated_publishers,
-                true,
             )
             .await;
             runtime.start().await?;
@@ -1900,55 +1878,12 @@ impl SessionInner {
         destination: Locality,
         matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
-        if let Some(ns) = &self.namespace {
-            self.matching_status_remote_inner(
-                &(ns / key_expr.deref()).into(),
-                destination,
-                matching_type,
-            )
-        } else {
-            self.matching_status_remote_inner(key_expr, destination, matching_type)
-        }
-    }
-
-    fn matching_status_remote_inner(
-        &self,
-        key_expr: &KeyExpr,
-        destination: Locality,
-        matching_type: MatchingStatusType,
-    ) -> ZResult<MatchingStatus> {
-        let router = self.runtime.router();
-        let tables = zread!(router.tables.tables);
-
-        let matches = match matching_type {
-            MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    key_expr,
-                )
-            }
-            MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    key_expr,
-                    complete,
-                )
-            }
-        };
-
-        drop(tables);
-        let matching = match destination {
-            Locality::Any => !matches.is_empty(),
-            Locality::Remote => matches
-                .values()
-                .any(|dir| dir.id != *self.face_id.get().unwrap()),
-            Locality::SessionLocal => matches
-                .values()
-                .any(|dir| dir.id == *self.face_id.get().unwrap()),
-        };
-        Ok(MatchingStatus { matching })
+        Ok(self.runtime.matching_status_remote(
+            key_expr,
+            destination,
+            matching_type,
+            *self.face_id.get().unwrap(),
+        ))
     }
 
     pub(crate) fn matching_status(
@@ -2161,28 +2096,13 @@ impl SessionInner {
             ..Push::from(make_body())
         };
         if destination != Locality::SessionLocal {
-            match &self.namespace {
-                Some(_) => {
-                    let face = primitives.as_any().downcast_ref::<Namespace>().unwrap();
-                    face.send_push(
-                        &mut push,
-                        #[cfg(feature = "unstable")]
-                        reliability,
-                        #[cfg(not(feature = "unstable"))]
-                        Reliability::DEFAULT,
-                    );
-                }
-                None => {
-                    let face = primitives.as_any().downcast_ref::<Face>().unwrap();
-                    face.send_push(
-                        &mut push,
-                        #[cfg(feature = "unstable")]
-                        reliability,
-                        #[cfg(not(feature = "unstable"))]
-                        Reliability::DEFAULT,
-                    );
-                }
-            }
+            primitives.send_push(
+                &mut push,
+                #[cfg(feature = "unstable")]
+                reliability,
+                #[cfg(not(feature = "unstable"))]
+                Reliability::DEFAULT,
+            );
         }
         if destination != Locality::Remote {
             self.execute_subscriber_callbacks(
@@ -2202,6 +2122,12 @@ impl SessionInner {
             );
         }
         Ok(())
+    }
+
+    #[cfg(feature = "internal")]
+    #[allow(dead_code)]
+    pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
+        self.runtime.static_runtime()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3014,10 +2940,12 @@ impl Closee for Arc<SessionInner> {
             return;
         };
 
-        if self.owns_runtime {
+        if let Some(r) = self.runtime.static_runtime() {
+            // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
             info!(zid = %self.zid(), "close session");
             self.task_controller.terminate_all_async().await;
-            self.runtime.get_closee().close_inner().await;
+            let closee = r.get_closee();
+            closee.close_inner().await;
         } else {
             self.task_controller.terminate_all_async().await;
             primitives.send_close();

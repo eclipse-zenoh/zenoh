@@ -5709,6 +5709,7 @@ dependencies = [
  "tokio",
  "zenoh",
  "zenoh-plugin-trait",
+ "zenoh-util",
  "zenoh_backend_traits",
 ]
 
@@ -6198,6 +6199,7 @@ dependencies = [
  "xxhash-rust",
  "zenoh",
  "zenoh-plugin-trait",
+ "zenoh-util",
  "zenoh_backend_traits",
 ]
 
@@ -6208,6 +6210,7 @@ dependencies = [
  "git-version",
  "libloading",
  "serde",
+ "stabby",
  "tracing",
  "zenoh-config",
  "zenoh-keyexpr",
@@ -6355,6 +6358,7 @@ dependencies = [
  "libc",
  "libloading",
  "pnet_datalink",
+ "schemars 0.8.21",
  "serde",
  "serde_json",
  "shellexpand",

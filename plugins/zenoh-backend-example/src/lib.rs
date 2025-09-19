@@ -27,6 +27,7 @@ use zenoh_backend_traits::{
     VolumeInstance,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
+use zenoh_util::ffi::JsonValue;
 
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);
@@ -60,8 +61,8 @@ impl Default for ExampleStorage {
 
 #[async_trait]
 impl Volume for ExampleBackend {
-    fn get_admin_status(&self) -> serde_json::Value {
-        serde_json::Value::Null
+    fn get_admin_status(&self) -> JsonValue {
+        serde_json::Value::Null.into()
     }
     fn get_capability(&self) -> Capability {
         Capability {
@@ -76,8 +77,8 @@ impl Volume for ExampleBackend {
 
 #[async_trait]
 impl Storage for ExampleStorage {
-    fn get_admin_status(&self) -> serde_json::Value {
-        serde_json::Value::Null
+    fn get_admin_status(&self) -> JsonValue {
+        serde_json::Value::Null.into()
     }
     async fn put(
         &mut self,

@@ -30,6 +30,7 @@ name = "zenoh_plugin_trait"
 git-version = { workspace = true }
 libloading = { workspace = true }
 serde = { workspace = true }
+stabby = { workspace = true }
 tracing = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-keyexpr = { workspace = true, features = ["internal", "unstable"] }

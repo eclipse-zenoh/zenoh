@@ -36,9 +36,9 @@ use std::{
     io::Read,
     net::SocketAddr,
     num::{NonZeroU16, NonZeroUsize},
-    ops::{self, Bound, RangeBounds},
+    ops::{self, Bound, Deref, RangeBounds},
     path::Path,
-    sync::Weak,
+    sync::{Arc, Weak},
 };
 
 use include::recursive_include;
@@ -1765,4 +1765,37 @@ macro_rules! unwrap_or_default {
     ($val:ident$(.$field:ident($($param:ident)?))*) => {
         $val$(.$field($($param)?))*.clone().unwrap_or(zenoh_config::defaults$(::$field$(($param))?)*.into())
     };
+}
+
+pub trait IConfig {
+    fn get(&self, key: &str) -> ZResult<String>;
+    fn queries_default_timeout_ms(&self) -> u64;
+    fn insert_json5(&self, key: &str, value: &str) -> ZResult<()>;
+}
+
+pub struct GenericConfig(Arc<dyn IConfig>);
+
+impl Deref for GenericConfig {
+    type Target = Arc<dyn IConfig>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl GenericConfig {
+    pub fn new(value: Arc<dyn IConfig>) -> Self {
+        GenericConfig(value)
+    }
+
+    pub fn get_typed<T: for<'a> Deserialize<'a>>(&self, key: &str) -> ZResult<T> {
+        self.0
+            .get(key)
+            .and_then(|v| serde_json::from_str::<T>(&v).map_err(|e| e.into()))
+    }
+
+    pub fn get_plugin_config(&self, plugin_name: &str) -> ZResult<Value> {
+        self.get(&("plugins/".to_owned() + plugin_name))
+            .and_then(|v| serde_json::from_str(&v).map_err(|e| e.into()))
+    }
 }
