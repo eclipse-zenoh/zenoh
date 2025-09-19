@@ -90,9 +90,10 @@ impl Drop for QueryInner {
 /// parameters, the payload and the attachment if any.
 /// 
 /// The reply to the query should be made with one of it's methods: 
-/// [`reply`](Query::reply), [`reply_err`](Query::reply_err) or
-/// [`reply_del`](Query::reply_del).
-/// 
+/// - [`Query::reply`](crate::query::Query::reply) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put),
+/// - [`Query::reply_del`](crate::query::Query::reply_del) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Delete`](crate::sample::SampleKind::Delete),
+/// - [`Query::reply_err`](crate::query::Query::reply_err) to send an error reply.
+///
 /// The important detail: the [`Query::key_expr`] is **not** the key expression
 /// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
 /// The [`Queryable`]s key expression is the one that should be used.
@@ -413,15 +414,18 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
         std::future::ready(self.wait())
     }
 }
-/// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
+/// A `Queryable` is an entity that implements the query/reply pattern.
 ///
-/// Queryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_queryable`](crate::Session::declare_queryable) function.
+/// A `Queryable` is declared by the
+/// [`Session::declare_queryable`](crate::Session::declare_queryable) method
+/// and serves queries [`Query`](crate::query::Query) using callback
+/// or channel (see [handlers](crate::handlers) module documentation for details).
 ///
-/// Callback queryables will run in background until the session is closed,
-/// or until it is undeclared.
-/// On the other hand, queryables with a handler are automatically undeclared when dropped.
-///
+/// The `Queryable` receives [`Query`](crate::query::Query) requests from
+/// [`Querier::get`](crate::query::Querier::get) or from [`Session::get`](crate::Session::get)
+/// and sends back replies with the methods of the [`Query`](crate::query::Query): [`reply`](crate::query::Query::reply),
+/// [`reply_err`](crate::query::Query::reply_err) or [`reply_del`](crate::query::Query::reply_del).
+/// 
 /// # Examples
 ///
 /// Using callback:
@@ -435,6 +439,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// session
 ///     .declare_queryable("key/expression")
 ///     .callback(move |query| tx.send(query).unwrap())
+///     .background()
 ///     .await
 ///     .unwrap();
 /// // queryable run in background until the session is closed

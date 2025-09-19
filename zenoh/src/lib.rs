@@ -488,7 +488,7 @@ pub mod pubsub {
 ///
 /// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method
-/// and serves queries [`Query``](crate::query::Query) using callback
+/// and serves queries [`Query`](crate::query::Query) using callback
 /// or channel (see [handlers] module documentation for details).
 ///
 /// The [`Query`](crate::query::Query) have the methods [`reply`](crate::query::Query::reply) 
