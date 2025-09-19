@@ -37,7 +37,7 @@ use zenoh::{
     Result as ZResult,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
-use zenoh_util::ffi::{JsonKeyValueMap, JsonValue};
+use zenoh_util::ffi::JsonKeyValueMap;
 
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;

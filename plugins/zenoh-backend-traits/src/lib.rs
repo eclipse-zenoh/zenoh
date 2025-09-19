@@ -121,7 +121,6 @@
 //! ```
 
 use async_trait::async_trait;
-use serde_json::Value;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     key_expr::{keyexpr, OwnedKeyExpr},
