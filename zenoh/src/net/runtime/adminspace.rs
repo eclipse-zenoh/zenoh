@@ -576,9 +576,12 @@ fn local_data(context: &AdminContext, query: Query) {
     #[cfg(feature = "stats")]
     let insert_stats = |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
         if export_stats {
-            json.as_object_mut()
-                .unwrap()
-                .insert("stats".into(), json!(stats.map(|s| s.report())));
+            let map = json.as_object_mut().unwrap();
+            map.insert("stats".into(), json!(stats.map(|s| s.report())));
+            map.insert(
+                "filtered_stats".into(),
+                json!(stats.map(|s| s.filtered_report())),
+            );
         }
         json
     };
