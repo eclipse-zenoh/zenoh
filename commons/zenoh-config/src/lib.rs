@@ -404,6 +404,11 @@ pub enum AutoConnectStrategy {
     GreaterZid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct StatsFilterConfig {
+    pub key: OwnedKeyExpr,
+}
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -887,8 +892,8 @@ validated_struct::validator! {
         pub low_pass_filter: Vec<LowPassFilterConf>,
 
         /// Configuration of the stats per keyexpr
-        pub stats: #[derive(Default)] StatsConfig {
-            keys: Vec<OwnedKeyExpr>,
+        pub stats: #[derive(Default, PartialEq, Eq)] StatsConfig {
+            filters: Vec<StatsFilterConfig>,
         },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.

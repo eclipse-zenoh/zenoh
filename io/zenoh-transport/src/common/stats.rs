@@ -110,7 +110,7 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 parent: Option<std::sync::Weak<$parent_type>>,
                 children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
-                keys: arc_swap::ArcSwap<Vec<KeyStats<$struct_name>>>,
+                filtered: arc_swap::ArcSwap<Vec<std::sync::Arc<FilteredStats<$struct_name>>>>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
@@ -118,7 +118,7 @@ macro_rules! stats_struct {
             }
 
             $(#[$meta])*
-            $vis struct [<Key $struct_name Report>] {
+            $vis struct [<Filtered $struct_name Report>] {
                 key: OwnedKeyExpr,
                 stats: [<$struct_name Report>]
             }
@@ -129,8 +129,6 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 #[serde(skip)]
                 children: std::vec::Vec<[<$struct_name Report>]>,
-                #[serde(default, skip_serializing_if = "Vec::is_empty")]
-                stats_keys: Vec<[<Key $struct_name Report>]>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@report_field_type $($field_type)?),
@@ -156,21 +154,24 @@ macro_rules! stats_struct {
                     a
                 }
 
-                $vis fn keys(&self) -> &arc_swap::ArcSwap<Vec<KeyStats<$struct_name>>> {
-                    &self.keys
+                $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<std::sync::Arc<FilteredStats<$struct_name>>>> {
+                    &self.filtered
                 }
 
                 $vis fn report(&self) -> [<$struct_name Report>] {
                     let report = [<$struct_name Report>] {
                         labels: self.labels.clone(),
                         children: self.children.lock().unwrap().iter().map(|c| c.report()).collect(),
-                        stats_keys: self.keys.load().iter().map(|k| [<Key $struct_name Report>] {key: k.key_expr.clone(), stats: k.stats.report()}).collect(),
                         $($field_name: self.[<get_ $field_name>](),)*
                     };
                     // remove already dropped children
                     self.children.lock().unwrap().retain(|c| std::sync::Arc::strong_count(c) > 1);
 
                     report
+                }
+
+                $vis fn filtered_report(&self) -> Vec<[<Filtered $struct_name Report>]> {
+                    self.filtered.load().iter().map(|f| [<Filtered $struct_name Report>] {key: f.key_expr.clone(), stats: f.stats.report()}).collect()
                 }
 
                 $(
@@ -185,7 +186,7 @@ macro_rules! stats_struct {
                         labels: Default::default(),
                         parent: Default::default(),
                         children: Default::default(),
-                        keys: Default::default(),
+                        filtered: Default::default(),
                         $($field_name: stats_struct!(@new(Default::default(), Default::default()) $($field_type)?),)*
                     }
                 }
@@ -276,7 +277,6 @@ macro_rules! stats_struct {
                     Self {
                         labels: Default::default(),
                         children: Default::default(),
-                        stats_keys: Default::default(),
                         $($field_name: stats_struct!(@report_default $($field_type)?),)*
                     }
                 }
@@ -445,12 +445,12 @@ stats_struct! {
     }
 }
 
-pub struct KeyStats<S = TransportStats> {
+pub struct FilteredStats<S = TransportStats> {
     key_expr: OwnedKeyExpr,
     stats: S,
 }
 
-impl KeyStats {
+impl FilteredStats {
     pub fn new(key_expr: OwnedKeyExpr) -> Self {
         Self {
             key_expr,

@@ -141,8 +141,8 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
     #[cfg(feature = "stats")]
     res.extend(stats::stats_interceptor_factories(config.stats())?);
     #[cfg(not(feature = "stats"))]
-    if !config.stats().keys().is_empty() {
-        tracing::warn!("stats per keys requires \"stats\" compilation feature enabled");
+    if *config.stats() != zenoh_config::StatsConfig::default() {
+        tracing::warn!("stats filters requires \"stats\" compilation feature enabled");
     }
     Ok(res)
 }

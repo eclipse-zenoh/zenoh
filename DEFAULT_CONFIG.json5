@@ -524,10 +524,12 @@
   //   },
   // ],
 
-  /// Enable stats gathering per key expression.
+  /// Enable stats per key expression.
   // stats: {
-  //   keys: [
-  //     "some/key/expression/**",
+  //   filters: [
+  //     {
+  //       key: "some/key/expression/**",
+  //     }
   //   ],
   // },
 
