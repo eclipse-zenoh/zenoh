@@ -27,12 +27,13 @@ use super::{
     resource::Resource,
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
-#[zenoh_macros::unstable]
-use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    dispatcher::{face::Face, gateway::Bound},
-    hat::{BaseContext, InterestProfile, SendDeclare},
-    router::{get_or_set_route, Direction, RouteBuilder},
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::{face::Face, gateway::Bound},
+        hat::{BaseContext, InterestProfile, SendDeclare},
+        router::{get_or_set_route, Direction, RouteBuilder},
+    },
 };
 
 // FIXME(fuzzypixelz): this was added in e7f885ef due to sub reliability

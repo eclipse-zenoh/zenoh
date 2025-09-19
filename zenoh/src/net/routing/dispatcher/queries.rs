@@ -40,12 +40,13 @@ use super::{
     resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, TablesLock},
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::routing::{
-    dispatcher::{face::Face, gateway::Bound, tables::Tables},
-    hat::{BaseContext, InterestProfile, SendDeclare},
-    router::{get_or_set_route, QueryDirection, RouteBuilder},
+use crate::{
+    key_expr::KeyExpr,
+    net::routing::{
+        dispatcher::{face::Face, gateway::Bound, tables::Tables},
+        hat::{BaseContext, InterestProfile, SendDeclare},
+        router::{get_or_set_route, QueryDirection, RouteBuilder},
+    },
 };
 
 pub(crate) struct Query {

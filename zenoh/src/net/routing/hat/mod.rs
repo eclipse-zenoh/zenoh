@@ -41,15 +41,16 @@ use super::{
     },
     RoutingContext,
 };
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-    routing::dispatcher::{
-        gateway::{Bound, BoundMap},
-        interests::{CurrentInterest, RemoteInterest},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+        routing::dispatcher::{
+            gateway::{Bound, BoundMap},
+            interests::{CurrentInterest, RemoteInterest},
+        },
+        runtime::Runtime,
     },
-    runtime::Runtime,
 };
 
 mod client;

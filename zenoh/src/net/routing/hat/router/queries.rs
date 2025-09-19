@@ -34,21 +34,23 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::network::Network,
-    routing::{
-        dispatcher::{
-            face::FaceState,
-            resource::{FaceContext, NodeId, Resource},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::network::Network,
+        routing::{
+            dispatcher::{
+                face::FaceState,
+                resource::{FaceContext, NodeId, Resource},
+                tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
+            },
+            hat::{
+                BaseContext, CurrentFutureTrait, HatQueriesTrait, InterestProfile, SendDeclare,
+                Sources,
+            },
+            router::{disable_matches_query_routes, Direction, DEFAULT_NODE_ID},
+            RoutingContext,
         },
-        hat::{
-            BaseContext, CurrentFutureTrait, HatQueriesTrait, InterestProfile, SendDeclare, Sources,
-        },
-        router::{disable_matches_query_routes, Direction, DEFAULT_NODE_ID},
-        RoutingContext,
     },
 };
 
@@ -1047,7 +1049,6 @@ impl Hat {
         }
     }
 
-    #[cfg(feature = "unstable")]
     #[inline]
     fn insert_faces_for_qbls(
         &self,

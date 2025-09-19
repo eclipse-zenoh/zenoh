@@ -31,23 +31,25 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
-#[cfg(feature = "unstable")]
-use crate::key_expr::KeyExpr;
-use crate::net::{
-    protocol::network::Network,
-    routing::{
-        dispatcher::{
-            face::FaceState,
-            interests::RemoteInterest,
-            pubsub::SubscriberInfo,
-            resource::{FaceContext, NodeId, Resource},
-            tables::{Route, RoutingExpr, TablesData},
+use crate::{
+    key_expr::KeyExpr,
+    net::{
+        protocol::network::Network,
+        routing::{
+            dispatcher::{
+                face::FaceState,
+                interests::RemoteInterest,
+                pubsub::SubscriberInfo,
+                resource::{FaceContext, NodeId, Resource},
+                tables::{Route, RoutingExpr, TablesData},
+            },
+            hat::{
+                BaseContext, CurrentFutureTrait, HatPubSubTrait, InterestProfile, SendDeclare,
+                Sources,
+            },
+            router::{disable_matches_data_routes, Direction, RouteBuilder, DEFAULT_NODE_ID},
+            RoutingContext,
         },
-        hat::{
-            BaseContext, CurrentFutureTrait, HatPubSubTrait, InterestProfile, SendDeclare, Sources,
-        },
-        router::{disable_matches_data_routes, Direction, RouteBuilder, DEFAULT_NODE_ID},
-        RoutingContext,
     },
 };
 
