@@ -202,6 +202,24 @@ impl QueryState {
     }
 }
 /// The kind of accepted query replies.
+/// 
+/// The [`Queryable`](crate::query::Queryable) may serve glob-like key expressions.
+/// E.g. the queryable may be declared with the key expression `foo/*`.
+/// At the same time it may send replies with more specific key expressions, e.g., `foo/bar` or `foo/baz`.
+/// This may cause the situattion when the queryable receives a query with the key expression `foo/bar`
+/// and replies to it with the key expression `foo/baz`.
+/// 
+/// By default this behavior is not allowed. Calling [`Query::reply`](crate::query::Query::reply) on 
+/// a query for `foo/bar` with key expression `foo/baz` will result in an error on the sending side.
+/// 
+/// But if the query is sent with [`ReplyKeyExpr::Any`] parameter in [`accept_replies`](crate::session::SessionGetBuilder::accept_replies) (for
+/// [`Session::get`](crate::session::Session::get) or
+/// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for
+/// [`Querier::get`](crate::query::Querier::get))
+/// then the reply with disjoint key expression will be accepted on this query.
+///
+/// The [`Queryable`](crate::query::Queryable) may check this parameter with
+/// [`Query::accepts_replies`](crate::query::Query::accepts_replies).
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {

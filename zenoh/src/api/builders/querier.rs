@@ -46,7 +46,7 @@ use crate::{
     Session,
 };
 
-/// A builder for initializing a `querier`.
+/// A builder for initializing a [`Querier`](crate::query::Querier).
 ///
 /// # Examples
 /// ```
@@ -133,11 +133,9 @@ impl QuerierBuilder<'_, '_> {
         Self { timeout, ..self }
     }
 
-    /// By default, only replies whose key expressions intersect
-    /// with the querier key expression will be received by calls to [`Querier::get`](crate::query::Querier::get) method.
-    ///
-    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
-    /// expressions that don't intersect with the querier's queries.
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This setter allows you to define whether this querier accepts such disjoint replies.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
@@ -187,7 +185,10 @@ impl IntoFuture for QuerierBuilder<'_, '_> {
     }
 }
 
-/// A builder for initializing a `query` to be sent from the querier.
+/// A builder for configuring a [`get`](crate::query::Querier::get) 
+/// operation from a [`Querier`](crate::query::Querier).
+/// The builder resolves to a [`handler`](crate::handlers) generating a series of
+/// [`Reply`](crate::api::query::Reply) for each response received.
 ///
 /// # Examples
 /// ```

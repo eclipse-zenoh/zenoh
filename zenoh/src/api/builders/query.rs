@@ -275,13 +275,9 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         Self { timeout, ..self }
     }
 
-    ///
-    ///
-    /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
-    /// with the queried key expression.
-    ///
-    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
-    /// expressions that don't intersect with the query's.
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This setter allows you to define whether this get operation accepts such disjoint replies.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {

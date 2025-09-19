@@ -83,7 +83,21 @@ impl Drop for QueryInner {
     }
 }
 
-/// Structs received by a [`Queryable`].
+/// The request received by a [`Queryable`].
+///
+/// The `Query` provides all data sent by [`Querier::get`](crate::query::Querier::get) 
+/// or [`Session::get`](crate::Session::get): the key expression, the
+/// parameters, the payload and the attachment if any.
+/// 
+/// The reply to the query should be made with one of it's methods: 
+/// [`reply`](Query::reply), [`reply_err`](Query::reply_err) or
+/// [`reply_del`](Query::reply_del).
+/// 
+/// The important detail: the [`Query::key_expr`] is **not** the key expression
+/// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
+/// The [`Queryable`]s key expression is the one that should be used.
+/// For example, the `Query` may contain the key expression `foo/*` and the reply
+/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
@@ -117,7 +131,7 @@ impl Query {
         self.value.as_ref().map(|v| &v.0)
     }
 
-    /// This Query's payload.
+    /// This Query's payload (mutable).
     #[inline(always)]
     pub fn payload_mut(&mut self) -> Option<&mut ZBytes> {
         self.value.as_mut().map(|v| &mut v.0)
@@ -134,7 +148,7 @@ impl Query {
         self.attachment.as_ref()
     }
 
-    /// This Query's attachment.
+    /// This Query's attachment (mutable).
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
@@ -154,7 +168,8 @@ impl Query {
         }
     }
 
-    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Put`] as a reply to this Query.
+    /// Sends a [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put) 
+    /// as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -182,7 +197,8 @@ impl Query {
         ReplyErrBuilder::new(self, payload)
     }
 
-    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Delete`] as a reply to this Query.
+    /// Sends a [`Sample`](crate::sample::Sample) of kind [`Delete`](crate::sample::SampleKind::Delete)
+    /// as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -199,8 +215,9 @@ impl Query {
         ReplyBuilder::<'_, 'b, ReplyBuilderDelete>::new(self, key_expr)
     }
 
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
-    /// This getter allows you to check whether or not a specific query does.
+    /// This getter allows you to check whether or not a specific query does so.
     #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
@@ -363,7 +380,7 @@ pub(crate) struct QueryableInner {
     pub(crate) key_expr: KeyExpr<'static>,
 }
 
-/// A [`Resolvable`] returned when undeclaring a queryable.
+/// A [`Resolvable`] returned when undeclaring a [`Queryable`].
 ///
 /// # Examples
 /// ```

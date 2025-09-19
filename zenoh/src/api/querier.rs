@@ -59,9 +59,11 @@ pub(crate) struct QuerierState {
     pub(crate) destination: Locality,
 }
 
-/// A querier that allows to send queries to a queryable.
+/// A querier that allows to send queries to a [`Queryable`](crate::query::Queryable).
 ///
-/// Queriers are automatically undeclared when dropped.
+/// The querier is a preconfigured object that can be used to send multiple
+/// queries to a given key expression. It is declared using
+/// [`Session::declare_querier`](crate::Session::declare_querier)
 ///
 /// # Examples
 /// ```
@@ -140,14 +142,18 @@ impl<'a> Querier<'a> {
         self.qos.priority()
     }
 
-    /// Get type of queryables that can reply to this querier
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This getter allows you to check whether this querier accepts such disjoint replies.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn accept_replies(&self) -> ReplyKeyExpr {
         self.accept_replies
     }
 
-    /// Send a query.
+    /// Send a query. Returns a builder to customize the query. The builder
+    /// resolves to a [`handler`](crate::handlers) generating a series of
+    /// [`Reply`](crate::api::query::Reply) for each response received.
     ///
     /// # Examples
     /// ```
