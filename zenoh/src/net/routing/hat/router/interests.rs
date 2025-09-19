@@ -448,10 +448,10 @@ impl Hat {
         let cancellation_token = self.task_controller.get_cancellation_token();
         let rejection_token = self.task_controller.get_cancellation_token();
 
-        // state: finalize delcaration if:
+        // NOTE(regions): finalize declaration if:
         //   1. timeout expires (task)
         //   2. interest is rejected by an interceptor (by reject_interest)
-        //   3. gateway finalized delcaration (by task)
+        //   3. gateway finalized declaration (by task)
         {
             let cancellation_token = cancellation_token.clone();
             let rejection_token = rejection_token.clone();
