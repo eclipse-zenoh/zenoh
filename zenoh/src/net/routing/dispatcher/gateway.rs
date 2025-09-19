@@ -47,6 +47,10 @@ impl Bound {
         Self::eastwest(0)
     }
 
+    pub(crate) const fn north() -> Self {
+        Self::North
+    }
+
     pub(crate) const fn south(index: usize) -> Self {
         Self::South { index }
     }

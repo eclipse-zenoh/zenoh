@@ -45,16 +45,38 @@ use crate::net::{
     },
 };
 
-pub struct Router {
-    // whatami: WhatAmI,
-    pub tables: Arc<TablesLock>,
+pub struct RouterBuilder<'conf> {
+    config: &'conf Config,
+    hlc: Option<Arc<HLC>>,
+    hats: Vec<(Bound, WhatAmI)>,
 }
 
-impl Router {
-    pub fn new(zid: ZenohIdProto, hlc: Option<Arc<HLC>>, config: &Config) -> ZResult<Self> {
-        let mode = zenoh_config::unwrap_or_default!(config.mode());
+impl<'conf> RouterBuilder<'conf> {
+    pub fn new(config: &'conf Config) -> RouterBuilder<'conf> {
+        Self {
+            config,
+            hlc: None,
+            hats: Vec::new(),
+        }
+    }
 
-        let gateway_config = config
+    pub fn hlc(mut self, hlc: Arc<HLC>) -> Self {
+        self.hlc = Some(hlc);
+        self
+    }
+
+    pub fn hat(mut self, bound: Bound, whatami: WhatAmI) -> Self {
+        self.hats.push((bound, whatami));
+        self
+    }
+
+    pub fn build(mut self) -> ZResult<Router> {
+        let config = self.config;
+        let mode = zenoh_config::unwrap_or_default!(config.mode());
+        let zid = (*config.id()).unwrap_or_default().into();
+
+        let gateway_config = self
+            .config
             .gateway
             .get(mode)
             .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
@@ -64,31 +86,35 @@ impl Router {
         }
 
         // REVIEW(regions): impact of using three hats at minimum
-        let mut hats = vec![
-            (Bound::North, mode),
-            (Bound::unbound(), WhatAmI::Router),
-            (Bound::session(), WhatAmI::Client),
-        ];
-
-        for (index, south) in gateway_config.south.iter().enumerate() {
-            hats.push((Bound::south(index), south.mode));
+        if self.hats.is_empty() {
+            self.hats.extend([
+                (Bound::North, mode),
+                (Bound::unbound(), WhatAmI::Router),
+                (Bound::session(), WhatAmI::Client),
+            ]);
         }
 
-        tracing::trace!(?hats, "new router");
+        for (index, south) in gateway_config.south.iter().enumerate() {
+            self.hats.push((Bound::south(index), south.mode));
+        }
+
+        tracing::trace!(hats = ?self.hats, "New router");
 
         Ok(Router {
             tables: Arc::new(TablesLock {
                 tables: RwLock::new(Tables {
                     data: TablesData::new(
                         zid,
-                        hlc,
+                        self.hlc,
                         config,
-                        hats.iter()
+                        self.hats
+                            .iter()
                             .copied()
                             .map(|(b, wai)| (b, tables::HatTablesData::new(wai)))
                             .collect(),
                     )?,
-                    hats: hats
+                    hats: self
+                        .hats
                         .iter()
                         .copied()
                         .map(|(b, wai)| (b, hat::new_hat(wai, config, b)))
@@ -100,7 +126,14 @@ impl Router {
             }),
         })
     }
+}
 
+pub struct Router {
+    // whatami: WhatAmI,
+    pub tables: Arc<TablesLock>,
+}
+
+impl Router {
     pub fn init_hats(&mut self, runtime: Runtime) -> ZResult<()> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);

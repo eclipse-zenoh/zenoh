@@ -72,7 +72,7 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
-    net::routing::dispatcher::gateway::Bound,
+    net::routing::{dispatcher::gateway::Bound, router::RouterBuilder},
     GIT_VERSION, LONG_VERSION,
 };
 
@@ -152,7 +152,11 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, hlc.clone(), &config)?);
+        let mut router_builder = RouterBuilder::new(&config);
+        if let Some(hlc) = hlc.as_ref().cloned() {
+            router_builder = router_builder.hlc(hlc.clone());
+        }
+        let router = Arc::new(router_builder.build()?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
