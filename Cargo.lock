@@ -6358,6 +6358,7 @@ dependencies = [
  "libc",
  "libloading",
  "pnet_datalink",
+ "schemars 0.8.21",
  "serde",
  "serde_json",
  "shellexpand",

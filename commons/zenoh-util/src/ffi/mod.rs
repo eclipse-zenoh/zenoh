@@ -40,8 +40,20 @@ pub unsafe fn pstr_to_string(ptr: *mut i8) -> String {
 /// It is not entirely abi stable due to using String, but should do
 /// for now since we require plugins to use the same version of rustc and
 /// same version of zenoh.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
+#[serde(from = "serde_json::Value")]
+#[serde(into = "serde_json::Value")]
 pub struct JsonValue(String);
+
+impl PartialEq for JsonValue {
+    fn eq(&self, other: &Self) -> bool {
+        let left: serde_json::Value = self.into();
+        let right: serde_json::Value = other.into();
+        left == right
+    }
+}
+
+impl Eq for JsonValue {}
 
 impl From<&serde_json::Value> for JsonValue {
     fn from(value: &serde_json::Value) -> Self {
@@ -64,6 +76,12 @@ impl From<&JsonValue> for serde_json::Value {
 impl From<JsonValue> for serde_json::Value {
     fn from(value: JsonValue) -> Self {
         (&value).into()
+    }
+}
+
+impl Default for JsonValue {
+    fn default() -> Self {
+        serde_json::Value::default().into()
     }
 }
 
@@ -97,3 +115,19 @@ impl From<JsonKeyValueMap> for serde_json::Map<String, serde_json::Value> {
         (&value).into()
     }
 }
+
+impl Default for JsonKeyValueMap {
+    fn default() -> Self {
+        serde_json::Map::<String, serde_json::Value>::default().into()
+    }
+}
+
+impl PartialEq for JsonKeyValueMap {
+    fn eq(&self, other: &Self) -> bool {
+        let left: serde_json::Map<String, serde_json::Value> = self.into();
+        let right: serde_json::Map<String, serde_json::Value> = other.into();
+        left == right
+    }
+}
+
+impl Eq for JsonKeyValueMap {}

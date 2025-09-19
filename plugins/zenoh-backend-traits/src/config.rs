@@ -24,7 +24,10 @@ use zenoh::{
 };
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
-use zenoh_util::LibSearchDirs;
+use zenoh_util::{
+    ffi::{JsonKeyValueMap, JsonValue},
+    LibSearchDirs,
+};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {
@@ -54,7 +57,7 @@ pub struct VolumeConfig {
     #[as_ref]
     #[as_mut]
     #[schemars(skip)]
-    pub rest: Map<String, Value>,
+    pub rest: JsonKeyValueMap,
 }
 #[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]
 pub struct StorageConfig {
@@ -63,7 +66,7 @@ pub struct StorageConfig {
     pub complete: bool,
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
-    pub volume_cfg: String,
+    pub volume_cfg: JsonValue,
     pub garbage_collection_config: GarbageCollectionConfig,
     // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
     pub replication: Option<ReplicaConfig>,
@@ -301,7 +304,7 @@ impl ConfigDiff {
 }
 impl VolumeConfig {
     pub fn to_json_value(&self) -> Value {
-        let mut result = self.rest.clone();
+        let mut result: Map<String, Value> = (&self.rest).into();
         if let Some(paths) = &self.paths {
             result.insert(
                 "__path__".into(),
@@ -384,16 +387,17 @@ impl VolumeConfig {
                     name
                 ),
             };
+            let rest_map: serde_json::Map<String, Value> = config
+                .iter()
+                .filter(|&(k, _v)| !["__path__", "__required__"].contains(&k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             volumes.push(VolumeConfig {
                 name: name.clone(),
                 backend,
                 paths,
                 required,
-                rest: config
-                    .iter()
-                    .filter(|&(k, _v)| !["__path__", "__required__"].contains(&k.as_str()))
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
+                rest: rest_map.into(),
             })
         }
         Ok(volumes)
@@ -409,14 +413,10 @@ impl StorageConfig {
         if let Some(s) = &self.strip_prefix {
             result.insert("strip_prefix".into(), Value::String(s.to_string()));
         }
-        let volume_value = match serde_json::from_str::<serde_json::Value>(&self.volume_cfg) {
-            Ok(value) => value,
-            Err(_) => Value::Null,
-        };
 
         result.insert(
             "volume".into(),
-            match volume_value {
+            match (&self.volume_cfg).into() {
                 Value::Null => Value::String(self.volume_id.clone()),
                 Value::Object(mut v) => {
                     v.insert("id".into(), self.volume_id.clone().into());
@@ -644,7 +644,7 @@ impl StorageConfig {
             complete,
             strip_prefix,
             volume_id,
-            volume_cfg: volume_cfg.to_string(),
+            volume_cfg: volume_cfg.into(),
             garbage_collection_config,
             replication,
         })
