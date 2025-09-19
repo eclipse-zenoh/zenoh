@@ -90,6 +90,7 @@ bytes = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
+hashbrown = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
