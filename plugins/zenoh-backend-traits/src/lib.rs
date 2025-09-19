@@ -50,7 +50,7 @@
 //!         // This operation is called on GET operation on the admin space for the Volume
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Volume monitoring.
-//!         self.config.to_json_value().into())
+//!         self.config.to_json_value().into()
 //!     }
 //!
 //!     fn get_capability(&self) -> Capability {
