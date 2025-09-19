@@ -28,41 +28,43 @@ use zenoh_protocol::{
     zenoh::{ext::AttachmentType, reply::ReplyBody, PushBody, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::stats::{DiscriminatedStats, KeyStats, TransportStats};
+use zenoh_transport::stats::{DiscriminatedStats, FilteredStats, TransportStats};
 
 use crate::net::routing::interceptor::*;
 
 pub(crate) fn stats_interceptor_factories(
     config: &StatsConfig,
 ) -> ZResult<Vec<InterceptorFactory>> {
-    if config.keys().is_empty() {
+    if config.filters().is_empty() {
         return Ok(vec![]);
     }
     Ok(vec![Box::new(StatsInterceptorFactory::new(config))])
 }
 
 struct StatsInterceptorFactory {
-    ke_indexes: Arc<KeBoxTree<usize>>,
-    stats: Arc<Vec<KeyStats>>,
+    filters_tree: Arc<KeBoxTree<Arc<FilteredStats>>>,
+    stats: Arc<Vec<Arc<FilteredStats>>>,
 }
 
 impl StatsInterceptorFactory {
     fn new(conf: &StatsConfig) -> Self {
         let mut tree = KeBoxTree::new();
-        for (i, key) in conf.keys().iter().enumerate() {
-            tree.insert(key, i);
+        let mut stats = Vec::new();
+        for filter in conf.filters() {
+            let filtered_stats = Arc::new(FilteredStats::new(filter.key.clone()));
+            tree.insert(&filter.key, filtered_stats.clone());
+            stats.push(filtered_stats);
         }
         Self {
-            ke_indexes: Arc::new(tree),
-            stats: Arc::new(conf.keys().iter().cloned().map(KeyStats::new).collect()),
+            filters_tree: Arc::new(tree),
+            stats: Arc::new(stats),
         }
     }
 
     fn make_interceptor(&self, stats: &TransportStats, flow: InterceptorFlow) -> Interceptor {
-        stats.keys().store(self.stats.clone());
+        stats.filtered().store(self.stats.clone());
         Box::new(StatsInterceptor {
-            stats: self.stats.clone(),
-            ke_indexes: self.ke_indexes.clone(),
+            filters_tree: self.filters_tree.clone(),
             flow,
         })
     }
@@ -94,52 +96,50 @@ impl InterceptorFactoryTrait for StatsInterceptorFactory {
 }
 
 struct StatsInterceptor {
-    stats: Arc<Vec<KeyStats>>,
-    ke_indexes: Arc<KeBoxTree<usize>>,
+    filters_tree: Arc<KeBoxTree<Arc<FilteredStats>>>,
     flow: InterceptorFlow,
 }
 
 impl StatsInterceptor {
-    fn compute_indexes(&self, key_expr: &keyexpr) -> Vec<usize> {
-        self.ke_indexes
+    fn compute_filtered_stats(&self, key_expr: &keyexpr) -> Vec<Arc<FilteredStats>> {
+        self.filters_tree
             .intersecting_nodes(key_expr)
             .filter_map(|n| n.weight().cloned())
             .collect()
     }
 
-    fn get_or_compute_indexes<'a>(
+    fn get_or_compute_filtered_stats<'a>(
         &self,
         msg: &NetworkMessageMut,
         ctx: &'a dyn InterceptorContext,
-    ) -> Cow<'a, [usize]> {
+    ) -> Cow<'a, [Arc<FilteredStats>]> {
         match ctx
             .get_cache(msg)
-            .and_then(|c| c.downcast_ref::<Vec<usize>>())
+            .and_then(|c| c.downcast_ref::<Vec<Arc<FilteredStats>>>())
         {
             Some(v) => Cow::Borrowed(v),
-            None => ctx
-                .full_keyexpr(msg)
-                .map_or_else(Cow::default, |k| Cow::Owned(self.compute_indexes(&k))),
+            None => ctx.full_keyexpr(msg).map_or_else(Cow::default, |k| {
+                Cow::Owned(self.compute_filtered_stats(&k))
+            }),
         }
     }
 
     fn incr_stats(
         &self,
-        indexes: &[usize],
+        filtered_stats: &[Arc<FilteredStats>],
         payload_bytes: usize,
         ingress: impl Fn(&TransportStats) -> (&DiscriminatedStats, &DiscriminatedStats),
         egress: impl Fn(&TransportStats) -> (&DiscriminatedStats, &DiscriminatedStats),
     ) {
-        for &i in indexes {
-            let stats = self.stats[i].stats();
+        for filtered_stats in filtered_stats {
             match self.flow {
                 InterceptorFlow::Ingress => {
-                    let (rx_msgs, rx_pl_bytes) = ingress(stats);
+                    let (rx_msgs, rx_pl_bytes) = ingress(filtered_stats.stats());
                     rx_msgs.inc_user(1);
                     rx_pl_bytes.inc_user(payload_bytes);
                 }
                 InterceptorFlow::Egress => {
-                    let (tx_msgs, tx_pl_bytes) = egress(stats);
+                    let (tx_msgs, tx_pl_bytes) = egress(filtered_stats.stats());
                     tx_msgs.inc_user(1);
                     tx_pl_bytes.inc_user(payload_bytes);
                 }
@@ -150,24 +150,24 @@ impl StatsInterceptor {
 
 impl InterceptorTrait for StatsInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(self.compute_indexes(key_expr)))
+        Some(Box::new(self.compute_filtered_stats(key_expr)))
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         fn attachment_size<const ID: u8>(attachment: &Option<AttachmentType<ID>>) -> usize {
             attachment.as_ref().map_or(0, |a| a.buffer.len())
         }
-        let indexes = || self.get_or_compute_indexes(msg, ctx);
+        let filtered_stats = || self.get_or_compute_filtered_stats(msg, ctx);
         match &msg.body {
             NetworkBodyMut::Push(msg) => match &msg.payload {
                 PushBody::Put(put) => self.incr_stats(
-                    &indexes(),
+                    &filtered_stats(),
                     put.payload.len() + attachment_size(&put.ext_attachment),
                     |s| (&s.rx_z_put_msgs, &s.rx_z_put_pl_bytes),
                     |s| (&s.tx_z_put_msgs, &s.tx_z_put_pl_bytes),
                 ),
                 PushBody::Del(del) => self.incr_stats(
-                    &indexes(),
+                    &filtered_stats(),
                     attachment_size(&del.ext_attachment),
                     |s| (&s.rx_z_del_msgs, &s.rx_z_del_pl_bytes),
                     |s| (&s.tx_z_del_msgs, &s.tx_z_del_pl_bytes),
@@ -176,7 +176,7 @@ impl InterceptorTrait for StatsInterceptor {
 
             NetworkBodyMut::Request(msg) => match &msg.payload {
                 RequestBody::Query(query) => self.incr_stats(
-                    &indexes(),
+                    &filtered_stats(),
                     attachment_size(&query.ext_attachment),
                     |s| (&s.rx_z_query_msgs, &s.rx_z_query_pl_bytes),
                     |s| (&s.tx_z_query_msgs, &s.tx_z_query_pl_bytes),
@@ -193,7 +193,7 @@ impl InterceptorTrait for StatsInterceptor {
                     ResponseBody::Err(err) => err.payload.len(),
                 };
                 self.incr_stats(
-                    &indexes(),
+                    &filtered_stats(),
                     payload_bytes,
                     |s| (&s.rx_z_reply_msgs, &s.rx_z_reply_pl_bytes),
                     |s| (&s.tx_z_reply_msgs, &s.tx_z_reply_pl_bytes),
