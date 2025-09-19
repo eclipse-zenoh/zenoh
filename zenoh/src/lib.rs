@@ -300,34 +300,8 @@ pub mod key_expr {
 /// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
 /// session is an `Arc` to the internal session object, so cloning is cheap and fast.
 /// 
-/// All session parameters are specified in the [`Config`] object
-/// which is passed to the [`open`] function.
-///
-/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher), 
-/// [`Subscriber`](crate::pubsub::Subscriber), [`Querier`](crate::query::Querier), etc.),
-/// have lifetimes independent of the session, but they stop functioning if all clones of the session
-/// object are dropped or the session is closed with the [`close`](crate::session::Session::close) method.
-///
-/// ### Background entities
-/// 
-/// Sometimes it is inconvenient not to keep a reference to an object (for example,
-/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to 
-/// avoid keeping this reference and keep the object alive until the session is closed.
-/// To do this, call the [`background`](crate::query::QueryableBuilder::background) method on the
-/// corresponding builder. This causes the builder to return `()` instead of the object instance and
-/// keeps the instance alive while the session is alive.
-///
-/// ### Difference between session and runtime
-/// The session object holds all declared zenoh entities (publishers, subscribers, etc.) and
-/// a shared reference to the runtime object which maintains the state of the zenoh node.
-/// Closing the session will close all associated entities and drop the reference to the runtime.
-/// 
-/// Typically each session has its own runtime, but in some cases
-/// the session may share the runtime with other sessions. This is the case for the plugins
-/// where each plugin has its own session but all plugins share the same `zenohd` runtime
-/// for efficiency.
-/// In this case all these sessions will have the same network identity 
-/// [`Session::zid`](crate::session::Session::zid).
+/// Zenoh session is instantiated using [`zenoh::open`](crate::open)
+/// with parameters specified in the [`Config`] object.
 pub mod session {
     #[zenoh_macros::unstable]
     pub use zenoh_config::wrappers::EntityGlobalId;
