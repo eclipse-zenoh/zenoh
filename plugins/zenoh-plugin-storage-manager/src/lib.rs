@@ -383,7 +383,7 @@ impl RunningPluginTrait for StorageRuntime {
                                     rx.recv().await
                                 })
                             }) {
-                                responses.push(Response::new(key.clone(), value.into()))
+                                responses.push(Response::new(key.clone(), value))
                             }
                         }
                     })
