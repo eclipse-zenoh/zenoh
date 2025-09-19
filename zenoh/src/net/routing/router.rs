@@ -88,7 +88,7 @@ impl<'conf> RouterBuilder<'conf> {
         // REVIEW(regions): impact of using three hats at minimum
         if self.hats.is_empty() {
             self.hats.extend([
-                (Bound::North, mode),
+                (Bound::north(), mode),
                 (Bound::unbound(), WhatAmI::Router),
                 (Bound::session(), WhatAmI::Client),
             ]);

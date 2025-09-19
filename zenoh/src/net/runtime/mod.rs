@@ -443,7 +443,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .collect();
 
                 // FIXME(regions): multicast support
-                let bound = Bound::North;
+                let bound = Bound::north();
 
                 runtime
                     .state
@@ -516,8 +516,8 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
 
-        // FIXME(regions): implement manual gateway config and use it here
-        let bound = Bound::North;
+        // FIXME(regions): multicast support
+        let bound = Bound::north();
 
         Ok(Arc::new(RuntimeMulticastSession {
             main_handler: self.runtime.state.router.new_peer_multicast(
@@ -656,7 +656,7 @@ fn compute_bound(peer: &TransportPeer, config: &Config) -> ZResult<Bound> {
     Ok(match (north, south) {
         (true, None) => {
             tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
-            Bound::North
+            Bound::north()
         }
         (false, Some(index)) => {
             tracing::debug!(zid = %peer.zid, "Transport peer is south-bound");

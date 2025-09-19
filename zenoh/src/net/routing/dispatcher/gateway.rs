@@ -69,7 +69,7 @@ impl Bound {
 pub(crate) struct BoundMap<D>(hashbrown::HashMap<Bound, D>);
 
 impl<D> BoundMap<D> {
-    pub(crate) fn get_many_mut<const N: usize>(&mut self, ks: [&Bound; N]) -> Option<[&mut D; N]> {
+    pub(crate) fn get_many_mut<const N: usize>(&mut self, ks: [&Bound; N]) -> [Option<&mut D>; N] {
         self.0.get_many_mut(ks)
     }
 

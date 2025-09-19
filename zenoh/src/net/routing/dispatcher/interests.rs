@@ -258,8 +258,8 @@ impl Face {
 
         let [upstream_hat, downstream_hat] = tables
             .hats
-            .get_many_mut([&Bound::North, &self.state.bound])
-            .unwrap();
+            .get_many_mut([&Bound::north(), &self.state.bound])
+            .map(Option::unwrap);
 
         let mut ctx = BaseContext {
             tables_lock: &self.tables,
@@ -294,8 +294,8 @@ impl Face {
 
         let [upstream_hat, downstream_hat] = tables
             .hats
-            .get_many_mut([&Bound::North, &self.state.bound])
-            .unwrap();
+            .get_many_mut([&Bound::north(), &self.state.bound])
+            .map(Option::unwrap);
 
         let ctx = BaseContext {
             tables_lock: &self.tables,
