@@ -24,11 +24,10 @@ use zenoh_protocol::zenoh::ext::AttachmentType;
 
 /// Technical wrapper type for API ergonomicity.
 ///
-/// It allows any type `T` to be converted into `Option<ZBytes>`
-/// where `T` implements `Into<ZBytes>`.
+/// It allows any type `T` implementing `Into<ZBytes>` to be converted into `Option<ZBytes>`.
 ///
 /// This type is unlikely to be used explicitly by the user. It's purpose is to allow to pass types
-/// like `&str`, `String`, `&[u8]`, `Vec<u8]`, etc. both directly and wrapped to `Option` to API methods
+/// like `&str`, `String`, `&[u8]`, `Vec<u8]`, etc. to API methods
 /// that accept an optional payload, like the [`attachment`](crate::pubsub::PublicationBuilder::attachment).
 ///
 /// # Examples
@@ -127,7 +126,7 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// writer.write_all(b"some raw bytes").unwrap();
 /// let payload = writer.finish();
 /// let mut reader = payload.reader();
-/// let mut buf = [0; 15];
+/// let mut buf = [0; 14];
 /// reader.read_exact(&mut buf).unwrap();
 /// assert_eq!(&buf, b"some raw bytes");
 /// ```
@@ -274,6 +273,26 @@ const _: () = {
 };
 
 /// A reader that implements [`std::io::Read`] trait to deserialize from a [`ZBytes`].
+/// 
+/// The instance of this struct is obtained from the [`ZBytes::reader`] method.
+/// It implements the standard [`std::io::Read`] and [`std::io::Seek`] traits.
+/// This allows to use it with libraries that deserialize data from a `std::io::Read`.
+/// Example:
+/// ```rust
+/// use std::io::{Read, Seek, SeekFrom, Write};
+/// use zenoh::bytes::ZBytes;
+/// let mut writer = ZBytes::writer();
+/// writer.write_all(b"some raw bytes").unwrap();
+/// let payload = writer.finish();
+/// let mut reader = payload.reader();
+/// let mut buf = [0; 14];
+/// reader.read_exact(&mut buf).unwrap();
+/// assert_eq!(&buf, b"some raw bytes");
+/// reader.seek(SeekFrom::Start(5)).unwrap();
+/// let mut buf2 = [0; 4];
+/// reader.read_exact(&mut buf2).unwrap();
+/// assert_eq!(&buf2, b"raw ");
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
@@ -303,6 +322,26 @@ impl std::io::Seek for ZBytesReader<'_> {
 }
 
 /// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
+/// 
+/// The instance of this struct is obtained from the [`ZBytes::writer`] method.
+/// It implements the standard [`std::io::Write`] trait.
+/// This allows to use it with libraries that serialize data into a `std::io::Write`.
+/// Example:
+/// ```rust
+/// use std::io::{Read, Write};
+/// use zenoh::bytes::ZBytes;
+/// let mut writer = ZBytes::writer();
+/// writer.write_all(b"some raw bytes").unwrap();
+/// let payload = writer.finish();
+/// let mut reader = payload.reader();
+/// let mut buf = [0; 14];
+/// reader.read_exact(&mut buf).unwrap();
+/// assert_eq!(&buf, b"some raw bytes");
+/// ```
+/// It is also possible to append existing [`ZBytes`] instances by taking ownership of them
+/// using the [`append`](Self::append) method.
+/// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+/// Said in other terms, it allows to create a linear view on different memory regions without copy.
 #[derive(Debug)]
 pub struct ZBytesWriter {
     zbuf: ZBuf,

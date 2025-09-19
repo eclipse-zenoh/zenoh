@@ -303,18 +303,17 @@ pub mod key_expr {
 /// All session parameters are specified in the [`Config`] object
 /// which is passed to the [`open`] function.
 ///
-/// Objects created by the session (for example, a [`Publisher`](crate::pubsub::Publisher) via
-/// [`declare_publisher`](crate::session::Session::declare_publisher) or a
-/// [`Subscriber`](crate::pubsub::Subscriber) via
-/// [`declare_subscriber`](crate::session::Session::declare_subscriber)) have lifetimes independent
-/// of the session, but they stop functioning when the session is closed or all clones of the session 
-/// object are dropped.
+/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher), 
+/// [`Subscriber`](crate::pubsub::Subscriber), [`Querier`](crate::query::Querier), etc.),
+/// have lifetimes independent of the session, but they stop functioning if all clones of the session
+/// object are dropped or the session is closed with the [`close`](crate::session::Session::close) method.
 ///
-/// There is an explicit [`close`](crate::session::Session::close) method to close the session
-///
-/// Sometimes it is convenient not to keep a reference to an object (for example, a [`Queryable`](crate::query::Queryable)) 
-/// solely to keep it alive, but instead run it in the background until the session is closed. To do this, create the
-/// object with the [`background`](crate::query::QueryableBuilder::background) method on the
+/// ### Background entities
+/// 
+/// Sometimes it is inconvenient not to keep a reference to an object (for example,
+/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to 
+/// avoid keeping this reference and keep the object alive until the session is closed.
+/// To do this, call the [`background`](crate::query::QueryableBuilder::background) method on the
 /// corresponding builder. This causes the builder to return `()` instead of the object instance and
 /// keeps the instance alive while the session is alive.
 ///

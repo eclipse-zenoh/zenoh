@@ -189,6 +189,7 @@ struct NotifierInner<T> {
     subscribers: Mutex<Vec<flume::Sender<Notification>>>,
 }
 
+#[doc(hidden)]
 pub struct Notifier<T> {
     inner: Arc<NotifierInner<T>>,
 }

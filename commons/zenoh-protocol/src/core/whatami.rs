@@ -27,6 +27,23 @@ pub enum WhatAmI {
     Client = 0b100,
 }
 
+/// The type of the node in the Zenoh network.
+/// 
+/// The zenoh application can work in three different modes: router, peer, and client.
+/// 
+/// In the peer mode the application searches for other nodes and establishes direct connections
+/// with them. This can work using multicast discovery and by getting gossip information
+/// the initial entry points. The peer mode is the default mode.
+/// 
+/// In the client mode the application remains conected to a single connection point, which
+/// serves as a gateway to the rest of the network. This mode is useful for the constained
+/// devices that cannot afford to maintain multiple connections.
+/// 
+/// The router mode is used to run a zenoh router, which is a node that
+/// maintains predefined zenoh network topology. Unlike peers, routers do not
+/// discover other nodes by themselves, but rely on static configuration.
+/// 
+/// More detailed explanation of each mode is at https://zenoh.io/docs/getting-started/deployment/
 impl WhatAmI {
     const STR_R: &'static str = "router";
     const STR_P: &'static str = "peer";
@@ -98,6 +115,7 @@ impl From<WhatAmI> for u8 {
     }
 }
 
+/// 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WhatAmIMatcher(NonZeroU8);
