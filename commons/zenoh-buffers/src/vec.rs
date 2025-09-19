@@ -70,7 +70,7 @@ impl HasWriter for &mut Vec<u8> {
     }
 }
 
-impl Writer for &mut Vec<u8> {
+impl Writer for Vec<u8> {
     fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
         if bytes.is_empty() {
             return Err(DidntWrite);
@@ -84,13 +84,13 @@ impl Writer for &mut Vec<u8> {
         self.write(bytes).map(|_| ())
     }
 
+    fn remaining(&self) -> usize {
+        usize::MAX
+    }
+
     fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
         self.push(byte);
         Ok(())
-    }
-
-    fn remaining(&self) -> usize {
-        usize::MAX
     }
 
     unsafe fn with_slot<F>(&mut self, mut len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
@@ -111,7 +111,7 @@ impl Writer for &mut Vec<u8> {
     }
 }
 
-impl BacktrackableWriter for &mut Vec<u8> {
+impl BacktrackableWriter for Vec<u8> {
     type Mark = usize;
 
     fn mark(&mut self) -> Self::Mark {

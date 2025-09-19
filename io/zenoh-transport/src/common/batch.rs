@@ -20,7 +20,10 @@ use zenoh_buffers::{
     BBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
 use zenoh_codec::{
-    transport::batch::{BatchError, Zenoh080Batch},
+    transport::{
+        batch::{BatchError, Zenoh080Batch},
+        frame::FrameReader,
+    },
     RCodec, WCodec,
 };
 use zenoh_protocol::{
@@ -267,7 +270,7 @@ impl WBatch {
     }
 
     fn init(buffer: &mut BBuf, config: &BatchConfig) {
-        let mut writer = buffer.writer();
+        let writer = buffer.writer();
         if config.is_streamed {
             let _ = writer.write_exact(&BatchSize::MIN.to_be_bytes());
         }
@@ -329,7 +332,7 @@ impl WBatch {
 
         // Compress the actual content
         let (_length, _header, payload) = Self::split(self.buffer.as_slice(), &self.config);
-        let mut writer = support.writer();
+        let writer = support.writer();
         // SAFETY: assertion ensures `with_slot` precondition
         unsafe {
             writer.with_slot(writer.remaining(), |b| {
@@ -524,6 +527,14 @@ impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
         let msg = self.codec.read(&mut reader)?;
         let end = self.buffer.len() as BatchSize;
         Ok((msg, len - end))
+    }
+}
+
+impl<'a> Decode<FrameReader<'a, ZSlice>> for &'a mut RBatch {
+    type Error = DidntRead;
+
+    fn decode(self) -> Result<FrameReader<'a, ZSlice>, Self::Error> {
+        self.codec.read(&mut self.buffer)
     }
 }
 

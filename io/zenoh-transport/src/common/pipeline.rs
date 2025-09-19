@@ -1044,10 +1044,10 @@ mod tests {
 
     use tokio::{task, time::timeout};
     use zenoh_buffers::reader::{DidntRead, HasReader};
-    use zenoh_codec::{network::NetworkMessageIter, RCodec, Zenoh080};
+    use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_config::{QueueAllocConf, QueueAllocMode};
     use zenoh_protocol::{
-        core::{Bits, CongestionControl, Priority, Reliability},
+        core::{Bits, CongestionControl, Priority},
         network::{ext, NetworkMessage, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
     };
@@ -1139,10 +1139,8 @@ mod tests {
                     match res {
                         Ok(msg) => {
                             match msg.body {
-                                TransportBody::Frame(Frame { mut payload, .. }) => {
-                                    msgs +=
-                                        NetworkMessageIter::new(Reliability::DEFAULT, &mut payload)
-                                            .count();
+                                TransportBody::Frame(Frame { payload, .. }) => {
+                                    msgs += payload.len()
                                 }
                                 TransportBody::Fragment(Fragment { more, .. }) => {
                                     fragments += 1;

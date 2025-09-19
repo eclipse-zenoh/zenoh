@@ -153,11 +153,49 @@ pub mod writer {
             F: FnOnce(&mut [u8]) -> usize;
     }
 
+    impl<W: Writer + ?Sized> Writer for &mut W {
+        fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
+            (**self).write(bytes)
+        }
+        fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
+            (**self).write_exact(bytes)
+        }
+        fn remaining(&self) -> usize {
+            (**self).remaining()
+        }
+        fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
+            (**self).write_u8(byte)
+        }
+        fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
+            (**self).write_zslice(slice)
+        }
+        fn can_write(&self) -> bool {
+            (**self).can_write()
+        }
+        unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
+        where
+            F: FnOnce(&mut [u8]) -> usize,
+        {
+            // SAFETY: same precondition
+            unsafe { (**self).with_slot(len, write) }
+        }
+    }
+
     pub trait BacktrackableWriter: Writer {
         type Mark;
 
         fn mark(&mut self) -> Self::Mark;
         fn rewind(&mut self, mark: Self::Mark) -> bool;
+    }
+
+    impl<W: BacktrackableWriter + ?Sized> BacktrackableWriter for &mut W {
+        type Mark = W::Mark;
+        fn mark(&mut self) -> Self::Mark {
+            (**self).mark()
+        }
+        fn rewind(&mut self, mark: Self::Mark) -> bool {
+            (**self).rewind(mark)
+        }
     }
 
     pub trait HasWriter {
@@ -206,11 +244,49 @@ pub mod reader {
         }
     }
 
+    impl<R: Reader + ?Sized> Reader for &mut R {
+        fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
+            (**self).read(into)
+        }
+        fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
+            (**self).read_exact(into)
+        }
+        fn remaining(&self) -> usize {
+            (**self).remaining()
+        }
+        fn read_zslices<F: FnMut(ZSlice)>(
+            &mut self,
+            len: usize,
+            for_each_slice: F,
+        ) -> Result<(), DidntRead> {
+            (**self).read_zslices(len, for_each_slice)
+        }
+        fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
+            (**self).read_zslice(len)
+        }
+        fn read_u8(&mut self) -> Result<u8, DidntRead> {
+            (**self).read_u8()
+        }
+        fn can_read(&self) -> bool {
+            (**self).can_read()
+        }
+    }
+
     pub trait BacktrackableReader: Reader {
         type Mark;
 
         fn mark(&mut self) -> Self::Mark;
         fn rewind(&mut self, mark: Self::Mark) -> bool;
+    }
+
+    impl<R: BacktrackableReader + ?Sized> BacktrackableReader for &mut R {
+        type Mark = R::Mark;
+        fn mark(&mut self) -> Self::Mark {
+            (**self).mark()
+        }
+        fn rewind(&mut self, mark: Self::Mark) -> bool {
+            (**self).rewind(mark)
+        }
     }
 
     pub trait AdvanceableReader: Reader {

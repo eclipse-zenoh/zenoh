@@ -13,13 +13,14 @@
 //
 use std::sync::MutexGuard;
 
-use zenoh_codec::network::NetworkMessageIter;
+use zenoh_buffers::ZSlice;
+use zenoh_codec::transport::frame::FrameReader;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
     network::NetworkMessage,
-    transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
+    transport::{Close, Fragment, KeepAlive, TransportBody, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -74,15 +75,8 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_frame(&self, frame: Frame) -> ZResult<()> {
-        let Frame {
-            reliability,
-            sn,
-            ext_qos,
-            mut payload,
-        } = frame;
-
-        let priority = ext_qos.priority();
+    fn handle_frame(&self, frame: FrameReader<ZSlice>) -> ZResult<()> {
+        let priority = frame.ext_qos.priority();
         let c = if self.is_qos() {
             &self.priority_rx[priority as usize]
         } else if priority == Priority::DEFAULT {
@@ -95,25 +89,24 @@ impl TransportUnicastUniversal {
             );
         };
 
-        let mut guard = match reliability {
+        let mut guard = match frame.reliability {
             Reliability::Reliable => zlock!(c.reliable),
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if !self.verify_sn("Frame", sn, &mut guard)? {
+        if !self.verify_sn("Frame", frame.sn, &mut guard)? {
             // Drop invalid message and continue
             return Ok(());
         }
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
-            for msg in NetworkMessageIter::new(reliability, &mut payload) {
+            for msg in frame {
                 self.trigger_callback(callback.as_ref(), msg)?;
             }
         } else {
             tracing::debug!(
-                "Transport: {}. No callback available, dropping messages: {:?}",
+                "Transport: {}. No callback available, dropping messages",
                 self.config.zid,
-                payload
             );
         }
 
@@ -224,6 +217,15 @@ impl TransportUnicastUniversal {
         #[cfg(feature = "stats")] stats: &TransportStats,
     ) -> ZResult<()> {
         while !batch.is_empty() {
+            if let Ok(frame) = batch.decode() {
+                tracing::trace!("Received: {:?}", frame);
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_rx_t_msgs(1);
+                }
+                self.handle_frame(frame)?;
+                continue;
+            }
             let msg: TransportMessage = batch
                 .decode()
                 .map_err(|_| zerror!("{}: decoding error", link))?;
@@ -236,7 +238,7 @@ impl TransportUnicastUniversal {
             }
 
             match msg.body {
-                TransportBody::Frame(msg) => self.handle_frame(msg)?,
+                TransportBody::Frame(_) => unreachable!(),
                 TransportBody::Fragment(fragment) => self.handle_fragment(fragment)?,
                 TransportBody::Close(Close { reason, session }) => {
                     self.handle_close(link, reason, session)?
