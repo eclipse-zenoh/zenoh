@@ -110,10 +110,9 @@ impl Hat {
         res: &'a Resource,
     ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
         // TODO(regions): move this method to a Hat trait
-        res.face_ctxs.iter().filter(move |(_, ctx)| {
-            tracing::debug!(%ctx.face, %self.bound, "owned_face_contexts");
-            self.owns(&ctx.face)
-        })
+        res.face_ctxs
+            .iter()
+            .filter(move |(_, ctx)| self.owns(&ctx.face))
     }
 
     pub(crate) fn owned_faces<'hat, 'tbl>(

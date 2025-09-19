@@ -356,14 +356,15 @@ impl HatQueriesTrait for Hat {
     fn compute_query_route(
         &self,
         tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
+        let source_type = face.whatami;
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
@@ -381,23 +382,23 @@ impl HatQueriesTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for face_ctx in self.owned_face_contexts(&mres) {
-                if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound) {
-                    route.push(qabl);
+            for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
+                // REVIEW(regions): not sure
+                if !face.bound.is_north() || !ctx.face.bound.is_north() {
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
+                    {
+                        route.push(qabl);
+                    }
                 }
             }
         }
 
-        if source_type == WhatAmI::Client {
-            for face in self
-                .faces(tables)
-                .values()
-                .filter(|f| f.whatami != WhatAmI::Client)
-            {
+        if !face.bound.is_north() {
+            for face in self.faces(tables).values().filter(|f| f.bound.is_north()) {
                 let has_interest_finalized = expr
                     .resource()
                     .and_then(|res| res.face_ctxs.get(&face.id))
-                    .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    .is_some_and(|ctx| ctx.queryable_interest_finalized);
                 if !has_interest_finalized {
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {

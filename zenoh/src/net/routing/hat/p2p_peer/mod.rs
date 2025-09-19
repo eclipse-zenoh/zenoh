@@ -492,7 +492,7 @@ impl HatTrait for Hat {}
 // This 'ghost' interest is registered locally to allow tracking if
 // the DeclareFinal has been received or not (finalized).
 
-const INITIAL_INTEREST_ID: u32 = 0;
+pub(crate) const INITIAL_INTEREST_ID: u32 = 0;
 
 #[inline]
 fn initial_interest(face: &FaceState) -> Option<&InterestState> {

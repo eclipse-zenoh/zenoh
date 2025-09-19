@@ -248,6 +248,35 @@ impl Hat {
         tables.faces.values().filter(|face| self.owns(face))
     }
 
+    /// Identifies the gateway of this hat's subregion (if any).
+    pub(crate) fn subregion_gateway(&self) -> Option<NodeId> {
+        // TODO(regions2): elect the primary gateway
+        let net = self.net();
+        let mut gwys = net.graph.node_indices().filter(|idx| {
+            tracing::trace!(
+                zid = %net.graph[*idx].zid.short(),
+                is_gwy = net.graph[*idx].is_gateway,
+                "Gateway candidate node"
+            );
+            net.graph[*idx].is_gateway
+        });
+
+        let gwy = gwys.next()?;
+
+        if gwys.next().is_some() {
+            tracing::error!(
+                bound = ?self.bound,
+                total = gwys.count() + 2,
+                selected = ?net.graph[gwy].zid,
+                "Multiple gateways found in router subregion. \
+                Only one gateway per subregion is supported. \
+                Selecting arbitrary gateway"
+            );
+        }
+
+        Some(gwy.index() as NodeId)
+    }
+
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
         tracing::trace!("Schedule trees computation");
         let _ = self.routers_trees_worker.tx.try_send(tables_ref);

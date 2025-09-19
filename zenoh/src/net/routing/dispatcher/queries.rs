@@ -423,7 +423,7 @@ fn get_query_route(
 ) -> Arc<QueryTargetQablSet> {
     let local_context = tables.hats[bound].map_routing_context(&tables.data, face, routing_context);
     let compute_route =
-        || tables.hats[bound].compute_query_route(&tables.data, expr, local_context, face.whatami);
+        || tables.hats[bound].compute_query_route(&tables.data, face, expr, local_context);
     if let Some(query_routes) = expr
         .resource()
         .as_ref()
@@ -543,10 +543,11 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 src_qid: msg.id,
             });
 
-            for (bound, hat) in rtables.hats.iter() {
+            for (bnd, hat) in rtables.hats.iter() {
                 if hat.ingress_filter(&rtables.data, face, &expr) {
-                    let qabls =
-                        get_query_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
+                    let qabls = get_query_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bnd);
+
+                    tracing::trace!(query_targets = ?qabls, %bnd);
 
                     compute_final_route(
                         &rtables,
@@ -568,6 +569,8 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
             drop(rtables);
 
             let query_dirs = query_dirs.build();
+
+            tracing::trace!(?query_dirs);
 
             if query_dirs.is_empty() {
                 tracing::debug!(

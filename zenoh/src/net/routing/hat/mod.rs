@@ -173,7 +173,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn node_id_to_zid(&self, face: &FaceState, _node_id: NodeId) -> Option<ZenohIdProto> {
         // FIXME(regions): remove default impl
-        Some(face.zid.clone())
+        Some(face.zid)
     }
 
     fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
@@ -382,9 +382,9 @@ pub(crate) trait HatQueriesTrait {
     fn compute_query_route(
         &self,
         tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
 
     fn get_matching_queryables(

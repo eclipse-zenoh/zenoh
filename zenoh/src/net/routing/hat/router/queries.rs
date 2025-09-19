@@ -1231,9 +1231,9 @@ impl HatQueriesTrait for Hat {
     fn compute_query_route(
         &self,
         tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         lazy_static::lazy_static! {
             static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
@@ -1243,6 +1243,7 @@ impl HatQueriesTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
+        let source_type = face.whatami;
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
@@ -1275,7 +1276,8 @@ impl HatQueriesTrait for Hat {
             );
 
             for (fid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.face.whatami != WhatAmI::Router {
+                // REVIEW(regions): not sure
+                if face.bound.is_north() ^ ctx.face.bound.is_north() {
                     let wire_expr = expr.get_best_key(*fid);
                     if let Some(qabl_info) = ctx.qabl.as_ref() {
                         route.push(QueryTargetQabl {
@@ -1293,6 +1295,9 @@ impl HatQueriesTrait for Hat {
                     }
                 }
             }
+
+            // FIXME(regions): track gateway current interest finalization,
+            // otherwise propagate query
         }
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)

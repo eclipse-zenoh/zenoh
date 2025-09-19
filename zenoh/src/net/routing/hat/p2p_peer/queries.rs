@@ -612,12 +612,13 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr))]
     fn compute_query_route(
         &self,
         tables: &TablesData,
+        src_face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         lazy_static::lazy_static! {
             static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
@@ -627,6 +628,7 @@ impl HatQueriesTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
+        let source_type = src_face.whatami;
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
@@ -645,24 +647,26 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                if source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client {
+                if src_face.bound.is_north() ^ ctx.face.bound.is_north() {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {
+                        tracing::trace!(dst = %ctx.face, reason = "resource match");
                         route.push(qabl);
                     }
                 }
             }
         }
 
-        if source_type == WhatAmI::Client {
+        if !src_face.bound.is_north() {
             // TODO: BestMatching: What if there is a local compete ?
             for face in self.faces(tables).values() {
-                if face.whatami == WhatAmI::Router {
+                if self.face_hat(face).is_gateway {
                     let has_interest_finalized = expr
                         .resource()
                         .and_then(|res| res.face_ctxs.get(&face.id))
-                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                        .is_some_and(|ctx| ctx.queryable_interest_finalized);
                     if !has_interest_finalized {
+                        tracing::trace!(dst = %face, reason = "unfinalized queryable interest");
                         let wire_expr = expr.get_best_key(face.id);
                         route.push(QueryTargetQabl {
                             dir: Direction {
@@ -675,8 +679,10 @@ impl HatQueriesTrait for Hat {
                         });
                     }
                 } else if face.whatami == WhatAmI::Peer
+                    && face.bound.is_north()
                     && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
+                    tracing::trace!(dst = %face, reason = "unfinalized initial interest");
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         dir: Direction {

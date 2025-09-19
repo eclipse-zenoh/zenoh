@@ -20,6 +20,7 @@ use std::{
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
+use zenoh_config::WhatAmI;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::network::{
     declare::{self},
@@ -313,6 +314,22 @@ impl Face {
         id: InterestId,
         send_declare: &mut SendDeclare,
     ) {
+        let tables = &mut *wtables;
+
+        let ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
+
+        // REVIEW(regions): peer initial interest
+        if self.state.whatami == WhatAmI::Peer && id == 0 {
+            let zid = ctx.src_face.zid;
+            tables.hats[self.state.bound].finalize_current_interest(ctx, id, &zid);
+            return;
+        }
+
         if !self.state.bound.is_north() {
             tracing::error!(
                 id,
@@ -322,16 +339,7 @@ impl Face {
             return;
         }
 
-        let tables = &mut *wtables;
-
         let (upstream_hat, downstream_hats) = tables.hats.partition_north_mut();
-
-        let ctx = BaseContext {
-            tables_lock: &self.tables,
-            tables: &mut tables.data,
-            src_face: &mut self.state.clone(),
-            send_declare,
-        };
 
         upstream_hat.unregister_current_interest(
             ctx,

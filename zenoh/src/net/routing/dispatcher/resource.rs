@@ -71,6 +71,7 @@ pub(crate) struct QueryDirection {
 
 pub(crate) type Route = Vec<Direction>;
 
+#[derive(Clone, Debug)]
 pub(crate) struct QueryTargetQabl {
     pub(crate) dir: Direction,
     pub(crate) info: Option<QueryableInfoType>,
