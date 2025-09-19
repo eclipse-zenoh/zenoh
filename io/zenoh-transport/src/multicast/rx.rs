@@ -13,15 +13,14 @@
 //
 use std::sync::MutexGuard;
 
-use zenoh_buffers::reader::BacktrackableReader;
+use zenoh_buffers::ZSlice;
 use zenoh_codec::transport::frame::FrameReader;
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
     network::NetworkMessage,
     transport::{
-        BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportMessage,
-        TransportSn,
+        BatchSize, Close, Fragment, Join, KeepAlive, TransportBody, TransportMessage, TransportSn,
     },
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -141,9 +140,9 @@ impl TransportMulticastInner {
         self.new_peer(locator, join)
     }
 
-    fn handle_frame<R: BacktrackableReader>(
+    fn handle_frame(
         &self,
-        frame: FrameReader<R>,
+        frame: FrameReader<ZSlice>,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
@@ -310,7 +309,7 @@ impl TransportMulticastInner {
                 Some(peer) => {
                     peer.set_active();
                     match msg.body {
-                        TransportBody::Frame(msg) => unreachable!(),
+                        TransportBody::Frame(_) => unreachable!(),
                         TransportBody::Fragment(fragment) => {
                             self.handle_fragment(fragment, peer)?
                         }

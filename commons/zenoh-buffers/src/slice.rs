@@ -156,10 +156,8 @@ impl Reader for &[u8] {
         Ok(())
     }
 
-    fn read_u8(&mut self) -> Result<u8, DidntRead> {
-        let mut buf = [0; 1];
-        self.read(&mut buf)?;
-        Ok(buf[0])
+    fn remaining(&self) -> usize {
+        self.len()
     }
 
     fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
@@ -177,8 +175,10 @@ impl Reader for &[u8] {
         Ok(buffer.into())
     }
 
-    fn remaining(&self) -> usize {
-        self.len()
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
+        let mut buf = [0; 1];
+        self.read(&mut buf)?;
+        Ok(buf[0])
     }
 
     fn can_read(&self) -> bool {

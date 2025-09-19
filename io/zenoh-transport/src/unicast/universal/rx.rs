@@ -13,7 +13,7 @@
 //
 use std::sync::MutexGuard;
 
-use zenoh_buffers::reader::BacktrackableReader;
+use zenoh_buffers::ZSlice;
 use zenoh_codec::transport::frame::FrameReader;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
@@ -75,7 +75,7 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_frame<R: BacktrackableReader>(&self, frame: FrameReader<R>) -> ZResult<()> {
+    fn handle_frame(&self, frame: FrameReader<ZSlice>) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
         let c = if self.is_qos() {
             &self.priority_rx[priority as usize]

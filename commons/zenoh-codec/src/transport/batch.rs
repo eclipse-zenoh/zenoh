@@ -269,7 +269,6 @@ impl<'a, R: BacktrackableReader> RCodec<FrameReader<'a, R>, &'a mut R> for &mut 
     type Error = DidntRead;
 
     fn read(self, reader: &'a mut R) -> Result<FrameReader<'a, R>, Self::Error> {
-        let mark = reader.mark();
         let codec = Zenoh080::new();
         let frame: FrameReader<R> = codec.read(reader)?;
         match frame.reliability {
