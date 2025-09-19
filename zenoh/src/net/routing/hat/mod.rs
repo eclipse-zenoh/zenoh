@@ -54,7 +54,7 @@ use crate::{
 };
 
 mod client;
-mod p2p_peer;
+mod peer;
 mod router;
 
 zconfigurable! {
@@ -402,7 +402,7 @@ pub(crate) fn new_hat(
 ) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
         WhatAmI::Client => Box::new(client::Hat::new(bound)),
-        WhatAmI::Peer => Box::new(p2p_peer::Hat::new(bound)),
+        WhatAmI::Peer => Box::new(peer::Hat::new(bound)),
         WhatAmI::Router => Box::new(router::Hat::new(bound)),
     }
 }

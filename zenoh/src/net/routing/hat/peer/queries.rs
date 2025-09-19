@@ -42,7 +42,7 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{
-            p2p_peer::initial_interest, BaseContext, CurrentFutureTrait, HatQueriesTrait,
+            peer::initial_interest, BaseContext, CurrentFutureTrait, HatQueriesTrait,
             InterestProfile, SendDeclare, Sources,
         },
         router::Direction,

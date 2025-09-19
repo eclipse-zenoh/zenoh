@@ -40,7 +40,7 @@ use crate::{
             tables::{Route, RoutingExpr, TablesData},
         },
         hat::{
-            p2p_peer::{initial_interest, Hat},
+            peer::{initial_interest, Hat},
             BaseContext, CurrentFutureTrait, HatPubSubTrait, InterestProfile, SendDeclare, Sources,
         },
         router::{Direction, RouteBuilder},
