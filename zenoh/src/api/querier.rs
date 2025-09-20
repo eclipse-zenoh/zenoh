@@ -277,7 +277,7 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a publisher.
+/// A [`Resolvable`] returned when undeclaring a querier.
 ///
 /// # Examples
 /// ```
