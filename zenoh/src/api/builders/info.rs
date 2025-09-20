@@ -63,7 +63,7 @@ impl IntoFuture for ZenohIdBuilder<'_> {
 }
 
 /// A builder returned by [`SessionInfo::routers_zid()`](crate::session::SessionInfo::routers_zid) that allows
-/// access to the [`ZenohId`] of the zenoh routers this process is currently connected to
+/// access to the [`ZenohId`] of the zenoh routers this process is currently connected to,
 /// or the [`ZenohId`] of the current router if this code is run from a router (plugin).
 ///
 /// # Examples

@@ -140,9 +140,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
-    /// Register the queryable callback to be run in background until the session is closed.
+    /// Register the queryable callback to be run in the background until the session is closed.
     ///
-    /// Background builder doesn't return a `Queryable` object anymore.
+    /// The background builder doesn't return a `Queryable` object anymore.
     ///
     /// # Examples
     /// ```
@@ -180,7 +180,7 @@ impl<Handler, const BACKGROUND: bool> QueryableBuilder<'_, '_, Handler, BACKGROU
 
     ///
     ///
-    /// Restrict the matching queries that will be receive by this [`Queryable`]
+    /// Restrict the matching queries that will be received by this [`Queryable`]
     /// to the ones that have the given [`Locality`](Locality).
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {

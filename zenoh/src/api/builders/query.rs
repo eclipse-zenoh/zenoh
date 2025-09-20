@@ -269,7 +269,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Set query timeout.
+    /// Set the query timeout.
     #[inline]
     pub fn timeout(self, timeout: Duration) -> Self {
         Self { timeout, ..self }

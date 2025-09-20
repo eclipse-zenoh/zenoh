@@ -44,7 +44,7 @@ pub trait QoSBuilderTrait {
 }
 
 pub trait TimestampBuilderTrait {
-    /// Sets of clears timestamp
+    /// Sets or clears the timestamp
     fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self;
 }
 
@@ -68,9 +68,9 @@ pub struct SampleBuilderPut;
 #[derive(Clone, Debug)]
 pub struct SampleBuilderDelete;
 /// The type modifier for a [`SampleBuilder`] for the building stage
-/// when sample [`kind`](crate::sample::Sample::kind) not yet specified.
+/// when the sample [`kind`](crate::sample::Sample::kind) is not yet specified.
 ///
-/// With this modifier the `SampleBuilder` can't be resolved, the selection of the kind must be done.
+/// With this modifier the `SampleBuilder` can't be resolved; the selection of the kind must be done.
 #[derive(Clone, Debug)]
 pub struct SampleBuilderAny;
 
