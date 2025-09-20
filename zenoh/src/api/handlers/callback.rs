@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use crate::api::handlers::IntoHandler;
 
-/// A function that can transform a [`FnMut`]`(T)` to
-/// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
+/// A function that can transform an [`FnMut`]`(T)` into
+/// an [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
 pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)
@@ -124,14 +124,14 @@ impl<T: CallbackParameter + Send + 'static> IntoHandler<T>
     }
 }
 
-/// A handler containing 2 callback functions:
+/// A handler containing two callback functions:
 ///  - `callback`: the typical callback function. `context` will be passed as its last argument.
-///  - `drop`: a callback called when this handler is dropped.
+///  - `drop`: a callback invoked when this handler is dropped.
 ///
 /// It is guaranteed that:
 ///
 ///   - `callback` will never be called once `drop` has started.
-///   - `drop` will only be called **once**, and **after every** `callback` has ended.
+///   - `drop` will only be called **once**, and **after** every `callback` has ended.
 ///   - The two previous guarantees imply that `call` and `drop` are never called concurrently.
 pub struct CallbackDrop<Callback, DropFn>
 where
