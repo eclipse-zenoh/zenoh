@@ -17,8 +17,8 @@ use crate::{
     api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
     net::runtime::Runtime,
 };
-/// Struct returned by [`Session::info()`](crate::Session::info) which allows
-/// to access information about the current zenoh [`Session`](crate::Session).
+/// Struct returned by [`Session::info()`](crate::Session::info) that allows
+/// access to information about the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
 /// ```
@@ -50,7 +50,7 @@ impl SessionInfo {
         ZenohIdBuilder::new(&self.runtime)
     }
 
-    /// Return the [`crate::session::ZenohId`] of the zenoh routers this process is currently connected to
+    /// Return the [`crate::session::ZenohId`] of the zenoh routers this process is currently connected to,
     /// or the [`crate::session::ZenohId`] of the current router if this code is run from a router (plugin).
     ///
     /// # Examples

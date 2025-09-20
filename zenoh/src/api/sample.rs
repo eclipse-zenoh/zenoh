@@ -85,7 +85,7 @@ impl SourceInfo {
     }
 
     #[zenoh_macros::unstable]
-    /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
+    /// The [`EntityGlobalId`] of the zenoh entity that published the [`Sample`] in question.
     pub fn source_id(&self) -> Option<&EntityGlobalId> {
         self.source_id.as_ref()
     }
@@ -186,7 +186,7 @@ impl TryFrom<u64> for SampleKind {
     }
 }
 
-/// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
+/// Structure with public fields for a sample. It is convenient when it is necessary to decompose a sample into its fields.
 #[derive(Debug, Clone)]
 pub struct SampleFields {
     pub key_expr: KeyExpr<'static>,
@@ -266,29 +266,29 @@ impl Sample {
         self.kind
     }
 
-    /// Gets the encoding of this sample
+    /// Gets the encoding of this sample.
     #[inline]
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
 
-    /// Gets the timestamp of this Sample
+    /// Gets the timestamp of this Sample.
     #[inline]
     pub fn timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
-    /// Gets the congetion control of this Sample
+    /// Gets the congestion control of this Sample.
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Gets the priority of this Sample
+    /// Gets the priority of this Sample.
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
 
-    /// Gets the reliability of this Sample
+    /// Gets the reliability of this Sample.
     #[zenoh_macros::unstable]
     pub fn reliability(&self) -> Reliability {
         self.reliability
@@ -299,20 +299,20 @@ impl Sample {
         self.qos.express()
     }
 
-    /// Gets infos on the source of this Sample.
+    /// Gets info on the source of this Sample.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> &SourceInfo {
         &self.source_info
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
@@ -444,7 +444,7 @@ impl QoSBuilderTrait for QoSBuilder {
 }
 
 impl QoS {
-    /// Gets priority of the message.
+    /// Gets the priority of the message.
     pub fn priority(&self) -> Priority {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
@@ -458,12 +458,12 @@ impl QoS {
         }
     }
 
-    /// Gets congestion control of the message.
+    /// Gets the congestion control of the message.
     pub fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }
 
-    /// Gets express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
+    /// Gets the express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
     }

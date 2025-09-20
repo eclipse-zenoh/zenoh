@@ -142,9 +142,9 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 }
 
 impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
-    /// Register the listener callback to be run in background until the publisher is undeclared.
+    /// Register the listener callback to be run in the background until the publisher is undeclared.
     ///
-    /// Background builder doesn't return a `MatchingListener` object anymore.
+    /// The background builder doesn't return a `MatchingListener` object anymore.
     ///
     /// # Examples
     /// ```
@@ -153,7 +153,7 @@ impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
-    /// // no need to assign and keep a variable with a background listener
+    /// // no need to assign and keep a variable for a background listener
     /// publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {

@@ -26,7 +26,7 @@ use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
 /// A builder for close operations.
-// NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
+// NOTE: `Closeable` is only pub(crate) because it is a zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
@@ -35,7 +35,7 @@ pub struct CloseBuilder<TCloseable: Closeable> {
     timeout: Duration,
 }
 
-// NOTE: `Closeable` is only pub(crate) because it is zenoh-internal trait, so we don't
+// NOTE: `Closeable` is only pub(crate) because it is a zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]
 impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
@@ -47,11 +47,11 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     }
 
     #[cfg(all(feature = "unstable", feature = "internal"))]
-    /// Set the timeout for close operation
+    /// Set the timeout for the close operation
     ///
     /// # Arguments
     ///
-    /// * `timeout` - The timeout value for close operation (10s by default)
+    /// * `timeout` - The timeout value for the close operation (10s by default)
     ///
     #[doc(hidden)]
     pub fn timeout(mut self, timeout: Duration) -> Self {
@@ -60,7 +60,7 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
     }
 
     #[cfg(all(feature = "unstable", feature = "internal"))]
-    /// Run Close operation concurrently
+    /// Run the Close operation concurrently
     #[doc(hidden)]
     pub fn in_background(
         self,
@@ -128,7 +128,7 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
-/// A builder for close operations running in background
+/// A builder for close operations running in the background
 #[doc(hidden)]
 pub struct BackgroundCloseBuilder<TOutput: Send + 'static> {
     inner: Pin<Box<dyn Future<Output = TOutput> + Send>>,

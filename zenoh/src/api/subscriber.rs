@@ -99,7 +99,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::Session::declare_subscriber) function.
 ///
-/// Callback subscribers will run in background until the session is closed,
+/// Callback subscribers will run in the background until the session is closed,
 /// or until it is undeclared.
 /// On the other hand, subscribers with a handler are automatically undeclared when dropped.
 ///
@@ -116,7 +116,7 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
 ///     .await
 ///     .unwrap();
-/// // subscriber run in background until the session is closed
+/// // subscriber runs in the background until the session is closed
 /// # }
 /// ```
 ///
@@ -174,14 +174,14 @@ impl<Handler> Subscriber<Handler> {
     }
 
     /// Returns a reference to this subscriber's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// A handler is anything that implements [`crate::handlers::IntoHandler`].
     /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this subscriber's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// A handler is anything that implements [`crate::handlers::IntoHandler`].
     /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
@@ -213,7 +213,7 @@ impl<Handler> Subscriber<Handler> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.inner.undeclare_on_drop = false;
         self.inner
             .session
