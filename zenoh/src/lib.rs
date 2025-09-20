@@ -25,12 +25,12 @@
 //!  
 //! ## Session
 //!
-//! The root element of Zenoh API is the [session]. 
+//! The root element of the Zenoh API is the [session]. 
 //! A session is created by the [`open`] function, which takes a [config] as an argument.
 //! The [`Session`] holds the zenoh runtime object,
 //! which maintains the state of the connection of the node to the Zenoh network. 
 //! 
-//! The session allows to declare publishers, subscribers, queriers, queryables, etc.
+//! The session allows declaring publishers, subscribers, queriers, queryables, etc.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
 //! Data can be sent directly between nodes or routed through intermediate nodes.
@@ -50,15 +50,15 @@
 //!
 //! ## Key Expressions
 //!
-//! Data is associated with keys in the format of a slash-separated path, e.g., `robot/sensor/temp`.
+//! Data is associated with keys in the form of a slash-separated path, e.g., `robot/sensor/temp`.
 //! The requesting side uses [key expressions](crate::key_expr) to address the data of interest. Key expressions can
 //! contain wildcards, e.g., `robot/sensor/*` or `robot/**`.
 //!
 //! ## Data representation
 //!
-//! Data is received as [sample] which contain the payload and all metadata associated with the data.
-//! The raw byte payload object [`ZBytes`](crate::bytes) which provides mechanisms for zero-copy creation and access
-//! is available in [bytes] module.
+//! Data is received as [sample]s, which contain the payload and all metadata associated with the data.
+//! The raw byte payload object [`ZBytes`](crate::bytes), which provides mechanisms for zero-copy creation and access,
+//! is available in the [bytes] module.
 //! The [zenoh_ext](https://docs.rs/zenoh-ext/latest/zenoh_ext) crate also provides serialization and deserialization
 //! of basic types and structures for `ZBytes`.
 //!
@@ -67,9 +67,9 @@
 //! Other important functionalities of Zenoh are:
 //! - [scouting] to discover Zenoh nodes in the network. Note that it's not necessary to explicitly
 //!   discover other nodes just to publish, subscribe, or query data.
-//! - Monitor [liveliness] to get notified when a specified resource appears or disappears in the network.
+//! - Monitor [liveliness] to be notified when a specified resource appears or disappears in the network.
 //! - The [matching] API allows the active side of communication (publisher, querier) to know whether
-//!   there are any interested parties on the other side (subscriber, queryable) which allows to save bandwidth and CPU resources.
+//!   there are any interested parties on the other side (subscriber, queryable), which allows saving bandwidth and CPU resources.
 //!
 //! ## Builders
 //!
@@ -294,13 +294,13 @@ pub mod key_expr {
 /// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, 
 /// which maintains the state of the connection of the node to the Zenoh network.
 /// 
-/// The session allows to declare other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
 /// and keeps them functioning. Closing the session will close all associated entities.
 /// 
 /// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
 /// session is an `Arc` to the internal session object, so cloning is cheap and fast.
 /// 
-/// Zenoh session is instantiated using [`zenoh::open`](crate::open)
+/// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
 /// with parameters specified in the [`Config`] object.
 pub mod session {
     #[zenoh_macros::unstable]
@@ -406,18 +406,18 @@ pub mod bytes {
 /// There are two operations in the publisher [`put`](crate::pubsub::Publisher::put) and
 /// [`delete`](crate::pubsub::Publisher::delete) (or in the session as mentioned above).
 /// 
-/// The publishing may express two different semantics: 
-/// - producing the sequence of values
-/// - updating the single value associated with a key expression
+/// Publishing may express two different semantics: 
+/// - producing a sequence of values
+/// - updating a single value associated with a key expression
 /// 
-/// In the second case it's necessary to be able to declare that some key is no more associated with any value. The
+/// In the second case, it's necessary to be able to declare that some key is no longer associated with any value. The
 /// [`delete`](crate::pubsub::Publisher::delete) operation is used for this.
 /// 
 /// On the receiving side, the subscriber distinguishes between the [`Put`](crate::sample::SampleKind::Put)
 /// and [`Delete`](crate::sample::SampleKind::Delete) operations
 /// by the [`kind`](crate::sample::Sample::kind) field of the [`Sample`](crate::sample::Sample) structure.
 ///
-/// The delete operation allows to subscriber to work in pair with a [`Queryable`](crate::query::Queryable)
+/// The delete operation allows the subscriber to work with a [`Queryable`](crate::query::Queryable)
 /// which caches the values associated with key expressions. 
 /// 
 /// # Examples:
@@ -462,31 +462,31 @@ pub mod pubsub {
 ///
 /// A [`Queryable`](crate::query::Queryable) is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method
-/// and serves queries [`Query`](crate::query::Query) using callback
-/// or channel (see [handlers] module documentation for details).
+/// and serves queries [`Query`](crate::query::Query) using a callback
+/// or a channel (see [handlers] module documentation for details).
 ///
-/// The [`Query`](crate::query::Query) have the methods [`reply`](crate::query::Query::reply) 
+/// The [`Query`](crate::query::Query) has the methods [`reply`](crate::query::Query::reply) 
 /// to reply with a data sample,
-/// and [reply_err](crate::query::Query::reply_err) to send an error reply.
+/// and [`reply_err`](crate::query::Query::reply_err) to send an error reply.
 ///
 /// The `reply` method sends a [`Sample`](crate::sample::Sample) with a [`kind`](crate::sample::Sample::kind)
 /// field set to [`Put`](crate::sample::SampleKind::Put). 
 /// If it's necessary to reply with a [`Delete`](crate::sample::SampleKind::Delete) sample,
 /// the [`reply_del`](crate::query::Query::reply_del) method should be used.
 /// 
-/// Data is requested from queryables via [`Session::get`](crate::Session::get) function or by
-/// [`Querier`](crate::query::Querier) object. Each request returns
+/// Data is requested from queryables via the [`Session::get`](crate::Session::get) function or by
+/// a [`Querier`](crate::query::Querier) object. Each request returns
 /// zero or more [`Reply`](crate::query::Reply) structures, each one from each queryable 
 /// that matches the request.
-/// The reply contains either the [`Sample`](crate::sample::Sample)
-/// or [`ReplyError`](crate::query::ReplyError) structures.
+/// The reply contains either a [`Sample`](crate::sample::Sample)
+/// or a [`ReplyError`](crate::query::ReplyError) structure.
 ///
 /// # Query parameters
 /// 
-/// The query/reply API allows to specify additional parameters for the request.
+/// The query/reply API allows specifying additional parameters for the request.
 /// These parameters are passed to the get operation using the [`Selector`](crate::query::Selector)
-/// syntax. The selector string have a syntax similar to the URL:
-/// it's a key expression followed by a question mark and the list of parameters in format 
+/// syntax. The selector string has a syntax similar to a URL:
+/// it's a key expression followed by a question mark and the list of parameters in the format 
 /// "name=value" separated by ';'.
 /// For example `key/expression?param1=value1;param2=value2`.
 /// 
@@ -608,9 +608,9 @@ pub mod matching {
 /// 2. **Channels**: the user provides a channel that buffers incoming samples, and the user
 ///     retrieves samples from the channel when needed.
 /// 
-/// Below there are the details how the channels works in Zenoh.
+/// Below are the details of how channels work in Zenoh.
 ///
-/// Under the hood the sequential data from a is always passed to a callback function.
+/// Under the hood, the sequential data from a primitive is always passed to a callback function.
 /// However, to simplify using channels, Zenoh provides the 
 /// [`IntoHandler`](crate::handlers::IntoHandler) trait,
 /// which returns a pair: a callback which pushes data to the channel and a "handler"
@@ -620,11 +620,11 @@ pub mod matching {
 /// implements the `IntoHandler` trait and extracts the callback and handler from it.
 /// The Zenoh object calls the callback with each incoming sample. 
 /// 
-/// The handler is also stored in the Zenoh object. It's completely opaque to the Zenoh object,
-/// it's just made available to user via the [`handler`](crate::pubsub::Subscriber::handler) method
-/// or by dereferencing, allowing to call handler's methods directly on the
+/// The handler is also stored in the Zenoh object. It's completely opaque to the Zenoh object;
+/// it's just made available to the user via the [`handler`](crate::pubsub::Subscriber::handler) method
+/// or by dereferencing, allowing the user to call the handler's methods directly on the
 /// `Subscriber` or `Query` object.
-/// This is a syntax sugar that allows the user not to care about the separate channel object.
+/// This is syntactic sugar that allows the user not to care about the separate channel object.
 ///
 /// The example of using channels is shown below.
 ///
@@ -662,7 +662,7 @@ pub mod matching {
 ///
 /// Obviously, the callback can also be defined manually, without using a channel, and passed
 /// to the [`callback`](crate::pubsub::SubscriberBuilder::callback) method.
-/// In this case the handler type is `()` and no additional methods, like `recv_async` are available on the
+/// In this case, the handler type is `()`, and no additional methods, like `recv_async`, are available on the
 /// subscriber object.
 ///
 /// ```no_run
@@ -759,8 +759,8 @@ pub mod scouting {
 /// [LivelinessToken](liveliness::LivelinessToken)
 /// with a key expression assigned to it by [declare_token](liveliness::Liveliness::declare_token).
 /// Other nodes can use the liveliness API to query this
-/// key expression or subscribe to it to get notified when the token appears or disappears on the network
-/// using corresponding functions [get](liveliness::Liveliness::get) and
+/// key expression or subscribe to it to be notified when the token appears or disappears on the network
+/// using the corresponding functions [get](liveliness::Liveliness::get) and
 /// [declare_subscriber](liveliness::Liveliness::declare_subscriber).
 ///
 /// # Examples
@@ -825,9 +825,9 @@ pub mod liveliness {
 /// [ReplyBuilder::timestamp](crate::query::ReplyBuilder::timestamp) when replying to a query with
 /// [`reply`](crate::query::Query::reply).
 ///
-/// The timestamp consists of the time value itself and unique
+/// The timestamp consists of the time value itself and a unique
 /// [clock](https://docs.rs/uhlc/latest/uhlc/) identifier. Each
-/// [`Session`] has its own clock, the [`new_timestamp`](crate::session::Session::new_timestamp)
+/// [`Session`] has its own clock. The [`new_timestamp`](crate::session::Session::new_timestamp)
 /// method can be used to create a new timestamp with the session's identifier.
 ///
 /// # Examples
