@@ -246,14 +246,14 @@ impl Encoding {
         id: 20,
         schema: None,
     });
-    /// An XML file intended to be consumed by an application..
+    /// An XML file intended to be consumed by an application.
     ///
     /// Constant alias for string: `"application/xml"`.
     pub const APPLICATION_XML: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 21,
         schema: None,
     });
-    /// An encoded a list of tuples, each consisting of a name and a value.
+    /// An encoded list of tuples, each consisting of a name and a value.
     ///
     /// Constant alias for string: `"application/x-www-form-urlencoded"`.
     pub const APPLICATION_X_WWW_FORM_URLENCODED: Encoding = Self(zenoh_protocol::core::Encoding {

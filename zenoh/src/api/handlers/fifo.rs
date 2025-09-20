@@ -27,10 +27,10 @@ use crate::api::handlers::{
     callback::Callback, CallbackParameter, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE,
 };
 
-/// An handler implementing FIFO semantics.
+/// A handler implementing FIFO semantics.
 ///
-/// Note that pushing on a full [`FifoChannel`] that is full will block until a slot is available.
-/// E.g., a slow subscriber could block the underlying Zenoh thread because is not emptying the
+/// Note that pushing on a [`FifoChannel`] that is full will block until a slot is available.
+/// E.g., a slow subscriber could block the underlying Zenoh thread because it is not emptying the
 /// [`FifoChannel`] fast enough. In this case, you may want to look into [`crate::api::handlers::RingChannel`] that
 /// will drop samples when full.
 pub struct FifoChannel {

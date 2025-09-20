@@ -527,13 +527,13 @@ impl fmt::Debug for SessionInner {
 /// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, 
 /// which maintains the state of the connection of the node to the Zenoh network.
 /// 
-/// The session allows to declare other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
 /// and keeps them functioning. Closing the session will close all associated entities.
 /// 
 /// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
 /// session is an `Arc` to the internal session object, so cloning is cheap and fast.
 /// 
-/// Zenoh session is instantiated using [`zenoh::open`](crate::open)
+/// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
 /// with parameters specified in the [`Config`] object.
 ///
 /// Objects created by the session ([`Publisher`](crate::pubsub::Publisher), 
@@ -611,7 +611,7 @@ impl Drop for Session {
 /// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
 /// It allows notably to establish reference cycles inside the session, for the primitive
 /// implementation.
-/// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
+/// When all `Session` instances are dropped, [`Session::close`] is called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
 /// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
@@ -620,7 +620,7 @@ impl Drop for Session {
 /// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
 /// performance penalty when it comes to session entities cloning/dropping.
 ///
-/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+/// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
@@ -892,7 +892,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resourkey expression to subscribe to
+    /// * `key_expr` - The resource key expression to subscribe to
     ///
     /// # Examples
     /// ```no_run

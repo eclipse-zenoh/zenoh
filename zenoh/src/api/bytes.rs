@@ -26,8 +26,8 @@ use zenoh_protocol::zenoh::ext::AttachmentType;
 ///
 /// It allows any type `T` implementing `Into<ZBytes>` to be converted into `Option<ZBytes>`.
 ///
-/// This type is unlikely to be used explicitly by the user. It's purpose is to allow to pass types
-/// like `&str`, `String`, `&[u8]`, `Vec<u8]`, etc. to API methods
+/// This type is unlikely to be used explicitly by the user. Its purpose is to allow passing types
+/// like `&str`, `String`, `&[u8]`, `Vec<u8>`, etc. to API methods
 /// that accept an optional payload, like the [`attachment`](crate::pubsub::PublicationBuilder::attachment).
 ///
 /// # Examples
@@ -88,22 +88,22 @@ impl From<OptionZBytes> for Option<ZBytes> {
 
 /// ZBytes contains the raw bytes data.
 ///
-/// This type is intended to represent the data payload with minimize copying data. 
-/// Zenoh may construct single `ZBytes` instance from pointers to multiple buffers
-/// in case when data is received fragmented from the network.
+/// This type is intended to represent the data payload with minimized copying.
+/// Zenoh may construct a single `ZBytes` instance from pointers to multiple buffers
+/// in cases where data is received fragmented from the network.
 ///
-/// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`] using [`to_bytes`](Self::to_bytes).
+/// To directly access raw data as a contiguous slice, it is preferable to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`] using [`to_bytes`](Self::to_bytes).
 /// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
 /// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
 ///
-/// It is also possible to iterate over the raw data that may be scattered on different memory regions using [`slices`](Self::slices).
+/// It is also possible to iterate over the raw data that may be scattered across different memory regions using [`slices`](Self::slices).
 /// 
 /// Another way to access raw data is to use a [`ZBytesReader`] obtained from [`reader`](Self::reader) 
 /// that implements the standard [`std::io::Read`] trait. This is useful when deserializing data using 
 /// libraries that operate on `std::io::Read`.
 ///
-/// The creation of a `ZBytes` instance using the [`std::io::Write`] trait is also possible using static
-/// the [`writer`](Self::writer) method that creates a [`ZBytesWriter`].
+/// The creation of a `ZBytes` instance using the [`std::io::Write`] trait is also possible using the static
+/// [`writer`](Self::writer) method that creates a [`ZBytesWriter`].
 /// 
 /// # Examples
 ///
@@ -201,8 +201,8 @@ impl ZBytes {
 
     /// Return an iterator on raw bytes slices contained in the [`ZBytes`].
     ///
-    /// [`ZBytes`] may store data in non-contiguous regions of memory, this iterator
-    /// then allows to access raw data directly without any attempt of deserializing it.
+    /// [`ZBytes`] may store data in non-contiguous regions of memory; this iterator
+    /// then allows accessing raw data directly without any attempt at deserializing it.
     /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`].
     /// The only provided guarantee is on the bytes order that is preserved.
     ///
@@ -276,7 +276,7 @@ const _: () = {
 /// 
 /// The instance of this struct is obtained from the [`ZBytes::reader`] method.
 /// It implements the standard [`std::io::Read`] and [`std::io::Seek`] traits.
-/// This allows to use it with libraries that deserialize data from a `std::io::Read`.
+/// This allows using it with libraries that deserialize data from a `std::io::Read`.
 /// Example:
 /// ```rust
 /// use std::io::{Read, Seek, SeekFrom, Write};
@@ -303,7 +303,7 @@ impl ZBytesReader<'_> {
         self.0.remaining()
     }
 
-    /// Returns true if no more bytes can be read
+    /// Returns true if no additional bytes can be read
     pub fn is_empty(&self) -> bool {
         self.remaining() == 0
     }
@@ -325,7 +325,7 @@ impl std::io::Seek for ZBytesReader<'_> {
 /// 
 /// The instance of this struct is obtained from the [`ZBytes::writer`] method.
 /// It implements the standard [`std::io::Write`] trait.
-/// This allows to use it with libraries that serialize data into a `std::io::Write`.
+/// This allows using it with libraries that serialize data into a `std::io::Write`.
 /// Example:
 /// ```rust
 /// use std::io::{Read, Write};
@@ -340,8 +340,8 @@ impl std::io::Seek for ZBytesReader<'_> {
 /// ```
 /// It is also possible to append existing [`ZBytes`] instances by taking ownership of them
 /// using the [`append`](Self::append) method.
-/// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
-/// Said in other terms, it allows to create a linear view on different memory regions without copy.
+/// This allows composing a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+/// In other words, it allows creating a linear view on different memory regions without copying.
 #[derive(Debug)]
 pub struct ZBytesWriter {
     zbuf: ZBuf,
@@ -350,8 +350,8 @@ pub struct ZBytesWriter {
 
 impl ZBytesWriter {
     /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
-    /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
-    /// Said in other terms, it allows to create a linear view on different memory regions without copy.
+    /// This allows composing a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+    /// In other words, it allows creating a linear view on different memory regions without copying.
     ///
     /// Example:
     /// ```
@@ -517,7 +517,7 @@ impl From<&Cow<'_, str>> for ZBytes {
 }
 
 // Define a transparent wrapper type to get around Rust's orphan rule.
-// This allows to use bytes::Bytes directly as supporting buffer of a
+// This allows using bytes::Bytes directly as the supporting buffer of a
 // ZSlice resulting in zero-copy and zero-alloc bytes::Bytes serialization.
 #[repr(transparent)]
 #[derive(Debug)]

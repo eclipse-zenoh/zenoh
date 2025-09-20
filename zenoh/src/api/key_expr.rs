@@ -294,7 +294,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    /// Will return false and log a error in case of TryInto failure.
+    /// Will return false and log an error in case of a `TryInto` failure.
     #[inline]
     pub(crate) fn keyexpr_include<'b, L, R>(left: L, right: R) -> bool
     where

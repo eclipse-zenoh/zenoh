@@ -146,7 +146,7 @@ impl SampleBuilder<SampleBuilderDelete> {
 }
 
 impl<T> SampleBuilder<T> {
-    /// Allows to change keyexpr of [`Sample`]
+    /// Allows changing the key expression of a [`Sample`]
     pub fn keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -160,7 +160,7 @@ impl<T> SampleBuilder<T> {
         }
     }
 
-    // Allows to change qos as a whole of [`Sample`]
+    // Allows changing the QoS of a [`Sample`] as a whole
     pub(crate) fn qos(self, qos: QoS) -> Self {
         Self {
             sample: Sample { qos, ..self.sample },

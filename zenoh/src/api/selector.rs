@@ -40,7 +40,7 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 ///     - in the absence of `=`, the parameter value is considered to be the empty string,
 ///     - both name and value should use percent-encoding to escape characters,
 ///     - defining a value for the same parameter name twice is considered undefined behavior,
-///       with the encouraged behaviour being to reject operations when a duplicate parameter is detected.
+///       with the encouraged behavior being to reject operations when a duplicate parameter is detected.
 ///
 /// Zenoh intends to standardize the usage of a set of parameter names. To avoid conflicting with RPC parameters,
 /// the Zenoh team has settled on reserving the set of parameter names that start with non-alphanumeric characters.
@@ -136,11 +136,11 @@ impl<'a> From<&'a Selector<'a>> for (&'a KeyExpr<'a>, &'a Parameters<'a>) {
 }
 
 #[zenoh_macros::unstable]
-/// The trait allows to set/read parameters processed by the zenoh library itself
+/// The trait allows setting/reading parameters processed by the Zenoh library itself
 pub trait ZenohParameters {
-    /// Text parameter names are not part of the public API. They exposed just to provide information about current parameters
-    /// namings, allowing user to avoid conflicts with custom parameters. It's also possible that some of these zenoh-specific parameters
-    /// which now are stored in the key-value pairs will be later passed in some other way, keeping the same get/set interface functions.
+    /// Text parameter names are not part of the public API. They are exposed only to provide information about current parameter
+    /// names, allowing users to avoid conflicts with custom parameters. It's also possible that some of these Zenoh-specific parameters,
+    /// which are now stored as key-value pairs, will later be passed in some other way, while keeping the same get/set interface functions.
     const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
@@ -151,7 +151,7 @@ pub trait ZenohParameters {
     /// - queryable is declared to handle `a/*` queries and contains data for `a/b` and `a/c`.
     /// - queryable receives our request and sends two replies with data for `a/b` and `a/c`
     ///
-    /// Normally only `a/b` reply would be accepted, but with `_anyke` parameter set, both replies are accepted.
+    /// Normally only the `a/b` reply would be accepted, but with the `_anyke` parameter set, both replies are accepted.
     /// NOTE: `_anyke` indicates that ANY key expression is allowed. I.e., if `_anyke` parameter is set, a reply
     ///       on `x/y/z` is valid even if the queryable is declared on `a/*`.
     fn set_reply_key_expr_any(&mut self);
@@ -174,8 +174,8 @@ impl ZenohParameters for Parameters<'_> {
         };
     }
 
-    /// Sets parameter allowing to querier to reply to this request even
-    /// it the requested key expression does not match the reply key expression.
+    /// Sets the parameter allowing the querier to reply to this request even
+    /// if the requested key expression does not match the reply key expression.
     fn set_reply_key_expr_any(&mut self) {
         self.insert(Self::REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
     }

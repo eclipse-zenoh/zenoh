@@ -136,9 +136,8 @@ pub(crate) struct MatchingListenerInner {
 /// A listener that sends notifications when the [`MatchingStatus`] of a
 /// corresponding Zenoh entity changes.
 ///
-/// Callback matching listeners will run in background until the corresponding Zenoh entity is undeclared,
-/// or until it is undeclared.
-/// On the other hand, matching listener with a handler are automatically undeclared when dropped.
+/// Callback matching listeners will run in the background until the corresponding Zenoh entity is
+/// undeclared. Matching listeners with a handler are automatically undeclared when dropped.
 ///
 /// # Examples
 /// ```no_run
@@ -195,14 +194,14 @@ impl<Handler> MatchingListener<Handler> {
     }
 
     /// Returns a reference to this matching listener's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// A handler is anything that implements [`crate::handlers::IntoHandler`].
     /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this matching listener's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
+    /// A handler is anything that implements [`crate::handlers::IntoHandler`].
     /// The default handler is [`crate::handlers::DefaultHandler`].
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler

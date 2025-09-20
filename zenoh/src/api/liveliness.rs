@@ -101,7 +101,7 @@ impl<'a> Liveliness<'a> {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression to create the lieliness token on
+    /// * `key_expr` - The key expression to create the liveliness token on
     ///
     /// # Examples
     /// ```
