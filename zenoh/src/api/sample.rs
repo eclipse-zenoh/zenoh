@@ -186,7 +186,7 @@ impl TryFrom<u64> for SampleKind {
     }
 }
 
-/// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
+/// Structure with public fields for a sample. It is convenient when it is necessary to decompose a sample into its fields.
 #[derive(Debug, Clone)]
 pub struct SampleFields {
     pub key_expr: KeyExpr<'static>,
@@ -444,7 +444,7 @@ impl QoSBuilderTrait for QoSBuilder {
 }
 
 impl QoS {
-    /// Gets priority of the message.
+    /// Gets the priority of the message.
     pub fn priority(&self) -> Priority {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
@@ -458,12 +458,12 @@ impl QoS {
         }
     }
 
-    /// Gets congestion control of the message.
+    /// Gets the congestion control of the message.
     pub fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }
 
-    /// Gets express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
+    /// Gets the express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
     }

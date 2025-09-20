@@ -49,18 +49,18 @@ pub type PublisherDeleteBuilder<'a> =
     PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
 
 
-/// The type-modifier for a [`PublicationBuilder`] for a `Put` operation,
+/// The type-modifier for a [`PublicationBuilder`] for a `Put` operation.
 /// 
-/// Makes publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Put`].
+/// Makes the publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Put`].
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
     pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
 }
 
-/// The type-modifier for a [`PublicationBuilder`] for a `Delete` operation,
+/// The type-modifier for a [`PublicationBuilder`] for a `Delete` operation.
 /// 
-/// Makes publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Delete`].
+/// Makes the publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Delete`].
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderDelete;
 
@@ -72,7 +72,7 @@ pub struct PublicationBuilderDelete;
 /// - [`crate::pubsub::Publisher::put`]
 /// - [`crate::pubsub::Publisher::delete`]
 /// 
-/// and resolves to `ZResult<()>` when awaited or when calling `.wait()`.
+/// It resolves to `ZResult<()>` when awaited or when calling `.wait()`.
 /// 
 /// # Examples
 /// ```
@@ -123,7 +123,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     /// Changes the Express policy to apply when routing the data.
     ///
     /// When express is set to `true`, then the message will not be batched.
-    /// This usually has a positive impact on latency but negative impact on throughput.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
         Self {
@@ -187,7 +187,7 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 
 #[zenoh_macros::internal_trait]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
-    /// Sets an optional source information [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
@@ -381,7 +381,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Changes the Express policy to apply when routing the data.
     ///
     /// When express is set to `true`, then the message will not be batched.
-    /// This usually has a positive impact on latency but negative impact on throughput.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
         Self { is_express, ..self }
@@ -389,7 +389,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl PublisherBuilder<'_, '_> {
-    /// Looks up if any configured QoS overwrites apply on the builder's key expression.
+    /// Looks up if any configured QoS overwrites apply to the builder's key expression.
     /// Returns a new builder with the overwritten QoS parameters.
     pub(crate) fn apply_qos_overwrites(self) -> Self {
         let mut qos_overwrites = PublisherQoSConfig::default();

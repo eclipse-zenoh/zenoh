@@ -153,17 +153,17 @@ impl ZBytes {
     /// Access raw bytes contained in the [`ZBytes`].
     ///
     /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
-    /// will be done, that's why the method returns a [`Cow`].
+    /// will be done; that's why the method returns a [`Cow`].
     /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy.
     pub fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.0.contiguous()
     }
 
-    /// Try to access a string contained in the [`ZBytes`], fail if it contains non-UTF8 bytes.
+    /// Tries to access a string contained in the [`ZBytes`], and fails if it contains non-UTF-8 bytes.
     ///
     /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
-    /// will be done, that's why the method returns a [`Cow`].
-    /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy, but then the UTF8
+    /// will be done; that's why the method returns a [`Cow`].
+    /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy, but then the UTF-8
     /// check has to be done manually.
     pub fn try_to_string(&self) -> Result<Cow<'_, str>, Utf8Error> {
         Ok(match self.to_bytes() {
@@ -172,7 +172,7 @@ impl ZBytes {
         })
     }
 
-    /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
+    /// Get a [`ZBytesReader`] implementing the [`std::io::Read`] trait.
     ///
     /// See [`ZBytesWriter`] on how to chain the deserialization of different types from a single [`ZBytes`].
     pub fn reader(&self) -> ZBytesReader<'_> {
@@ -199,12 +199,12 @@ impl ZBytes {
         }
     }
 
-    /// Return an iterator on raw bytes slices contained in the [`ZBytes`].
+    /// Return an iterator over raw byte slices contained in the [`ZBytes`].
     ///
     /// [`ZBytes`] may store data in non-contiguous regions of memory; this iterator
     /// then allows accessing raw data directly without any attempt at deserializing it.
     /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`].
-    /// The only provided guarantee is on the bytes order that is preserved.
+    /// The only provided guarantee is that the byte order is preserved.
     ///
     /// ```rust
     /// use std::io::Write;

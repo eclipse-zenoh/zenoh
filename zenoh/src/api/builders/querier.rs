@@ -102,13 +102,13 @@ impl QoSBuilderTrait for QuerierBuilder<'_, '_> {
 }
 
 impl QuerierBuilder<'_, '_> {
-    /// Change the target of the querier queries.
+    /// Change the target of the querier's queries.
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
         Self { target, ..self }
     }
 
-    /// Change the consolidation mode of the querier queries.
+    /// Change the consolidation mode of the querier's queries.
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
         Self {
@@ -127,13 +127,13 @@ impl QuerierBuilder<'_, '_> {
         }
     }
 
-    /// Set queries timeout.
+    /// Set the query timeout.
     #[inline]
     pub fn timeout(self, timeout: Duration) -> Self {
         Self { timeout, ..self }
     }
 
-    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this querier accepts such disjoint replies.
     #[zenoh_macros::unstable]
