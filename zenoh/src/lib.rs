@@ -603,10 +603,10 @@ pub mod matching {
 /// [`Subscriber`](crate::pubsub::Subscriber) or [`Query`](crate::query::Query)
 ///
 /// 1. **Callback functions**: the user provides a callback function that is called with each
-///     incoming sample.
+///    incoming sample.
 ///
 /// 2. **Channels**: the user provides a channel that buffers incoming samples, and the user
-///     retrieves samples from the channel when needed.
+///    retrieves samples from the channel when needed.
 ///
 /// Below are the details of how channels work in Zenoh.
 ///
