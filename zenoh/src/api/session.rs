@@ -530,7 +530,7 @@ impl fmt::Debug for SessionInner {
 /// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc.
 /// and keeps them functioning. Closing the session will close all associated entities.
 ///
-/// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
+/// The session is cloneable so it's easy to share it between tasks and threads. Each clone of the
 /// session is an `Arc` to the internal session object, so cloning is cheap and fast.
 ///
 /// A Zenoh session is instantiated using [`zenoh::open`](crate::open)

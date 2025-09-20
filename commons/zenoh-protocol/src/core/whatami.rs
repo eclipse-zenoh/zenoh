@@ -26,8 +26,8 @@ use zenoh_result::{bail, ZError};
 /// with them. This can work using multicast discovery and by getting gossip information
 /// the initial entry points. The peer mode is the default mode.
 ///
-/// In the client mode the application remains conected to a single connection point, which
-/// serves as a gateway to the rest of the network. This mode is useful for the constained
+/// In the client mode the application remains connected to a single connection point, which
+/// serves as a gateway to the rest of the network. This mode is useful for the constrained
 /// devices that cannot afford to maintain multiple connections.
 ///
 /// The router mode is used to run a zenoh router, which is a node that
