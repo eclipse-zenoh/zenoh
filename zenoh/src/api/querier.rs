@@ -206,8 +206,8 @@ impl<'a> Querier<'a> {
 
     /// Return the [`MatchingStatus`] of the querier.
     ///
-    /// [`MatchingStatus::matching`] will return true if there exist Queryables
-    /// matching the Queriers's key expression and target and false otherwise.
+    /// [`MatchingStatus::matching`] will return true if there are Queryables
+    /// matching the Querier's key expression and target, and false otherwise.
     ///
     /// # Examples
     /// ```
