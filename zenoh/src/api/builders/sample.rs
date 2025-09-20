@@ -67,15 +67,15 @@ pub struct SampleBuilderPut;
 /// The type modifier for a [`SampleBuilder`] to create a [`Delete`](crate::sample::SampleKind::Delete) sample.
 #[derive(Clone, Debug)]
 pub struct SampleBuilderDelete;
-/// The type modifier for a [`SampleBuilder`] for the building stage 
+/// The type modifier for a [`SampleBuilder`] for the building stage
 /// when sample [`kind`](crate::sample::Sample::kind) not yet specified.
-/// 
+///
 /// With this modifier the `SampleBuilder` can't be resolved, the selection of the kind must be done.
 #[derive(Clone, Debug)]
 pub struct SampleBuilderAny;
 
 /// A builder for [`Sample`](crate::sample::Sample)
-/// 
+///
 /// As the `Sample` struct is not mutable, the `SampleBuilder` can be used to
 /// create or modify an existing `Sample` instance or to create a new one from scratch
 /// for storing it for later use.

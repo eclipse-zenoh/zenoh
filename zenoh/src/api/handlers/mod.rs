@@ -39,7 +39,7 @@ pub trait IntoHandler<T: CallbackParameter> {
 ///
 /// When no channel or callback is provided to [`Subscriber`](crate::pubsub::Subscriber) or [`Query`](crate::query::Query),
 /// Zenoh uses this type by default.
-/// 
+///
 /// Currently, this type is an opaque wrapper over the [`FifoChannel`] with default settings. But the
 /// separate type is created to make possible to change default handler implementation
 /// without API breaking changes.

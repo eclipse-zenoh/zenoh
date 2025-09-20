@@ -524,27 +524,27 @@ impl fmt::Debug for SessionInner {
     }
 }
 
-/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, 
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object,
 /// which maintains the state of the connection of the node to the Zenoh network.
-/// 
-/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
+///
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc.
 /// and keeps them functioning. Closing the session will close all associated entities.
-/// 
+///
 /// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
 /// session is an `Arc` to the internal session object, so cloning is cheap and fast.
-/// 
+///
 /// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
 /// with parameters specified in the [`Config`] object.
 ///
-/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher), 
+/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher),
 /// [`Subscriber`](crate::pubsub::Subscriber), [`Querier`](crate::query::Querier), etc.),
 /// have lifetimes independent of the session, but they stop functioning if all clones of the session
 /// object are dropped or the session is closed with the [`close`](crate::session::Session::close) method.
 ///
 /// ### Background entities
-/// 
+///
 /// Sometimes it is inconvenient not to keep a reference to an object (for example,
-/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to 
+/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to
 /// avoid keeping this reference and keep the object alive until the session is closed.
 /// To do this, call the [`background`](crate::query::QueryableBuilder::background) method on the
 /// corresponding builder. This causes the builder to return `()` instead of the object instance and
@@ -554,14 +554,14 @@ impl fmt::Debug for SessionInner {
 /// The session object holds all declared zenoh entities (publishers, subscribers, etc.) and
 /// a shared reference to the runtime object which maintains the state of the zenoh node.
 /// Closing the session will close all associated entities and drop the reference to the runtime.
-/// 
+///
 /// Typically each session has its own runtime, but in some cases
 /// the session may share the runtime with other sessions. This is the case for the plugins
 /// where each plugin has its own session but all plugins share the same `zenohd` runtime
 /// for efficiency.
-/// In this case all these sessions will have the same network identity 
+/// In this case all these sessions will have the same network identity
 /// [`Session::zid`](crate::session::Session::zid).
-/// 
+///
 /// # Examples
 /// ```
 /// # #[tokio::main]

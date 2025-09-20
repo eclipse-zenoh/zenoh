@@ -19,27 +19,27 @@ use zenoh_protocol::core::EncodingId;
 
 /// # Encoding information
 ///
-/// The [`Sample`](crate::sample::Sample) or [`ReplyError`](crate::query::ReplyError) 
-/// may contain the optional encoding value which indicates how the payload should be interpreted 
+/// The [`Sample`](crate::sample::Sample) or [`ReplyError`](crate::query::ReplyError)
+/// may contain the optional encoding value, which indicates how the payload should be interpreted
 /// by the application.
 ///
 /// The encoding is represented as a string in MIME-like format: `type/subtype[;schema]`.
 ///
-/// To optimize the network usage, Zenoh internally maps some predefined encoding strings to
+/// To optimize network usage, Zenoh internally maps some predefined encoding strings to
 /// an integer identifier. These encodings are provided as associated constants of the [`Encoding`] struct,
 /// e.g. [`Encoding::ZENOH_BYTES`], [`Encoding::APPLICATION_JSON`], etc. This internal mapping
-/// is not exposed to the application layer and from the API point of view the encoding is always
+/// is not exposed to the application layer and, from the API point of view, the encoding is always
 /// represented as a string. But it's useful to know that some encodings are much more efficient
-/// than others, especially considering that the encoding value is sent with each message. 
+/// than others, especially considering that the encoding value is sent with each message.
 ///
-/// Please note the Zenoh protocol does not impose any encoding value nor it operates on it.
-/// It can be seen as some optional metadata that is carried over by Zenoh in such a way the application may perform different operations depending on the encoding value.
+/// Please note that the Zenoh protocol does not impose any encoding value, nor does it operate on it.
+/// It can be seen as optional metadata that is carried over by Zenoh in such a way that the application may perform different operations depending on the encoding value.
 ///
 /// # Examples
 ///
 /// ### String operations
 ///
-/// Create an [`Encoding`] from a string and viceversa.
+/// Create an [`Encoding`] from a string and vice versa.
 /// ```
 /// use zenoh::bytes::Encoding;
 ///
@@ -64,9 +64,9 @@ use zenoh_protocol::core::EncodingId;
 ///
 /// ### Schema
 ///
-/// Additionally, a schema can be associated to the encoding.
+/// Additionally, a schema can be associated with the encoding.
 /// The convention is to use the `;` separator if an encoding is created from a string.
-/// Alternatively, [`with_schema()`](Encoding::with_schema) can be used to add a scheme to one of the associated constants.
+/// Alternatively, [`with_schema()`](Encoding::with_schema) can be used to add a schema to one of the associated constants.
 /// ```
 /// use zenoh::bytes::Encoding;
 ///
@@ -83,16 +83,16 @@ pub struct Encoding(zenoh_protocol::core::Encoding);
 impl Encoding {
     const SCHEMA_SEP: char = ';';
 
-    // For compatibility purposes Zenoh reserves any prefix value from `0` to `1023` included.
+    // For compatibility purposes, Zenoh reserves any prefix value from `0` to `1023`, inclusive.
 
-    // - Primitives types supported in all Zenoh bindings
+    // - Primitive types supported in all Zenoh bindings
     /// Just some bytes.
     ///
     /// Constant alias for string: `"zenoh/bytes"`.
     ///
-    /// This encoding supposes that the payload was created with [`ZBytes::from::<Vec<u8>>`](crate::bytes::ZBytes::from) or similar
+    /// This encoding assumes that the payload was created with [`ZBytes::from::<Vec<u8>>`](crate::bytes::ZBytes::from) or similar
     /// (`[u8]`, `[u8;N]`, `Cow<_,[u8]>`) and its data can be accessed with [`ZBytes::to_bytes()`](crate::bytes::ZBytes::to_bytes),
-    /// no additional assumptions about data format are made
+    /// no additional assumptions about data format are made.
     pub const ZENOH_BYTES: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 0,
         schema: None,
@@ -101,7 +101,7 @@ impl Encoding {
     ///
     /// Constant alias for string: `"zenoh/string"`.
     ///
-    /// This encoding supposes that the payload was created with [`ZBytes::from::<String>`](crate::bytes::ZBytes::from) or similar
+    /// This encoding assumes that the payload was created with [`ZBytes::from::<String>`](crate::bytes::ZBytes::from) or similar
     /// (`&str`, `Cow<str>`) and its data can be accessed with [`ZBytes::try_to_string()`](crate::bytes::ZBytes::try_to_string) without an error.
     pub const ZENOH_STRING: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 1,
@@ -112,7 +112,7 @@ impl Encoding {
     ///
     /// Constant alias for string: `"zenoh/serialized"`.
     ///
-    /// This encoding supposes that the payload created with serialization functions provided by `zenoh-ext` crate.
+    /// This encoding assumes that the payload was created with serialization functions provided by the `zenoh-ext` crate.
     /// The `schema` field may contain the details of the serialization format.
     pub const ZENOH_SERIALIZED: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 2,
@@ -147,14 +147,14 @@ impl Encoding {
         id: 6,
         schema: None,
     });
-    /// A Common Data Representation (CDR)-encoded data.
+    /// Common Data Representation (CDR)-encoded data.
     ///
     /// Constant alias for string: `"application/cdr"`.
     pub const APPLICATION_CDR: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 7,
         schema: None,
     });
-    /// A Concise Binary Object Representation (CBOR)-encoded data.
+    /// Concise Binary Object Representation (CBOR)-encoded data.
     ///
     /// Constant alias for string: `"application/cbor"`.
     pub const APPLICATION_CBOR: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -175,7 +175,7 @@ impl Encoding {
         id: 10,
         schema: None,
     });
-    /// JSON5 encoded data that are human readable.
+    /// JSON5-encoded data that are human readable.
     ///
     /// Constant alias for string: `"text/json5"`.
     pub const TEXT_JSON5: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -190,7 +190,7 @@ impl Encoding {
             id: 12,
             schema: None,
         });
-    /// An application-specific protobuf-encoded data.
+    /// Application-specific protobuf-encoded data.
     ///
     /// Constant alias for string: `"application/protobuf"`.
     pub const APPLICATION_PROTOBUF: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -204,7 +204,7 @@ impl Encoding {
         id: 14,
         schema: None,
     });
-    /// An [openmetrics](https://github.com/OpenObservability/OpenMetrics) data, common used by [Prometheus](https://prometheus.io/).
+    /// [OpenMetrics](https://github.com/OpenObservability/OpenMetrics) data, commonly used by [Prometheus](https://prometheus.io/).
     ///
     /// Constant alias for string: `"application/openmetrics-text"`.
     pub const APPLICATION_OPENMETRICS_TEXT: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -232,14 +232,14 @@ impl Encoding {
         id: 18,
         schema: None,
     });
-    /// A BitMap (BMP) image.
+    /// A Bitmap (BMP) image.
     ///
     /// Constant alias for string: `"image/bmp"`.
     pub const IMAGE_BMP: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 19,
         schema: None,
     });
-    /// A Web Portable (WebP) image.
+    /// A WebP image.
     ///
     ///  Constant alias for string: `"image/webp"`.
     pub const IMAGE_WEBP: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -288,7 +288,7 @@ impl Encoding {
         id: 26,
         schema: None,
     });
-    /// A MarkDown file.
+    /// A Markdown file.
     ///
     /// Constant alias for string: `"text/markdown"`.
     pub const TEXT_MARKDOWN: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -330,7 +330,7 @@ impl Encoding {
         id: 32,
         schema: None,
     });
-    /// A JSONPath defines a string syntax for selecting and extracting JSON values from within a given JSON value.
+    /// JSONPath defines a string syntax for selecting and extracting JSON values from within a given JSON value.
     ///
     /// Constant alias for string: `"application/jsonpath"`.
     pub const APPLICATION_JSONPATH: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -344,7 +344,7 @@ impl Encoding {
         id: 34,
         schema: None,
     });
-    /// An application-specific MPEG-4 encoded data, either audio or video.
+    /// Application-specific MPEG-4-encoded data, either audio or video.
     ///
     /// Constant alias for string: `"application/mp4"`.
     pub const APPLICATION_MP4: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -358,14 +358,14 @@ impl Encoding {
         id: 36,
         schema: None,
     });
-    /// A YANG-encoded data commonly used by the Network Configuration Protocol (NETCONF).
+    /// YANG-encoded data commonly used by the Network Configuration Protocol (NETCONF).
     ///
     /// Constant alias for string: `"application/yang"`.
     pub const APPLICATION_YANG: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 37,
         schema: None,
     });
-    /// A MPEG-4 Advanced Audio Coding (AAC) media.
+    /// An MPEG-4 Advanced Audio Coding (AAC) media.
     ///
     /// Constant alias for string: `"audio/aac"`.
     pub const AUDIO_AAC: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -400,35 +400,35 @@ impl Encoding {
         id: 42,
         schema: None,
     });
-    /// A h261-encoded video stream.
+    /// An h261-encoded video stream.
     ///
     /// Constant alias for string: `"video/h261"`.
     pub const VIDEO_H261: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 43,
         schema: None,
     });
-    /// A h263-encoded video stream.
+    /// An h263-encoded video stream.
     ///
     /// Constant alias for string: `"video/h263"`.
     pub const VIDEO_H263: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 44,
         schema: None,
     });
-    /// A h264-encoded video stream.
+    /// An h264-encoded video stream.
     ///
     /// Constant alias for string: `"video/h264"`.
     pub const VIDEO_H264: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 45,
         schema: None,
     });
-    /// A h265-encoded video stream.
+    /// An h265-encoded video stream.
     ///
     /// Constant alias for string: `"video/h265"`.
     pub const VIDEO_H265: Encoding = Self(zenoh_protocol::core::Encoding {
         id: 46,
         schema: None,
     });
-    /// A h266-encoded video stream.
+    /// An h266-encoded video stream.
     ///
     /// Constant alias for string: `"video/h266"`.
     pub const VIDEO_H266: Encoding = Self(zenoh_protocol::core::Encoding {
@@ -525,7 +525,7 @@ impl Encoding {
         50u16 => "video/raw",
         51u16 => "video/vp8",
         52u16 => "video/vp9",
-        // The 0xFFFFu16 is used to indicate an custom encoding where both encoding and schema
+        // The 0xFFFFu16 is used to indicate a custom encoding where both encoding and schema
         // are stored in the schema field.
         0xFFFFu16 => "",
     };
@@ -591,8 +591,8 @@ impl Encoding {
         Self::ZENOH_BYTES
     }
 
-    /// Set a schema to this encoding. Zenoh does not define what a schema is and its semantichs is left to the implementer.
-    /// E.g. a common schema for `text/plain` encoding is `utf-8`.
+    /// Set a schema for this encoding. Zenoh does not define what a schema is, and its semantics is left to the implementer.
+    /// E.g., a common schema for the `text/plain` encoding is `utf-8`.
     pub fn with_schema<S>(mut self, s: S) -> Self
     where
         S: Into<String>,

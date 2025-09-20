@@ -25,11 +25,11 @@
 //!  
 //! ## Session
 //!
-//! The root element of the Zenoh API is the [session]. 
+//! The root element of the Zenoh API is the [session].
 //! A session is created by the [`open`] function, which takes a [config] as an argument.
 //! The [`Session`] holds the zenoh runtime object,
-//! which maintains the state of the connection of the node to the Zenoh network. 
-//! 
+//! which maintains the state of the connection of the node to the Zenoh network.
+//!
 //! The session allows declaring publishers, subscribers, queriers, queryables, etc.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
@@ -251,7 +251,7 @@ pub use crate::{
 ///
 /// [`kedefine`](crate::key_expr::format::kedefine) also lets you define formats at compile time, enabling a more performant—and, more importantly, safer and more convenient—use of said formats,
 /// as the [`keformat`](crate::key_expr::format::keformat) and [`kewrite`](crate::key_expr::format::kewrite) macros will tell you if you're attempting to set fields of the format that do not exist.
-/// 
+///
 /// # Example
 /// ```no_run
 /// # #[tokio::main]
@@ -290,16 +290,16 @@ pub mod key_expr {
 }
 
 /// # Zenoh [`Session`] and associated types
-/// 
-/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object, 
+///
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object,
 /// which maintains the state of the connection of the node to the Zenoh network.
-/// 
-/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc. 
+///
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc.
 /// and keeps them functioning. Closing the session will close all associated entities.
-/// 
+///
 /// The session is clonable so it's easy to share it between tasks and threads. Each clone of the
 /// session is an `Arc` to the internal session object, so cloning is cheap and fast.
-/// 
+///
 /// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
 /// with parameters specified in the [`Config`] object.
 pub mod session {
@@ -351,7 +351,7 @@ pub mod sample {
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
 ///
 /// The module also provides the [`Encoding`](crate::bytes::Encoding) enum to specify the encoding of the payload.
-/// 
+///
 /// # Examples
 ///
 /// ### Creating ZBytes
@@ -405,21 +405,21 @@ pub mod bytes {
 ///
 /// There are two operations in the publisher [`put`](crate::pubsub::Publisher::put) and
 /// [`delete`](crate::pubsub::Publisher::delete) (or in the session as mentioned above).
-/// 
-/// Publishing may express two different semantics: 
+///
+/// Publishing may express two different semantics:
 /// - producing a sequence of values
 /// - updating a single value associated with a key expression
-/// 
+///
 /// In the second case, it's necessary to be able to declare that some key is no longer associated with any value. The
 /// [`delete`](crate::pubsub::Publisher::delete) operation is used for this.
-/// 
+///
 /// On the receiving side, the subscriber distinguishes between the [`Put`](crate::sample::SampleKind::Put)
 /// and [`Delete`](crate::sample::SampleKind::Delete) operations
 /// by the [`kind`](crate::sample::Sample::kind) field of the [`Sample`](crate::sample::Sample) structure.
 ///
 /// The delete operation allows the subscriber to work with a [`Queryable`](crate::query::Queryable)
-/// which caches the values associated with key expressions. 
-/// 
+/// which caches the values associated with key expressions.
+///
 /// # Examples:
 /// ### Declaring a publisher and publishing data
 /// ```no_run
@@ -465,36 +465,36 @@ pub mod pubsub {
 /// and serves queries [`Query`](crate::query::Query) using a callback
 /// or a channel (see [handlers] module documentation for details).
 ///
-/// The [`Query`](crate::query::Query) has the methods [`reply`](crate::query::Query::reply) 
+/// The [`Query`](crate::query::Query) has the methods [`reply`](crate::query::Query::reply)
 /// to reply with a data sample,
 /// and [`reply_err`](crate::query::Query::reply_err) to send an error reply.
 ///
 /// The `reply` method sends a [`Sample`](crate::sample::Sample) with a [`kind`](crate::sample::Sample::kind)
-/// field set to [`Put`](crate::sample::SampleKind::Put). 
+/// field set to [`Put`](crate::sample::SampleKind::Put).
 /// If it's necessary to reply with a [`Delete`](crate::sample::SampleKind::Delete) sample,
 /// the [`reply_del`](crate::query::Query::reply_del) method should be used.
-/// 
+///
 /// Data is requested from queryables via the [`Session::get`](crate::Session::get) function or by
 /// a [`Querier`](crate::query::Querier) object. Each request returns
-/// zero or more [`Reply`](crate::query::Reply) structures, each one from each queryable 
+/// zero or more [`Reply`](crate::query::Reply) structures, each one from each queryable
 /// that matches the request.
 /// The reply contains either a [`Sample`](crate::sample::Sample)
 /// or a [`ReplyError`](crate::query::ReplyError) structure.
 ///
 /// # Query parameters
-/// 
+///
 /// The query/reply API allows specifying additional parameters for the request.
 /// These parameters are passed to the get operation using the [`Selector`](crate::query::Selector)
 /// syntax. The selector string has a syntax similar to a URL:
-/// it's a key expression followed by a question mark and the list of parameters in the format 
+/// it's a key expression followed by a question mark and the list of parameters in the format
 /// "name=value" separated by ';'.
 /// For example `key/expression?param1=value1;param2=value2`.
-/// 
+///
 /// # Examples:
 /// ### Declaring a queryable
-/// 
+///
 /// The example below shows a queryable that replies with temperature data for a given day.
-/// 
+///
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
@@ -517,9 +517,9 @@ pub mod pubsub {
 /// ```
 ///
 /// ## Requesting data
-/// 
+///
 /// The corresponding request for the above queryable requests the temperature for a given day.
-/// 
+///
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
@@ -604,22 +604,22 @@ pub mod matching {
 ///
 /// 1. **Callback functions**: the user provides a callback function that is called with each
 ///     incoming sample.
-/// 
+///
 /// 2. **Channels**: the user provides a channel that buffers incoming samples, and the user
 ///     retrieves samples from the channel when needed.
-/// 
+///
 /// Below are the details of how channels work in Zenoh.
 ///
 /// Under the hood, the sequential data from a primitive is always passed to a callback function.
-/// However, to simplify using channels, Zenoh provides the 
+/// However, to simplify using channels, Zenoh provides the
 /// [`IntoHandler`](crate::handlers::IntoHandler) trait,
 /// which returns a pair: a callback which pushes data to the channel and a "handler"
 /// which allows retrieving data from the channel.
 ///
 /// The method [`with`](crate::pubsub::SubscriberBuilder::with) accepts any type that
 /// implements the `IntoHandler` trait and extracts the callback and handler from it.
-/// The Zenoh object calls the callback with each incoming sample. 
-/// 
+/// The Zenoh object calls the callback with each incoming sample.
+///
 /// The handler is also stored in the Zenoh object. It's completely opaque to the Zenoh object;
 /// it's just made available to the user via the [`handler`](crate::pubsub::Subscriber::handler) method
 /// or by dereferencing, allowing the user to call the handler's methods directly on the
@@ -640,16 +640,16 @@ pub mod matching {
 /// }
 /// # }
 /// ```
-/// 
+///
 /// Note that this code is equivalent to the following one, where the channel
 /// and the callback are created explicitly.
-/// 
+///
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// use zenoh::handlers::IntoHandler;
-/// let (callback, mut ring_channel_handler) 
+/// let (callback, mut ring_channel_handler)
 ///    = zenoh::handlers::RingChannel::new(10).into_handler();
 /// let subscriber = session.declare_subscriber("key/expression")
 ///    .with((callback, ())) // or simply .callback(callback)
@@ -866,12 +866,12 @@ pub mod time {
 /// a Zenoh session or the scouting process. Usually a configuration file is stored in the json or
 /// yaml format and loaded using the [`Config::from_file`](crate::config::Config::from_file) method.
 /// It's also possible to read or
-/// modify individual elements of the `Config` with the 
+/// modify individual elements of the `Config` with the
 /// [`Config::insert_json5`](crate::config::Config::insert_json5)
 /// and [`Config::get_json`](crate::config::Config::get_json) methods.
 ///
 /// An example configuration file is available in the [`Config`] documentation section
-/// and in the Zenoh repository as 
+/// and in the Zenoh repository as
 /// [DEFAULT_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/blob/release/1.0.0/DEFAULT_CONFIG.json5)
 ///
 /// # Example

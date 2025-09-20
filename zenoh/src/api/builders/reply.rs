@@ -48,7 +48,7 @@ pub struct ReplyBuilderPut {
 #[derive(Debug)]
 pub struct ReplyBuilderDelete;
 
-/// A builder for [`Reply`](crate::query::Reply) 
+/// A builder for [`Reply`](crate::query::Reply)
 /// returned by [`Query::reply()`](Query::reply) and [`Query::reply_del()`](Query::reply_del)
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]
@@ -218,7 +218,7 @@ impl IntoFuture for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
     }
 }
 
-/// A builder for [`ReplyError`](crate::query::ReplyError) 
+/// A builder for [`ReplyError`](crate::query::ReplyError)
 /// returned by [`Query::reply_err()`](Query::reply_err).
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Debug)]

@@ -85,7 +85,7 @@ impl fmt::Debug for PublisherState {
 /// ```
 ///
 ///
-/// `Publisher` implements the `Sink` trait which is useful to forward
+/// `Publisher` implements the `Sink` trait which is useful for forwarding
 /// streams to zenoh.
 /// ```no_run
 /// # #[tokio::main]
@@ -162,7 +162,7 @@ impl<'a> Publisher<'a> {
         self.priority
     }
 
-    /// Get the [`Reliability`] applied when routing the data
+    /// Get the [`Reliability`] applied when routing the data.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(&self) -> Reliability {
@@ -171,7 +171,7 @@ impl<'a> Publisher<'a> {
 
     /// Publish the data. The subscribers matching the Publisher's key expression will receive the
     /// [`Sample`] with [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Put`].
-    /// 
+    ///
     /// The builder allows customizing the publication: add the timestamp,
     /// attachment, etc. Some fields are pre-filled with the Publisher's configuration and can
     /// be overridden.
@@ -309,7 +309,7 @@ impl<'a> Publisher<'a> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.undeclare_on_drop = false;
         let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
         for id in ids {
@@ -424,8 +424,8 @@ impl Sink<Sample> for Publisher<'_> {
 
 /// Message priority.
 ///
-/// If QoS is enabled in the [`Config`](crate::config::Config) (see the boolean 
-/// `transport.<transport_type>.qos` parameter), 
+/// If QoS is enabled in the [`Config`](crate::config::Config) (see the boolean
+/// `transport.<transport_type>.qos` parameter),
 /// Zenoh keeps one transmission queue per [`Priority`], where all messages in
 /// the queue have the same [`Priority`]. These queues are serviced in the order of their assigned
 /// [`Priority`] (i.e. from [`Priority::RealTime`] to [`Priority::Background`]).
@@ -519,13 +519,13 @@ impl From<Priority> for PriorityConf {
 type ProtocolPriority = zenoh_protocol::core::Priority;
 impl From<Priority> for ProtocolPriority {
     fn from(prio: Priority) -> Self {
-        // The Priority in the prelude differs from the Priority in the core protocol only from
-        // the missing Control priority. The Control priority is reserved for zenoh internal use
+        // The Priority in the prelude differs from the Priority in the core protocol only by
+        // the missing Control priority. The Control priority is reserved for zenoh's internal use
         // and as such it is not exposed by the zenoh API. Nevertheless, the values of the
         // priorities which are common to the internal and public Priority enums are the same. Therefore,
         // it is possible to safely transmute from the public Priority enum toward the internal
-        // Priority enum without risking to be in an invalid state.
-        // For better robusteness, the correctness of the unsafe transmute operation is covered
+        // Priority enum without risking being in an invalid state.
+        // For better robustness, the correctness of the unsafe transmute operation is covered
         // by the unit test below.
         unsafe { std::mem::transmute::<Priority, zenoh_protocol::core::Priority>(prio) }
     }

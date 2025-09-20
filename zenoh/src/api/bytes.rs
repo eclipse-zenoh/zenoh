@@ -97,14 +97,14 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
 ///
 /// It is also possible to iterate over the raw data that may be scattered across different memory regions using [`slices`](Self::slices).
-/// 
-/// Another way to access raw data is to use a [`ZBytesReader`] obtained from [`reader`](Self::reader) 
-/// that implements the standard [`std::io::Read`] trait. This is useful when deserializing data using 
+///
+/// Another way to access raw data is to use a [`ZBytesReader`] obtained from [`reader`](Self::reader)
+/// that implements the standard [`std::io::Read`] trait. This is useful when deserializing data using
 /// libraries that operate on `std::io::Read`.
 ///
 /// The creation of a `ZBytes` instance using the [`std::io::Write`] trait is also possible using the static
 /// [`writer`](Self::writer) method that creates a [`ZBytesWriter`].
-/// 
+///
 /// # Examples
 ///
 /// `ZBytes` can be converted from/to raw bytes:
@@ -116,7 +116,7 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// let payload = ZBytes::from(buf);
 /// assert_eq!(payload.to_bytes(), buf.as_slice());
 /// ```
-/// 
+///
 /// Create a `ZBytes` with a writer and read it back with a reader:
 /// ```rust
 /// use std::io::{Read, Write};
@@ -273,7 +273,7 @@ const _: () = {
 };
 
 /// A reader that implements [`std::io::Read`] trait to deserialize from a [`ZBytes`].
-/// 
+///
 /// The instance of this struct is obtained from the [`ZBytes::reader`] method.
 /// It implements the standard [`std::io::Read`] and [`std::io::Seek`] traits.
 /// This allows using it with libraries that deserialize data from a `std::io::Read`.
@@ -322,7 +322,7 @@ impl std::io::Seek for ZBytesReader<'_> {
 }
 
 /// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
-/// 
+///
 /// The instance of this struct is obtained from the [`ZBytes::writer`] method.
 /// It implements the standard [`std::io::Write`] trait.
 /// This allows using it with libraries that serialize data into a `std::io::Write`.

@@ -37,15 +37,15 @@ use crate::api::{
 };
 
 /// The reply consolidation strategy to apply to replies to a [`get`](crate::Session::get).
-/// 
+///
 /// By default, the consolidation strategy is [`QueryConsolidation::AUTO`], which lets the implementation
 /// choose the best strategy depending on the query parameters and the number of responders.
 /// Other strategies can be selected with the associated constants or by using
-/// specific [`ConsolidationMode`] as a parameter of the 
+/// specific [`ConsolidationMode`] as a parameter of the
 /// [`QuerierBuilder::consolidation`](crate::query::QuerierBuilder::consolidation)
 /// or [`SessionGetBuilder::consolidation`](crate::session::SessionGetBuilder::consolidation)
 /// methods.
-/// 
+///
 /// See the documentation of [`ConsolidationMode`] for more details about each strategy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
@@ -82,7 +82,7 @@ impl Default for QueryConsolidation {
 }
 
 /// Error reply returned from a [`Queryable`](crate::query::Queryable).
-/// 
+///
 /// The `ReplyError` contains the payload with the error information (message or some structured data)
 /// and the encoding of this payload.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -141,10 +141,10 @@ impl Display for ReplyError {
 impl Error for ReplyError {}
 
 /// Answer received from a [`Queryable`](crate::query::Queryable).
-/// 
+///
 /// The `Reply` contains the result of the request to a [`Queryable`](crate::query::Queryable) by
 /// [`Session::get`](crate::Session::get) or [`Querier::get`](crate::query::Querier::get).
-/// 
+///
 /// It may be either a successful result with a [`Sample`](crate::sample::Sample) or an error with a [`ReplyError`].
 /// The method [`Reply::result`] is provided to access the result.
 #[non_exhaustive]
@@ -221,16 +221,16 @@ impl QueryState {
     }
 }
 /// The kinds of accepted query replies.
-/// 
+///
 /// The [`Queryable`](crate::query::Queryable) may serve glob-like key expressions.
 /// E.g. the queryable may be declared with the key expression `foo/*`.
 /// At the same time it may send replies with more specific key expressions, e.g., `foo/bar` or `foo/baz`.
 /// This may cause the situation when the queryable receives a query with the key expression `foo/bar`
 /// and replies to it with the key expression `foo/baz`.
-/// 
-/// By default, this behavior is not allowed. Calling [`Query::reply`](crate::query::Query::reply) on 
+///
+/// By default, this behavior is not allowed. Calling [`Query::reply`](crate::query::Query::reply) on
 /// a query for `foo/bar` with key expression `foo/baz` will result in an error on the sending side.
-/// 
+///
 /// But if the query is sent with [`ReplyKeyExpr::Any`] parameter in [`accept_replies`](crate::session::SessionGetBuilder::accept_replies) (for
 /// [`Session::get`](crate::session::Session::get) or
 /// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for

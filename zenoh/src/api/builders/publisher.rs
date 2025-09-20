@@ -48,9 +48,8 @@ pub type PublisherPutBuilder<'a> = PublicationBuilder<&'a Publisher<'a>, Publica
 pub type PublisherDeleteBuilder<'a> =
     PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
 
-
 /// The type-modifier for a [`PublicationBuilder`] for a `Put` operation.
-/// 
+///
 /// Makes the publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Put`].
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
@@ -59,21 +58,21 @@ pub struct PublicationBuilderPut {
 }
 
 /// The type-modifier for a [`PublicationBuilder`] for a `Delete` operation.
-/// 
+///
 /// Makes the publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Delete`].
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderDelete;
 
 /// Publication builder
-/// 
+///
 /// A publication builder object is returned by the following methods:
 /// - [`crate::session::Session::put`]
 /// - [`crate::session::Session::delete`]
 /// - [`crate::pubsub::Publisher::put`]
 /// - [`crate::pubsub::Publisher::delete`]
-/// 
+///
 /// It resolves to `ZResult<()>` when awaited or when calling `.wait()`.
-/// 
+///
 /// # Examples
 /// ```
 /// # #[tokio::main]

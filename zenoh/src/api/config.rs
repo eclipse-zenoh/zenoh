@@ -24,15 +24,14 @@ use zenoh_result::{bail, ZResult};
 
 /// Zenoh configuration.
 ///
-/// The zenoh configuration is unstable so no direct access to the fields is provided.
-/// The only way to change the configuration is to load the json configuration from a file or a string,
-/// with [`Config::from_file`](crate::config::Config::from_file) or 
+/// The zenoh configuration is unstable, so no direct access to the fields is provided.
+/// The only way to change the configuration is to load the JSON configuration from a file or a string,
+/// with [`Config::from_file`](crate::config::Config::from_file) or
 /// [`Config::from_json5`](crate::config::Config::from_json5),
 /// or to use the [`Config::insert_json5`](crate::config::Config::insert_json5)
-/// and [`Config::remove`](crate::config::Config::remove) methods.
-/// to modify the configuration tree.
+/// and [`Config::remove`](crate::config::Config::remove) methods to modify the configuration tree.
 ///
-/// Example of the configuration file:
+/// Example configuration file:
 #[doc = concat!(
     "```json5\n",
     include_str!("../../../DEFAULT_CONFIG.json5"),
@@ -66,7 +65,7 @@ impl Config {
         match zenoh_config::Config::from_deserializer(&mut json5::Deserializer::from_str(input)?) {
             Ok(config) => Ok(Config(config)),
             Err(Ok(_)) => {
-                Err(zerror!("The config was correctly deserialized but it is invalid").into())
+                Err(zerror!("The config was correctly deserialized, but it is invalid").into())
             }
             Err(Err(err)) => Err(err.into()),
         }

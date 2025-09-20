@@ -185,7 +185,7 @@ impl IntoFuture for QuerierBuilder<'_, '_> {
     }
 }
 
-/// A builder for configuring a [`get`](crate::query::Querier::get) 
+/// A builder for configuring a [`get`](crate::query::Querier::get)
 /// operation from a [`Querier`](crate::query::Querier).
 /// The builder resolves to a [`handler`](crate::handlers) generating a series of
 /// [`Reply`](crate::api::query::Reply) for each response received.

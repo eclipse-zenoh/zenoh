@@ -104,7 +104,7 @@ impl<'a> KeyExpr<'a> {
         Self::try_from(t)
     }
 
-    /// Constructs key expression object to be used as dummy value
+    /// Constructs a key expression object to be used as a dummy value
     /// for empty objects. This method is not supposed to be called in user code,
     /// but may be used in language bindings (zenoh-c)
     #[zenoh_macros::internal]
@@ -173,7 +173,7 @@ impl<'a> KeyExpr<'a> {
         Self::new(t)
     }
 
-    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// Constructs a [`KeyExpr`] without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
@@ -644,7 +644,7 @@ impl Wait for KeyExprUndeclaration<'_> {
                 if *session_id == session.0.id {
                     *expr_id
                 } else {
-                    return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
+                    return Err(zerror!("Failed to undeclare {}, as it was declared by another Session", expr).into())
                 }
             }
             KeyExprInner::BorrowedWire {
@@ -657,7 +657,7 @@ impl Wait for KeyExprUndeclaration<'_> {
                 if *session_id == session.0.id {
                     *expr_id
                 } else {
-                    return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
+                    return Err(zerror!("Failed to undeclare {}, as it was declared by another Session", expr).into())
                 }
             }
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),

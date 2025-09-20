@@ -85,11 +85,11 @@ impl Drop for QueryInner {
 
 /// The request received by a [`Queryable`].
 ///
-/// The `Query` provides all data sent by [`Querier::get`](crate::query::Querier::get) 
+/// The `Query` provides all data sent by [`Querier::get`](crate::query::Querier::get)
 /// or [`Session::get`](crate::Session::get): the key expression, the
 /// parameters, the payload and the attachment if any.
-/// 
-/// The reply to the query should be made with one of it's methods: 
+///
+/// The reply to the query should be made with one of it's methods:
 /// - [`Query::reply`](crate::query::Query::reply) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put),
 /// - [`Query::reply_del`](crate::query::Query::reply_del) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Delete`](crate::sample::SampleKind::Delete),
 /// - [`Query::reply_err`](crate::query::Query::reply_err) to send an error reply.
@@ -169,7 +169,7 @@ impl Query {
         }
     }
 
-    /// Sends a [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put) 
+    /// Sends a [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put)
     /// as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
@@ -425,7 +425,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// [`Querier::get`](crate::query::Querier::get) or from [`Session::get`](crate::Session::get)
 /// and sends back replies with the methods of the [`Query`](crate::query::Query): [`reply`](crate::query::Query::reply),
 /// [`reply_err`](crate::query::Query::reply_err) or [`reply_del`](crate::query::Query::reply_del).
-/// 
+///
 /// # Examples
 ///
 /// Using callback:

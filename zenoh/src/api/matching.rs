@@ -64,7 +64,7 @@ pub(crate) enum MatchingStatusType {
 }
 
 impl MatchingStatus {
-    /// Return true if there exist entities matching the target (i.e either Subscribers matching Publisher's key expression or Queryables matching Querier's key expression and target).
+    /// Returns true if there exist entities matching the target (i.e., either Subscribers matching Publisher's key expression or Queryables matching Querier's key expression and target).
     ///
     /// # Examples
     /// ```
@@ -185,7 +185,7 @@ impl<Handler> MatchingListener<Handler> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid a double panic if this function panics
         self.inner.undeclare_on_drop = false;
         zlock!(self.inner.matching_listeners).remove(&self.inner.id);
         self.inner
