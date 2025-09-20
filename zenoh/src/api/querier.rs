@@ -63,7 +63,7 @@ pub(crate) struct QuerierState {
 ///
 /// The querier is a preconfigured object that can be used to send multiple
 /// queries to a given key expression. It is declared using
-/// [`Session::declare_querier`](crate::Session::declare_querier)
+/// [`Session::declare_querier`](crate::Session::declare_querier).
 ///
 /// # Examples
 /// ```
@@ -153,7 +153,7 @@ impl<'a> Querier<'a> {
 
     /// Send a query. Returns a builder to customize the query. The builder
     /// resolves to a [`handler`](crate::handlers) generating a series of
-    /// [`Reply`](crate::api::query::Reply) for each response received.
+    /// [`Reply`](crate::api::query::Reply) values for each response received.
     ///
     /// # Examples
     /// ```
@@ -195,7 +195,7 @@ impl<'a> Querier<'a> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.undeclare_on_drop = false;
         let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
         for id in ids {

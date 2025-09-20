@@ -27,7 +27,7 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// A selector is the combination of a [Key Expression](crate::key_expr::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a set of [Parameters](crate::query::Parameters),
 /// with a few intended uses:
-/// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters
+/// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters,
 /// - filtering by value,
 /// - filtering by metadata, such as the timestamp of a value,
 /// - specifying arguments to zenoh when using the REST API.
@@ -46,22 +46,22 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// the Zenoh team has settled on reserving the set of parameter names that start with non-alphanumeric characters.
 ///
 /// The full specification for selectors is available [here](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors),
-/// it includes standardized parameters.
+/// It includes standardized parameters.
 ///
 /// Queryable implementers are encouraged to prefer these standardized parameter names when implementing their
 /// associated features, and to prefix their own parameter names to avoid having conflicting parameter names with other
 /// queryables.
 ///
 /// Here are the currently standardized parameters for Zenoh (check the specification page for the exhaustive list):
-/// - **`[unstable]`** `_time`: used to express interest in only values dated within a certain time range, values for
+/// - **`[unstable]`** `_time`: used to express interest in only values dated within a certain time range; values for
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
-///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
+///   whose key expression matches the query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     pub(crate) key_expr: Cow<'a, KeyExpr<'a>>,
-    /// the part of this selector identifying which values should be part of the selection.
+    /// The part of this selector identifying which values should be part of the selection.
     pub(crate) parameters: Cow<'a, Parameters<'a>>,
 }
 
@@ -93,7 +93,7 @@ impl<'a> Selector<'a> {
         }
     }
     /// Build a new selector holding references to keyexpr and parameters
-    /// Useful for printing pairs of keyexpr and parameters in url-like format
+    /// Useful for printing pairs of keyexpr and parameters in URL-like format
     pub fn borrowed(key_expr: &'a KeyExpr<'a>, parameters: &'a Parameters<'a>) -> Self {
         Self {
             key_expr: Cow::Borrowed(key_expr),
@@ -136,30 +136,30 @@ impl<'a> From<&'a Selector<'a>> for (&'a KeyExpr<'a>, &'a Parameters<'a>) {
 }
 
 #[zenoh_macros::unstable]
-/// The trait allows setting/reading parameters processed by the Zenoh library itself
+/// The trait allows setting/reading parameters processed by the Zenoh library itself.
 pub trait ZenohParameters {
-    /// Text parameter names are not part of the public API. They are exposed only to provide information about current parameter
+    /// These parameter names are not part of the public API. They are exposed only to provide information about current parameter
     /// names, allowing users to avoid conflicts with custom parameters. It's also possible that some of these Zenoh-specific parameters,
     /// which are now stored as key-value pairs, will later be passed in some other way, while keeping the same get/set interface functions.
     const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
     const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
-    /// Sets the parameter allowing to receive replies from queryables not matching
+    /// Sets the parameter allowing replies from queryables not matching
     /// the requested key expression. This may happen in this scenario:
     /// - we are requesting keyexpr `a/b`.
     /// - queryable is declared to handle `a/*` queries and contains data for `a/b` and `a/c`.
     /// - queryable receives our request and sends two replies with data for `a/b` and `a/c`
     ///
-    /// Normally only the `a/b` reply would be accepted, but with the `_anyke` parameter set, both replies are accepted.
-    /// NOTE: `_anyke` indicates that ANY key expression is allowed. I.e., if `_anyke` parameter is set, a reply
+    /// Normally, only the `a/b` reply would be accepted, but with the `_anyke` parameter set, both replies are accepted.
+    /// NOTE: `_anyke` indicates that ANY key expression is allowed. i.e., if the `_anyke` parameter is set, a reply
     ///       on `x/y/z` is valid even if the queryable is declared on `a/*`.
     fn set_reply_key_expr_any(&mut self);
     /// Extracts the standardized `_time` argument from the selector parameters.
     /// Returns `None` if the `_time` argument is not present or `Some` with the result of parsing the `_time` argument
     /// if it is present.
     fn time_range(&self) -> Option<ZResult<TimeRange>>;
-    /// Returns true if `_anyke` parameter is present in the selector parameters
+    /// Returns true if the `_anyke` parameter is present in the selector parameters
     fn reply_key_expr_any(&self) -> bool;
 }
 
@@ -188,7 +188,7 @@ impl ZenohParameters for Parameters<'_> {
             .map(|tr| tr.parse().map_err(Into::into))
     }
 
-    /// Returns true if `_anyke` parameter is present in the selector parameters
+    /// Returns true if the `_anyke` parameter is present in the selector parameters
     fn reply_key_expr_any(&self) -> bool {
         self.contains_key(Self::REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }

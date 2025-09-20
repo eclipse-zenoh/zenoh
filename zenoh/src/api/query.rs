@@ -22,7 +22,7 @@ use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalIdProto;
 use zenoh_protocol::core::Parameters;
-/// The [`Queryable`](crate::query::Queryable)s that should be the target of a [`get`](crate::Session::get).
+/// The [`Queryable`](crate::query::Queryable)s that should be the targets of a [`get`](crate::Session::get).
 pub use zenoh_protocol::network::request::ext::QueryTarget;
 #[doc(inline)]
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;
@@ -41,7 +41,7 @@ use crate::api::{
 /// By default, the consolidation strategy is [`QueryConsolidation::AUTO`], which lets the implementation
 /// choose the best strategy depending on the query parameters and the number of responders.
 /// Other strategies can be selected with the associated constants or by using
-/// specific [`ConsolidationMode`] as a parameter of the
+/// a specific [`ConsolidationMode`] as a parameter of the
 /// [`QuerierBuilder::consolidation`](crate::query::QuerierBuilder::consolidation)
 /// or [`SessionGetBuilder::consolidation`](crate::session::SessionGetBuilder::consolidation)
 /// methods.
@@ -81,7 +81,7 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// Error reply returned from a [`Queryable`](crate::query::Queryable).
+/// An error reply returned from a [`Queryable`](crate::query::Queryable).
 ///
 /// The `ReplyError` contains the payload with the error information (message or some structured data)
 /// and the encoding of this payload.
@@ -140,7 +140,7 @@ impl Display for ReplyError {
 
 impl Error for ReplyError {}
 
-/// Answer received from a [`Queryable`](crate::query::Queryable).
+/// An answer received from a [`Queryable`](crate::query::Queryable).
 ///
 /// The `Reply` contains the result of the request to a [`Queryable`](crate::query::Queryable) by
 /// [`Session::get`](crate::Session::get) or [`Querier::get`](crate::query::Querier::get).
@@ -223,15 +223,15 @@ impl QueryState {
 /// The kinds of accepted query replies.
 ///
 /// The [`Queryable`](crate::query::Queryable) may serve glob-like key expressions.
-/// E.g. the queryable may be declared with the key expression `foo/*`.
-/// At the same time it may send replies with more specific key expressions, e.g., `foo/bar` or `foo/baz`.
-/// This may cause the situation when the queryable receives a query with the key expression `foo/bar`
+/// E.g., the queryable may be declared with the key expression `foo/*`.
+/// At the same time, it may send replies with more specific key expressions, e.g., `foo/bar` or `foo/baz`.
+/// This may cause a situation when the queryable receives a query with the key expression `foo/bar`
 /// and replies to it with the key expression `foo/baz`.
 ///
 /// By default, this behavior is not allowed. Calling [`Query::reply`](crate::query::Query::reply) on
 /// a query for `foo/bar` with key expression `foo/baz` will result in an error on the sending side.
 ///
-/// But if the query is sent with [`ReplyKeyExpr::Any`] parameter in [`accept_replies`](crate::session::SessionGetBuilder::accept_replies) (for
+/// But if the query is sent with the [`ReplyKeyExpr::Any`] parameter in [`accept_replies`](crate::session::SessionGetBuilder::accept_replies) (for
 /// [`Session::get`](crate::session::Session::get) or
 /// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for
 /// [`Querier::get`](crate::query::Querier::get))

@@ -85,7 +85,7 @@ impl SourceInfo {
     }
 
     #[zenoh_macros::unstable]
-    /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
+    /// The [`EntityGlobalId`] of the zenoh entity that published the [`Sample`] in question.
     pub fn source_id(&self) -> Option<&EntityGlobalId> {
         self.source_id.as_ref()
     }
@@ -306,13 +306,13 @@ impl Sample {
         &self.source_info
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()

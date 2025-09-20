@@ -87,18 +87,18 @@ impl Drop for QueryInner {
 ///
 /// The `Query` provides all data sent by [`Querier::get`](crate::query::Querier::get)
 /// or [`Session::get`](crate::Session::get): the key expression, the
-/// parameters, the payload and the attachment if any.
+/// parameters, the payload, and the attachment, if any.
 ///
-/// The reply to the query should be made with one of it's methods:
+/// The reply to the query should be made with one of its methods:
 /// - [`Query::reply`](crate::query::Query::reply) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put),
 /// - [`Query::reply_del`](crate::query::Query::reply_del) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Delete`](crate::sample::SampleKind::Delete),
 /// - [`Query::reply_err`](crate::query::Query::reply_err) to send an error reply.
 ///
 /// The important detail: the [`Query::key_expr`] is **not** the key expression
 /// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
-/// The [`Queryable`]s key expression is the one that should be used.
+/// The [`Queryable`]'s key expression is the one that should be used.
 /// For example, the `Query` may contain the key expression `foo/*` and the reply
-/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier
+/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier.
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
@@ -234,7 +234,7 @@ impl Query {
         Ok(self.parameters().reply_key_expr_any())
     }
 
-    /// Constructs an empty Query without payload, nor attachment referencing the same inner query.
+    /// Constructs an empty Query without payload or attachment, referencing the same inner query.
     #[zenoh_macros::internal]
     pub unsafe fn empty() -> Self {
         Query {
@@ -418,7 +418,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 ///
 /// A `Queryable` is declared by the
 /// [`Session::declare_queryable`](crate::Session::declare_queryable) method
-/// and serves queries [`Query`](crate::query::Query) using callback
+/// and serves [`Query`](crate::query::Query) using callback
 /// or channel (see [handlers](crate::handlers) module documentation for details).
 ///
 /// The `Queryable` receives [`Query`](crate::query::Query) requests from
@@ -442,7 +442,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 ///     .background()
 ///     .await
 ///     .unwrap();
-/// // queryable run in background until the session is closed
+/// // queryable runs in background until the session is closed
 /// tokio::spawn(async move {
 ///     while let Ok(query) = rx.recv_async().await {
 ///         println!(">> Handling query '{}'", query.selector());
