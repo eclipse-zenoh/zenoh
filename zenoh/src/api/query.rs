@@ -22,7 +22,7 @@ use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalIdProto;
 use zenoh_protocol::core::Parameters;
-/// The [`Queryable`](crate::query::Queryable)s that should be target of a [`get`](crate::Session::get).
+/// The [`Queryable`](crate::query::Queryable)s that should be the target of a [`get`](crate::Session::get).
 pub use zenoh_protocol::network::request::ext::QueryTarget;
 #[doc(inline)]
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;
@@ -36,7 +36,7 @@ use crate::api::{
     selector::Selector,
 };
 
-/// The replies consolidation strategy to apply on replies to a [`get`](crate::Session::get).
+/// The reply consolidation strategy to apply to replies to a [`get`](crate::Session::get).
 /// 
 /// By default, the consolidation strategy is [`QueryConsolidation::AUTO`], which lets the implementation
 /// choose the best strategy depending on the query parameters and the number of responders.
@@ -81,7 +81,7 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// Error reply returned from a [`Queryable`](crate::query::Queryable)
+/// Error reply returned from a [`Queryable`](crate::query::Queryable).
 /// 
 /// The `ReplyError` contains the payload with the error information (message or some structured data)
 /// and the encoding of this payload.
@@ -131,7 +131,7 @@ impl Display for ReplyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "query returned an error with a {} bytes payload and encoding {}",
+            "query returned an error with a {}-byte payload and encoding {}",
             self.payload.len(),
             self.encoding
         )
@@ -140,7 +140,7 @@ impl Display for ReplyError {
 
 impl Error for ReplyError {}
 
-/// Answer received from a [`Queryable`](crate::query::Queryable) 
+/// Answer received from a [`Queryable`](crate::query::Queryable).
 /// 
 /// The `Reply` contains the result of the request to a [`Queryable`](crate::query::Queryable) by
 /// [`Session::get`](crate::Session::get) or [`Querier::get`](crate::query::Querier::get).
@@ -156,23 +156,23 @@ pub struct Reply {
 }
 
 impl Reply {
-    /// Gets the a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    /// Gets a borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
     pub fn result(&self) -> Result<&Sample, &ReplyError> {
         self.result.as_ref()
     }
 
-    /// Gets the a mutable borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
+    /// Gets a mutable borrowed result of this `Reply`. Use [`Reply::into_result`] to take ownership of the result.
     pub fn result_mut(&mut self) -> Result<&mut Sample, &mut ReplyError> {
         self.result.as_mut()
     }
 
-    /// Converts this `Reply` into the its result. Use [`Reply::result`] it you don't want to take ownership.
+    /// Converts this `Reply` into its result. Use [`Reply::result`] if you don't want to take ownership.
     pub fn into_result(self) -> Result<Sample, ReplyError> {
         self.result
     }
 
     #[zenoh_macros::unstable]
-    /// Gets the id of the zenoh instance that answered this Reply.
+    /// Gets the ID of the zenoh instance that answered this reply.
     pub fn replier_id(&self) -> Option<EntityGlobalId> {
         self.replier_id.map(Into::into)
     }
@@ -220,22 +220,22 @@ impl QueryState {
         Selector::borrowed(&self.key_expr, &self.parameters)
     }
 }
-/// The kind of accepted query replies.
+/// The kinds of accepted query replies.
 /// 
 /// The [`Queryable`](crate::query::Queryable) may serve glob-like key expressions.
 /// E.g. the queryable may be declared with the key expression `foo/*`.
 /// At the same time it may send replies with more specific key expressions, e.g., `foo/bar` or `foo/baz`.
-/// This may cause the situattion when the queryable receives a query with the key expression `foo/bar`
+/// This may cause the situation when the queryable receives a query with the key expression `foo/bar`
 /// and replies to it with the key expression `foo/baz`.
 /// 
-/// By default this behavior is not allowed. Calling [`Query::reply`](crate::query::Query::reply) on 
+/// By default, this behavior is not allowed. Calling [`Query::reply`](crate::query::Query::reply) on 
 /// a query for `foo/bar` with key expression `foo/baz` will result in an error on the sending side.
 /// 
 /// But if the query is sent with [`ReplyKeyExpr::Any`] parameter in [`accept_replies`](crate::session::SessionGetBuilder::accept_replies) (for
 /// [`Session::get`](crate::session::Session::get) or
 /// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for
 /// [`Querier::get`](crate::query::Querier::get))
-/// then the reply with disjoint key expression will be accepted on this query.
+/// then the reply with a disjoint key expression will be accepted for this query.
 ///
 /// The [`Queryable`](crate::query::Queryable) may check this parameter with
 /// [`Query::accepts_replies`](crate::query::Query::accepts_replies).

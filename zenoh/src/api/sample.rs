@@ -266,29 +266,29 @@ impl Sample {
         self.kind
     }
 
-    /// Gets the encoding of this sample
+    /// Gets the encoding of this sample.
     #[inline]
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
 
-    /// Gets the timestamp of this Sample
+    /// Gets the timestamp of this Sample.
     #[inline]
     pub fn timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
-    /// Gets the congetion control of this Sample
+    /// Gets the congestion control of this Sample.
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Gets the priority of this Sample
+    /// Gets the priority of this Sample.
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
 
-    /// Gets the reliability of this Sample
+    /// Gets the reliability of this Sample.
     #[zenoh_macros::unstable]
     pub fn reliability(&self) -> Reliability {
         self.reliability
@@ -299,7 +299,7 @@ impl Sample {
         self.qos.express()
     }
 
-    /// Gets infos on the source of this Sample.
+    /// Gets info on the source of this Sample.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> &SourceInfo {

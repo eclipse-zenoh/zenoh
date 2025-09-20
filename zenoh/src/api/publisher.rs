@@ -69,7 +69,7 @@ impl fmt::Debug for PublisherState {
     }
 }
 
-/// A publisher that allows to send data through a stream.
+/// A publisher that allows sending data through a stream.
 ///
 /// Publishers are automatically undeclared when dropped.
 ///
@@ -172,7 +172,7 @@ impl<'a> Publisher<'a> {
     /// Publish the data. The subscribers matching the Publisher's key expression will receive the
     /// [`Sample`] with [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Put`].
     /// 
-    /// The builder allows to customize the publication: add the timestamp,
+    /// The builder allows customizing the publication: add the timestamp,
     /// attachment, etc. Some fields are pre-filled with the Publisher's configuration and can
     /// be overridden.
     ///
@@ -207,7 +207,7 @@ impl<'a> Publisher<'a> {
     /// The subscribers will receive the [`Sample`] with
     /// [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Delete`].
     ///
-    /// The builder allows to customize the publication: add the timestamp, attachment, etc.
+    /// The builder allows customizing the publication: add the timestamp, attachment, etc.
     ///
     /// # Examples
     /// ```
@@ -261,7 +261,7 @@ impl<'a> Publisher<'a> {
 
     /// Return a [`MatchingListener`](crate::api::matching::MatchingListener) for this Publisher.
     ///
-    /// The [`MatchingListener`](crate::api::matching::MatchingListener) that will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
+    /// The [`MatchingListener`](crate::api::matching::MatchingListener) will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
     /// the Publisher changes.
     ///
     /// # Examples
@@ -462,10 +462,10 @@ impl TryFrom<u8> for Priority {
     type Error = zenoh_result::Error;
 
     /// A Priority is identified by a numeric value.
-    /// Lower the value, higher the priority.
-    /// Higher the value, lower the priority.
+    /// The lower the value, the higher the priority.
+    /// The higher the value, the lower the priority.
     ///
-    /// Admitted values are: 1-7.
+    /// Allowed values are: 1-7.
     ///
     /// Highest priority: 1
     /// Lowest priority: 7
