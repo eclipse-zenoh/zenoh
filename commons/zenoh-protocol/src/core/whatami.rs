@@ -24,17 +24,17 @@ use zenoh_result::{bail, ZError};
 ///
 /// In the peer mode the application searches for other nodes and establishes direct connections
 /// with them. This can work using multicast discovery and by getting gossip information
-/// the initial entry points. The peer mode is the default mode.
+/// from the initial entry points. The peer mode is the default mode.
 ///
 /// In the client mode the application remains connected to a single connection point, which
-/// serves as a gateway to the rest of the network. This mode is useful for the constrained
+/// serves as a gateway to the rest of the network. This mode is useful for constrained
 /// devices that cannot afford to maintain multiple connections.
 ///
 /// The router mode is used to run a zenoh router, which is a node that
-/// maintains predefined zenoh network topology. Unlike peers, routers do not
+/// maintains a predefined zenoh network topology. Unlike peers, routers do not
 /// discover other nodes by themselves, but rely on static configuration.
 ///
-/// More detailed explanation of each mode is at [Zenoh Documentation](https://zenoh.io/docs/getting-started/deployment/)
+/// A more detailed explanation of each mode is at [Zenoh Documentation](https://zenoh.io/docs/getting-started/deployment/)
 #[repr(u8)]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WhatAmI {
@@ -115,10 +115,10 @@ impl From<WhatAmI> for u8 {
     }
 }
 
-/// The helper type allowing to match combinations of `WhatAmI` values in scouting.
+/// A helper type that allows matching combinations of `WhatAmI` values in scouting.
 ///
 /// The [`scout`](crate::scouting::scout) function accepts a `WhatAmIMatcher` to filter the nodes
-/// of the specified types. The `WhatAmIMatcher` can be constructed using from [`WhatAmI`] values
+/// of the specified types. The `WhatAmIMatcher` can be constructed from [`WhatAmI`] values
 /// with the `|` operator
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
