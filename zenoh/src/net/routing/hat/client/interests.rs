@@ -49,13 +49,10 @@ pub(super) fn interests_new_face(tables: &mut Tables, face: &mut Arc<FaceState>)
                 face_hat_mut!(&mut src_face).remote_interests.values()
             {
                 let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
+                let face_id = face.id;
                 get_mut_unchecked(face).local_interests.insert(
                     id,
-                    InterestState {
-                        options: *options,
-                        res: res.as_ref().map(|res| (*res).clone()),
-                        finalized: false,
-                    },
+                    InterestState::new(face_id, *options, res.clone(), false),
                 );
                 let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face, true));
                 face.primitives.send_interest(RoutingContext::with_expr(
@@ -94,20 +91,22 @@ impl HatInterestTrait for HatCode {
                 tables,
                 face,
                 id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
+                res.as_deref().cloned().as_mut(),
                 mode,
                 options.aggregate(),
                 send_declare,
             )
         }
-        face_hat_mut!(face).remote_interests.insert(
-            id,
-            RemoteInterest {
-                res: res.as_ref().map(|res| (*res).clone()),
-                options,
-                mode,
-            },
-        );
+        if mode.future() {
+            face_hat_mut!(face).remote_interests.insert(
+                id,
+                RemoteInterest {
+                    res: res.as_deref().cloned(),
+                    options,
+                    mode,
+                },
+            );
+        }
 
         let interest = Arc::new(CurrentInterest {
             src_face: face.clone(),
@@ -121,13 +120,15 @@ impl HatInterestTrait for HatCode {
             .filter(|f| f.whatami != WhatAmI::Client)
         {
             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+            let dst_face_id = dst_face.id;
             get_mut_unchecked(dst_face).local_interests.insert(
                 id,
-                InterestState {
+                InterestState::new(
+                    dst_face_id,
                     options,
-                    res: res.as_ref().map(|res| (*res).clone()),
-                    finalized: mode == InterestMode::Future,
-                },
+                    res.as_deref().cloned(),
+                    mode == InterestMode::Future,
+                ),
             );
             if mode.current() && options.tokens() {
                 let dst_face_mut = get_mut_unchecked(dst_face);
@@ -214,20 +215,13 @@ impl HatInterestTrait for HatCode {
                     .faces
                     .values_mut()
                     .filter(|f| f.whatami != WhatAmI::Client)
+                    .map(get_mut_unchecked)
                 {
-                    for id in dst_face
-                        .local_interests
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<InterestId>>()
-                    {
-                        let local_interest = dst_face.local_interests.get(&id).unwrap();
-                        if local_interest.res == interest.res
-                            && local_interest.options == interest.options
-                        {
+                    dst_face.local_interests.retain(|id, local_interest| {
+                        if *local_interest == interest {
                             dst_face.primitives.send_interest(RoutingContext::with_expr(
                                 &mut Interest {
-                                    id,
+                                    id: *id,
                                     mode: InterestMode::Final,
                                     // Note: InterestMode::Final options are undefined in the current protocol specification,
                                     //       they are initialized here for internal use by local egress interceptors.
@@ -243,9 +237,10 @@ impl HatInterestTrait for HatCode {
                                     .map(|res| res.expr().to_string())
                                     .unwrap_or_default(),
                             ));
-                            get_mut_unchecked(dst_face).local_interests.remove(&id);
+                            return false;
                         }
-                    }
+                        true
+                    });
                 }
             }
         }
