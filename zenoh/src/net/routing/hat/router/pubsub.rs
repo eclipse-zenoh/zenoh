@@ -1102,7 +1102,8 @@ impl HatPubSubTrait for Hat {
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        source: NodeId,
+        node_id: NodeId,
+        dst_node_id: NodeId,
     ) -> Arc<Route> {
         #[inline]
         fn insert_faces_for_subs(
@@ -1130,6 +1131,7 @@ impl HatPubSubTrait for Hat {
                                                 dst_face: face.clone(),
                                                 wire_expr: wire_expr.to_owned(),
                                                 node_id: source,
+                                                dst_node_id: DEFAULT_NODE_ID,
                                             }
                                         });
                                     }
@@ -1151,9 +1153,32 @@ impl HatPubSubTrait for Hat {
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
-            source,
+            node_id,
             source_type
         );
+
+        if src_face.whatami == WhatAmI::Router
+            && self.owns(src_face)
+            && node_id == DEFAULT_NODE_ID
+            && dst_node_id != DEFAULT_NODE_ID
+        {
+            if let Some(next_hop) = self.point_to_point_hop(tables, dst_node_id) {
+                route.insert(next_hop.id, || {
+                    let wire_expr = expr.get_best_key(next_hop.id);
+                    Direction {
+                        dst_face: next_hop,
+                        wire_expr: wire_expr.to_owned(),
+                        node_id,
+                        dst_node_id,
+                    }
+                });
+            } else {
+                tracing::error!("Unable to find next hop face in point-to-point route");
+            };
+
+            return Arc::new(route.build());
+        }
+
         let matches = expr
             .resource()
             .as_ref()
@@ -1166,7 +1191,7 @@ impl HatPubSubTrait for Hat {
 
             let net = self.routers_net.as_ref().unwrap();
             let router_source = match source_type {
-                WhatAmI::Router => source,
+                WhatAmI::Router => node_id,
                 _ => net.idx.index() as NodeId,
             };
             insert_faces_for_subs(
@@ -1192,7 +1217,8 @@ impl HatPubSubTrait for Hat {
                         Direction {
                             dst_face: ctx.face.clone(),
                             wire_expr: wire_expr.to_owned(),
-                            node_id: NodeId::default(),
+                            node_id: DEFAULT_NODE_ID,
+                            dst_node_id: DEFAULT_NODE_ID,
                         }
                     });
                 }
@@ -1200,13 +1226,29 @@ impl HatPubSubTrait for Hat {
         }
 
         // FIXME(regions): track gateway current interest finalization
-        // otherwise send push point-to-point/broadcast
+        if let Some(gwy_node_id) = self.subregion_gateway() {
+            if let Some(next_hop) = self.point_to_point_hop(tables, gwy_node_id) {
+                route.insert(next_hop.id, || {
+                    tracing::trace!(dst = %next_hop, reason = "unfinalized subscriber interest");
+                    let wire_expr = expr.get_best_key(next_hop.id);
+                    Direction {
+                        dst_face: next_hop,
+                        wire_expr: wire_expr.to_owned(),
+                        node_id: DEFAULT_NODE_ID,
+                        dst_node_id: gwy_node_id,
+                    }
+                });
+            } else {
+                tracing::error!("Unable to find first hop face in point-to-point route");
+            }
+        }
 
         for mcast_group in self.mcast_groups(tables) {
             route.insert(mcast_group.id, || Direction {
                 dst_face: mcast_group.clone(),
                 wire_expr: key_expr.to_string().into(),
-                node_id: NodeId::default(),
+                node_id: DEFAULT_NODE_ID,
+                dst_node_id: DEFAULT_NODE_ID,
             });
         }
         Arc::new(route.build())

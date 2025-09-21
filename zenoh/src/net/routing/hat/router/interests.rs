@@ -352,63 +352,6 @@ impl Hat {
         });
     }
 
-    /// Sends a network message to the router identified by `dst_node_id`.
-    fn send_point_to_point(
-        &self,
-        ctx: BaseContext,
-        dst_node_id: NodeId,
-        mut send_message: impl FnMut(&Arc<FaceState>),
-    ) {
-        let net = self.net();
-        let Some(tree) = net.trees.get(dst_node_id as usize) else {
-            return;
-        };
-        let Some(Some(next_hop_node_id)) = tree.directions.get(dst_node_id as usize) else {
-            return;
-        };
-        let Some(next_hop) = net
-            .graph
-            .node_weight(*next_hop_node_id)
-            .map(|node| &node.zid)
-        else {
-            return;
-        };
-        let Some(next_hop) = self.face(ctx.tables, next_hop) else {
-            tracing::error!(zid = ?next_hop, "Unable to find next-hop face in point-to-point route");
-            return;
-        };
-        send_message(next_hop);
-    }
-
-    /// Sends a declare message to the router identified by `dst_node_id`.
-    fn send_declare_point_to_point(
-        &self,
-        ctx: BaseContext,
-        dst_node_id: NodeId,
-        mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
-    ) {
-        // FIXME(regions): refactor (send_point_to_point)
-        let net = self.net();
-        let Some(tree) = net.trees.get(dst_node_id as usize) else {
-            return;
-        };
-        let Some(Some(next_hop_node_id)) = tree.directions.get(dst_node_id as usize) else {
-            return;
-        };
-        let Some(next_hop) = net
-            .graph
-            .node_weight(*next_hop_node_id)
-            .map(|node| &node.zid)
-        else {
-            return;
-        };
-        let Some(next_hop) = self.face(ctx.tables, next_hop) else {
-            tracing::error!(zid = ?next_hop, "Unable to find next-hop face in point-to-point route");
-            return;
-        };
-        send_message(ctx.send_declare, next_hop)
-    }
-
     fn register_pending_current_interest(
         &mut self,
         ctx: BaseContext,

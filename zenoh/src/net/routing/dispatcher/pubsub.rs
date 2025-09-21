@@ -254,12 +254,14 @@ fn get_data_route(
     tables: &Tables,
     face: &FaceState,
     expr: &RoutingExpr,
-    routing_context: NodeId,
+    node_id: NodeId,
+    dst_node_id: NodeId,
     bound: &Bound,
 ) -> Arc<Route> {
-    let local_context = tables.hats[bound].map_routing_context(&tables.data, face, routing_context);
+    let node_id = tables.hats[bound].map_routing_context(&tables.data, face, node_id);
+    let dst_node_id = tables.hats[bound].map_routing_context(&tables.data, face, dst_node_id);
     let compute_route =
-        || tables.hats[bound].compute_data_route(&tables.data, face, expr, local_context);
+        || tables.hats[bound].compute_data_route(&tables.data, face, expr, node_id, dst_node_id);
     match expr
         .resource()
         .as_ref()
@@ -270,7 +272,7 @@ fn get_data_route(
             data_routes,
             tables.data.hats[bound].routes_version,
             face.whatami,
-            local_context,
+            node_id,
             compute_route,
         ),
         None => compute_route(),
@@ -361,7 +363,14 @@ pub fn route_data(
 
     for (bound, hat) in rtables.hats.iter() {
         if hat.ingress_filter(&rtables.data, face, &expr) {
-            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
+            let route = get_data_route(
+                &rtables,
+                face,
+                &expr,
+                msg.ext_nodeid.node_id,
+                msg.ext_dst_nodeid.node_id,
+                bound,
+            );
 
             for dir in route.iter() {
                 if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
@@ -406,6 +415,9 @@ pub fn route_data(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType {
                         node_id: dir.node_id,
+                    },
+                    ext_dst_nodeid: ext::DstNodeIdType {
+                        node_id: dir.dst_node_id,
                     },
                     payload: msg.payload.clone(),
                 },

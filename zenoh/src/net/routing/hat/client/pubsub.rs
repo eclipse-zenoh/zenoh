@@ -37,7 +37,7 @@ use crate::{
             tables::{Route, RoutingExpr, TablesData},
         },
         hat::{BaseContext, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
-        router::{Direction, RouteBuilder},
+        router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
     },
 };
@@ -348,7 +348,8 @@ impl HatPubSubTrait for Hat {
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        source: NodeId,
+        node_id: NodeId,
+        _dst_node_id: NodeId,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::<Direction>::new();
         let Some(key_expr) = expr.key_expr() else {
@@ -358,7 +359,7 @@ impl HatPubSubTrait for Hat {
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
-            source,
+            node_id,
             source_type
         );
 
@@ -385,7 +386,8 @@ impl HatPubSubTrait for Hat {
                         Direction {
                             dst_face: ctx.face.clone(),
                             wire_expr: wire_expr.to_owned(),
-                            node_id: NodeId::default(),
+                            node_id: DEFAULT_NODE_ID,
+                            dst_node_id: DEFAULT_NODE_ID,
                         }
                     });
                 }
@@ -406,7 +408,8 @@ impl HatPubSubTrait for Hat {
                         Direction {
                             dst_face: face.clone(),
                             wire_expr: wire_expr.to_owned(),
-                            node_id: NodeId::default(),
+                            node_id: DEFAULT_NODE_ID,
+                            dst_node_id: DEFAULT_NODE_ID,
                         }
                     })
                 });

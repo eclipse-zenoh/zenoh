@@ -277,6 +277,49 @@ impl Hat {
         Some(gwy.index() as NodeId)
     }
 
+    fn point_to_point_hop(
+        &self,
+        tables: &TablesData,
+        dst_node_id: NodeId,
+    ) -> Option<Arc<FaceState>> {
+        let net = self.net();
+        let tree = net.trees.get(dst_node_id as usize)?;
+        let next_hop_node_id = tree.directions.get(dst_node_id as usize)?.as_ref()?;
+        let next_hop = net
+            .graph
+            .node_weight(*next_hop_node_id)
+            .map(|node| &node.zid)?;
+        self.face(tables, next_hop).cloned()
+    }
+
+    /// Sends a network message to the router identified by `dst_node_id`.
+    pub(crate) fn send_point_to_point(
+        &self,
+        ctx: BaseContext,
+        dst_node_id: NodeId,
+        mut send_message: impl FnMut(&Arc<FaceState>),
+    ) {
+        let Some(next_hop) = self.point_to_point_hop(&ctx.tables, dst_node_id) else {
+            tracing::error!("Unable to find next-hop face in point-to-point route");
+            return;
+        };
+        send_message(&next_hop);
+    }
+
+    /// Sends a declare message to the router identified by `dst_node_id`.
+    pub(crate) fn send_declare_point_to_point(
+        &self,
+        ctx: BaseContext,
+        dst_node_id: NodeId,
+        mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
+    ) {
+        let Some(next_hop) = self.point_to_point_hop(&ctx.tables, dst_node_id) else {
+            tracing::error!("Unable to find next-hop face in point-to-point route");
+            return;
+        };
+        send_message(ctx.send_declare, &next_hop)
+    }
+
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
         tracing::trace!("Schedule trees computation");
         let _ = self.routers_trees_worker.tx.try_send(tables_ref);

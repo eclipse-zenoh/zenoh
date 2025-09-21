@@ -169,6 +169,8 @@ impl Network {
             is_gateway: !bound.is_north(),
         });
 
+        tracing::trace!(idx = idx.index(), "New network");
+
         Network {
             name,
             router_peers_failover_brokering,

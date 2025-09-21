@@ -651,7 +651,12 @@ fn client_test() {
                 wire_expr,
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType { node_id: 0 },
+                ext_nodeid: ext::NodeIdType {
+                    node_id: DEFAULT_NODE_ID,
+                },
+                ext_dst_nodeid: ext::NodeIdType {
+                    node_id: DEFAULT_NODE_ID,
+                },
                 payload: PushBody::Put(Put {
                     timestamp: None,
                     encoding: Encoding::empty(),

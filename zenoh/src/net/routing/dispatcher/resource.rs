@@ -61,6 +61,7 @@ pub(crate) struct Direction {
     pub(crate) dst_face: Arc<FaceState>,
     pub(crate) wire_expr: WireExpr<'static>,
     pub(crate) node_id: NodeId,
+    pub(crate) dst_node_id: NodeId,
 }
 
 #[derive(Clone, Debug)]
@@ -91,7 +92,8 @@ impl QueryTargetQabl {
             dir: Direction {
                 dst_face: ctx.face.clone(),
                 wire_expr: wire_expr.to_owned(),
-                node_id: NodeId::default(),
+                node_id: DEFAULT_NODE_ID,
+                dst_node_id: DEFAULT_NODE_ID,
             },
             info: Some(QueryableInfoType {
                 complete: complete && qabl.complete,

@@ -39,7 +39,7 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{BaseContext, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
-        router::Direction,
+        router::{Direction, DEFAULT_NODE_ID},
         RoutingContext,
     },
 };
@@ -409,7 +409,8 @@ impl HatQueriesTrait for Hat {
                         dir: Direction {
                             dst_face: face.clone(),
                             wire_expr: wire_expr.to_owned(),
-                            node_id: NodeId::default(),
+                            node_id: DEFAULT_NODE_ID,
+                            dst_node_id: DEFAULT_NODE_ID,
                         },
                         bound: self.bound,
                     });
