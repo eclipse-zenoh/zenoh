@@ -259,7 +259,7 @@ fn get_data_route(
 ) -> Arc<Route> {
     let local_context = tables.hats[bound].map_routing_context(&tables.data, face, routing_context);
     let compute_route =
-        || tables.hats[bound].compute_data_route(&tables.data, expr, local_context, face.whatami);
+        || tables.hats[bound].compute_data_route(&tables.data, face, expr, local_context);
     match expr
         .resource()
         .as_ref()

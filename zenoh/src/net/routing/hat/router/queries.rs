@@ -1283,14 +1283,15 @@ impl HatQueriesTrait for Hat {
                 {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {
+                        tracing::trace!(dst = %ctx.face, reason = "resource match");
                         route.push(qabl);
                     }
                 }
             }
-
-            // FIXME(regions): track gateway current interest finalization,
-            // otherwise propagate query
         }
+
+        // FIXME(regions): track gateway current interest finalization otherwise propagate query
+
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }

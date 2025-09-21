@@ -647,6 +647,7 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
+                // REVIEW(regions): not sure
                 if src_face.bound.is_north() ^ ctx.face.bound.is_north()
                     || src_face.whatami == WhatAmI::Client
                     || ctx.face.whatami == WhatAmI::Client
@@ -682,7 +683,7 @@ impl HatQueriesTrait for Hat {
                         });
                     }
                 } else if face.whatami == WhatAmI::Peer
-                    && face.bound.is_north()
+                    && face.bound.is_north() // REVIEW(regions): not sure
                     && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
                     tracing::trace!(dst = %face, reason = "unfinalized initial interest");

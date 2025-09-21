@@ -1099,9 +1099,9 @@ impl HatPubSubTrait for Hat {
     fn compute_data_route(
         &self,
         tables: &TablesData,
+        src_face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<Route> {
         #[inline]
         fn insert_faces_for_subs(
@@ -1146,6 +1146,7 @@ impl HatPubSubTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
         };
+        let source_type = src_face.whatami;
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
@@ -1178,8 +1179,14 @@ impl HatPubSubTrait for Hat {
             );
 
             for (fid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && ctx.face.whatami != WhatAmI::Router {
+                if ctx.subs.is_some()
+                    // REVIEW(regions): not sure
+                    && (src_face.bound.is_north() ^ ctx.face.bound.is_north()
+                        || src_face.whatami == WhatAmI::Client
+                        || ctx.face.whatami == WhatAmI::Client)
+                {
                     route.insert(*fid, || {
+                        tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(*fid);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -1190,6 +1197,9 @@ impl HatPubSubTrait for Hat {
                 }
             }
         }
+
+        // FIXME(regions): track gateway current interest finalization otherwise push data
+
         for mcast_group in self.mcast_groups(tables) {
             route.insert(mcast_group.id, || Direction {
                 dst_face: mcast_group.clone(),

@@ -346,14 +346,15 @@ impl HatPubSubTrait for Hat {
     fn compute_data_route(
         &self,
         tables: &TablesData,
+        src_face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::<Direction>::new();
         let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
         };
+        let source_type = src_face.whatami;
         tracing::trace!(
             "compute_data_route({}, {:?}, {:?})",
             key_expr,
@@ -373,9 +374,13 @@ impl HatPubSubTrait for Hat {
 
             for (sid, ctx) in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some()
-                    && (source_type == WhatAmI::Client || ctx.face.whatami == WhatAmI::Client)
+                    // REVIEW(regions): not sure
+                    && (src_face.bound.is_north() ^ ctx.face.bound.is_north()
+                        || source_type == WhatAmI::Client
+                        || ctx.face.whatami == WhatAmI::Client)
                 {
                     route.insert(*sid, || {
+                        tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(*sid);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -387,18 +392,16 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if source_type == WhatAmI::Client {
-            for face in self
-                .faces(tables)
-                .values()
-                .filter(|f| f.whatami != WhatAmI::Client)
-            {
+        if !src_face.bound.is_north() {
+            // REVIEW(regions): there should only be one such face?
+            for face in self.faces(tables).values().filter(|f| f.bound.is_north()) {
                 route.try_insert(face.id, || {
                     let has_interest_finalized = expr
                         .resource()
                         .and_then(|res| res.face_ctxs.get(&face.id))
                         .is_some_and(|ctx| ctx.subscriber_interest_finalized);
                     (!has_interest_finalized).then(|| {
+                        tracing::trace!(dst = %face, reason = "unfinalized subscriber interest");
                         let wire_expr = expr.get_best_key(face.id);
                         Direction {
                             dst_face: face.clone(),
