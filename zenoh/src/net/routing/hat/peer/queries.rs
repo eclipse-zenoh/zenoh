@@ -647,7 +647,10 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                if src_face.bound.is_north() ^ ctx.face.bound.is_north() {
+                if src_face.bound.is_north() ^ ctx.face.bound.is_north()
+                    || src_face.whatami == WhatAmI::Client
+                    || ctx.face.whatami == WhatAmI::Client
+                {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");

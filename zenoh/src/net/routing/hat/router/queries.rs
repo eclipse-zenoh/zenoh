@@ -1275,23 +1275,15 @@ impl HatQueriesTrait for Hat {
                 complete,
             );
 
-            for (fid, ctx) in self.owned_face_contexts(&mres) {
+            for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
                 // REVIEW(regions): not sure
-                if face.bound.is_north() ^ ctx.face.bound.is_north() {
-                    let wire_expr = expr.get_best_key(*fid);
-                    if let Some(qabl_info) = ctx.qabl.as_ref() {
-                        route.push(QueryTargetQabl {
-                            dir: Direction {
-                                dst_face: ctx.face.clone(),
-                                wire_expr: wire_expr.to_owned(),
-                                node_id: NodeId::default(),
-                            },
-                            info: Some(QueryableInfoType {
-                                complete: complete && qabl_info.complete,
-                                distance: 1,
-                            }),
-                            bound: self.bound,
-                        });
+                if face.bound.is_north() ^ ctx.face.bound.is_north()
+                    || face.whatami == WhatAmI::Client
+                    || ctx.face.whatami == WhatAmI::Client
+                {
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
+                    {
+                        route.push(qabl);
                     }
                 }
             }
