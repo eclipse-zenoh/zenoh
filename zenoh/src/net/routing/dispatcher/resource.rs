@@ -16,6 +16,7 @@ use std::{
     borrow::{Borrow, Cow},
     collections::VecDeque,
     convert::TryInto,
+    fmt::Debug,
     hash::{Hash, Hasher},
     ops::{Deref, DerefMut},
     sync::{Arc, RwLock, Weak},
@@ -26,7 +27,8 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
+        self,
+        declare::{self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
         interest::InterestId,
         Mapping, RequestId,
     },
@@ -36,14 +38,14 @@ use zenoh_sync::{get_mut_unchecked, Cache, CacheValueType};
 use super::{
     face::FaceState,
     pubsub::SubscriberInfo,
-    tables::{Tables, TablesLock},
+    tables::{TablesData, TablesLock},
 };
 use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
-        tables::RoutingExpr,
+        gateway::{Bound, BoundMap},
+        tables::{RoutingExpr, Tables},
     },
-    hat::HatTrait,
     interceptor::{InterceptorTrait, InterceptorsChain},
     router::{disable_matches_data_routes, disable_matches_query_routes},
     RoutingContext,
@@ -51,29 +53,54 @@ use crate::net::routing::{
 
 pub(crate) type NodeId = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
+/// [`NodeId`] value of [`network::ext::NodeIdType::DEFAULT`].
+pub(crate) const DEFAULT_NODE_ID: NodeId = network::ext::NodeIdType::<0>::DEFAULT.node_id;
+
+#[derive(Clone, Debug)]
+pub(crate) struct Direction {
+    pub(crate) dst_face: Arc<FaceState>,
+    pub(crate) wire_expr: WireExpr<'static>,
+    pub(crate) node_id: NodeId,
+    pub(crate) dst_node_id: NodeId,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct QueryDirection {
+    pub(crate) dir: Direction,
+    pub(crate) rid: RequestId,
+}
+
 pub(crate) type Route = Vec<Direction>;
 
+#[derive(Clone, Debug)]
 pub(crate) struct QueryTargetQabl {
-    pub(crate) direction: Direction,
+    pub(crate) dir: Direction,
     pub(crate) info: Option<QueryableInfoType>,
+    pub(crate) bound: Bound,
 }
 
 impl QueryTargetQabl {
     pub(crate) fn new(
-        (&fid, ctx): (&FaceId, &Arc<SessionContext>),
+        (&fid, ctx): (&FaceId, &Arc<FaceContext>),
         expr: &RoutingExpr,
         complete: bool,
+        bound: &Bound,
     ) -> Option<Self> {
         let qabl = ctx.qabl?;
         let wire_expr = expr.get_best_key(fid);
         Some(Self {
-            direction: (ctx.face.clone(), wire_expr.to_owned(), NodeId::default()),
+            dir: Direction {
+                dst_face: ctx.face.clone(),
+                wire_expr: wire_expr.to_owned(),
+                node_id: DEFAULT_NODE_ID,
+                dst_node_id: DEFAULT_NODE_ID,
+            },
             info: Some(QueryableInfoType {
                 complete: complete && qabl.complete,
                 // NOTE: local client faces are nearer than remote client faces
                 distance: if ctx.face.is_local { 0 } else { 1 },
             }),
+            bound: *bound,
         })
     }
 }
@@ -81,7 +108,7 @@ impl QueryTargetQabl {
 pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 
 /// Helper struct to build route, handling face deduplication.
-pub(crate) struct RouteBuilder<T = Direction> {
+pub(crate) struct RouteBuilder<T> {
     /// The route built.
     route: Vec<T>,
     /// The faces' id already inserted.
@@ -97,8 +124,8 @@ impl<T> RouteBuilder<T> {
         }
     }
 
-    /// Inserts a new direction if it has not been registered for the given face.
-    pub(crate) fn insert(&mut self, face_id: usize, direction: impl FnOnce() -> T) {
+    /// Insert a new direction if it has not been registered for the given face.
+    pub(crate) fn insert(&mut self, face_id: FaceId, direction: impl FnOnce() -> T) {
         if self.faces.insert(face_id) {
             self.route.push(direction());
         }
@@ -118,7 +145,6 @@ impl<T> RouteBuilder<T> {
         self.route
     }
 }
-pub(crate) type QueryRouteBuilder = RouteBuilder<(Direction, RequestId)>;
 
 pub(crate) struct InterceptorCache(Cache<Option<Box<dyn Any + Send + Sync>>>);
 pub(crate) type InterceptorCacheValueType = CacheValueType<Option<Box<dyn Any + Send + Sync>>>;
@@ -148,7 +174,7 @@ impl InterceptorCache {
     }
 }
 
-pub(crate) struct SessionContext {
+pub(crate) struct FaceContext {
     pub(crate) face: Arc<FaceState>,
     pub(crate) local_expr_id: Option<ExprId>,
     pub(crate) remote_expr_id: Option<ExprId>,
@@ -161,7 +187,7 @@ pub(crate) struct SessionContext {
     pub(crate) e_interceptor_cache: InterceptorCache,
 }
 
-impl SessionContext {
+impl FaceContext {
     pub(crate) fn new(face: Arc<FaceState>) -> Self {
         Self {
             face,
@@ -271,16 +297,31 @@ pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
+    // REVIEW(regions): added because e.g. router/router bounds needs separate
+    // Routes (WhatAmI, NodeId -> Route) since each linkstate has a NodeId space
+    pub(crate) hats: BoundMap<HatResourceContext>,
+}
+
+impl ResourceContext {
+    pub(crate) fn new(hat: BoundMap<HatResourceContext>) -> ResourceContext {
+        ResourceContext {
+            matches: Vec::new(),
+            hats: hat,
+        }
+    }
+}
+
+pub(crate) struct HatResourceContext {
+    /// Downcasts to `HatContext`.
+    pub(crate) ctx: Box<dyn Any + Send + Sync>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
 }
 
-impl ResourceContext {
-    fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
-        ResourceContext {
-            matches: Vec::new(),
-            hat,
+impl HatResourceContext {
+    pub(crate) fn new(ctx: Box<dyn Any + Send + Sync>) -> Self {
+        HatResourceContext {
+            ctx,
             data_routes: Default::default(),
             query_routes: Default::default(),
         }
@@ -301,8 +342,8 @@ pub struct Resource {
     pub(crate) suffix: usize,
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
-    pub(crate) context: Option<Box<ResourceContext>>,
-    pub(crate) session_ctxs: IntHashMap<usize, Arc<SessionContext>>,
+    pub(crate) ctx: Option<Box<ResourceContext>>,
+    pub(crate) face_ctxs: IntHashMap<FaceId, Arc<FaceContext>>, // REVIEW(regions): should this be per-hat?
 }
 
 impl PartialEq for Resource {
@@ -319,6 +360,12 @@ impl Eq for Resource {}
 impl Hash for Resource {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.expr().hash(state);
+    }
+}
+
+impl Debug for Resource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.expr())
     }
 }
 
@@ -378,8 +425,8 @@ impl Resource {
             suffix: parent.expr.len(),
             nonwild_prefix,
             children: SingleOrBoxHashSet::new(),
-            context: context.map(Box::new),
-            session_ctxs: IntHashMap::new(),
+            ctx: context.map(Box::new),
+            face_ctxs: IntHashMap::new(),
         }
     }
 
@@ -402,17 +449,17 @@ impl Resource {
 
     #[inline(always)]
     pub(crate) fn context(&self) -> &ResourceContext {
-        self.context.as_ref().unwrap()
+        self.ctx.as_ref().unwrap()
     }
 
     #[inline(always)]
     pub(crate) fn context_mut(&mut self) -> &mut ResourceContext {
-        self.context.as_mut().unwrap()
+        self.ctx.as_mut().unwrap()
     }
 
     #[inline(always)]
     pub(crate) fn matches(&self, other: &Arc<Resource>) -> bool {
-        self.context
+        self.ctx
             .as_ref()
             .unwrap()
             .matches
@@ -443,24 +490,26 @@ impl Resource {
             suffix: 0,
             nonwild_prefix: None,
             children: SingleOrBoxHashSet::new(),
-            context: None,
-            session_ctxs: IntHashMap::new(),
+            ctx: None,
+            face_ctxs: IntHashMap::new(),
         })
     }
 
+    #[tracing::instrument(level = "trace")]
     pub fn clean(res: &mut Arc<Resource>) {
         let mut resclone = res.clone();
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
+            tracing::trace!(strong_count = Arc::strong_count(res));
             if Arc::strong_count(res) <= 3 && res.children.is_empty() {
                 // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
                 tracing::debug!("Unregister resource {}", res.expr());
-                if let Some(context) = mutres.context.as_mut() {
+                if let Some(context) = mutres.ctx.as_mut() {
                     for match_ in &mut context.matches {
                         let mut match_ = match_.upgrade().unwrap();
                         if !Arc::ptr_eq(&match_, res) {
                             let mutmatch = get_mut_unchecked(&mut match_);
-                            if let Some(ctx) = mutmatch.context.as_mut() {
+                            if let Some(ctx) = mutmatch.ctx.as_mut() {
                                 ctx.matches
                                     .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
                             }
@@ -483,8 +532,8 @@ impl Resource {
         }
         r.parent.take();
         r.nonwild_prefix.take();
-        r.context.take();
-        r.session_ctxs.clear();
+        r.ctx.take();
+        r.face_ctxs.clear();
     }
 
     #[cfg(test)]
@@ -497,20 +546,15 @@ impl Resource {
         result
     }
 
+    #[tracing::instrument(level = "trace", skip(tables))]
     pub fn make_resource(
-        hat_code: &(dyn HatTrait + Send + Sync),
-        _tables: &mut Tables,
+        tables: &mut Tables,
         from: &mut Arc<Resource>,
         mut suffix: &str,
     ) -> Arc<Resource> {
         if !suffix.is_empty() && !suffix.starts_with('/') {
             if let Some(parent) = &mut from.parent.clone() {
-                return Resource::make_resource(
-                    hat_code,
-                    _tables,
-                    parent,
-                    &[from.suffix(), suffix].concat(),
-                );
+                return Resource::make_resource(tables, parent, &[from.suffix(), suffix].concat());
             }
         }
         let mut from = from.clone();
@@ -530,7 +574,10 @@ impl Resource {
             };
             suffix = rest;
         }
-        Resource::upgrade_resource(&mut from, hat_code.new_resource());
+        let hat = tables
+            .hats
+            .map(|d| HatResourceContext::new(d.new_resource()));
+        Resource::upgrade_resource(&mut from, hat);
         from
     }
 
@@ -587,7 +634,7 @@ impl Resource {
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
                 if let Some(ctx) = get_mut_unchecked(&mut nonwild_prefix)
-                    .session_ctxs
+                    .face_ctxs
                     .get(&face.id)
                 {
                     if let Some(expr_id) = ctx.remote_expr_id {
@@ -613,9 +660,9 @@ impl Resource {
                     })
                 {
                     let ctx = get_mut_unchecked(&mut nonwild_prefix)
-                        .session_ctxs
+                        .face_ctxs
                         .entry(face.id)
-                        .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
+                        .or_insert_with(|| Arc::new(FaceContext::new(face.clone())));
                     let expr_id = face.get_next_local_id();
                     get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
                     get_mut_unchecked(face)
@@ -624,9 +671,9 @@ impl Resource {
                     face.primitives.send_declare(RoutingContext::with_expr(
                         &mut Declare {
                             interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: declare::ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
                                 wire_expr: nonwild_prefix.expr().to_string().into(),
@@ -664,7 +711,7 @@ impl Resource {
             suffix: impl FnOnce() -> Cow<'a, str>,
             sid: usize,
         ) -> Option<WireExpr<'a>> {
-            let ctx = prefix.session_ctxs.get(&sid)?;
+            let ctx = prefix.face_ctxs.get(&sid)?;
             let (scope, mapping) = match (ctx.remote_expr_id, ctx.local_expr_id) {
                 (Some(expr_id), _) => (expr_id, Mapping::Receiver),
                 (_, Some(expr_id)) => (expr_id, Mapping::Sender),
@@ -727,7 +774,7 @@ impl Resource {
             .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+    pub fn get_matches(tables: &TablesData, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
         pub fn visit_nodes<T>(node: T, mut visit: impl FnMut(T, &mut VecDeque<T>)) {
             let mut nodes = VecDeque::from([node]);
             while let Some(node) = nodes.pop_front() {
@@ -736,7 +783,7 @@ impl Resource {
         }
         fn push_all(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
             visit_nodes(from, |from, nodes| {
-                if from.context.is_some() {
+                if from.ctx.is_some() {
                     matches.push(Arc::downgrade(from));
                 }
                 for child in from.children.iter() {
@@ -778,7 +825,7 @@ impl Resource {
                             if ke_chunk.as_bytes() == b"**" {
                                 push_all(from, matches)
                             } else {
-                                if from.context.is_some() {
+                                if from.ctx.is_some() {
                                     matches.push(Arc::downgrade(from));
                                 }
                                 if suffix.as_bytes() == b"**" {
@@ -789,7 +836,7 @@ impl Resource {
                                 if let Some(child) =
                                     from.children.get("/**").or_else(|| from.children.get("**"))
                                 {
-                                    if child.context.is_some() {
+                                    if child.ctx.is_some() {
                                         matches.push(Arc::downgrade(child))
                                     }
                                 }
@@ -820,8 +867,12 @@ impl Resource {
         matches
     }
 
-    pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
-        if res.context.is_some() {
+    pub fn match_resource(
+        _tables: &TablesData, // FIXME: is there a better way to ensure that a lock is held?
+        res: &mut Arc<Resource>,
+        matches: Vec<Weak<Resource>>,
+    ) {
+        if res.ctx.is_some() {
             for match_ in &matches {
                 let mut match_ = match_.upgrade().unwrap();
                 get_mut_unchecked(&mut match_)
@@ -835,9 +886,9 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
-        if res.context.is_none() {
-            get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
+    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: BoundMap<HatResourceContext>) {
+        if res.ctx.is_none() {
+            get_mut_unchecked(res).ctx = Some(Box::new(ResourceContext::new(hat)));
         }
     }
 
@@ -846,7 +897,7 @@ impl Resource {
         face: &Face,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs
+        self.face_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.in_interceptor_cache.value(interceptor, self))
     }
@@ -856,7 +907,7 @@ impl Resource {
         face: &Face,
         interceptor: &InterceptorsChain,
     ) -> Option<InterceptorCacheValueType> {
-        self.session_ctxs
+        self.face_ctxs
             .get(&face.state.id)
             .and_then(|ctx| ctx.e_interceptor_cache.value(interceptor, self))
     }
@@ -870,6 +921,7 @@ pub(crate) fn register_expr(
 ) {
     let rtables = zread!(tables.tables);
     match rtables
+        .data
         .get_mapping(face, &expr.scope, expr.mapping)
         .cloned()
     {
@@ -887,41 +939,40 @@ pub(crate) fn register_expr(
             }
             None => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) =
-                    if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                        drop(rtables);
-                        let wtables = zwrite!(tables.tables);
-                        (res.unwrap(), wtables)
-                    } else {
-                        let mut fullexpr = prefix.expr().to_string();
-                        fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
-                            .unwrap_or_default();
-                        drop(rtables);
-                        let mut wtables = zwrite!(tables.tables);
-                        let mut res = Resource::make_resource(
-                            tables.hat_code.as_ref(),
-                            &mut wtables,
-                            &mut prefix,
-                            expr.suffix.as_ref(),
-                        );
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
-                        (res, wtables)
-                    };
+                let (mut res, wtables) = if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr().to_string();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables.data, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables.data, &mut res, matches);
+                    (res, wtables)
+                };
                 let ctx = get_mut_unchecked(&mut res)
-                    .session_ctxs
+                    .face_ctxs
                     .entry(face.id)
-                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
+                    .or_insert_with(|| Arc::new(FaceContext::new(face.clone())));
 
                 get_mut_unchecked(ctx).remote_expr_id = Some(expr_id);
 
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
-                disable_matches_data_routes(&mut wtables, &mut res);
-                disable_matches_query_routes(&mut wtables, &mut res);
+
+                for bound in wtables.hats.bounds() {
+                    disable_matches_data_routes(&mut res, bound);
+                    disable_matches_query_routes(&mut res, bound);
+                }
+
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
             }
@@ -952,12 +1003,13 @@ pub(crate) fn register_expr_interest(
     if let Some(expr) = expr {
         let rtables = zread!(tables.tables);
         match rtables
+            .data
             .get_mapping(face, &expr.scope, expr.mapping)
             .cloned()
         {
             Some(mut prefix) => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (res, wtables) = if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                let (res, wtables) = if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                     drop(rtables);
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
@@ -965,18 +1017,14 @@ pub(crate) fn register_expr_interest(
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .map(|ke| Resource::get_matches(&rtables.data, ke))
                         .unwrap_or_default();
                     drop(rtables);
                     let mut wtables = zwrite!(tables.tables);
-                    let mut res = Resource::make_resource(
-                        tables.hat_code.as_ref(),
-                        &mut wtables,
-                        &mut prefix,
-                        expr.suffix.as_ref(),
-                    );
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
                     matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
+                    Resource::match_resource(&wtables.data, &mut res, matches);
                     (res, wtables)
                 };
                 get_mut_unchecked(face)
