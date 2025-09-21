@@ -61,7 +61,9 @@ impl Hat {
     ) {
         if (src_face.id != dst_face.id)
             && !self.face_hat(dst_face).local_subs.contains_key(res)
-            && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+            && (src_face.bound.is_north() ^ dst_face.bound.is_north()
+                || src_face.whatami == WhatAmI::Client
+                || dst_face.whatami == WhatAmI::Client)
         {
             if dst_face.whatami != WhatAmI::Client && profile.is_push() {
                 let id = self

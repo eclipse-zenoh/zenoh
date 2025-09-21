@@ -1289,7 +1289,8 @@ impl HatQueriesTrait for Hat {
             }
         }
 
-        // FIXME(regions): track gateway current interest finalization otherwise propagate query
+        // FIXME(regions): track gateway current interest finalization
+        // otherwise send request point-to-point/broadcast
 
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)

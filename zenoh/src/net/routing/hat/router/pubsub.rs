@@ -114,7 +114,9 @@ impl Hat {
         if src_face.id != dst_face.id
             && !self.face_hat_mut(dst_face).local_subs.contains_key(res)
             && dst_face.whatami != WhatAmI::Router
-            && (src_face.whatami != WhatAmI::Peer || dst_face.whatami != WhatAmI::Peer)
+            && (src_face.bound.is_north() ^ dst_face.bound.is_north()
+                || src_face.whatami == WhatAmI::Client
+                || dst_face.whatami == WhatAmI::Client)
         {
             let matching_interests = self
                 .face_hat_mut(dst_face)
@@ -1197,7 +1199,8 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        // FIXME(regions): track gateway current interest finalization otherwise push data
+        // FIXME(regions): track gateway current interest finalization
+        // otherwise send push point-to-point/broadcast
 
         for mcast_group in self.mcast_groups(tables) {
             route.insert(mcast_group.id, || Direction {
