@@ -98,9 +98,7 @@ impl Face {
                             src_face: &mut self.state.clone(),
                             send_declare,
                         },
-                        id,
                         &mut res,
-                        node_id,
                         interest_id,
                         downstream_hats
                             .into_iter()

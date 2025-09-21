@@ -206,14 +206,6 @@ impl Hat {
         tables.faces.values().find(|face| face.zid == *zid)
     }
 
-    pub(crate) fn face_mut<'t>(
-        &self,
-        tables: &'t mut TablesData,
-        zid: &ZenohIdProto,
-    ) -> Option<&'t mut Arc<FaceState>> {
-        tables.faces.values_mut().find(|face| face.zid == *zid)
-    }
-
     /// Returns `true` if `face` belongs to this [`Hat`]'s linkstate network.
     pub(crate) fn owns_router(&self, face: &FaceState) -> bool {
         // TODO(regions): move `face.whatami == WhatAmI::Router` out of here
@@ -299,7 +291,7 @@ impl Hat {
         dst_node_id: NodeId,
         mut send_message: impl FnMut(&Arc<FaceState>),
     ) {
-        let Some(next_hop) = self.point_to_point_hop(&ctx.tables, dst_node_id) else {
+        let Some(next_hop) = self.point_to_point_hop(ctx.tables, dst_node_id) else {
             tracing::error!("Unable to find next-hop face in point-to-point route");
             return;
         };
@@ -313,7 +305,7 @@ impl Hat {
         dst_node_id: NodeId,
         mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
     ) {
-        let Some(next_hop) = self.point_to_point_hop(&ctx.tables, dst_node_id) else {
+        let Some(next_hop) = self.point_to_point_hop(ctx.tables, dst_node_id) else {
             tracing::error!("Unable to find next-hop face in point-to-point route");
             return;
         };
@@ -375,8 +367,6 @@ impl HatBaseTrait for Hat {
             AutoConnect::disabled()
         };
 
-        let router_peers_failover_brokering =
-            unwrap_or_default!(config.routing().router().peers_failover_brokering());
         let router_link_weights = config
             .routing()
             .router()
@@ -389,7 +379,6 @@ impl HatBaseTrait for Hat {
             ROUTERS_NET_NAME.to_string(),
             tables.zid,
             runtime.clone(),
-            router_peers_failover_brokering,
             gossip,
             gossip_multihop,
             gossip_target,

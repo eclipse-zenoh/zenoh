@@ -127,11 +127,11 @@ pub(crate) struct BaseContext<'ctx> {
     pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
 }
 
-impl<'ctx> BaseContext<'ctx> {
+impl BaseContext<'_> {
     /// Reborrows [`BaseContext`] to avoid moving it.
     pub(crate) fn reborrow(&mut self) -> BaseContext<'_> {
         BaseContext {
-            tables_lock: &*self.tables_lock,
+            tables_lock: self.tables_lock,
             tables: &mut *self.tables,
             src_face: &mut *self.src_face,
             send_declare: &mut *self.send_declare,
@@ -430,9 +430,7 @@ pub(crate) trait HatTokenTrait {
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
-        id: TokenId,
         res: &mut Arc<Resource>,
-        node_id: NodeId,
         interest_id: InterestId,
         downstream_hats: BoundMap<&mut dyn HatTrait>,
     );

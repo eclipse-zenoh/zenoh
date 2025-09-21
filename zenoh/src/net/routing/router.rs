@@ -65,6 +65,7 @@ impl<'conf> RouterBuilder<'conf> {
         self
     }
 
+    #[cfg(test)]
     pub fn hat(mut self, bound: Bound, whatami: WhatAmI) -> Self {
         self.hats.push((bound, whatami));
         self

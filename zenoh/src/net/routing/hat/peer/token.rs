@@ -677,9 +677,7 @@ impl HatTokenTrait for Hat {
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
-        id: TokenId,
         res: &mut Arc<Resource>,
-        node_id: NodeId,
         interest_id: InterestId,
         mut downstream_hats: BoundMap<&mut dyn HatTrait>,
     ) {

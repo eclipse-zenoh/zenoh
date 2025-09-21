@@ -300,7 +300,7 @@ impl Hat {
                         && interest
                             .res
                             .as_ref()
-                            .map(|r| r.matches(&res))
+                            .map(|r| r.matches(res))
                             .unwrap_or(true)
                 })
                 || router != tables.zid

@@ -27,12 +27,11 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
         gateway::{BoundMap, GatewayPendingCurrentInterest},
         interests::{finalize_pending_interest, CurrentInterest, RemoteInterest},
         resource::Resource,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, SendDeclare},
+    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait},
     router::NodeId,
     RoutingContext,
 };

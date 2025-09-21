@@ -115,7 +115,6 @@ impl Link {
 
 #[derive(Default)]
 pub(crate) struct Changes {
-    pub(crate) updated_nodes: Vec<(NodeIndex, Node)>,
     pub(crate) removed_nodes: Vec<(NodeIndex, Node)>,
 }
 
@@ -129,7 +128,6 @@ pub(crate) struct Tree {
 
 pub(crate) struct Network {
     pub(crate) name: String,
-    pub(crate) router_peers_failover_brokering: bool,
     pub(crate) gossip: bool,
     pub(crate) gossip_multihop: bool,
     pub(crate) gossip_target: WhatAmIMatcher,
@@ -150,7 +148,6 @@ impl Network {
         name: String,
         zid: ZenohIdProto,
         runtime: Runtime,
-        router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
@@ -173,7 +170,6 @@ impl Network {
 
         Network {
             name,
-            router_peers_failover_brokering,
             gossip,
             gossip_multihop,
             gossip_target,
@@ -749,7 +745,6 @@ impl Network {
         self.propagate_link_states(src, new_nodes, updated_nodes);
 
         Changes {
-            updated_nodes: vec![],
             removed_nodes: removed,
         }
     }

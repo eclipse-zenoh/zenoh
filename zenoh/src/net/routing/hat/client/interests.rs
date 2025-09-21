@@ -290,7 +290,7 @@ impl HatInterestTrait for Hat {
     fn finalize_interest(
         &mut self,
         ctx: BaseContext,
-        msg: &Interest,
+        _msg: &Interest,
         inbound_interest: RemoteInterest,
     ) {
         for dst_face in self

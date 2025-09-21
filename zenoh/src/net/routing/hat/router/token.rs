@@ -655,7 +655,7 @@ impl Hat {
                         && interest
                             .res
                             .as_ref()
-                            .map(|r| r.matches(&res))
+                            .map(|r| r.matches(res))
                             .unwrap_or(true)
                 })
                 || router != &tables.zid
@@ -1094,9 +1094,7 @@ impl HatTokenTrait for Hat {
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
-        id: TokenId,
         res: &mut Arc<Resource>,
-        node_id: NodeId,
         interest_id: InterestId,
         mut downstream_hats: BoundMap<&mut dyn HatTrait>,
     ) {

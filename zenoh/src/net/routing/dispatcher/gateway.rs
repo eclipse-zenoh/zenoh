@@ -109,14 +109,6 @@ impl<D> BoundMap<D> {
         (north, BoundMap(south))
     }
 
-    pub(crate) fn non_north_iter(&self) -> impl Iterator<Item = (&Bound, &D)> {
-        self.iter().filter(|(b, _)| !b.is_north())
-    }
-
-    pub(crate) fn non_north_iter_mut(&mut self) -> impl Iterator<Item = (&Bound, &mut D)> {
-        self.iter_mut().filter(|(b, _)| !b.is_north())
-    }
-
     pub(crate) fn bounds(&self) -> impl Iterator<Item = &Bound> + '_ {
         self.0.keys()
     }
