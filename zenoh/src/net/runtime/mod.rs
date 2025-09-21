@@ -443,7 +443,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .collect();
 
                 // FIXME(regions): multicast support
-                let bound = Bound::north();
+                let bound = Bound::unbound();
 
                 runtime
                     .state
@@ -517,7 +517,7 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .collect();
 
         // FIXME(regions): multicast support
-        let bound = Bound::north();
+        let bound = Bound::unbound();
 
         Ok(Arc::new(RuntimeMulticastSession {
             main_handler: self.runtime.state.router.new_peer_multicast(

@@ -1106,7 +1106,6 @@ impl HatQueriesTrait for Hat {
 
         match ctx.src_face.whatami {
             WhatAmI::Router => {
-                // FIXME(regions): InterestProfile is ignored
                 self.declare_router_queryable(
                     ctx.tables,
                     ctx.src_face,
