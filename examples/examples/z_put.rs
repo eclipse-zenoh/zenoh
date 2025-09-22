@@ -12,11 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{
-    key_expr::KeyExpr,
-    qos::{CongestionControl, Reliability},
-    Config,
-};
+use zenoh::{key_expr::KeyExpr, Config};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
@@ -31,18 +27,7 @@ async fn main() {
 
     println!("Putting Data ('{key_expr}': '{payload}')...");
     // Refer to z_bytes.rs to see how to serialize different types of message
-    for i in 0..usize::MAX {
-        session
-            .put(&key_expr, [payload.as_str(), &i.to_string()].concat())
-            .reliability(if i % 2 == 0 {
-                Reliability::Reliable
-            } else {
-                Reliability::BestEffort
-            })
-            .congestion_control(CongestionControl::Block)
-            .await
-            .unwrap();
-    }
+    session.put(&key_expr, payload).await.unwrap();
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
