@@ -331,6 +331,19 @@ impl Default for ShmConf {
         Self {
             enabled: true,
             mode: ShmInitMode::default(),
+            transport_optimization: LargeMessageTransportOpt::default(),
+        }
+    }
+}
+
+// Make explicit the value and ignore clippy warning
+#[allow(clippy::derivable_impls)]
+impl Default for LargeMessageTransportOpt {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            pool_size: unsafe { NonZeroUsize::new_unchecked(16 * 1024 * 1024) },
+            message_size_threshold: 3072,
         }
     }
 }

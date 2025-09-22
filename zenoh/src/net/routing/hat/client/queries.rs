@@ -19,10 +19,7 @@ use std::{
 
 use zenoh_protocol::{
     core::{
-        key_expr::{
-            include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
-        },
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI,
     },
     network::declare::{
@@ -346,63 +343,27 @@ impl HatQueriesTrait for HatCode {
     fn compute_query_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
-        }
+        };
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return EMPTY_ROUTE.clone();
-            }
-        };
 
-        if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami != WhatAmI::Client)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
-                            .unwrap_or(true)
-                }) || face_hat!(face)
-                    .remote_qabls
-                    .values()
-                    .any(|qbl| KeyExpr::keyexpr_intersect(qbl.expr(), expr.full_expr()))
-                {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    route.push(QueryTargetQabl {
-                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                        info: None,
-                    });
-                }
-            }
-        }
-
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.context.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -413,6 +374,27 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
+
+        if source_type == WhatAmI::Client {
+            for face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami != WhatAmI::Client)
+            {
+                let has_interest_finalized = expr
+                    .resource()
+                    .and_then(|res| res.session_ctxs.get(&face.id))
+                    .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                if !has_interest_finalized {
+                    let wire_expr = expr.get_best_key(face.id);
+                    route.push(QueryTargetQabl {
+                        direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                        info: None,
+                    });
+                }
+            }
+        }
+
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }
@@ -432,36 +414,6 @@ impl HatQueriesTrait for HatCode {
             key_expr,
             complete
         );
-        for face in tables
-            .faces
-            .values()
-            .filter(|f| f.whatami != WhatAmI::Client)
-        {
-            if face.local_interests.values().any(|interest| {
-                interest.finalized
-                    && interest.options.queryables()
-                    && interest
-                        .res
-                        .as_ref()
-                        .map(|res| KeyExpr::keyexpr_include(res.expr(), key_expr))
-                        .unwrap_or(true)
-            }) && face_hat!(face)
-                .remote_qabls
-                .values()
-                .any(|qbl| match complete {
-                    true => {
-                        qbl.session_ctxs
-                            .get(&face.id)
-                            .and_then(|sc| sc.qabl)
-                            .is_some_and(|q| q.complete)
-                            && KeyExpr::keyexpr_include(qbl.expr(), key_expr)
-                    }
-                    false => KeyExpr::keyexpr_intersect(qbl.expr(), key_expr),
-                })
-            {
-                matching_queryables.insert(face.id, face.clone());
-            }
-        }
 
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
@@ -476,12 +428,10 @@ impl HatQueriesTrait for HatCode {
                 continue;
             }
             for (sid, context) in &mres.session_ctxs {
-                if context.face.whatami == WhatAmI::Client
-                    && match complete {
-                        true => context.qabl.is_some_and(|q| q.complete),
-                        false => context.qabl.is_some(),
-                    }
-                {
+                if match complete {
+                    true => context.qabl.is_some_and(|q| q.complete),
+                    false => context.qabl.is_some(),
+                } {
                     matching_queryables
                         .entry(*sid)
                         .or_insert_with(|| context.face.clone());

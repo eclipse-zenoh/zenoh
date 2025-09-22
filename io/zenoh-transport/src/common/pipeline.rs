@@ -674,7 +674,8 @@ impl StageOut {
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
-    pub(crate) wait_before_drop: (Duration, Duration),
+    pub(crate) wait_before_drop: Duration,
+    pub(crate) max_wait_before_drop_fragments: Duration,
     pub(crate) wait_before_close: Duration,
     pub(crate) batching_enabled: bool,
     pub(crate) batching_time_limit: Duration,
@@ -693,6 +694,11 @@ impl TransmissionPipeline {
             disabled: AtomicBool::new(false),
             congested: AtomicU8::new(0),
             pending: AtomicU8::new(0),
+            waits: Waits {
+                wait_before_drop: config.wait_before_drop,
+                max_wait_before_drop_fragments: config.max_wait_before_drop_fragments,
+                wait_before_close: config.wait_before_close,
+            },
         });
 
         let mut stage_in = vec![];
@@ -779,8 +785,6 @@ impl TransmissionPipeline {
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
             status: status.clone(),
-            wait_before_drop: config.wait_before_drop,
-            wait_before_close: config.wait_before_close,
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
@@ -799,6 +803,9 @@ struct TransmissionPipelineStatus {
     congested: AtomicU8,
     // Bitflags to indicate the given priority queue has messages waiting to be sent
     pending: AtomicU8,
+    // wait parameters
+    // Note: this is placed here to optimize TransmissionPipelineProducer memory layout and improve performance
+    waits: Waits,
 }
 
 impl TransmissionPipelineStatus {
@@ -836,12 +843,18 @@ impl TransmissionPipelineStatus {
 }
 
 #[derive(Clone)]
+struct Waits {
+    wait_before_drop: Duration,
+    max_wait_before_drop_fragments: Duration,
+
+    wait_before_close: Duration,
+}
+
+#[derive(Clone)]
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
     stage_in: Arc<[Mutex<StageIn>]>,
     status: Arc<TransmissionPipelineStatus>,
-    wait_before_drop: (Duration, Duration),
-    wait_before_close: Duration,
 }
 
 impl TransmissionPipelineProducer {
@@ -864,9 +877,12 @@ impl TransmissionPipelineProducer {
             if self.status.is_congested(priority) {
                 return Ok(false);
             }
-            (self.wait_before_drop.0, Some(self.wait_before_drop.1))
+            (
+                self.status.waits.wait_before_drop,
+                Some(self.status.waits.max_wait_before_drop_fragments),
+            )
         } else {
-            (self.wait_before_close, None)
+            (self.status.waits.wait_before_close, None)
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
@@ -1051,7 +1067,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_drop: Duration::from_millis(1),
+        max_wait_before_drop_fragments: Duration::from_millis(1024),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
         queue_alloc: QueueAllocConf {
@@ -1068,7 +1085,8 @@ mod tests {
         },
         queue_size: [1; Priority::NUM],
         batching_enabled: true,
-        wait_before_drop: (Duration::from_millis(1), Duration::from_millis(1024)),
+        wait_before_drop: Duration::from_millis(1),
+        max_wait_before_drop_fragments: Duration::from_millis(1024),
         wait_before_close: Duration::from_secs(5),
         batching_time_limit: Duration::from_micros(1),
         queue_alloc: QueueAllocConf {

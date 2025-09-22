@@ -77,10 +77,22 @@ pub(crate) async fn open_link(
         link,
         sn_resolution,
         initial_sns,
-        #[cfg(feature = "shared-memory")]
-        is_shm: manager.config.multicast.is_shm,
     };
-    let ti = Arc::new(TransportMulticastInner::make(manager.clone(), config)?);
+
+    #[cfg(feature = "shared-memory")]
+    let shm_context = manager.state.shm_context.as_ref().map(|context| {
+        crate::shm_context::MulticastTransportShmContext::new(
+            context.shm_reader.clone(),
+            context.shm_provider.clone(),
+        )
+    });
+
+    let ti = Arc::new(TransportMulticastInner::make(
+        manager.clone(),
+        config,
+        #[cfg(feature = "shared-memory")]
+        shm_context,
+    )?);
 
     // Add the link
     ti.start_tx()?;

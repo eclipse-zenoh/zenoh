@@ -158,7 +158,7 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
         flows: Some(nev![flow]),
         interfaces: None,
         link_protocols: None,
-        messages: nev![DownsamplingMessage::Push],
+        messages: nev![DownsamplingMessage::Put],
         rules: nev![
             DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
@@ -216,7 +216,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: Some(nev!["lo".to_string(), "lo0".to_string()]),
             link_protocols: None,
-            messages: nev![DownsamplingMessage::Push],
+            messages: nev![DownsamplingMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
@@ -227,7 +227,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: Some(nev!["some_unknown_interface".to_string()]),
             link_protocols: None,
-            messages: nev![DownsamplingMessage::Push],
+            messages: nev![DownsamplingMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
@@ -277,7 +277,7 @@ fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: None,
             link_protocols: Some(nev![InterceptorLink::Tcp]),
-            messages: nev![DownsamplingMessage::Push],
+            messages: nev![DownsamplingMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
@@ -288,7 +288,7 @@ fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: None,
             link_protocols: Some(nev![InterceptorLink::Serial]),
-            messages: nev![DownsamplingMessage::Push],
+            messages: nev![DownsamplingMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
@@ -333,7 +333,7 @@ fn downsampling_config_error_wrong_strategy() {
               [
                 {
                   flows: ["down"],
-                  messages: ["push"],
+                  messages: ["put"],
                   rules: [
                     { key_expr: "test/downsamples_by_keyexp/r100", freq: 10, },
                     { key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }
@@ -361,7 +361,7 @@ fn downsampling_config_error_repeated_id() {
                 {
                   id: "REPEATED",
                   flows: ["egress"],
-                  messages: ["push"],
+                  messages: ["put"],
                   rules: [
                     { key_expr: "test/downsamples_by_keyexp/r100", freq: 10, },
                   ],
@@ -369,7 +369,7 @@ fn downsampling_config_error_repeated_id() {
                 {
                   id: "REPEATED",
                   flows: ["ingress"],
-                  messages: ["push"],
+                  messages: ["put"],
                   rules: [
                     { key_expr: "test/downsamples_by_keyexp/r50", freq: 20, }
                   ],

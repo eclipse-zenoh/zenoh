@@ -188,13 +188,10 @@ impl HatBaseTrait for HatCode {
             }
         }
         if face.state.whatami == WhatAmI::Peer {
+            let face_id = face.state.id;
             get_mut_unchecked(&mut face.state).local_interests.insert(
                 INITIAL_INTEREST_ID,
-                InterestState {
-                    options: InterestOptions::ALL,
-                    res: None,
-                    finalized: false,
-                },
+                InterestState::new(face_id, InterestOptions::ALL, None, false),
             );
         }
 
@@ -373,7 +370,7 @@ impl HatBaseTrait for HatCode {
     }
 
     #[inline]
-    fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &mut RoutingExpr) -> bool {
+    fn ingress_filter(&self, _tables: &Tables, _face: &FaceState, _expr: &RoutingExpr) -> bool {
         true
     }
 
@@ -383,7 +380,7 @@ impl HatBaseTrait for HatCode {
         _tables: &Tables,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
-        _expr: &mut RoutingExpr,
+        _expr: &RoutingExpr,
     ) -> bool {
         src_face.id != out_face.id
             && (out_face.mcast_group.is_none()

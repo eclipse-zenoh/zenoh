@@ -19,10 +19,7 @@ use std::{
 
 use zenoh_protocol::{
     core::{
-        key_expr::{
-            include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
-        },
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
         WhatAmI,
     },
     network::{
@@ -487,37 +484,33 @@ pub(super) fn declare_qabl_interest(
             for src_face in tables
                 .faces
                 .values()
+                .filter(|f| f.id != face.id)
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
-                if src_face.id != face.id {
-                    for qabl in face_hat!(src_face).remote_qabls.values() {
-                        if qabl.context.is_some() {
-                            let info = local_qabl_info(tables, qabl, face);
-                            let id = make_qabl_id(qabl, face, mode, info);
-                            let key_expr = Resource::decl_key(
-                                qabl,
-                                face,
-                                super::push_declaration_profile(face),
-                            );
-                            send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                            id,
-                                            wire_expr: key_expr,
-                                            ext_info: info,
-                                        }),
-                                    },
-                                    qabl.expr().to_string(),
-                                ),
-                            );
-                        }
+                for qabl in face_hat!(src_face).remote_qabls.values() {
+                    if qabl.context.is_some() {
+                        let info = local_qabl_info(tables, qabl, face);
+                        let id = make_qabl_id(qabl, face, mode, info);
+                        let key_expr =
+                            Resource::decl_key(qabl, face, super::push_declaration_profile(face));
+                        send_declare(
+                            &face.primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id,
+                                        wire_expr: key_expr,
+                                        ext_info: info,
+                                    }),
+                                },
+                                qabl.expr().to_string(),
+                            ),
+                        );
                     }
                 }
             }
@@ -601,75 +594,27 @@ impl HatQueriesTrait for HatCode {
     fn compute_query_route(
         &self,
         tables: &Tables,
-        expr: &mut RoutingExpr,
+        expr: &RoutingExpr,
         source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
-        let key_expr = expr.full_expr();
-        if key_expr.ends_with('/') {
+        let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
-        }
+        };
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
             source,
             source_type
         );
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                tracing::warn!("Invalid KE reached the system: {}", e);
-                return EMPTY_ROUTE.clone();
-            }
-        };
 
-        if source_type == WhatAmI::Client {
-            // TODO: BestMatching: What if there is a local compete ?
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami == WhatAmI::Router)
-            {
-                if !face.local_interests.values().any(|interest| {
-                    interest.finalized
-                        && interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|res| KeyExpr::keyexpr_include(res.expr(), expr.full_expr()))
-                            .unwrap_or(true)
-                }) || face_hat!(face)
-                    .remote_qabls
-                    .values()
-                    .any(|sub| KeyExpr::keyexpr_intersect(sub.expr(), expr.full_expr()))
-                {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                    route.push(QueryTargetQabl {
-                        direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                        info: None,
-                    });
-                }
-            }
-
-            for face in tables.faces.values().filter(|f| {
-                f.whatami == WhatAmI::Peer
-                    && !initial_interest(f).map(|i| i.finalized).unwrap_or(true)
-            }) {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                route.push(QueryTargetQabl {
-                    direction: (face.clone(), key_expr.to_owned(), NodeId::default()),
-                    info: None,
-                });
-            }
-        }
-
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
+        let matches = expr
+            .resource()
             .as_ref()
             .and_then(|res| res.context.as_ref())
             .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
 
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
@@ -682,6 +627,34 @@ impl HatQueriesTrait for HatCode {
                 }
             }
         }
+
+        if source_type == WhatAmI::Client {
+            // TODO: BestMatching: What if there is a local compete ?
+            for face in tables.faces.values() {
+                if face.whatami == WhatAmI::Router {
+                    let has_interest_finalized = expr
+                        .resource()
+                        .and_then(|res| res.session_ctxs.get(&face.id))
+                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    if !has_interest_finalized {
+                        let wire_expr = expr.get_best_key(face.id);
+                        route.push(QueryTargetQabl {
+                            direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                            info: None,
+                        });
+                    }
+                } else if face.whatami == WhatAmI::Peer
+                    && initial_interest(face).is_some_and(|i| !i.finalized)
+                {
+                    let wire_expr = expr.get_best_key(face.id);
+                    route.push(QueryTargetQabl {
+                        direction: (face.clone(), wire_expr.to_owned(), NodeId::default()),
+                        info: None,
+                    });
+                }
+            }
+        }
+
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
     }

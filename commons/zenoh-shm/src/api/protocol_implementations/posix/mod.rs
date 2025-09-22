@@ -13,7 +13,12 @@
 //
 
 pub mod posix_shm_client;
+
 pub mod posix_shm_provider_backend;
+pub mod posix_shm_provider_backend_binary_heap;
+pub mod posix_shm_provider_backend_buddy;
+pub mod posix_shm_provider_backend_talc;
+
 pub mod protocol_id;
 
 pub(crate) mod posix_shm_segment;

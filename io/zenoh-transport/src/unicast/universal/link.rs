@@ -65,6 +65,7 @@ impl TransportLinkUnicastUniversal {
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
+            max_wait_before_drop_fragments: transport.manager.config.max_wait_before_drop_fragments,
             wait_before_close: transport.manager.config.wait_before_close,
             batching_enabled: transport.manager.config.batching,
             batching_time_limit: transport.manager.config.queue_backoff,

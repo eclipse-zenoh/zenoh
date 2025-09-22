@@ -25,8 +25,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::client_storage::GLOBAL_CLIENT_STORAGE;
-#[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::ShmReader;
 use zenoh_task::TaskController;
 
@@ -40,6 +38,8 @@ use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
+#[cfg(feature = "shared-memory")]
+use crate::shm_context::ShmContext;
 
 fn duration_from_i64us(us: i64) -> Duration {
     if us >= 0 {
@@ -108,7 +108,8 @@ pub struct TransportManagerConfig {
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub batching: bool,
-    pub wait_before_drop: (Duration, Duration),
+    pub wait_before_drop: Duration,
+    pub max_wait_before_drop_fragments: Duration,
     pub wait_before_close: Duration,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
@@ -126,6 +127,8 @@ pub struct TransportManagerConfig {
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
     pub multicast: TransportManagerStateMulticast,
+    #[cfg(feature = "shared-memory")]
+    pub shm_context: Option<ShmContext>,
 }
 
 pub struct TransportManagerParams {
@@ -141,7 +144,8 @@ pub struct TransportManagerBuilder {
     batch_size: BatchSize,
     batching_enabled: bool,
     batching_time_limit: Duration,
-    wait_before_drop: (Duration, Duration),
+    wait_before_drop: Duration,
+    max_wait_before_drop_fragments: Duration,
     wait_before_close: Duration,
     queue_size: QueueSizeConf,
     queue_alloc: QueueAllocConf,
@@ -153,10 +157,18 @@ pub struct TransportManagerBuilder {
     tx_threads: usize,
     supported_links: Option<Vec<LinkKind>>,
     #[cfg(feature = "shared-memory")]
+    shm: zenoh_config::ShmConf,
+    #[cfg(feature = "shared-memory")]
     shm_reader: Option<ShmReader>,
 }
 
 impl TransportManagerBuilder {
+    #[cfg(feature = "shared-memory")]
+    pub fn shm(mut self, shm: zenoh_config::ShmConf) -> Self {
+        self.shm = shm;
+        self
+    }
+
     #[cfg(feature = "shared-memory")]
     pub fn shm_reader(mut self, shm_reader: Option<ShmReader>) -> Self {
         self.shm_reader = shm_reader;
@@ -198,8 +210,16 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn wait_before_drop(mut self, wait_before_drop: (Duration, Duration)) -> Self {
+    pub fn wait_before_drop(mut self, wait_before_drop: Duration) -> Self {
         self.wait_before_drop = wait_before_drop;
+        self
+    }
+
+    pub fn max_wait_before_drop_fragments(
+        mut self,
+        max_wait_before_drop_fragments: Duration,
+    ) -> Self {
+        self.max_wait_before_drop_fragments = max_wait_before_drop_fragments;
         self
     }
 
@@ -270,15 +290,20 @@ impl TransportManagerBuilder {
         ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
-        self = self.wait_before_drop((
-            duration_from_i64us(*cc_drop.wait_before_drop()),
-            duration_from_i64us(*cc_drop.max_wait_before_drop_fragments()),
+        self = self.wait_before_drop(duration_from_i64us(*cc_drop.wait_before_drop()));
+        self = self.max_wait_before_drop_fragments(duration_from_i64us(
+            *cc_drop.max_wait_before_drop_fragments(),
         ));
         self = self.wait_before_close(duration_from_i64us(*cc_block.wait_before_close()));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.queue_alloc(*link.tx().queue().allocation());
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
+
+        #[cfg(feature = "shared-memory")]
+        {
+            self = self.shm(config.transport().shared_memory().clone());
+        }
 
         let (c, errors) = zenoh_link::LinkConfigurator::default().configurations(config);
         if !errors.is_empty() {
@@ -305,15 +330,9 @@ impl TransportManagerBuilder {
         let mut prng = PseudoRng::from_entropy();
 
         #[cfg(feature = "shared-memory")]
-        let shm_reader = self
-            .shm_reader
-            .unwrap_or_else(|| ShmReader::new((*GLOBAL_CLIENT_STORAGE.read()).clone()));
+        let shm_context = ShmContext::new(self.shm, self.shm_reader)?;
 
-        let unicast = self.unicast.build(
-            &mut prng,
-            #[cfg(feature = "shared-memory")]
-            &shm_reader,
-        )?;
+        let unicast = self.unicast.build(&mut prng)?;
         let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
@@ -334,6 +353,7 @@ impl TransportManagerBuilder {
             batch_size: self.batch_size,
             batching: self.batching_enabled,
             wait_before_drop: self.wait_before_drop,
+            max_wait_before_drop_fragments: self.max_wait_before_drop_fragments,
             wait_before_close: self.wait_before_close,
             queue_size,
             queue_backoff: self.batching_time_limit,
@@ -353,16 +373,13 @@ impl TransportManagerBuilder {
         let state = TransportManagerState {
             unicast: unicast.state,
             multicast: multicast.state,
+            #[cfg(feature = "shared-memory")]
+            shm_context,
         };
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(
-            params,
-            prng,
-            #[cfg(feature = "shared-memory")]
-            shm_reader,
-        ))
+        Ok(TransportManager::new(params, prng))
     }
 }
 
@@ -380,9 +397,9 @@ impl Default for TransportManagerBuilder {
             resolution: Resolution::default(),
             batch_size: BatchSize::MAX,
             batching_enabled: true,
-            wait_before_drop: (
-                duration_from_i64us(*cc_drop.wait_before_drop()),
-                duration_from_i64us(*cc_drop.max_wait_before_drop_fragments()),
+            wait_before_drop: duration_from_i64us(*cc_drop.wait_before_drop()),
+            max_wait_before_drop_fragments: duration_from_i64us(
+                *cc_drop.max_wait_before_drop_fragments(),
             ),
             wait_before_close: duration_from_i64us(*cc_block.wait_before_close()),
             queue_size: queue.size,
@@ -395,6 +412,8 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             supported_links: None,
+            #[cfg(feature = "shared-memory")]
+            shm: zenoh_config::ShmConf::default(),
             #[cfg(feature = "shared-memory")]
             shm_reader: None,
         }
@@ -409,19 +428,13 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
-    #[cfg(feature = "shared-memory")]
-    pub(crate) shmr: ShmReader,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
     pub(crate) task_controller: TaskController,
 }
 
 impl TransportManager {
-    pub fn new(
-        params: TransportManagerParams,
-        mut prng: PseudoRng,
-        #[cfg(feature = "shared-memory")] shmr: ShmReader,
-    ) -> TransportManager {
+    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
@@ -439,8 +452,6 @@ impl TransportManager {
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
-            #[cfg(feature = "shared-memory")]
-            shmr,
             task_controller: TaskController::default(),
         };
 
