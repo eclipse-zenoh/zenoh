@@ -32,6 +32,7 @@
 //! use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, bytes::{ZBytes, Encoding}};
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
+//! use zenoh_util::ffi::JsonValue;
 //!
 //! #[no_mangle]
 //! pub fn create_volume(config: VolumeConfig) -> zenoh::Result<Box<dyn Volume>> {
@@ -45,11 +46,11 @@
 //!
 //! #[async_trait]
 //! impl Volume for MyVolumeType {
-//!     fn get_admin_status(&self) -> serde_json::Value {
+//!     fn get_admin_status(&self) -> JsonValue {
 //!         // This operation is called on GET operation on the admin space for the Volume
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Volume monitoring.
-//!         self.config.to_json_value()
+//!         self.config.to_json_value().into()
 //!     }
 //!
 //!     fn get_capability(&self) -> Capability {
@@ -80,11 +81,11 @@
 //!
 //! #[async_trait]
 //! impl Storage for MyStorage {
-//!     fn get_admin_status(&self) -> serde_json::Value {
+//!     fn get_admin_status(&self) -> JsonValue {
 //!         // This operation is called on GET operation on the admin space for the Storage
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Storage monitoring.
-//!         self.config.to_json_value()
+//!         self.config.to_json_value().into()
 //!     }
 //!
 //!     async fn put(&mut self, key: Option<OwnedKeyExpr>, payload: ZBytes, encoding: Encoding, timestamp: Timestamp) -> zenoh::Result<StorageInsertionResult> {
@@ -121,15 +122,14 @@
 //! ```
 
 use async_trait::async_trait;
-use const_format::concatcp;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     key_expr::{keyexpr, OwnedKeyExpr},
     time::Timestamp,
     Result as ZResult,
 };
-use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
-use zenoh_util::concat_enabled_features;
+use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec};
+use zenoh_util::{concat_enabled_features, ffi::JsonValue};
 
 pub mod config;
 use config::StorageConfig;
@@ -184,9 +184,9 @@ pub struct StoredData {
 /// Trait to be implemented by a Backend.
 #[async_trait]
 pub trait Volume: Send + Sync {
-    /// Returns the status that will be sent as a reply to a query
+    /// Returns the status in the json format that will be sent as a reply to a query
     /// on the administration space for this backend.
-    fn get_admin_status(&self) -> serde_json::Value;
+    fn get_admin_status(&self) -> JsonValue;
 
     /// Returns the capability of this backend
     fn get_capability(&self) -> Capability;
@@ -196,15 +196,6 @@ pub trait Volume: Send + Sync {
 }
 
 pub type VolumeInstance = Box<dyn Volume + 'static>;
-
-impl StructVersion for VolumeInstance {
-    fn struct_version() -> u64 {
-        1
-    }
-    fn struct_features() -> &'static str {
-        concatcp!(zenoh::FEATURES, crate::FEATURES)
-    }
-}
 
 impl PluginControl for VolumeInstance {
     fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec<'_>> {
@@ -219,7 +210,7 @@ impl PluginInstance for VolumeInstance {}
 pub trait Storage: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this storage.
-    fn get_admin_status(&self) -> serde_json::Value;
+    fn get_admin_status(&self) -> JsonValue;
 
     /// Function called for each incoming data ([`Sample`](zenoh::sample::Sample)) to be stored in this storage.
     /// A key can be `None` if it matches the `strip_prefix` exactly.
