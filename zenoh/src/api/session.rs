@@ -123,7 +123,6 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
@@ -153,7 +152,6 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            liveliness_qid_counter: AtomicRequestId::new(0),
             local_resources: IntHashMap::new(),
             remote_resources: IntHashMap::new(),
             remote_subscribers: HashMap::new(),
@@ -2341,7 +2339,10 @@ impl SessionInner {
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.state);
-        let id = state.liveliness_qid_counter.fetch_add(1, Ordering::SeqCst);
+        // Queries must use the same id generator as liveliness subscribers.
+        // This is because both query's id and subscriber's id are used as interest id,
+        // so both must not overlap.
+        let id = self.runtime.next_id();
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
