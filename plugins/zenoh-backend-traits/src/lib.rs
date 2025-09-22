@@ -14,8 +14,6 @@
 
 //! ⚠️ WARNING ⚠️
 //!
-//! TODO: The example is outdated, rewrite it
-//!
 //! This crate should be considered unstable, as in we might change the APIs anytime.
 //!
 //! This crate provides the traits to be implemented by a zenoh backend library:
