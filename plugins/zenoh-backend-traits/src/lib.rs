@@ -30,17 +30,33 @@
 //! use zenoh::{key_expr::OwnedKeyExpr, time::Timestamp, bytes::{ZBytes, Encoding}};
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
+//! use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
+//! use zenoh_result::ZResult;
 //! use zenoh_util::ffi::JsonValue;
 //!
-//! #[no_mangle]
-//! pub fn create_volume(config: VolumeConfig) -> zenoh::Result<Box<dyn Volume>> {
-//!     Ok(Box::new(MyVolumeType { config }))
-//! }
 //!
-//! // Your Backend implementation
+//! // Your Backend volume implementation
 //! struct MyVolumeType {
 //!     config: VolumeConfig,
 //! }
+//!
+//! // Create the entry point for your backend
+//! zenoh_plugin_trait::declare_plugin!(MyVolumeType);
+//!
+//! impl Plugin for MyVolumeType {
+//!     type StartArgs = VolumeConfig;
+//!     type Instance = VolumeInstance;
+//!     fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::Instance> {
+//!         let volume = MyVolumeType {config: _args.clone()};
+//!         Ok(Box::new(volume))
+//!     }
+//!
+//!     const DEFAULT_NAME: &'static str = "my_backend";
+//!     const PLUGIN_VERSION: &'static str = plugin_version!();
+//!     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
+//! }
+//!
+//!
 //!
 //! #[async_trait]
 //! impl Volume for MyVolumeType {
