@@ -807,6 +807,22 @@ impl Session {
         zread!(self.0.state).primitives.is_none()
     }
 
+    /// Undeclare a zenoh entity declared by the session.
+    /// 
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let keyexpr = session.declare_keyexpr("key/expression").await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber(&keyexpr)
+    ///     .await
+    ///     .unwrap();
+    /// session.undeclare(subscriber).await.unwrap();
+    /// session.undeclare(keyexpr).await.unwrap();
+    /// # }
+    /// ```
     pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
         T: Undeclarable<&'a Session> + 'a,
