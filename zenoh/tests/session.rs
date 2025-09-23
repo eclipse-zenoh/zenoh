@@ -132,7 +132,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         tokio::time::sleep(SLEEP).await;
 
         // Put data
-        println!("[PS][02b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
+        println!("[PS][02b] Putting on peer02 session. {msg_count} msgs of {size} bytes.");
         for _ in 0..msg_count {
             ztimeout!(peer02
                 .put(key_expr, vec![0u8; size])
