@@ -154,7 +154,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, Callback<Sample>> {
-    /// Register the subscriber callback to be run in the background until the session is closed.
+    /// Make the subscriber run in the background until the session is closed.
     ///
     /// The background builder doesn't return a `Subscriber` object anymore.
     ///

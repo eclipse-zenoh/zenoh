@@ -332,7 +332,7 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a publisher.
+/// A [`Resolvable`] returned by [`Publisher::undeclare`]
 ///
 /// # Examples
 /// ```

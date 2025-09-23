@@ -219,7 +219,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber run in background until the session is closed.
     ///
     /// Background builder doesn't return a `AdvancedSubscriber` object anymore.
     pub fn background(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>, true> {
@@ -1505,7 +1505,7 @@ impl<Handler> std::ops::DerefMut for SampleMissListener<Handler> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a [`SampleMissListener`].
+/// A [`Resolvable`] returned by [`SampleMissListener::undeclare`]
 #[zenoh_macros::unstable]
 pub struct SampleMissHandlerUndeclaration<Handler>(SampleMissListener<Handler>);
 
@@ -1576,7 +1576,7 @@ impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
-    /// Register the sample miss notification callback to be run in background until the adanced subscriber is undeclared.
+    /// Make the sample miss notification run in the background until the adanced subscriber is undeclared.
     ///
     /// Background builder doesn't return a `SampleMissHandler` object anymore.
     #[zenoh_macros::unstable]

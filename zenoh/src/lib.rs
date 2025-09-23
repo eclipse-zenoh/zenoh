@@ -27,15 +27,15 @@
 //!
 //! The root element of the Zenoh API is the [session].
 //! A session is created by the [`open`] function, which takes a [config] as an argument.
-//! The [`Session`] holds the zenoh runtime object,
-//! which maintains the state of the connection of the node to the Zenoh network.
-//!
-//! The session allows declaring publishers, subscribers, queriers, queryables, etc.
+//! The [`Session`] holds the runtime object,
+//! which maintains the connection to the Zenoh network.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
-//! Data can be sent directly between nodes or routed through intermediate nodes.
+//! There is a parameter `mode` in the [config] which specifies the role of the node in the topology: a peer, router or client.
+//! See [`Config::WhatAmI`] for details.
 //!
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
+//! The entities that perform the communication (e.g., publishers, subscribers, queriers, and queryables) are declared by the session object.
 //!
 //! ## Publish/Subscribe
 //!
@@ -452,7 +452,7 @@ pub mod pubsub {
             subscriber::SubscriberBuilder,
         },
         publisher::{Publisher, PublisherUndeclaration},
-        subscriber::Subscriber,
+        subscriber::{Subscriber, SubscriberUndeclaration},
     };
 }
 
@@ -550,7 +550,7 @@ pub mod query {
             queryable::QueryableBuilder,
             reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
-        querier::Querier,
+        querier::{Querier, QuerierUndeclaration},
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
         queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,

@@ -142,7 +142,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 }
 
 impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
-    /// Register the listener callback to be run in the background until the publisher is undeclared.
+    /// Make listener run in the background until the publisher is undeclared.
     ///
     /// The background builder doesn't return a `MatchingListener` object anymore.
     ///

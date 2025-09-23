@@ -140,7 +140,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
-    /// Register the queryable callback to be run in the background until the session is closed.
+    /// Make the queryable run in the background until the session is closed.
     ///
     /// The background builder doesn't return a `Queryable` object anymore.
     ///

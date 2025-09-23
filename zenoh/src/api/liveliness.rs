@@ -503,7 +503,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make subscriber run in background until the session is closed.
     ///
     /// The background builder doesn't return a `Subscriber` object anymore.
     ///

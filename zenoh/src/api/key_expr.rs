@@ -608,7 +608,7 @@ impl<'a> UndeclarableSealed<&'a Session> for KeyExpr<'a> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a [`KeyExpr`].
+/// A [`Resolvable`] returned by [`Session::undeclare`] when undeclaring a [`KeyExpr`]
 ///
 /// # Examples
 /// ```

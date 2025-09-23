@@ -20,7 +20,7 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_core::{Resolvable, Wait};
+use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_result::ZResult;
 
 use super::{
@@ -136,9 +136,6 @@ pub(crate) struct MatchingListenerInner {
 /// A listener that sends notifications when the [`MatchingStatus`] of a
 /// corresponding Zenoh entity changes.
 ///
-/// Callback matching listeners will run in the background until the corresponding Zenoh entity is
-/// undeclared. Matching listeners with a handler are automatically undeclared when dropped.
-///
 /// # Examples
 /// ```no_run
 /// # #[tokio::main]
@@ -245,7 +242,7 @@ impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
     }
 }
 
-/// A [`Resolvable`] returned by [`MatchingListener::undeclare`](MatchingListener::undeclare)
+/// A [`Resolvable`] returned by [`MatchingListener::undeclare`]
 pub struct MatchingListenerUndeclaration<Handler>(MatchingListener<Handler>);
 
 impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {

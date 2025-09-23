@@ -155,10 +155,7 @@ impl Query {
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.
-    ///
-    /// By default, queries only accept replies whose key expression intersects with the query's.
-    /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
-    /// replying on a disjoint key expression will result in an error when resolving the reply.
+    /// 
     /// This api is for internal use only.
     #[inline(always)]
     #[zenoh_macros::internal]
