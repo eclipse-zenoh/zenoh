@@ -200,7 +200,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct FrameReader<'a, R> {
+pub struct FrameReader<'a, R: BacktrackableReader> {
     pub reliability: Reliability,
     pub sn: TransportSn,
     pub ext_qos: ext::QoSType,
@@ -235,5 +235,11 @@ impl<R: BacktrackableReader> Iterator for FrameReader<'_, R> {
             self.reader.rewind(mark);
         }
         msg.ok()
+    }
+}
+
+impl<R: BacktrackableReader> Drop for FrameReader<'_, R> {
+    fn drop(&mut self) {
+        for _ in self {}
     }
 }
