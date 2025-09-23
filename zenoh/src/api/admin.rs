@@ -221,6 +221,7 @@ impl Handler {
                             ..Put::default()
                         }))
                     },
+                    None,
                     #[cfg(feature = "unstable")]
                     Reliability::Reliable,
                 );
@@ -280,6 +281,7 @@ impl PeerHandler {
             &self.expr.clone().with_suffix(suffix),
             Default::default(),
             msg,
+            None,
             #[cfg(feature = "unstable")]
             Reliability::Reliable,
         );

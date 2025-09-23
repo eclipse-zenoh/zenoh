@@ -338,6 +338,7 @@ impl SessionState {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback,
+            history: None,
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -1709,6 +1710,7 @@ impl SessionInner {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback: callback.clone(),
+            history: Some(history),
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1975,6 +1977,7 @@ impl SessionInner {
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
         msg: impl FnOnce() -> &'a mut PushBody,
+        liveliness_interest_current: Option<bool>, // Some(_) for liveliness sub, None otherwise
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -1982,10 +1985,16 @@ impl SessionInner {
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
+        // For LivelinessSubscriber, Interest::Current Tokens should only run liveliness subs callbacks with history=true
+        let filter_by_interest = if liveliness_interest_current.is_some_and(|c| c) {
+            |sub: &&Arc<SubscriberState>| sub.history == Some(true)
+        } else {
+            |_: &&Arc<SubscriberState>| true
+        };
         if wire_expr.suffix.is_empty() {
             match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind) {
+                    for sub in res.subscribers(kind).iter().filter(filter_by_interest) {
                         if sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal))
                         {
@@ -2008,7 +2017,7 @@ impl SessionInner {
         } else {
             match state.wireexpr_to_keyexpr(wire_expr, local) {
                 Ok(key_expr) => {
-                    for sub in state.subscribers(kind).values() {
+                    for sub in state.subscribers(kind).values().filter(filter_by_interest) {
                         if (sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal)))
                             && key_expr.intersects(&sub.key_expr)
@@ -2115,6 +2124,7 @@ impl SessionInner {
                     }
                     &mut push.payload
                 },
+                None,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
@@ -2550,6 +2560,9 @@ impl Primitives for WeakSession {
                                 &m.wire_expr,
                                 Default::default(),
                                 || body.insert(Put::default().into()),
+                                // interest_id is set if the Token is an Interest::Current.
+                                // This is used to decide if subs with history=false should be called or not
+                                Some(msg.interest_id.is_some()),
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
                             );
@@ -2567,6 +2580,10 @@ impl Primitives for WeakSession {
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
+                    // interest_id is set if the Token is an Interest::Current.
+                    // This is used to decide if liveliness subs with history=false should be called or not
+                    // NOTE: an UndeclareToken is most likely not an Interest::Current
+                    let interest_current = msg.interest_id.is_some();
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
                         let mut body = None;
@@ -2576,6 +2593,7 @@ impl Primitives for WeakSession {
                             &key_expr.to_wire(self),
                             Default::default(),
                             || body.insert(Del::default().into()),
+                            Some(interest_current),
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
                         );
@@ -2593,6 +2611,7 @@ impl Primitives for WeakSession {
                                     &key_expr.to_wire(self),
                                     Default::default(),
                                     || body.insert(Del::default().into()),
+                                    Some(interest_current),
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
                                 );
@@ -2625,6 +2644,7 @@ impl Primitives for WeakSession {
             &msg.wire_expr,
             msg.ext_qos,
             || &mut msg.payload,
+            None,
             #[cfg(feature = "unstable")]
             _reliability,
         );
