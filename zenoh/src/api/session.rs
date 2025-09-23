@@ -1144,7 +1144,9 @@ impl Session {
         })
     }
 
-    /// Put data.
+    /// Publish [`SampleKind::Put`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`put`](crate::api::publisher::Publisher::put)
+    /// on it.
     ///
     /// # Arguments
     ///
@@ -1189,7 +1191,8 @@ impl Session {
         }
     }
 
-    /// Delete data.
+    /// Publish a [`SampleKind::Delete`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`delete`](crate::api::publisher::Publisher::delete) on it.
     ///
     /// # Arguments
     ///
@@ -1222,9 +1225,11 @@ impl Session {
             source_info: SourceInfo::empty(),
         }
     }
-    /// Query data from the matching queryables in the system.
+    /// Query data from the matching queryables in the system. This is a shortcut for declaring
+    /// a [`Querier`](crate::query::Querier) and calling [`get`](crate::api::querier::Querier::get) on it.
     ///
-    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies), replies are guaranteed to have
+    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies), 
+    /// replies are guaranteed to have
     /// key expressions that match the requested `selector`.
     ///
     /// # Arguments
