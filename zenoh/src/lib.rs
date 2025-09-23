@@ -326,8 +326,22 @@ pub mod session {
 
 /// # Sample primitives
 ///
-/// The [`Sample`](crate::sample::Sample) structure is the data unit received from [`Subscriber`](crate::pubsub::Subscriber)
-/// or [`Queryable`](crate::query::Queryable) instances. It contains the payload and all metadata associated with the data.
+/// The [`Sample`](crate::sample::Sample) structure is the data unit received
+/// by [`Subscriber`](crate::pubsub::Subscriber) or [`Querier`](crate::query::Querier) 
+/// or [`Session::get`]. It contains the payload and all metadata associated with the data.
+///
+/// The module contains the definitions of the `Sample` itself, definitions of
+/// types of its fields, and builders to create the sample.
+/// 
+/// In practice, users do not need to create samples manually, as they are created
+/// by the Zenoh runtime when data is published or replied to a query. But sometimes
+/// it's useful to create samples, for example, for the simulation of data reception,
+/// so the [`SampleBuilder`](crate::sample::SampleBuilder) is provided.
+/// 
+/// The [`SampleFields`](crate::sample::SampleFields) structure contains `Sample`
+/// fields as public members, unlike the `Sample` itself where fields are private. 
+/// This allows deconstructing a sample to fields without cloning, which is more efficient
+/// than using getter methods.
 pub mod sample {
     #[zenoh_macros::unstable]
     pub use crate::api::sample::{SourceInfo, SourceSn};

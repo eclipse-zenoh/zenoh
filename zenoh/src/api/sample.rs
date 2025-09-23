@@ -186,7 +186,30 @@ impl TryFrom<u64> for SampleKind {
     }
 }
 
-/// Structure with public fields for a sample. It is convenient when it is necessary to decompose a sample into its fields.
+/// Structure with public fields for a sample. It allows destructuring a [`Sample`] into
+/// variables without having to use `clone()` on the getter methods of the [`Sample`] struct.
+///
+/// # Example:
+/// ```rust
+/// # #[tokio::main]
+/// # async fn main() {
+/// let sample: Sample = zenoh::sample::SampleBuilder::default()
+///     .key_expr("example/key")
+///     .payload("Hello, World!")
+///     .kind(zenoh::sample::SampleKind::Put)
+///     .into();
+/// let fields: zenoh::sample::SampleFields = sample.into();
+/// let SampleFields {
+///    key_expr,
+///    payload,
+///    kind,
+///    ...
+/// } = fields;
+/// assert_eq!(key_expr.to_string(), "example/key");
+/// assert_eq!(payload.as_str().unwrap(), "Hello, World!");
+/// assert_eq!(kind, zenoh::sample::SampleKind::Put);
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SampleFields {
     pub key_expr: KeyExpr<'static>,
@@ -224,7 +247,10 @@ impl From<Sample> for SampleFields {
     }
 }
 
-/// A zenoh sample.
+/// The `Sample` structure is the data unit received
+/// by [`Subscriber`](crate::pubsub::Subscriber) or [`Querier`](crate::query::Querier)
+/// or [`Session::get`](crate::session::Session::get). 
+/// It contains the payload and all metadata associated with the data.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Sample {
