@@ -51,6 +51,9 @@ pub fn init_log_from_env_or<S>(fallback: S)
 where
     S: AsRef<str>,
 {
+    // Install the console subscriber to collect Tokio’s tracing data
+    console_subscriber::init();
+
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(fallback));
     init_env_filter(env_filter);
 }

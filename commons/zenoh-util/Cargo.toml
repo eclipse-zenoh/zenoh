@@ -48,6 +48,7 @@ shellexpand = { workspace = true }
 tokio = { workspace = true, features = ["net", "time"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+console-subscriber = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true, features = ["default"] }
 
