@@ -30,6 +30,7 @@ maintenance = { status = "actively-developed" }
 base64ct = "=1.6.0"
 home = "=0.5.9"
 icu_normalizer = "=1.5.0"
+librocksdb-sys = "=0.17.1"
 litemap = "=0.7.4"
 lz4_flex = "=0.11.3"
 pest = "=2.8.0"
@@ -37,6 +38,7 @@ pest_derive = "=2.8.0"
 pest_generator = "=2.8.0"
 pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
+rocksdb = "=0.23.0"
 static_init = "=1.0.3"
 time = "=0.3.41"
 tinystr = "=0.8.0"
@@ -50,6 +52,7 @@ ignored = [
   "base64ct",
   "home",
   "icu_normalizer",
+  "librocksdb-sys",
   "litemap",
   "lz4_flex",
   "pest",
@@ -57,6 +60,7 @@ ignored = [
   "pest_generator",
   "pest_meta",
   "potential_utf",
+  "rocksdb",
   "static_init",
   "time",
   "tinystr",
