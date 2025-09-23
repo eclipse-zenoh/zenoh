@@ -234,6 +234,15 @@ pub use crate::{
 /// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
 /// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
 ///   routing and network usage.
+/// 
+/// The key expression object can be created using the [`KeyExpr::new`](crate::key_expr::KeyExpr::new) method, 
+/// which validates the syntax of the provided string. 
+/// The [`KeyExpr::from_str_unchecked`](crate::key_expr::KeyExpr::from_str_unchecked) method allows to
+/// accelerate the creation of key expressions when the user can guarantee that the provided string
+/// respects the KE syntax. There is also the 
+/// [`Session::declare_keyexpr`](crate::session::Session::declare_keyexpr) method, which not only
+/// declares the key expressio, but also informs the Zenoh network of its existence, which can
+/// accelerate routing.
 ///
 /// All of these types implement [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given key expression
 /// [`intersects`](crate::key_expr::keyexpr::intersects) with another, or whether it [`includes`](crate::key_expr::keyexpr::includes) another.
