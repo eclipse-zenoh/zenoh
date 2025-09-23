@@ -20,7 +20,7 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_core::{Resolvable, Resolve, Wait};
+use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use super::{

@@ -188,7 +188,9 @@ struct NotifierInner<T> {
     subscribers: Mutex<Vec<flume::Sender<Notification>>>,
 }
 
-#[doc(hidden)]
+/// The wrapper for a [`Config`] that allows to subscribe to changes.
+/// This type is returned by [`Session::config`](crate::Session::config) and allows
+/// the `Session` to immediately react to changes applied to the configuration.
 pub struct Notifier<T> {
     inner: Arc<NotifierInner<T>>,
 }

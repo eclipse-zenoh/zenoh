@@ -32,7 +32,7 @@
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
 //! There is a parameter `mode` in the [config] which specifies the role of the node in the topology: a peer, router or client.
-//! See [`Config::WhatAmI`] for details.
+//! See [`WhatAmI`](crate::config::WhatAmI) for details.
 //!
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
 //! The entities that perform the communication (e.g., publishers, subscribers, queriers, and queryables) are declared by the session object.
