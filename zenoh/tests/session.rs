@@ -347,7 +347,7 @@ async fn zenoh_session_unicast() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
-    zenoh::init_log_from_env_or("error");
+    zenoh::init_log_from_env_or("debug");
     let (peer01, peer02) =
         open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
