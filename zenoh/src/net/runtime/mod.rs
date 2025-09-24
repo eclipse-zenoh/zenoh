@@ -48,6 +48,7 @@ use zenoh_protocol::{
     network::{oam, NetworkBodyMut, NetworkMessageMut, Oam},
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_runtime::ZRuntime;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::client_storage::ShmClientStorage;
 #[cfg(feature = "shared-memory")]
@@ -314,7 +315,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -401,6 +402,57 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .collect();
 
                 let bound = compute_bound(&peer, &runtime.config().lock())?;
+
+                fn north_bound_transport_peer_count(
+                    runtime: &Runtime,
+                    new_peer: &TransportPeer,
+                ) -> usize {
+                    ZRuntime::Application.block_in_place(async {
+                        runtime
+                            .manager()
+                            .get_transports_unicast()
+                            .await
+                            .iter()
+                            .filter(|transport| {
+                                let Ok(peer) = transport.get_peer() else {
+                                    tracing::error!(
+                                        "Could not get transport peer \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                if &peer == new_peer {
+                                    return false;
+                                }
+
+                                // NOTE(regions): compute bound instead of querying the router as
+                                // the corresponding transport face might not exist yet
+                                let Ok(bound) = compute_bound(&peer, &runtime.config().lock())
+                                else {
+                                    tracing::error!(
+                                        zid = %peer.zid.short(),
+                                        wai = %peer.whatami.short(),
+                                        "Could not get transport peer bound \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                bound.is_north()
+                            })
+                            .count()
+                    })
+                }
+
+                if bound.is_north()
+                    && runtime.whatami() == WhatAmI::Client
+                    && north_bound_transport_peer_count(runtime, &peer) > 0
+                {
+                    bail!("Client runtimes only accept one north-bound transport");
+                }
 
                 if !bound.is_north() && peer.whatami == WhatAmI::Peer {
                     transport.schedule(NetworkMessageMut {

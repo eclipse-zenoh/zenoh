@@ -128,9 +128,10 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
+        let (listeners, peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
             let guard = &self.state.config.lock().0;
             (
+                guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
                 guard
                     .connect()
                     .endpoints()
@@ -145,6 +146,9 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
+
+        self.bind_listeners(&listeners).await?;
+
         match peers.len() {
             0 => {
                 if scouting {
