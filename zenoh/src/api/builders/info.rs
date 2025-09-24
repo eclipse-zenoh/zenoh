@@ -27,7 +27,6 @@ use crate::net::runtime::Runtime;
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let zid = session.info().zid().await;
 /// # }

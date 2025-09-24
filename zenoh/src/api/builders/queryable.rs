@@ -28,12 +28,13 @@ use crate::{
 };
 
 /// A builder for initializing a [`Queryable`].
+/// Returned by the
+/// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// # }

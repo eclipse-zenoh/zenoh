@@ -39,7 +39,10 @@ use crate::{
     query::{QueryConsolidation, Reply},
 };
 
-/// A builder for initializing a `query`.
+/// A builder for configuring a [`get`](crate::Session::get)
+/// operation from a [`Session`](crate::Session).
+/// The builder resolves to a [`handler`](crate::handlers) generating a series of
+/// [`Reply`](crate::api::query::Reply) for each response received.
 ///
 /// # Examples
 /// ```

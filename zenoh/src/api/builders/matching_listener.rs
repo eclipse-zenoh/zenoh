@@ -32,7 +32,10 @@ use crate::{
     key_expr::KeyExpr,
 };
 
-/// A builder for initializing a [`MatchingListener`].
+/// A builder for initializing a [`MatchingListener`]
+/// returned by the [`Publisher::matching_listener`](crate::pubsub::Publisher::matching_listener)
+/// or [`Querier::matching_listener`](crate::query::Querier::matching_listener) methods.
+///
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a WeakSession,

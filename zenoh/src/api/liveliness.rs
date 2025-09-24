@@ -210,7 +210,8 @@ impl<'a> Liveliness<'a> {
     }
 }
 
-/// A builder for initializing a [`LivelinessToken`](LivelinessToken).
+/// A builder for initializing a [`LivelinessToken`](LivelinessToken)
+/// returned by the [`Liveliness::declare_token`] method.
 ///
 /// # Examples
 /// ```

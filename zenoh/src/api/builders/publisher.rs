@@ -37,14 +37,22 @@ use crate::{
     Session,
 };
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Session::put`](crate::session::Session::put) method.
 pub type SessionPutBuilder<'a, 'b> =
     PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>;
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Session::delete`](crate::session::Session::delete) method.
 pub type SessionDeleteBuilder<'a, 'b> =
     PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>;
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Publisher::put`](crate::pubsub::Publisher::put) method.
 pub type PublisherPutBuilder<'a> = PublicationBuilder<&'a Publisher<'a>, PublicationBuilderPut>;
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Publisher::delete`](crate::pubsub::Publisher::delete) method.
 pub type PublisherDeleteBuilder<'a> =
     PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
 
@@ -285,6 +293,8 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 }
 
 /// A builder for initializing a [`Publisher`].
+/// Returned by the
+/// [`Session::declare_publisher`](crate::Session::declare_publisher) method.
 ///
 /// # Examples
 /// ```

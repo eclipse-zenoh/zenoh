@@ -26,7 +26,9 @@ use crate::{
     Session,
 };
 
-/// A builder for initializing a [`Subscriber<Handler>`](crate::pubsub::Subscriber<Handler>).
+/// A builder for initializing a [`Subscriber`](crate::pubsub::Subscriber). 
+/// Returned by the 
+/// [`Session::declare_subscriber`](crate::Session::declare_subscriber) method.
 ///
 /// # Examples
 /// ```

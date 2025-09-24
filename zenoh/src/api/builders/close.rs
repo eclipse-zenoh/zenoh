@@ -25,7 +25,8 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
-/// A builder for close operations.
+/// A builder for close operations, returned by the
+/// [`Session::close`](crate::Session::close) method.
 // NOTE: `Closeable` is only pub(crate) because it is a zenoh-internal trait, so we don't
 // care about the `private_bounds` lint in this particular case.
 #[allow(private_bounds)]

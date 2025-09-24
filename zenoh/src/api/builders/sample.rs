@@ -70,7 +70,9 @@ pub struct SampleBuilderDelete;
 /// The type modifier for a [`SampleBuilder`] for the building stage
 /// when the sample [`kind`](crate::sample::Sample::kind) is not yet specified.
 ///
-/// With this modifier the `SampleBuilder` can't be resolved; the selection of the kind must be done.
+/// With this modifier the `SampleBuilder` can't be resolved;
+/// the selection of the kind must be done with [`SampleBuilder::put`] or
+/// [`SampleBuilder::delete`].
 #[derive(Clone, Debug)]
 pub struct SampleBuilderAny;
 
