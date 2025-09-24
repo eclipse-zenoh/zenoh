@@ -49,6 +49,7 @@ pub enum PushBody {
 
 impl PushBody {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -82,6 +83,7 @@ pub enum RequestBody {
 
 impl RequestBody {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -109,6 +111,7 @@ pub enum ResponseBody {
 
 impl ResponseBody {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -158,6 +161,7 @@ pub mod ext {
 
     impl<const ID: u8> SourceInfoType<{ ID }> {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -214,6 +218,7 @@ pub mod ext {
         pub const SID: u8 = SID;
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -250,6 +255,7 @@ pub mod ext {
 
     impl<const ID: u8> AttachmentType<{ ID }> {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();

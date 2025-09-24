@@ -54,6 +54,7 @@ pub type ReplyBody = PushBody;
 
 impl Reply {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();

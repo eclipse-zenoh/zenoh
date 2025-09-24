@@ -99,6 +99,7 @@ pub mod ext {
 
 impl Fragment {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -137,6 +138,7 @@ pub struct FragmentHeader {
 
 impl FragmentHeader {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

@@ -230,6 +230,7 @@ impl<'a> From<&'a String> for WireExpr<'a> {
 
 impl WireExpr<'_> {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

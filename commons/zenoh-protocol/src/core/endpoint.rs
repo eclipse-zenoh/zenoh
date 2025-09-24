@@ -660,6 +660,7 @@ impl FromStr for EndPoint {
 
 impl EndPoint {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

@@ -76,6 +76,7 @@ impl ZenohIdProto {
         self.0.to_le_bytes()
     }
 
+    #[doc(hidden)]
     pub fn rand() -> ZenohIdProto {
         ZenohIdProto(uhlc::ID::rand())
     }
@@ -287,6 +288,7 @@ pub struct EntityGlobalIdProto {
 
 impl EntityGlobalIdProto {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         Self {
@@ -341,6 +343,7 @@ impl PriorityRange {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -470,6 +473,7 @@ impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

@@ -85,6 +85,7 @@ pub mod ext {
 
 impl Frame {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -114,6 +115,7 @@ pub struct FrameHeader {
 
 impl FrameHeader {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

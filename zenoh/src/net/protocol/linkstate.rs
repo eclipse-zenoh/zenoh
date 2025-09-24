@@ -104,6 +104,7 @@ pub(crate) struct LocalLinkState {
 
 impl LinkState {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -158,6 +159,7 @@ pub(crate) struct LinkStateList {
 
 impl LinkStateList {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

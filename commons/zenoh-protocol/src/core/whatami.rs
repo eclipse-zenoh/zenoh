@@ -62,6 +62,7 @@ impl WhatAmI {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
         let mut rng = rand::thread_rng();
@@ -183,6 +184,7 @@ impl WhatAmIMatcher {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
