@@ -19,12 +19,15 @@ use crate::{
 };
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
+/// 
+/// This information includes the [`ZenohId`](crate::session::ZenohId) identifier of the current session,
+/// and the identifiers of the connected routers and peers (see also [`WhatAmI`](crate::config::WhatAmI)
+/// for more information about peers and routers).
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let info = session.info();
 /// let zid = info.zid().await;
@@ -41,7 +44,6 @@ impl SessionInfo {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let zid = session.info().zid().await;
     /// # }
@@ -73,7 +75,6 @@ impl SessionInfo {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut peers_zid = session.info().peers_zid().await;
     /// while let Some(peer_zid) = peers_zid.next() {}
