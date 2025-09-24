@@ -66,10 +66,10 @@ pub struct PublicationBuilderDelete;
 /// Publication builder
 ///
 /// A publication builder object is returned by the following methods:
-/// - [`crate::session::Session::put`]
-/// - [`crate::session::Session::delete`]
-/// - [`crate::pubsub::Publisher::put`]
-/// - [`crate::pubsub::Publisher::delete`]
+/// - [Session::put](crate::session::Session::put)
+/// - [Session::delete](crate::session::Session::delete)
+/// - [Publisher::put](crate::pubsub::Publisher::put)
+/// - [Publisher::delete](crate::pubsub::Publisher::delete)
 ///
 /// It resolves to `ZResult<()>` when awaited or when calling `.wait()`.
 ///
@@ -101,7 +101,7 @@ pub struct PublicationBuilder<P, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
-    /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
+    /// Changes the [CongestionControl](crate::qos::CongestionControl) to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -110,7 +110,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         }
     }
 
-    /// Changes the [`crate::qos::Priority`] of the written data.
+    /// Changes the [Priority](crate::qos::Priority) of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self {
@@ -133,10 +133,10 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 }
 
 impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
-    /// Changes the [`crate::sample::Locality`] applied when routing the data.
+    /// Changes the [Locality](crate::sample::Locality) applied when routing the data.
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
-    /// that have the given [`crate::sample::Locality`].
+    /// that have the given [Locality](crate::sample::Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -144,7 +144,7 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         self
     }
 
-    /// Changes the [`crate::qos::Reliability`] to apply when routing the data.
+    /// Changes the [Reliability](crate::qos::Reliability) to apply when routing the data.
     ///
     /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
     ///   is rather used as a marker on the wire and it may be used to select the best link
@@ -362,7 +362,7 @@ impl Clone for PublisherBuilder<'_, '_> {
 
 #[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
-    /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
+    /// Changes the [CongestionControl](crate::qos::CongestionControl) to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -371,7 +371,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
         }
     }
 
-    /// Changes the [`crate::qos::Priority`] of the written data.
+    /// Changes the [Priority](crate::qos::Priority) of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self { priority, ..self }
@@ -440,17 +440,17 @@ impl PublisherBuilder<'_, '_> {
         }
     }
 
-    /// Changes the [`crate::sample::Locality`] applied when routing the data.
+    /// Changes the [Locality](crate::sample::Locality) applied when routing the data.
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
-    /// that have the given [`crate::sample::Locality`].
+    /// that have the given [Locality](crate::sample::Locality).
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
         self
     }
 
-    /// Changes the [`crate::qos::Reliability`] to apply when routing the data.
+    /// Changes the [Reliability](crate::qos::Reliability) to apply when routing the data.
     ///
     /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
     ///   is rather used as a marker on the wire and it may be used to select the best link

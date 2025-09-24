@@ -170,7 +170,7 @@ impl<'a> Publisher<'a> {
     }
 
     /// Publish the data. The subscribers matching the Publisher's key expression will receive the
-    /// [`Sample`] with [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Put`].
+    /// [`Sample`] with [`kind`](crate::sample::Sample::kind) [SampleKind::Put](crate::sample::SampleKind::Put).
     ///
     /// The builder allows customizing the publication: add the timestamp,
     /// attachment, etc. Some fields are pre-filled with the Publisher's configuration and can
@@ -205,7 +205,7 @@ impl<'a> Publisher<'a> {
 
     /// Declare that the data associated with the Publisher's key expression is deleted.
     /// The subscribers will receive the [`Sample`] with
-    /// [`kind`](crate::sample::Sample::kind) [`crate::sample::SampleKind::Delete`].
+    /// [`kind`](crate::sample::Sample::kind) [SampleKind::Delete](crate::sample::SampleKind::Delete).
     ///
     /// The builder allows customizing the publication: add the timestamp, attachment, etc.
     ///

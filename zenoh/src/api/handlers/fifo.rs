@@ -31,7 +31,7 @@ use crate::api::handlers::{
 ///
 /// Note that pushing on a [`FifoChannel`] that is full will block until a slot is available.
 /// E.g., a slow subscriber could block the underlying Zenoh thread because it is not emptying the
-/// [`FifoChannel`] fast enough. In this case, you may want to look into [`crate::api::handlers::RingChannel`] that
+/// [`FifoChannel`] fast enough. In this case, you may want to look into [handlers::RingChannel](crate::api::handlers::RingChannel) that
 /// will drop samples when full.
 pub struct FifoChannel {
     capacity: usize,

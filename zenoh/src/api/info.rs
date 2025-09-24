@@ -35,7 +35,7 @@ pub struct SessionInfo {
 }
 
 impl SessionInfo {
-    /// Return the [`crate::session::ZenohId`] of the current zenoh [`Session`](crate::Session).
+    /// Return the [ZenohId](crate::session::ZenohId) of the current zenoh [`Session`](crate::Session).
     ///
     /// # Examples
     /// ```
@@ -50,8 +50,8 @@ impl SessionInfo {
         ZenohIdBuilder::new(&self.runtime)
     }
 
-    /// Return the [`crate::session::ZenohId`] of the zenoh routers this process is currently connected to,
-    /// or the [`crate::session::ZenohId`] of the current router if this code is run from a router (plugin).
+    /// Return the [ZenohId](crate::session::ZenohId) of the zenoh routers this process is currently connected to,
+    /// or the [ZenohId](crate::session::ZenohId) of the current router if this code is run from a router (plugin).
     ///
     /// # Examples
     /// ```
@@ -67,7 +67,7 @@ impl SessionInfo {
         RoutersZenohIdBuilder::new(&self.runtime)
     }
 
-    /// Return the [`crate::session::ZenohId`] of the zenoh peers this process is currently connected to.
+    /// Return the [ZenohId](crate::session::ZenohId) of the zenoh peers this process is currently connected to.
     ///
     /// # Examples
     /// ```
