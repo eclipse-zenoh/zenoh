@@ -635,7 +635,7 @@ impl HatQueriesTrait for HatCode {
                     let has_interest_finalized = expr
                         .resource()
                         .and_then(|res| res.session_ctxs.get(&face.id))
-                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                        .is_some_and(|ctx| ctx.queryable_interest_finalized);
                     if !has_interest_finalized {
                         let wire_expr = expr.get_best_key(face.id);
                         route.push(QueryTargetQabl {
