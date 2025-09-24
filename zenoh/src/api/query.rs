@@ -81,8 +81,9 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// An error reply returned from a [`Queryable`](crate::query::Queryable).
-///
+/// An error reply variant returned by [`Querier::get`](crate::query::Querier::get)
+/// or [`Session::get`](crate::Session::get) in [`Reply`] 
+/// 
 /// The `ReplyError` contains the payload with the error information (message or some structured data)
 /// and the encoding of this payload.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
