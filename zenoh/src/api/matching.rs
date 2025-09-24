@@ -191,15 +191,15 @@ impl<Handler> MatchingListener<Handler> {
     }
 
     /// Returns a reference to this matching listener's handler.
-    /// A handler is anything that implements [IntoHandler](crate::handlers::IntoHandler).
-    /// The default handler is [DefaultHandler](crate::handlers::DefaultHandler).
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this matching listener's handler.
-    /// A handler is anything that implements [IntoHandler](crate::handlers::IntoHandler).
-    /// The default handler is [DefaultHandler](crate::handlers::DefaultHandler).
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }

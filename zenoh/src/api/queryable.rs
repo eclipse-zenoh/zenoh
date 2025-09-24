@@ -186,7 +186,7 @@ impl Query {
         ReplyBuilder::<'_, 'b, ReplyBuilderPut>::new(self, key_expr, payload)
     }
 
-    /// Sends a [ReplyError](crate::query::ReplyError) as a reply to this Query.
+    /// Sends a [`ReplyError`](crate::query::ReplyError) as a reply to this Query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -501,15 +501,15 @@ impl<Handler> Queryable<Handler> {
     }
 
     /// Returns a reference to this queryable's handler.
-    /// A handler is anything that implements [IntoHandler](crate::handlers::IntoHandler).
-    /// The default handler is [DefaultHandler](crate::handlers::DefaultHandler).
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this queryable's handler.
-    /// A handler is anything that implements [IntoHandler](crate::handlers::IntoHandler).
-    /// The default handler is [DefaultHandler](crate::handlers::DefaultHandler).
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }

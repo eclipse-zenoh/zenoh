@@ -843,9 +843,9 @@ pub mod liveliness {
 ///
 /// Each [`Sample`](crate::sample::Sample) has an optional [`Timestamp`](crate::time::Timestamp) associated with it.
 /// The timestamp can be set using the
-/// [PublicationBuilder::timestamp](crate::pubsub::PublicationBuilder::timestamp) method when performing a
+/// [`PublicationBuilder::timestamp`](crate::pubsub::PublicationBuilder::timestamp) method when performing a
 /// [`put`](crate::pubsub::Publisher::put) operation or by
-/// [ReplyBuilder::timestamp](crate::query::ReplyBuilder::timestamp) when replying to a query with
+/// [`ReplyBuilder::timestamp`](crate::query::ReplyBuilder::timestamp) when replying to a query with
 /// [`reply`](crate::query::Query::reply).
 ///
 /// The timestamp consists of the time value itself and a unique

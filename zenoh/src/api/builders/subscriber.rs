@@ -26,7 +26,7 @@ use crate::{
     Session,
 };
 
-/// A builder for initializing a [Subscriber<Handler>](crate::pubsub::Subscriber<Handler>).
+/// A builder for initializing a [`Subscriber<Handler>`](crate::pubsub::Subscriber<Handler>).
 ///
 /// # Examples
 /// ```
@@ -184,10 +184,10 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, Callback<Sample>> {
 }
 
 impl<Handler, const BACKGROUND: bool> SubscriberBuilder<'_, '_, Handler, BACKGROUND> {
-    /// Changes the [Locality](crate::sample::Locality) of received publications.
+    /// Changes the [`Locality`](crate::sample::Locality) of received publications.
     ///
     /// Restricts the matching publications that will be received by this [`Subscriber`] to the ones
-    /// that have the given [Locality](crate::sample::Locality).
+    /// that have the given [`Locality`](crate::sample::Locality).
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
