@@ -259,8 +259,6 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    ///
-    ///
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]

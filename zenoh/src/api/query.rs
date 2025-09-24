@@ -22,7 +22,20 @@ use zenoh_keyexpr::OwnedKeyExpr;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::EntityGlobalIdProto;
 use zenoh_protocol::core::Parameters;
-/// The [`Queryable`](crate::query::Queryable)s that should be the targets of a [`get`](crate::Session::get).
+/// The [`Queryable`](crate::query::Queryable)s to which a query from
+/// a [`Session::get`](crate::Session::get) or a [`Querier::get`](crate::query::Querier::get)
+/// is delivered.
+///
+/// * [`QueryTarget::All`] makes the query be delivered to all the matching queryables.
+/// * [`QueryTarget::AllComplete`] makes the query be delivered to all the matching queryables
+///   which are marked as "complete" with 
+///   [`QueryableBuilder::complete`](crate::query::QueryableBuilder::complete).
+/// * [`QueryTarget::BestMatching`] (default) makes the query be delivered to the 
+///   queryable selected by zenoh to get the fastest and most complete reply.
+/// 
+/// It is set by [`SessionGetBuilder::target`](crate::session::SessionGetBuilder::target)
+/// or [`QuerierBuilder::target`](crate::query::QuerierBuilder::target) methods.
+///
 pub use zenoh_protocol::network::request::ext::QueryTarget;
 #[doc(inline)]
 pub use zenoh_protocol::zenoh::query::ConsolidationMode;

@@ -173,14 +173,20 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
 
 impl<Handler, const BACKGROUND: bool> QueryableBuilder<'_, '_, Handler, BACKGROUND> {
     /// Change queryable completeness.
+    /// When queryable is declared as "complete", it promises to have all the data
+    /// associated with its key expression, so it's not necessary to send queries to other nodes.
+    /// 
+    /// The [`QueryTarget::BestMatching`](crate::query::QueryTarget::BestMatching) parameter
+    /// of querier's [`target`](crate::query::QuerierBuilder::target) method makes queries
+    /// to prefer "complete" queryables. 
+    /// The [`QueryTarget::AllComplete`](crate::query::QueryTarget::AllComplete)
+    /// parameter makes queries to ignore "incomplete" queryables.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
         self.complete = complete;
         self
     }
 
-    ///
-    ///
     /// Restrict the matching queries that will be received by this [`Queryable`]
     /// to the ones that have the given [`Locality`](Locality).
     #[inline]
