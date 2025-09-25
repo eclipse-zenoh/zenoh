@@ -26,6 +26,7 @@ use zenoh_backend_traits::{
     *,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
+use zenoh_util::ffi::JsonValue;
 
 use crate::MEMORY_BACKEND_NAME;
 
@@ -50,8 +51,8 @@ impl Plugin for MemoryBackend {
 
 #[async_trait]
 impl Volume for MemoryBackend {
-    fn get_admin_status(&self) -> serde_json::Value {
-        self.config.to_json_value()
+    fn get_admin_status(&self) -> JsonValue {
+        self.config.to_json_value().into()
     }
 
     fn get_capability(&self) -> Capability {
@@ -90,8 +91,8 @@ impl MemoryStorage {
 
 #[async_trait]
 impl Storage for MemoryStorage {
-    fn get_admin_status(&self) -> serde_json::Value {
-        self.config.to_json_value()
+    fn get_admin_status(&self) -> JsonValue {
+        self.config.to_json_value().into()
     }
 
     async fn put(

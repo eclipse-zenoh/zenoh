@@ -18,7 +18,7 @@ use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmI;
 
-use crate::net::runtime::Runtime;
+use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows
 /// access to the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
@@ -33,11 +33,11 @@ use crate::net::runtime::Runtime;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct ZenohIdBuilder<'a> {
-    runtime: &'a Runtime,
+    runtime: &'a DynamicRuntime,
 }
 
 impl<'a> ZenohIdBuilder<'a> {
-    pub(crate) fn new(runtime: &'a Runtime) -> Self {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
     }
 }
@@ -77,11 +77,11 @@ impl IntoFuture for ZenohIdBuilder<'_> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct RoutersZenohIdBuilder<'a> {
-    runtime: &'a Runtime,
+    runtime: &'a DynamicRuntime,
 }
 
 impl<'a> RoutersZenohIdBuilder<'a> {
-    pub(crate) fn new(runtime: &'a Runtime) -> Self {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
     }
 }
@@ -92,17 +92,7 @@ impl Resolvable for RoutersZenohIdBuilder<'_> {
 
 impl Wait for RoutersZenohIdBuilder<'_> {
     fn wait(self) -> Self::To {
-        Box::new(
-            zenoh_runtime::ZRuntime::Application
-                .block_in_place(self.runtime.manager().get_transports_unicast())
-                .into_iter()
-                .filter_map(|s| {
-                    s.get_whatami()
-                        .ok()
-                        .and_then(|what| (what == WhatAmI::Router).then_some(()))
-                        .and_then(|_| s.get_zid().map(Into::into).ok())
-                }),
-        )
+        self.runtime.get_zids(WhatAmI::Router)
     }
 }
 
@@ -131,11 +121,11 @@ impl IntoFuture for RoutersZenohIdBuilder<'_> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PeersZenohIdBuilder<'a> {
-    runtime: &'a Runtime,
+    runtime: &'a DynamicRuntime,
 }
 
 impl<'a> PeersZenohIdBuilder<'a> {
-    pub(crate) fn new(runtime: &'a Runtime) -> Self {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
     }
 }
@@ -146,17 +136,7 @@ impl Resolvable for PeersZenohIdBuilder<'_> {
 
 impl Wait for PeersZenohIdBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        Box::new(
-            zenoh_runtime::ZRuntime::Application
-                .block_in_place(self.runtime.manager().get_transports_unicast())
-                .into_iter()
-                .filter_map(|s| {
-                    s.get_whatami()
-                        .ok()
-                        .and_then(|what| (what == WhatAmI::Peer).then_some(()))
-                        .and_then(|_| s.get_zid().map(Into::into).ok())
-                }),
-        )
+        self.runtime.get_zids(WhatAmI::Peer)
     }
 }
 

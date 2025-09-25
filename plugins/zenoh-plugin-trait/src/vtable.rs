@@ -13,10 +13,10 @@
 //
 use zenoh_result::ZResult;
 
-use crate::{Plugin, StructVersion};
+use crate::Plugin;
 
 pub type PluginLoaderVersion = u64;
-pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
+pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 2;
 
 type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
@@ -25,14 +25,6 @@ pub struct PluginVTable<StartArgs, Instance> {
     pub plugin_version: &'static str,
     pub plugin_long_version: &'static str,
     pub start: StartFn<StartArgs, Instance>,
-}
-impl<StartArgs, Instance> StructVersion for PluginVTable<StartArgs, Instance> {
-    fn struct_version() -> u64 {
-        1
-    }
-    fn struct_features() -> &'static str {
-        ""
-    }
 }
 
 impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
@@ -68,11 +60,11 @@ macro_rules! declare_plugin {
 
         #[no_mangle]
         fn get_compatibility() -> $crate::Compatibility {
-            $crate::Compatibility::with_plugin_version::<
-                <$ty as $crate::Plugin>::StartArgs,
-                <$ty as $crate::Plugin>::Instance,
-                $ty,
-            >()
+            use zenoh_plugin_trait::StructVersion;
+            $crate::Compatibility::new(
+                <$ty as $crate::Plugin>::StartArgs::struct_version(),
+                <$ty as $crate::Plugin>::StartArgs::struct_features(),
+            )
         }
 
         #[no_mangle]

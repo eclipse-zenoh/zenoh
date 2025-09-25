@@ -15,7 +15,7 @@
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use crate::{
     api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
-    net::runtime::Runtime,
+    net::runtime::DynamicRuntime,
 };
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
@@ -34,7 +34,7 @@ use crate::{
 /// # }
 /// ```
 pub struct SessionInfo {
-    pub(crate) runtime: Runtime,
+    pub(crate) runtime: DynamicRuntime,
 }
 
 impl SessionInfo {
