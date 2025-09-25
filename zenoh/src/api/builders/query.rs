@@ -245,13 +245,13 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     }
 
     /// Change the target(s) of the query.
-    /// 
+    ///
     /// This method allows to specify whether the request should just return the
-    /// data available in the network which matches the key expression 
-    /// ([QueryTarget::BestMatching], default) or if it should arrive to 
-    /// all queryables matching the key expression ([QueryTarget::All], 
+    /// data available in the network which matches the key expression
+    /// ([QueryTarget::BestMatching], default) or if it should arrive to
+    /// all queryables matching the key expression ([QueryTarget::All],
     /// [QueryTarget::AllComplete]).
-    /// 
+    ///
     /// See also the [`complete`](crate::query::QueryableBuilder::complete) setting
     /// of the [`Queryable`](crate::query::Queryable)
     #[inline]
@@ -260,7 +260,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     }
 
     /// Change the consolidation mode of the query.
-    /// 
+    ///
     /// The multiple replies to a query may arrive from the network. The
     /// [`ConsolidationMode`](crate::query::ConsolidationMode) enum defines
     /// the strategies of filtering and reordering these replies.
