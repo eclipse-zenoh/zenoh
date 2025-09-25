@@ -37,11 +37,20 @@ use crate::api::{
 pub type SourceSn = u32;
 
 /// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
+/// 
+/// There are queriable's [`allowed_origin`](crate::query::QueryableBuilder::allowed_origin) and 
+/// subscriber's [`allowed_origin`](crate::pubsub::SubscriberBuilder::allowed_origin) settings and
+/// publishers's [`allowed_destination`](crate::pubsub::PublisherBuilder::allowed_destination) and
+/// querier's [`allowed_destination`](crate::query::QuerierBuilder::allowed_destination) settings
+/// which allows to restrict the connection to only local or only remote entities.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Locality {
+    /// Request / serve data only to entities in the same session
     SessionLocal,
+    /// Request / serve data only to remote entities (not in the same session)
     Remote,
     #[default]
+    /// Request / serve data to both local and remote entities
     Any,
 }
 
