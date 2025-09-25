@@ -174,13 +174,26 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
 impl<Handler, const BACKGROUND: bool> QueryableBuilder<'_, '_, Handler, BACKGROUND> {
     /// Change queryable completeness.
     /// When queryable is declared as "complete", it promises to have all the data
-    /// associated with its key expression, so it's not necessary to send queries to other nodes.
+    /// associated with its key expression, so it's not necessary to query other nodes
+    /// for data matching its key expression.
+    /// 
+    /// E.g. a queryable serving key expression `foo/*` is "complete". The queryer
+    /// requests data matching `foo/bar` and gets data from this queryable
+    /// only even if there are other queryables matching `foo/bar`.
+    /// 
+    /// But for "complete" queryable serving key expression `foo/bar` the request
+    /// for `foo/*` will be sent to other queryables as well as the data from this
+    /// queryable doesn't cover the whole key expression `foo/*`.
     ///
-    /// The [`QueryTarget::BestMatching`](crate::query::QueryTarget::BestMatching) parameter
-    /// of querier's [`target`](crate::query::QuerierBuilder::target) method makes queries
-    /// to prefer "complete" queryables.
-    /// The [`QueryTarget::AllComplete`](crate::query::QueryTarget::AllComplete)
-    /// parameter makes queries to ignore "incomplete" queryables.
+    /// This is default behavior which corresponds to
+    ///  [`QueryTarget::BestMatching`](crate::query::QueryTarget::BestMatching) parameter
+    /// of querier's [`target`](crate::query::QuerierBuilder::target).
+    ///
+    /// It's also possible to forcibly request all available queryables with
+    /// [`QueryTarget::All`](crate::query::QueryTarget::All) parameter,
+    /// or to request only "complete" ones with 
+    /// [`QueryTarget::AllComplete`](crate::query::QueryTarget::AllComplete)
+    /// parameter.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
         self.complete = complete;

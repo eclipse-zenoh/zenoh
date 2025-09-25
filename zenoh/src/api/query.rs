@@ -30,8 +30,8 @@ use zenoh_protocol::core::Parameters;
 /// * [`QueryTarget::AllComplete`] makes the query be delivered to all the matching queryables
 ///   which are marked as "complete" with
 ///   [`QueryableBuilder::complete`](crate::query::QueryableBuilder::complete).
-/// * [`QueryTarget::BestMatching`] (default) makes the query be delivered to the
-///   queryable selected by zenoh to get the fastest and most complete reply.
+/// * [`QueryTarget::BestMatching`] (default) makes the data to be requested from the
+///   queryable(s) selected by zenoh to get the fastest and most complete reply.
 ///
 /// It is set by [`SessionGetBuilder::target`](crate::session::SessionGetBuilder::target)
 /// or [`QuerierBuilder::target`](crate::query::QuerierBuilder::target) methods.

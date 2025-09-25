@@ -104,7 +104,16 @@ impl QoSBuilderTrait for QuerierBuilder<'_, '_> {
 }
 
 impl QuerierBuilder<'_, '_> {
-    /// Change the target of the querier's queries.
+    /// Change the target(s) of the querier's queries.
+    /// 
+    /// This method allows to specify whether the request should just return the
+    /// data available in the network which matches the key expression 
+    /// ([QueryTarget::BestMatching], default) or if it should arrive to 
+    /// all queryables matching the key expression ([QueryTarget::All], 
+    /// [QueryTarget::AllComplete]).
+    /// 
+    /// See also the [`complete`](crate::query::QueryableBuilder::complete) setting
+    /// of the [`Queryable`](crate::query::Queryable)
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
         Self { target, ..self }
