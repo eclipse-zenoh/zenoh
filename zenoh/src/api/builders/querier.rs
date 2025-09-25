@@ -120,6 +120,13 @@ impl QuerierBuilder<'_, '_> {
     }
 
     /// Change the consolidation mode of the querier's queries.
+    /// 
+    /// The multiple replies to a query may arrive from the network. The
+    /// [`ConsolidationMode`](crate::query::ConsolidationMode) enum defines
+    /// the strategies of filtering and reordering these replies.
+    /// The wrapper struct [`QueryConsolidation`](crate::query::QueryConsolidation)
+    /// allows to set an [`ConsolidationMode::AUTO`](crate::query::QueryConsolidation::AUTO)
+    /// mode, which lets the implementation choose the best strategy.
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
         Self {
