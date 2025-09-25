@@ -38,7 +38,7 @@ pub type SourceSn = u32;
 
 /// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
 ///
-/// There are queriable's [`allowed_origin`](crate::query::QueryableBuilder::allowed_origin) and
+/// There are queryable's [`allowed_origin`](crate::query::QueryableBuilder::allowed_origin) and
 /// subscriber's [`allowed_origin`](crate::pubsub::SubscriberBuilder::allowed_origin) settings and
 /// publishers's [`allowed_destination`](crate::pubsub::PublisherBuilder::allowed_destination) and
 /// querier's [`allowed_destination`](crate::query::QuerierBuilder::allowed_destination) settings
