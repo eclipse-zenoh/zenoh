@@ -116,7 +116,9 @@ jobs:
         run: rustup update stable
 
       - name: Make sure necessary tools are installed
-        run: rustup component add clippy rustfmt --toolchain stable
+        run: |
+          rustup component add clippy --toolchain stable
+          rustup component add rustfmt --toolchain nightly
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
