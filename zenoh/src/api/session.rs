@@ -338,7 +338,7 @@ impl SessionState {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback,
-            history: None,
+            history: false,
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -1710,7 +1710,7 @@ impl SessionInner {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback: callback.clone(),
-            history: Some(history),
+            history,
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1977,7 +1977,7 @@ impl SessionInner {
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
         msg: impl FnOnce() -> &'a mut PushBody,
-        liveliness_interest_current: Option<bool>, // Some(_) for liveliness sub, None otherwise
+        msg_interest_current: bool, // Currently only relevant for LivelinessSub due to history config
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -1986,11 +1986,12 @@ impl SessionInner {
             return; // Session closing or closed
         }
         // For LivelinessSubscriber, Interest::Current Tokens should only run liveliness subs callbacks with history=true
-        let filter_by_interest = if liveliness_interest_current.is_some_and(|c| c) {
-            |sub: &&Arc<SubscriberState>| sub.history == Some(true)
-        } else {
-            |_: &&Arc<SubscriberState>| true
-        };
+        let filter_by_interest =
+            if matches!(kind, SubscriberKind::LivelinessSubscriber) && msg_interest_current {
+                |sub: &&Arc<SubscriberState>| sub.history
+            } else {
+                |_: &&Arc<SubscriberState>| true
+            };
         if wire_expr.suffix.is_empty() {
             match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
@@ -2124,7 +2125,7 @@ impl SessionInner {
                     }
                     &mut push.payload
                 },
-                None,
+                false,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
@@ -2562,7 +2563,7 @@ impl Primitives for WeakSession {
                                 || body.insert(Put::default().into()),
                                 // interest_id is set if the Token is an Interest::Current.
                                 // This is used to decide if subs with history=false should be called or not
-                                Some(msg.interest_id.is_some()),
+                                msg.interest_id.is_some(),
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
                             );
@@ -2593,7 +2594,7 @@ impl Primitives for WeakSession {
                             &key_expr.to_wire(self),
                             Default::default(),
                             || body.insert(Del::default().into()),
-                            Some(interest_current),
+                            interest_current,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
                         );
@@ -2611,7 +2612,7 @@ impl Primitives for WeakSession {
                                     &key_expr.to_wire(self),
                                     Default::default(),
                                     || body.insert(Del::default().into()),
-                                    Some(interest_current),
+                                    interest_current,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
                                 );
@@ -2644,7 +2645,7 @@ impl Primitives for WeakSession {
             &msg.wire_expr,
             msg.ext_qos,
             || &mut msg.payload,
-            None,
+            false,
             #[cfg(feature = "unstable")]
             _reliability,
         );

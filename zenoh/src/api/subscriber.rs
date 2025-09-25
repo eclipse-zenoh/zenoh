@@ -37,8 +37,7 @@ pub(crate) struct SubscriberState {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<Sample>,
-    /// history config: `Some(_)` for liveliness subscribers, `None` otherwise
-    pub(crate) history: Option<bool>,
+    pub(crate) history: bool,
 }
 
 impl fmt::Debug for SubscriberState {
