@@ -808,7 +808,7 @@ impl Session {
     }
 
     /// Undeclare a zenoh entity declared by the session.
-    /// 
+    ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
@@ -1228,7 +1228,7 @@ impl Session {
     /// Query data from the matching queryables in the system. This is a shortcut for declaring
     /// a [`Querier`](crate::query::Querier) and calling [`get`](crate::api::querier::Querier::get) on it.
     ///
-    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies), 
+    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies),
     /// replies are guaranteed to have
     /// key expressions that match the requested `selector`.
     ///

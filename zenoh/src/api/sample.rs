@@ -249,7 +249,7 @@ impl From<Sample> for SampleFields {
 
 /// The `Sample` structure is the data unit received
 /// by [`Subscriber`](crate::pubsub::Subscriber) or [`Querier`](crate::query::Querier)
-/// or [`Session::get`](crate::session::Session::get). 
+/// or [`Session::get`](crate::session::Session::get).
 /// It contains the payload and all metadata associated with the data.
 #[non_exhaustive]
 #[derive(Clone, Debug)]

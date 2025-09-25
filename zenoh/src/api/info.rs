@@ -19,7 +19,7 @@ use crate::{
 };
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
-/// 
+///
 /// This information includes the [`ZenohId`](crate::session::ZenohId) identifier of the current session,
 /// and the identifiers of the connected routers and peers (see also [`WhatAmI`](crate::config::WhatAmI)
 /// for more information about peers and routers).

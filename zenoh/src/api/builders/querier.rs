@@ -47,7 +47,7 @@ use crate::{
 };
 
 /// A builder for initializing a [`Querier`](crate::query::Querier).
-/// Returned by the 
+/// Returned by the
 /// [`Session::declare_querier`](crate::Session::declare_querier) method.
 ///
 /// # Examples

@@ -28,11 +28,11 @@ use zenoh_protocol::core::Parameters;
 ///
 /// * [`QueryTarget::All`] makes the query be delivered to all the matching queryables.
 /// * [`QueryTarget::AllComplete`] makes the query be delivered to all the matching queryables
-///   which are marked as "complete" with 
+///   which are marked as "complete" with
 ///   [`QueryableBuilder::complete`](crate::query::QueryableBuilder::complete).
-/// * [`QueryTarget::BestMatching`] (default) makes the query be delivered to the 
+/// * [`QueryTarget::BestMatching`] (default) makes the query be delivered to the
 ///   queryable selected by zenoh to get the fastest and most complete reply.
-/// 
+///
 /// It is set by [`SessionGetBuilder::target`](crate::session::SessionGetBuilder::target)
 /// or [`QuerierBuilder::target`](crate::query::QuerierBuilder::target) methods.
 ///
@@ -95,8 +95,8 @@ impl Default for QueryConsolidation {
 }
 
 /// An error reply variant returned by [`Querier::get`](crate::query::Querier::get)
-/// or [`Session::get`](crate::Session::get) in [`Reply`] 
-/// 
+/// or [`Session::get`](crate::Session::get) in [`Reply`]
+///
 /// The `ReplyError` contains the payload with the error information (message or some structured data)
 /// and the encoding of this payload.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

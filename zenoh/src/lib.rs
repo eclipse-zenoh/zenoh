@@ -234,12 +234,12 @@ pub use crate::{
 /// - [`OwnedKeyExpr`](crate::key_expr::OwnedKeyExpr) works like an [`std::sync::Arc<str>`],
 /// - [`KeyExpr`](crate::key_expr::KeyExpr) works like a [`std::borrow::Cow<str>`], but also stores some additional context internal to Zenoh to optimize
 ///   routing and network usage.
-/// 
-/// The key expression object can be created using the [`KeyExpr::new`](crate::key_expr::KeyExpr::new) method, 
-/// which validates the syntax of the provided string. 
+///
+/// The key expression object can be created using the [`KeyExpr::new`](crate::key_expr::KeyExpr::new) method,
+/// which validates the syntax of the provided string.
 /// The [`KeyExpr::from_str_unchecked`](crate::key_expr::KeyExpr::from_str_unchecked) method allows to
 /// accelerate the creation of key expressions when the user can guarantee that the provided string
-/// respects the KE syntax. There is also the 
+/// respects the KE syntax. There is also the
 /// [`Session::declare_keyexpr`](crate::session::Session::declare_keyexpr) method, which not only
 /// declares the key expressio, but also informs the Zenoh network of its existence, which can
 /// accelerate routing.
@@ -336,19 +336,19 @@ pub mod session {
 /// # Sample primitives
 ///
 /// The [`Sample`](crate::sample::Sample) structure is the data unit received
-/// by [`Subscriber`](crate::pubsub::Subscriber) or [`Querier`](crate::query::Querier) 
+/// by [`Subscriber`](crate::pubsub::Subscriber) or [`Querier`](crate::query::Querier)
 /// or [`Session::get`]. It contains the payload and all metadata associated with the data.
 ///
 /// The module contains the definitions of the `Sample` itself, definitions of
 /// types of its fields, and builders to create the sample.
-/// 
+///
 /// In practice, users do not need to create samples manually, as they are created
 /// by the Zenoh runtime when data is published or replied to a query. But sometimes
 /// it's useful to create samples, for example, for the simulation of data reception,
 /// so the [`SampleBuilder`](crate::sample::SampleBuilder) is provided.
-/// 
+///
 /// The [`SampleFields`](crate::sample::SampleFields) structure contains `Sample`
-/// fields as public members, unlike the `Sample` itself where fields are private. 
+/// fields as public members, unlike the `Sample` itself where fields are private.
 /// This allows deconstructing a sample to fields without cloning, which is more efficient
 /// than using getter methods.
 pub mod sample {

@@ -155,7 +155,7 @@ impl Query {
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.
-    /// 
+    ///
     /// This api is for internal use only.
     #[inline(always)]
     #[zenoh_macros::internal]
