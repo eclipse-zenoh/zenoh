@@ -289,6 +289,7 @@ impl TransportMulticastInner {
                     transport.stats.inc_rx_t_msgs(1);
                 }
                 if let Some(peer) = zread!(self.peers).get(&locator) {
+                    peer.set_active();
                     self.handle_frame(frame, peer)?;
                 }
                 continue;
