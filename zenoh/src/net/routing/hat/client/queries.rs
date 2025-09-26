@@ -50,6 +50,7 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
     this
 }
 
+#[inline]
 fn local_qabl_info(
     _tables: &Tables,
     res: &Arc<Resource>,
@@ -74,6 +75,37 @@ fn local_qabl_info(
         .unwrap_or(QueryableInfoType::DEFAULT)
 }
 
+#[inline]
+fn send_declare_queryable(
+    dst_face: &mut Arc<FaceState>,
+    res: &Arc<Resource>,
+    id: u32,
+    info: QueryableInfoType,
+    send_declare: &mut SendDeclare,
+) {
+    face_hat_mut!(dst_face)
+        .local_qabls
+        .insert(res.clone(), (id, info));
+    let key_expr = Resource::decl_key(res, dst_face, true);
+    send_declare(
+        &dst_face.primitives,
+        RoutingContext::with_expr(
+            Declare {
+                interest_id: None,
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                    id,
+                    wire_expr: key_expr,
+                    ext_info: info,
+                }),
+            },
+            res.expr().to_string(),
+        ),
+    );
+}
+
 fn propagate_simple_queryable(
     tables: &mut Tables,
     res: &Arc<Resource>,
@@ -82,44 +114,25 @@ fn propagate_simple_queryable(
 ) {
     let faces = tables.faces.values().cloned();
     for mut dst_face in faces {
-        let info = local_qabl_info(tables, res, &dst_face);
-        let current = face_hat!(dst_face).local_qabls.get(res);
         if src_face
             .as_ref()
-            .map(|src_face| dst_face.id != src_face.id)
+            .map(|src_face| {
+                dst_face.id != src_face.id
+                    && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+            })
             .unwrap_or(true)
-            && (current.is_none() || current.unwrap().1 != info)
-            && src_face
-                .as_ref()
-                .map(|src_face| {
-                    src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
-                })
-                .unwrap_or(true)
         {
-            let id = current
-                .map(|c| c.0)
-                .unwrap_or(face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst));
-            face_hat_mut!(&mut dst_face)
-                .local_qabls
-                .insert(res.clone(), (id, info));
-            let key_expr = Resource::decl_key(res, &mut dst_face, true);
-            send_declare(
-                &dst_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id,
-                            wire_expr: key_expr,
-                            ext_info: info,
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
-            );
+            if let Some(current) = face_hat!(dst_face).local_qabls.get(res) {
+                let info = local_qabl_info(tables, res, &dst_face);
+                if current.1 != info {
+                    let id = current.0;
+                    send_declare_queryable(&mut dst_face, res, id, info, send_declare);
+                }
+            } else {
+                let info = local_qabl_info(tables, res, &dst_face);
+                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+                send_declare_queryable(&mut dst_face, res, id, info, send_declare);
+            }
         }
     }
 }
