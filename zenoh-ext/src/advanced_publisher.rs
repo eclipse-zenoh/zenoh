@@ -60,7 +60,8 @@ pub(crate) enum Sequencing {
 
 /// Configuration for sample miss detection
 ///
-/// Enabling sample miss detection allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed samples
+/// Enabling [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) in [`AdvancedPublisher`](crate::AdvancedPublisher)
+/// allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed samples
 /// through [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
 /// and to recover missed samples through [`recovery`](crate::AdvancedSubscriberBuilder::recovery).
 #[zenoh_macros::unstable]
@@ -283,7 +284,38 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
     }
 }
 
-/// [`AdvancedPublisher`].
+/// The extension to a [`Publisher`](zenoh::pubsub::Publisher) providing advanced functionalities.
+///
+/// The `AdvancedPublisher` is constructed over a regular [`Publisher`](zenoh::pubsub::Publisher) through
+/// [`advanced`](crate::AdvancedPublisherBuilderExt::advanced) method or by using
+/// any other method of [`AdvancedPublisherBuilder`](crate::AdvancedPublisherBuilder).
+///
+/// The `AdvancedPublisher` works with [`AdvancedSubscriber`](crate::AdvancedSubscriber) to provide additional functionalities such as:
+/// - [`cache`](crate::AdvancedPublisherBuilderExt::cache) last published samples to be retrieved by
+///   [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`history`](crate::AdvancedSubscriberBuilderExt::history) mechanism
+/// - [`sample_miss_detection`](crate::AdvancedPublisherBuilderExt::sample_miss_detection) to allow detecting missed samples 
+///   using [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
+/// - [`publisher_detection`](crate::AdvancedPublisherBuilderExt::publisher_detection) create a Liveliness token to assert its presence and
+///   allow it to be requested for missed samples if [`detect_late_publishers`](crate::HistoryConfig::detect_late_publishers) is enabled
+/// 
+/// # Example
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh_ext::{AdvancedPublisherBuilderExt, CacheConfig, MissDetectionConfig};
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session
+///     .declare_publisher("key/expression")
+///     .cache(CacheConfig::default().max_samples(10))
+///     .sample_miss_detection(
+///         MissDetectionConfig::default().heartbeat(std::time::Duration::from_secs(1))
+///     )
+///     .publisher_detection()
+///     .await
+///     .unwrap();
+/// publisher.put("Value").await.unwrap();
+/// # }
+/// ```
 #[zenoh_macros::unstable]
 pub struct AdvancedPublisher<'a> {
     publisher: Publisher<'a>,
@@ -434,12 +466,16 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Returns the [`EntityGlobalId`] of this Publisher.
+    /// 
+    /// Wraps [`Publisher::id`](zenoh::pubsub::Publisher::id) method
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
         self.publisher.id()
     }
 
     /// Returns the [`KeyExpr`] of this Publisher.
+    /// 
+    /// Wraps [`Publisher::key_expr`](zenoh::pubsub::Publisher::key_expr) method
     #[inline]
     #[zenoh_macros::unstable]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
@@ -447,6 +483,8 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Get the [`Encoding`] used when publishing data.
+    /// 
+    /// Wraps [`Publisher::encoding`](zenoh::pubsub::Publisher::encoding) method
     #[inline]
     #[zenoh_macros::unstable]
     pub fn encoding(&self) -> &Encoding {
@@ -454,6 +492,8 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Get the `congestion_control` applied when routing the data.
+    /// 
+    /// Wraps [`Publisher::congestion_control`](zenoh::pubsub::Publisher::congestion_control) method
     #[inline]
     #[zenoh_macros::unstable]
     pub fn congestion_control(&self) -> CongestionControl {
@@ -461,6 +501,8 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Get the priority of the written data.
+    /// 
+    /// Wraps [`Publisher::priority`](zenoh::pubsub::Publisher::priority) method
     #[inline]
     #[zenoh_macros::unstable]
     pub fn priority(&self) -> Priority {
@@ -468,6 +510,8 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Put data.
+    ///
+    /// Wraps [`Publisher::put`](zenoh::pubsub::Publisher::put) method
     ///
     /// # Examples
     /// ```
@@ -510,6 +554,8 @@ impl<'a> AdvancedPublisher<'a> {
 
     /// Delete data.
     ///
+    /// Wraps [`Publisher::delete`](zenoh::pubsub::Publisher::delete) method
+    ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
@@ -541,6 +587,8 @@ impl<'a> AdvancedPublisher<'a> {
 
     /// Return the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the publisher.
     ///
+    /// Wraps [`Publisher::matching_status`](zenoh::pubsub::Publisher::matching_status) method.
+    /// 
     /// [`MatchingStatus::matching`](zenoh::matching::MatchingStatus::matching)
     /// will return true if there exist Subscribers matching the Publisher's key expression and false otherwise.
     ///
@@ -565,6 +613,8 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Return a [`MatchingListener`](zenoh::matching::MatchingStatus) for this Publisher.
+    ///
+    /// Wraps [`Publisher::matching_listener`](zenoh::pubsub::Publisher::matching_listener) method.
     ///
     /// The [`MatchingListener`](zenoh::matching::MatchingStatus) that will send a notification each time
     /// the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the Publisher changes.
@@ -596,6 +646,8 @@ impl<'a> AdvancedPublisher<'a> {
 
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
     ///
+    /// Wraps [`Publisher::undeclare`](zenoh::pubsub::Publisher::undeclare) method
+    /// 
     /// # Examples
     /// ```
     /// # #[tokio::main]
