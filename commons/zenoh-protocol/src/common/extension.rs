@@ -137,6 +137,7 @@ impl<const ID: u8> ZExtUnit<{ ID }> {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         Self::new()
     }
@@ -190,6 +191,7 @@ impl<const ID: u8> ZExtZ64<{ ID }> {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -247,6 +249,7 @@ impl<const ID: u8> ZExtZBuf<{ ID }> {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -317,6 +320,7 @@ pub enum ZExtBody {
 
 impl ZExtBody {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::{seq::SliceRandom, Rng};
         let mut rng = rand::thread_rng();
@@ -353,6 +357,7 @@ impl ZExtUnknown {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -364,6 +369,7 @@ impl ZExtUnknown {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand2(start: u8, mandatory: bool) -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();

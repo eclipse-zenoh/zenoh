@@ -64,7 +64,7 @@ pub(crate) enum MatchingStatusType {
 }
 
 impl MatchingStatus {
-    /// Return true if there exist entities matching the target (i.e either Subscribers matching Publisher's key expression or Queryables matching Querier's key expression and target).
+    /// Returns true if there exist entities matching the target (i.e., either Subscribers matching Publisher's key expression or Queryables matching Querier's key expression and target).
     ///
     /// # Examples
     /// ```
@@ -136,10 +136,6 @@ pub(crate) struct MatchingListenerInner {
 /// A listener that sends notifications when the [`MatchingStatus`] of a
 /// corresponding Zenoh entity changes.
 ///
-/// Callback matching listeners will run in background until the corresponding Zenoh entity is undeclared,
-/// or until it is undeclared.
-/// On the other hand, matching listener with a handler are automatically undeclared when dropped.
-///
 /// # Examples
 /// ```no_run
 /// # #[tokio::main]
@@ -186,7 +182,7 @@ impl<Handler> MatchingListener<Handler> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid a double panic if this function panics
         self.inner.undeclare_on_drop = false;
         zlock!(self.inner.matching_listeners).remove(&self.inner.id);
         self.inner
@@ -195,15 +191,15 @@ impl<Handler> MatchingListener<Handler> {
     }
 
     /// Returns a reference to this matching listener's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
-    /// The default handler is [`crate::handlers::DefaultHandler`].
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this matching listener's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
-    /// The default handler is [`crate::handlers::DefaultHandler`].
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
@@ -246,6 +242,7 @@ impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
     }
 }
 
+/// A [`Resolvable`] returned by [`MatchingListener::undeclare`]
 pub struct MatchingListenerUndeclaration<Handler>(MatchingListener<Handler>);
 
 impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {

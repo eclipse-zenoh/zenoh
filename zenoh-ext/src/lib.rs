@@ -11,6 +11,31 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
+//! rest, and computations. It elegantly blends traditional pub/sub with geo-distributed
+//! storage, queries, and computations, while retaining a level of time and space efficiency
+//! that is well beyond any of the mainstream stacks.
+//!
+//! This crate provides components extending the core Zenoh functionalities.
+//! 
+//! These components includes
+//! 
+//! # Serialization
+//! 
+//! The base zenoh library allows to send/receive data as raw bytes payload. But in order to
+//! simplify the library usability and, which is more important, to ensure interoperability
+//! between zenoh-based applications, this crate provides serialization/deserialization
+//! functionalities.
+//!
+//! The key functions are [`z_serialize`] and [`z_deserialize`] that allows to
+//! serialize/deserialize any data structure implementing the [`Serialize`] and
+//! [`Deserialize`] traits respectively.
+//! 
+//! # Advanced Pub/Sub
+//! 
+//! The [`AdvancedPublisher`] and [`AdvancedSubscriber`] provide advanced pub/sub
+//! functionalities, including support for message history, recovery, and more.
 #[cfg(feature = "unstable")]
 mod advanced_cache;
 #[cfg(feature = "unstable")]

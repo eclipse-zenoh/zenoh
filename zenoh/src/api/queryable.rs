@@ -83,7 +83,22 @@ impl Drop for QueryInner {
     }
 }
 
-/// Structs received by a [`Queryable`].
+/// The request received by a [`Queryable`].
+///
+/// The `Query` provides all data sent by [`Querier::get`](crate::query::Querier::get)
+/// or [`Session::get`](crate::Session::get): the key expression, the
+/// parameters, the payload, and the attachment, if any.
+///
+/// The reply to the query should be made with one of its methods:
+/// - [`Query::reply`](crate::query::Query::reply) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put),
+/// - [`Query::reply_del`](crate::query::Query::reply_del) to reply with a data [`Sample`](crate::sample::Sample) of kind [`Delete`](crate::sample::SampleKind::Delete),
+/// - [`Query::reply_err`](crate::query::Query::reply_err) to send an error reply.
+///
+/// The important detail: the [`Query::key_expr`] is **not** the key expression
+/// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
+/// The [`Queryable`]'s key expression is the one that should be used.
+/// For example, the `Query` may contain the key expression `foo/*` and the reply
+/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier.
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
@@ -117,7 +132,7 @@ impl Query {
         self.value.as_ref().map(|v| &v.0)
     }
 
-    /// This Query's payload.
+    /// This Query's payload (mutable).
     #[inline(always)]
     pub fn payload_mut(&mut self) -> Option<&mut ZBytes> {
         self.value.as_mut().map(|v| &mut v.0)
@@ -134,16 +149,13 @@ impl Query {
         self.attachment.as_ref()
     }
 
-    /// This Query's attachment.
+    /// This Query's attachment (mutable).
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.
     ///
-    /// By default, queries only accept replies whose key expression intersects with the query's.
-    /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
-    /// replying on a disjoint key expression will result in an error when resolving the reply.
     /// This api is for internal use only.
     #[inline(always)]
     #[zenoh_macros::internal]
@@ -154,7 +166,8 @@ impl Query {
         }
     }
 
-    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Put`] as a reply to this Query.
+    /// Sends a [`Sample`](crate::sample::Sample) of kind [`Put`](crate::sample::SampleKind::Put)
+    /// as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -173,7 +186,7 @@ impl Query {
         ReplyBuilder::<'_, 'b, ReplyBuilderPut>::new(self, key_expr, payload)
     }
 
-    /// Sends a [`crate::query::ReplyError`] as a reply to this Query.
+    /// Sends a [`ReplyError`](crate::query::ReplyError) as a reply to this Query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -182,7 +195,8 @@ impl Query {
         ReplyErrBuilder::new(self, payload)
     }
 
-    /// Sends a [`crate::sample::Sample`] of kind [`crate::sample::SampleKind::Delete`] as a reply to this Query.
+    /// Sends a [`Sample`](crate::sample::Sample) of kind [`Delete`](crate::sample::SampleKind::Delete)
+    /// as a reply to this Query.
     ///
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
@@ -199,8 +213,9 @@ impl Query {
         ReplyBuilder::<'_, 'b, ReplyBuilderDelete>::new(self, key_expr)
     }
 
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
-    /// This getter allows you to check whether or not a specific query does.
+    /// This getter allows you to check whether or not a specific query does so.
     #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
@@ -216,7 +231,7 @@ impl Query {
         Ok(self.parameters().reply_key_expr_any())
     }
 
-    /// Constructs an empty Query without payload, nor attachment referencing the same inner query.
+    /// Constructs an empty Query without payload or attachment, referencing the same inner query.
     #[zenoh_macros::internal]
     pub unsafe fn empty() -> Self {
         Query {
@@ -363,7 +378,7 @@ pub(crate) struct QueryableInner {
     pub(crate) key_expr: KeyExpr<'static>,
 }
 
-/// A [`Resolvable`] returned when undeclaring a queryable.
+/// A [`Resolvable`] returned when undeclaring a [`Queryable`].
 ///
 /// # Examples
 /// ```
@@ -396,14 +411,17 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
         std::future::ready(self.wait())
     }
 }
-/// A queryable that provides data through a [`Handler`](crate::handlers::IntoHandler).
+/// A `Queryable` is an entity that implements the query/reply pattern.
 ///
-/// Queryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`declare_queryable`](crate::Session::declare_queryable) function.
+/// A `Queryable` is declared by the
+/// [`Session::declare_queryable`](crate::Session::declare_queryable) method
+/// and serves [`Query`](crate::query::Query) using callback
+/// or channel (see [handlers](crate::handlers) module documentation for details).
 ///
-/// Callback queryables will run in background until the session is closed,
-/// or until it is undeclared.
-/// On the other hand, queryables with a handler are automatically undeclared when dropped.
+/// The `Queryable` receives [`Query`](crate::query::Query) requests from
+/// [`Querier::get`](crate::query::Querier::get) or from [`Session::get`](crate::Session::get)
+/// and sends back replies with the methods of the [`Query`](crate::query::Query): [`reply`](crate::query::Query::reply),
+/// [`reply_err`](crate::query::Query::reply_err) or [`reply_del`](crate::query::Query::reply_del).
 ///
 /// # Examples
 ///
@@ -418,9 +436,10 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// session
 ///     .declare_queryable("key/expression")
 ///     .callback(move |query| tx.send(query).unwrap())
+///     .background()
 ///     .await
 ///     .unwrap();
-/// // queryable run in background until the session is closed
+/// // queryable runs in background until the session is closed
 /// tokio::spawn(async move {
 ///     while let Ok(query) = rx.recv_async().await {
 ///         println!(">> Handling query '{}'", query.selector());
@@ -482,15 +501,15 @@ impl<Handler> Queryable<Handler> {
     }
 
     /// Returns a reference to this queryable's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
-    /// The default handler is [`crate::handlers::DefaultHandler`].
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this queryable's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
-    /// The default handler is [`crate::handlers::DefaultHandler`].
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }

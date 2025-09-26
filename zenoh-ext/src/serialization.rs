@@ -114,6 +114,12 @@ pub trait Deserialize: Sized {
 ///
 /// Serialization doesn't take the ownership of the data.
 ///
+/// This function takes any type implementing the [`Serialize`] trait and 
+/// creates [`ZBytes`] containing the serialized data.
+/// This trait is implemented for all the primitive types (integers, floats, bool) and
+/// standard collections (arrays, slices, `Vec`, `String`, `HashMap`, `HashSet`, etc)
+/// and could be implemented for user-defined types.
+/// 
 /// # Examples
 ///
 /// ```rust
@@ -131,6 +137,9 @@ pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
 
 /// Deserialize an object according to the [Zenoh serialization format][1].
 ///
+/// The destination type is given as a type parameter. If the data cannot be
+/// deserialized into the given type, an error is returned.
+/// 
 /// # Examples
 ///
 /// ```rust

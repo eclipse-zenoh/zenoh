@@ -124,6 +124,7 @@ impl fmt::Debug for Locator {
 
 impl Locator {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         EndPoint::rand().into()
     }

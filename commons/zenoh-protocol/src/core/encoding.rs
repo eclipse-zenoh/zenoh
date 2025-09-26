@@ -63,6 +63,7 @@ impl Default for Encoding {
 
 impl Encoding {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

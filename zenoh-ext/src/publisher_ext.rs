@@ -38,7 +38,7 @@ pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
     #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
-    /// Turn this `Publisher` into an `AdvancedPublisher`.
+    /// Turn this [`Publisher`](zenoh::publication::Publisher) into an [`AdvancedPublisher`](crate::AdvancedPublisher).
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
@@ -71,7 +71,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
         AdvancedPublisherBuilder::new(self).publisher_detection()
     }
 
-    /// Turn this `Publisher` into an `AdvancedPublisher`.
+    /// Turn this [`Publisher`](zenoh::publication::Publisher) into an [`AdvancedPublisher`](crate::AdvancedPublisher).
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self)

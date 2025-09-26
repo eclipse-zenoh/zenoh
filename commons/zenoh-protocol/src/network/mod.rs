@@ -56,6 +56,7 @@ impl Mapping {
     pub const DEFAULT: Self = Self::Receiver;
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -272,6 +273,7 @@ impl NetworkMessageExt for NetworkMessageMut<'_> {
 
 impl NetworkMessage {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -494,6 +496,7 @@ pub mod ext {
         }
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -548,6 +551,7 @@ pub mod ext {
 
     impl<const ID: u8> TimestampType<{ ID }> {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -577,6 +581,7 @@ pub mod ext {
         pub const DEFAULT: Self = Self { node_id: 0 };
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -623,6 +628,7 @@ pub mod ext {
 
     impl<const ID: u8> EntityGlobalIdType<{ ID }> {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();

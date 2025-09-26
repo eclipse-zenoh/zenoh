@@ -52,7 +52,7 @@ use crate::{
 };
 
 #[derive(Debug, Default, Clone)]
-/// Configure query for historical data.
+/// Configure query for historical data for [`history`](crate::AdvancedSubscriberBuilder::history) method.
 #[zenoh_macros::unstable]
 pub struct HistoryConfig {
     liveliness: bool,
@@ -219,7 +219,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber run in background until the session is closed.
     ///
     /// Background builder doesn't return a `AdvancedSubscriber` object anymore.
     pub fn background(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>, true> {
@@ -447,7 +447,76 @@ struct SourceState<T> {
     pending_samples: BTreeMap<T, Sample>,
 }
 
-/// [`AdvancedSubscriber`].
+/*
+use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
+
+let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+let subscriber = session
+    .declare_subscriber("key/expression")
+    .history(HistoryConfig::default().detect_late_publishers())
+    .recovery(RecoveryConfig::default())
+    .await
+    .unwrap();
+
+let miss_listener = subscriber.sample_miss_listener().await.unwrap();
+loop {
+    tokio::select! {
+        sample = subscriber.recv_async() => {
+            if let Ok(sample) = sample {
+                // ...
+            }
+        },
+        miss = miss_listener.recv_async() => {
+            if let Ok(miss) = miss {
+                // ...
+            }
+        },
+    }
+}
+*/
+
+/// The extension to [`Subscriber`](zenoh::pubsub::Subscriber) that provides advanced functionalities
+///
+/// The `AdvancedSubscriber` is constructed over a regular [`Subscriber`](zenoh::pubsub::Subscriber) 
+/// through [`advanced`](crate::AdvancedSubscriberBuilderExt::advanced) method or by using
+/// any other method of [`AdvancedSubscriberBuilder`](crate::AdvancedSubscriberBuilder).
+///
+/// The `AdvancedSubscriber` works with [`AdvancedPublisher`](crate::AdvancedPublisher) to provide additional functionalities such as:
+/// * missing samples detection using periodic queries or heartbeat subscription configurable with [`recovery`](crate::AdvancedSubscriberBuilder::recovery) method
+/// * recovering missing samples, configured with [`history`](crate::AdvancedSubscriberBuilder::history) method
+///   (max age and sample count, late joiner detection and requesting)
+/// * liveliness-based subscriber detection with [`subscriber_detection`](crate::AdvancedSubscriberBuilder::subscriber_detection) method
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let subscriber = session
+///     .declare_subscriber("key/expression")
+///     .history(HistoryConfig::default().detect_late_publishers())
+///     .recovery(RecoveryConfig::default().heartbeat())
+///     .subscriber_detection()
+///     .await
+///     .unwrap();
+/// let miss_listener = subscriber.sample_miss_listener().await.unwrap();
+/// loop {
+///     tokio::select! {
+///         sample = subscriber.recv_async() => {
+///             if let Ok(sample) = sample {
+///                 // ...
+///             }
+///         },
+///         miss = miss_listener.recv_async() => {
+///             if let Ok(miss) = miss {
+///                 // ...
+///             }
+///         },
+///     }
+/// }
+/// # }
+/// ```
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriber<Receiver> {
     statesref: Arc<Mutex<State>>,
@@ -1505,7 +1574,7 @@ impl<Handler> std::ops::DerefMut for SampleMissListener<Handler> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a [`SampleMissListener`].
+/// A [`Resolvable`] returned by [`SampleMissListener::undeclare`]
 #[zenoh_macros::unstable]
 pub struct SampleMissHandlerUndeclaration<Handler>(SampleMissListener<Handler>);
 
@@ -1576,7 +1645,7 @@ impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
-    /// Register the sample miss notification callback to be run in background until the adanced subscriber is undeclared.
+    /// Make the sample miss notification run in the background until the adanced subscriber is undeclared.
     ///
     /// Background builder doesn't return a `SampleMissHandler` object anymore.
     #[zenoh_macros::unstable]

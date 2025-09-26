@@ -21,13 +21,12 @@ use zenoh_protocol::core::WhatAmI;
 use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows
-/// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
+/// access to the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let zid = session.info().zid().await;
 /// # }
@@ -63,7 +62,7 @@ impl IntoFuture for ZenohIdBuilder<'_> {
 }
 
 /// A builder returned by [`SessionInfo::routers_zid()`](crate::session::SessionInfo::routers_zid) that allows
-/// to access the [`ZenohId`] of the zenoh routers this process is currently connected to
+/// access to the [`ZenohId`] of the zenoh routers this process is currently connected to,
 /// or the [`ZenohId`] of the current router if this code is run from a router (plugin).
 ///
 /// # Examples
@@ -107,7 +106,7 @@ impl IntoFuture for RoutersZenohIdBuilder<'_> {
 }
 
 /// A builder returned by [`SessionInfo::peers_zid()`](crate::session::SessionInfo::peers_zid) that allows
-/// to access the [`ZenohId`] of the zenoh peers this process is currently connected to.
+/// access to the [`ZenohId`] of the zenoh peers this process is currently connected to.
 ///
 /// # Examples
 /// ```
