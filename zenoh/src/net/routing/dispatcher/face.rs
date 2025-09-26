@@ -121,6 +121,7 @@ pub struct FaceState {
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+    pub(crate) e_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
@@ -136,6 +137,7 @@ impl FaceState {
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+        e_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
         hat: Box<dyn Any + Send + Sync>,
         is_local: bool,
     ) -> Arc<FaceState> {
@@ -155,6 +157,7 @@ impl FaceState {
             pending_queries: HashMap::new(),
             mcast_group,
             in_interceptors,
+            e_interceptors,
             hat,
             task_controller: TaskController::default(),
             is_local,
@@ -336,6 +339,10 @@ impl Face {
             interest.rejection_token.cancel();
         }
     }
+
+    pub(crate) fn send_push_intercept(&self, msg: &mut Push, reliability: Reliability) {
+        route_data(&self.tables, &self.state, msg, reliability, true)
+    }
 }
 
 impl Primitives for Face {
@@ -506,7 +513,7 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        route_data(&self.tables, &self.state, msg, reliability);
+        route_data(&self.tables, &self.state, msg, reliability, false);
     }
 
     fn send_request(&self, msg: &mut Request) {

@@ -23,12 +23,13 @@ pub mod interceptor;
 pub mod namespace;
 pub mod router;
 
-use std::{any::Any, cell::OnceCell};
+use std::{any::Any, cell::OnceCell, sync::Arc};
 
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::network::NetworkMessageMut;
 
 use super::runtime;
-use crate::net::routing::{dispatcher::face::Face, interceptor::InterceptorContext};
+use crate::net::routing::{dispatcher::face::FaceState, interceptor::InterceptorContext};
 
 pub(crate) struct RoutingContext<Msg> {
     pub(crate) msg: Msg,
@@ -61,11 +62,13 @@ impl<Msg> RoutingContext<Msg> {
 }
 
 impl<T> InterceptorContext for RoutingContext<T> {
-    fn face(&self) -> Option<Face> {
+    fn face(&self) -> Option<Arc<FaceState>> {
         None
     }
-    fn full_expr(&self, _msg: &NetworkMessageMut) -> Option<&str> {
-        self.full_expr.get().map(|x| x.as_str())
+    fn full_expr(&self, _msg: &NetworkMessageMut) -> Option<&keyexpr> {
+        self.full_expr
+            .get()
+            .map(|x| unsafe { keyexpr::from_str_unchecked(x) })
     }
     fn get_cache(&self, _msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
         None
