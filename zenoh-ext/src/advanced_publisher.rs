@@ -293,11 +293,11 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
 /// The `AdvancedPublisher` works with [`AdvancedSubscriber`](crate::AdvancedSubscriber) to provide additional functionalities such as:
 /// - [`cache`](crate::AdvancedPublisherBuilderExt::cache) last published samples to be retrieved by
 ///   [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`history`](crate::AdvancedSubscriberBuilderExt::history) mechanism
-/// - [`sample_miss_detection`](crate::AdvancedPublisherBuilderExt::sample_miss_detection) to allow detecting missed samples 
+/// - [`sample_miss_detection`](crate::AdvancedPublisherBuilderExt::sample_miss_detection) to allow detecting missed samples
 ///   using [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
 /// - [`publisher_detection`](crate::AdvancedPublisherBuilderExt::publisher_detection) create a Liveliness token to assert its presence and
 ///   allow it to be requested for missed samples if [`detect_late_publishers`](crate::HistoryConfig::detect_late_publishers) is enabled
-/// 
+///
 /// # Example
 /// ```no_run
 /// # #[tokio::main]
@@ -466,7 +466,7 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Returns the [`EntityGlobalId`] of this Publisher.
-    /// 
+    ///
     /// Wraps [`Publisher::id`](zenoh::pubsub::Publisher::id) method
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
@@ -474,7 +474,7 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Returns the [`KeyExpr`] of this Publisher.
-    /// 
+    ///
     /// Wraps [`Publisher::key_expr`](zenoh::pubsub::Publisher::key_expr) method
     #[inline]
     #[zenoh_macros::unstable]
@@ -483,7 +483,7 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Get the [`Encoding`] used when publishing data.
-    /// 
+    ///
     /// Wraps [`Publisher::encoding`](zenoh::pubsub::Publisher::encoding) method
     #[inline]
     #[zenoh_macros::unstable]
@@ -492,7 +492,7 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Get the `congestion_control` applied when routing the data.
-    /// 
+    ///
     /// Wraps [`Publisher::congestion_control`](zenoh::pubsub::Publisher::congestion_control) method
     #[inline]
     #[zenoh_macros::unstable]
@@ -501,7 +501,7 @@ impl<'a> AdvancedPublisher<'a> {
     }
 
     /// Get the priority of the written data.
-    /// 
+    ///
     /// Wraps [`Publisher::priority`](zenoh::pubsub::Publisher::priority) method
     #[inline]
     #[zenoh_macros::unstable]
@@ -588,7 +588,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// Return the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the publisher.
     ///
     /// Wraps [`Publisher::matching_status`](zenoh::pubsub::Publisher::matching_status) method.
-    /// 
+    ///
     /// [`MatchingStatus::matching`](zenoh::matching::MatchingStatus::matching)
     /// will return true if there exist Subscribers matching the Publisher's key expression and false otherwise.
     ///
@@ -647,7 +647,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
     ///
     /// Wraps [`Publisher::undeclare`](zenoh::pubsub::Publisher::undeclare) method
-    /// 
+    ///
     /// # Examples
     /// ```
     /// # #[tokio::main]

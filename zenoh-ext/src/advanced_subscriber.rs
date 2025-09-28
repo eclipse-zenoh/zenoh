@@ -477,7 +477,7 @@ loop {
 
 /// The extension to [`Subscriber`](zenoh::pubsub::Subscriber) that provides advanced functionalities
 ///
-/// The `AdvancedSubscriber` is constructed over a regular [`Subscriber`](zenoh::pubsub::Subscriber) 
+/// The `AdvancedSubscriber` is constructed over a regular [`Subscriber`](zenoh::pubsub::Subscriber)
 /// through [`advanced`](crate::AdvancedSubscriberBuilderExt::advanced) method or by using
 /// any other method of [`AdvancedSubscriberBuilder`](crate::AdvancedSubscriberBuilder).
 ///
