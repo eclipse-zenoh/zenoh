@@ -20,7 +20,7 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
   - the API to implement plugins
   - the API to load, start, and stop the plugins and get their status
 
-  The applicaition-specific, functional part of pluigns is implemented outsidd of this API, in the types passed as type arguments `StartArgs` and `Instance`.
+  The application-specific, functional part of plugins is implemented outsidd of this API, in the types passed as type arguments `StartArgs` and `Instance`.
   E.g. the plugins for `zenohd` implements trait `ZenohPlugin` from `zenoh` crate (under `internal` feature)
 
   ```rust
