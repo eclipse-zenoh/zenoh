@@ -202,21 +202,20 @@ impl TryFrom<u64> for SampleKind {
 /// ```rust
 /// # #[tokio::main]
 /// # async fn main() {
-/// let sample: Sample = zenoh::sample::SampleBuilder::default()
-///     .key_expr("example/key")
-///     .payload("Hello, World!")
-///     .kind(zenoh::sample::SampleKind::Put)
+/// use zenoh::sample::{Sample, SampleFields, SampleBuilder, SampleKind};
+/// use zenoh::key_expr::KeyExpr;
+/// let sample: Sample = SampleBuilder::put(KeyExpr::try_from("example/key").unwrap(), "Hello, World!")
 ///     .into();
-/// let fields: zenoh::sample::SampleFields = sample.into();
+/// let fields: SampleFields = sample.into();
 /// let SampleFields {
 ///    key_expr,
 ///    payload,
 ///    kind,
-///    ...
+///    ..
 /// } = fields;
 /// assert_eq!(key_expr.to_string(), "example/key");
-/// assert_eq!(payload.as_str().unwrap(), "Hello, World!");
-/// assert_eq!(kind, zenoh::sample::SampleKind::Put);
+/// assert_eq!(payload.try_to_string().unwrap(), "Hello, World!");
+/// assert_eq!(kind, SampleKind::Put);
 /// # }
 /// ```
 #[derive(Debug, Clone)]
