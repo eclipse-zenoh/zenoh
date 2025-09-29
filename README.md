@@ -29,7 +29,9 @@ This repository contains the following elements:
 
 * [zenoh-ext](zenoh-ext) Rust crate
 
-  This crate contains components based on [zenoh], like `AdvancedSubscriber` and components not directly related to the Zenoh protocol (e.g. serialization).
+  This crate contains extended components of Zenoh:
+  * `AdvancedPublisher` / `AdvancedSubscriber` - the API to send/receive data with advanced delivery guarantees
+  * Data serialization support. This serialization is ligntweight and universal for all `zenoh` bindings, which simplifies interoperability
 
 * [zenohd](zenohd) router binary
 
