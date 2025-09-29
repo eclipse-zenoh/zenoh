@@ -33,7 +33,7 @@ This repository contains the following elements:
 
 * [zenohd](zenohd) router binary
 
-  This standlalone tool keeps connectivity of zenoh network.
+  The zenoh router - the standalone daemon which is used to support zenoh network infrastructure.
 
 * [plugins](plugins)
 
@@ -101,8 +101,7 @@ cargo run --example z_get
 * Python - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
 * Kotlin - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-c)
 * Java - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
-* Typescript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-c) - the websocket client to the
-  plugin on [zenohd]
+* Typescript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-c) - the websocket client to the plugin in [zenohd](zenohd)
 
 # Troubleshooting
 
