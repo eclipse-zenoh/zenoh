@@ -429,7 +429,7 @@ pub mod sample {
 /// [`ZBytes::slices`](crate::bytes::ZBytes::slices)), as well as methods for sequential
 /// reading/writing ([`ZBytes::reader`](crate::bytes::ZBytes::reader), [`ZBytes::writer`](crate::bytes::ZBytes::writer)).
 ///
-/// The `zenoh_ext` crate provides serialization and deserialization of basic types and structures for `ZBytes` via
+/// The `zenoh-ext` crate provides serialization and deserialization of basic types and structures for `ZBytes` via
 /// [`z_serialize`](../../zenoh_ext/fn.z_serialize.html) and
 /// [`z_deserialize`](../../zenoh_ext/fn.z_deserialize.html).
 ///
