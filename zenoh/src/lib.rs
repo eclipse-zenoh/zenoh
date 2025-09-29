@@ -691,6 +691,18 @@ pub mod matching {
 /// 2. **Channels**: the user provides a channel that buffers incoming samples, and the user
 ///    retrieves samples from the channel when needed.
 ///
+/// # ⚠️ Important Note
+///
+/// > **Warning**: The callback function is called in the context of the Zenoh runtime.
+/// > Calling zenoh network operations from the callback (e.g., making queries)
+/// > may lead to deadlocks and other unexpected behaviors.
+/// >
+/// > The Rust type system is not used to prevent calling zenoh network operations
+/// > from the callback for two reasons:
+/// > - this would be too restrictive for multithreaded scenarios
+/// > - this may change in future releases in any direction: immediate crash or allowing
+/// >  this behavior.
+/// 
 /// Below are the details of how channels work in Zenoh.
 ///
 /// Under the hood, the sequential data from a primitive is always passed to a callback function.
@@ -759,17 +771,6 @@ pub mod matching {
 /// # }
 /// ```
 ///
-/// # ⚠️ Important Note
-///
-/// > **Warning**: The callback function is called in the context of the Zenoh runtime.
-/// > Calling zenoh network operations from the callback (e.g., making queries)
-/// > may lead to deadlocks and other unexpected behaviors.
-/// >
-/// The Rust type system is not used to prevent calling zenoh network operations
-/// from the callback for two reasons:
-/// - this would be too restrictive for multithreaded scenarios
-/// - this may change in future releases in any direction: immediate crash or allowing
-///   this behavior.
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
