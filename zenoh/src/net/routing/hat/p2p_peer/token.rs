@@ -62,6 +62,7 @@ fn propagate_simple_token_to(
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
         && new_token(tables, res, src_face, dst_face)
         && (dst_face.whatami != WhatAmI::Client
+            || dst_face.is_local
             || face_hat!(dst_face).remote_interests.values().any(|i| {
                 i.options.tokens()
                     && (i.mode.current() || src_interest_id.is_none())
@@ -109,7 +110,7 @@ fn propagate_simple_token(
             res,
             src_face,
             interest_id,
-            None,
+            interest_id.is_some().then_some(INITIAL_INTEREST_ID),
             send_declare,
         );
     }
@@ -229,10 +230,12 @@ fn propagate_forget_simple_token(
             );
         } else if src_face.id != face.id
             && (src_face.whatami == WhatAmI::Client || face.whatami == WhatAmI::Client)
-            && face_hat!(face)
-                .remote_interests
-                .values()
-                .any(|i| i.options.tokens() && i.matches(res))
+            && (face.whatami != WhatAmI::Client
+                || face.is_local
+                || face_hat!(face)
+                    .remote_interests
+                    .values()
+                    .any(|i| i.options.tokens() && i.matches(res)))
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
