@@ -44,6 +44,6 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
   The backend API for storage manager. It exports types `VolumeConfig` and `VolumeInstance` which are used by backends as `Plugin`'s trait type arguments.
 
-- [zenoh-backend-example]
+- [zenoh-backend-example](zenoh-backend-example)
 
   The simple example backend plugin for `zenoh-plugin-storage-manager`

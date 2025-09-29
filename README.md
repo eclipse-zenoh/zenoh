@@ -101,7 +101,7 @@ cargo run --example z_get
   * [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) - pure C implementation
 * C++ [zenoh-cpp](https://github.com/eclipse-zenoh/zenoh-cpp) - C++ wrapper over C libraries
 * Python - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
-* Kotlin - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-c)
+* Kotlin - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
 * Java - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
 * Typescript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-c) - the websocket client to the plugin in [zenohd](zenohd)
 
