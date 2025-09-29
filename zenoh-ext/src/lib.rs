@@ -19,12 +19,12 @@
 //!
 //! This crate provides components extending the core Zenoh functionalities.
 //!
-//! These components includes
+//! These components include
 //!
 //! # Serialization
 //!
 //! The base zenoh library allows to send/receive data as raw bytes payload. But in order to
-//! simplify the library usability and, which is more important, to ensure interoperability
+//! simplify the library's usability and, more importantly, to ensure interoperability
 //! between zenoh-based applications, this crate provides serialization/deserialization
 //! functionalities.
 //!

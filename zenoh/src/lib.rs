@@ -158,12 +158,12 @@
 //! The following features are exposed by the crate:
 //! * `auth_pubkey`, `auth_usrpwd`
 //!
-//!   Enable authenification support, credentials are configurable in the [`Config`]
+//!   Enable authentication support, credentials are configurable in the [`Config`]
 //!
 //! * `internal`
 //!
-//!   Enable some internal APIs, usually necessary to expose some internal functionalities to other language bindings. These API are not supposed
-//!   to be called by user as they are close to implementation and and can be changed at any moment
+//!   Enable some internal APIs, usually necessary to expose some internal functionalities to other language bindings. These APIs are not supposed
+//!   to be called by users as they are close to implementation and can be changed at any moment
 //!
 //! * `plugins`
 //!
@@ -183,7 +183,7 @@
 //!
 //! * `tracing-instrument`
 //!
-//!   Developer feature - enable tracing of asyncronous tasks for debugging
+//!   Developer feature - enable tracing of asynchronous tasks for debugging
 //!
 //! * `transport-compression`
 //!
@@ -301,7 +301,7 @@ pub use crate::{
 /// accelerate the creation of key expressions when the user can guarantee that the provided string
 /// respects the KE syntax. There is also the
 /// [`Session::declare_keyexpr`](crate::session::Session::declare_keyexpr) method, which not only
-/// declares the key expressio, but also informs the Zenoh network of its existence, which can
+/// declares the key expression, but also informs the Zenoh network of its existence, which can
 /// accelerate routing.
 ///
 /// All of these types implement [`Deref`](std::ops::Deref) to [`keyexpr`](crate::key_expr::keyexpr), which notably has methods to check whether a given key expression

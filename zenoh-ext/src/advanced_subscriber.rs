@@ -100,7 +100,7 @@ pub struct RecoveryConfig<const CONFIGURED: bool = true> {
 impl RecoveryConfig<false> {
     /// Enable periodic queries for not yet received Samples and specify their period.
     ///
-    /// This allows to retrieve the last Sample(s) if the last Sample(s) is/are lost.
+    /// This allows retrieving the last Sample(s) if the last Sample(s) is/are lost.
     /// So it is useful for sporadic publications but useless for periodic publications
     /// with a period smaller or equal to this period.
     /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
@@ -117,7 +117,7 @@ impl RecoveryConfig<false> {
 
     /// Subscribe to heartbeats of [`AdvancedPublishers`](crate::AdvancedPublisher).
     ///
-    /// This allows to receive the last published Sample's sequence number and check for misses.
+    /// This allows receiving the last published Sample's sequence number and check for misses.
     /// Heartbeat subscriber must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with
@@ -242,7 +242,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
 impl<'a, 'c, Handler, const BACKGROUND: bool>
     AdvancedSubscriberBuilder<'a, '_, 'c, Handler, BACKGROUND>
 {
-    /// Restrict the matching publications that will be receive by this [`Subscriber`]
+    /// Restrict the matching publications that will be received by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
@@ -297,7 +297,7 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     }
 
     /// A key expression added to the liveliness token key expression.
-    /// It can be used to convey meta data.
+    /// It can be used to convey metadata.
     #[zenoh_macros::unstable]
     pub fn subscriber_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
     where
@@ -426,7 +426,7 @@ impl State {
     }
 }
 
-macro_rules! spawn_periodoic_queries {
+macro_rules! spawn_periodic_queries {
     ($p:expr,$s:expr,$r:expr) => {{
         if let Some(period) = &$p.period {
             period.timer.add(TimedEvent::periodic(
@@ -767,9 +767,8 @@ impl<Handler> AdvancedSubscriber<Handler> {
 
                 if let Some(source_id) = source_id {
                     if new {
-                        spawn_periodoic_queries!(states, source_id, statesref.clone());
+                        spawn_periodic_queries!(states, source_id, statesref.clone());
                     }
-
                     if let Some(state) = states.sequenced_states.get_mut(&source_id) {
                         if retransmission.is_some()
                             && state.pending_queries == 0
@@ -1019,7 +1018,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                             .wait();
 
                                         if new {
-                                            spawn_periodoic_queries!(
+                                            spawn_periodic_queries!(
                                                 zlock!(statesref),
                                                 source_id,
                                                 statesref.clone()
@@ -1154,7 +1153,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                     let entry = states.sequenced_states.entry(source_id);
                     if matches!(&entry, Entry::Vacant(_)) {
                         // NOTE: API does not allow both heartbeat and periodic_queries
-                        spawn_periodoic_queries!(states, source_id, statesref.clone());
+                        spawn_periodic_queries!(states, source_id, statesref.clone());
                         if states.global_pending_queries > 0 {
                             tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", states.key_expr, heartbeat_keyexpr);
                             return;
@@ -1224,7 +1223,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 / &KeyExpr::try_from(subscriber.id().eid().to_string()).unwrap();
             let suffix = match meta {
                 Some(meta) => suffix / &meta,
-                // We need this empty chunk because af a routing matching bug
+                // We need this empty chunk because of a routing matching bug
                 _ => suffix / KE_EMPTY,
             };
             tracing::debug!(
@@ -1412,7 +1411,7 @@ impl Drop for InitialRepliesHandler {
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
                 flush_sequenced_source(state, &states.callback, source_id, &states.miss_handlers);
-                spawn_periodoic_queries!(states, *source_id, self.statesref.clone());
+                spawn_periodic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
                 flush_timestamped_source(state, &states.callback);
@@ -1645,7 +1644,7 @@ impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
-    /// Make the sample miss notification run in the background until the adanced subscriber is undeclared.
+    /// Make the sample miss notification run in the background until the advanced subscriber is undeclared.
     ///
     /// Background builder doesn't return a `SampleMissHandler` object anymore.
     #[zenoh_macros::unstable]

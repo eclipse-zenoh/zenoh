@@ -74,7 +74,7 @@ pub struct MissDetectionConfig {
 impl MissDetectionConfig {
     /// Allow last sample miss detection through periodic heartbeat.
     ///
-    /// Periodically send the last published Sample's sequence number to allow last sample recovery.
+    /// Periodically send the last published sample's sequence number to allow last sample recovery.
     ///
     /// [`heartbeat`](MissDetectionConfig::heartbeat) and [`sporadic_heartbeat`](MissDetectionConfig::sporadic_heartbeat)
     /// are mutually exclusive. Enabling one will disable the other.
@@ -89,8 +89,8 @@ impl MissDetectionConfig {
 
     /// Allow last sample miss detection through sporadic heartbeat.
     ///
-    /// Each period, the last published Sample's sequence number is sent with [`CongestionControl::Block`]
-    /// but only if it changed since last period.
+    /// Each period, the last published sample's sequence number is sent with [`CongestionControl::Block`]
+    /// but only if it changed since the last period.
     ///
     /// [`heartbeat`](MissDetectionConfig::heartbeat) and [`sporadic_heartbeat`](MissDetectionConfig::sporadic_heartbeat)
     /// are mutually exclusive. Enabling one will disable the other.
@@ -104,7 +104,7 @@ impl MissDetectionConfig {
     }
 }
 
-/// The builder of PublicationCache, allowing to configure it.
+/// The builder of AdvancedPublisher, allowing to configure it.
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
@@ -171,7 +171,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         }
     }
 
-    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect lost samples and optionally ask for retransimission.
+    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect lost samples and optionally ask for retransmission.
     ///
     /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is enabled.
     #[zenoh_macros::unstable]
@@ -295,7 +295,7 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
 ///   [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`history`](crate::AdvancedSubscriberBuilderExt::history) mechanism
 /// - [`sample_miss_detection`](crate::AdvancedPublisherBuilderExt::sample_miss_detection) to allow detecting missed samples
 ///   using [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
-/// - [`publisher_detection`](crate::AdvancedPublisherBuilderExt::publisher_detection) create a Liveliness token to assert its presence and
+/// - [`publisher_detection`](crate::AdvancedPublisherBuilderExt::publisher_detection) to create a Liveliness token to assert its presence and
 ///   allow it to be requested for missed samples if [`detect_late_publishers`](crate::HistoryConfig::detect_late_publishers) is enabled
 ///
 /// # Example
@@ -662,7 +662,7 @@ impl<'a> AdvancedPublisher<'a> {
     #[zenoh_macros::unstable]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         tracing::debug!(
-            "AdvancedPublisher{{key_expr: {}}}: : Undeclare",
+            "AdvancedPublisher{{key_expr: {}}}: Undeclare",
             self.key_expr()
         );
         self.publisher.undeclare()
