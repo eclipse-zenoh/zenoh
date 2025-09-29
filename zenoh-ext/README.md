@@ -30,7 +30,7 @@ described in [Zenoh serialization format](https://github.com/eclipse-zenoh/roadm
 The serialization functions are supported not only in the Rust library, but also in all other language bindings (C, C++,
 Java, Kotlin, Python, TypeScript), which significantly simplifies interoperability.
 
-### Example
+### Serialization example
 
 ```rust
 use zenoh_ext::*;
@@ -46,7 +46,7 @@ that provide these guarantees.
 
 These components require the "unstable" feature to be enabled.
 
-### Example
+### Advanced publisher and subscriber examples
 
 Publisher
 
