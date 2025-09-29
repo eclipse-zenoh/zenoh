@@ -10,7 +10,7 @@
 
 # Eclipse Zenoh
 
-The Eclipse Zenoh: Zero Overhead Pub/sub, Store/Query and Compute.
+The Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
 Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
@@ -20,7 +20,7 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 # Zenoh router
 
-The `zenohd` is a daemon router which purpose is to build zenoh infrastructure. Technically the `zenohd` is the zenoh runtime with a plugin manager.
+The `zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. Technically the `zenohd` is the Zenoh runtime with a plugin manager.
 
 ## Command Line Arguments
 
@@ -94,7 +94,7 @@ The `zenohd` is a daemon router which purpose is to build zenoh infrastructure. 
 built with the exact same Rust version as `zenohd`, and using for `zenoh` dependency the same version (or commit number) as `zenohd` with the same
 set of features. A plugin compiled with different Rust version or with different set of `zenoh` crate features will be rejected when `zenohd` attempts to load it. Otherwise, incompatibilities in memory mapping of structures shared between `zenohd` and the library could lead to a `"SIGSEGV"` crash.
 
-By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
+By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via Zenoh puts on individual parts of the configuration.
 
 **[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
 This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.

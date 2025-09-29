@@ -14,7 +14,7 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 The crate `zenoh` provides the main implementation of the Zenoh network protocol in Rust and the [API](https://docs.rs/zenoh/latest/zenoh/) to use it.
 
-The primary features of the Zenoh are
+The primary features of Zenoh are
 
 * Arbitrary network topology support
 * Publish-subscribe and query-reply paradigms

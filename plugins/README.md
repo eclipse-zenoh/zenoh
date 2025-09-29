@@ -37,8 +37,8 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 - [zenoh-plugin-storage-manager](zenoh-plugin-storage-manager)
 
-  The plugin which allows to connect `zenohd` to different storages (e.g. databases). This plugin is a plugin manager itself which loads it's own plugins - `backends` -
-  specific for the extermal storage API.
+  The plugin which allows you to connect `zenohd` to different storages (e.g. databases). This plugin is a plugin manager itself which loads its own plugins - `backends` -
+  specific for the external storage API.
 
 - [zenoh-backend-traits](zenoh-backend-traits)
 

@@ -8,9 +8,9 @@
 
 # Eclipse Zenoh
 
-Eclipse Zenoh: Zero Overhead Pub/sub, Store/Query and Compute.
+Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
-Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
+Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
 Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/)
 

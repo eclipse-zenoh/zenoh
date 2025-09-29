@@ -10,7 +10,7 @@
 
 # Eclipse Zenoh
 
-The Eclipse Zenoh: Zero Overhead Pub/sub, Store/Query and Compute.
+The Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
 Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
@@ -24,14 +24,14 @@ This repository contains the following elements:
 
 * [zenoh](zenoh) Rust crate
 
-  This is the primary and reference implementation of Zenoh protocol. The Zenoh libraries for other languages are the bindings to the Rust implementaion
-  (excepf of pure-C [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico))
+  This is the primary and reference implementation of Zenoh protocol. The Zenoh libraries for other languages are the bindings to the Rust implementation
+  (except for pure-C [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico)).
 
 * [zenoh-ext](zenoh-ext) Rust crate
 
   This crate contains extended components of Zenoh:
-  * `AdvancedPublisher` / `AdvancedSubscriber` - the API to send/receive data with advanced delivery guarantees
-  * Data serialization support. This serialization is ligntweight and universal for all `zenoh` bindings, which simplifies interoperability
+  * `AdvancedPublisher` / `AdvancedSubscriber` - the API to send/receive data with advanced delivery guarantees.
+  * Data serialization support. This serialization is lightweight and universal for all `zenoh` bindings, which simplifies interoperability.
 
 * [zenohd](zenohd) router binary
 
@@ -43,7 +43,7 @@ This repository contains the following elements:
 
 * [examples](examples)
 
-  Zenoh usage examples. These examples have double purpose: they not only demonstrates writing Zenoh application on Rust but also it is a set of tools to experimenting with and testing zenoh functionality
+  Zenoh usage examples. These examples have a double purpose: they not only demonstrate writing Zenoh applications in Rust but also serve as a set of tools for experimenting with and testing Zenoh functionality.
 
 # Documentation
 
@@ -65,13 +65,13 @@ To build Zenoh, just type the following command after having followed the previo
 cargo build --release --all-targets
 ```
 
-Router can be run with command `cargo run` or from `target/release/zenohd`. When running by cargo use `--` to pass command line argumnent to `zenohd`
+Router can be run with the command `cargo run` or from `target/release/zenohd`. When running by cargo use `--` to pass command line arguments to `zenohd`:
 
 ```bash
-cargo run --release -- --config DEFAULT_CONFIG.json5`
+cargo run --release -- --config DEFAULT_CONFIG.json5
 ```
 
-Examples also can be executed by cargo or directly from `target/release/examples`
+Examples can also be executed by cargo or directly from `target/release/examples`
 
 Publish/subscribe
 
@@ -103,9 +103,9 @@ cargo run --example z_get
 * Python - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
 * Kotlin - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
 * Java - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
-* Typescript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-c) - the websocket client to the plugin in [zenohd](zenohd)
+* Typescript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - the websocket client to the plugin in [zenohd](zenohd)
 
 # Troubleshooting
 
 In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.
-Otherwise, you can ask a question on the [zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
+Otherwise, you can ask a question on the [Zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
