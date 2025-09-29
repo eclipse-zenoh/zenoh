@@ -31,7 +31,7 @@
 //! which maintains the connection to the Zenoh network.
 //!
 //! The Zenoh protocol allows nodes to form a graph with an arbitrary topology, such as a mesh, a star, or a clique.
-//! There is a parameter `mode` in the [config] which specifies the role of the node in the topology: a peer, router or client.
+//! There is a `mode` parameter in the [config] which specifies the role of the node in the topology: a peer, router or client.
 //! See [`WhatAmI`](crate::config::WhatAmI) for details.
 //!
 //! Zenoh supports two paradigms of communication: publish/subscribe and query/reply.
@@ -175,11 +175,11 @@
 //!
 //! * `shared-memory`
 //!
-//!   Enable shared-memory transport support and specifics shared-memory related APIs
+//!   Enable shared-memory transport support and specific shared-memory related APIs
 //!
 //! * `stats`
 //!
-//!   Enable collecting of statistical data. This data becomes available in "adminspace" (by key `@/<zenoh_id>/router/metrics`)
+//!   Enable collection of statistical data. This data becomes available in "adminspace" (by key `@/<zenoh_id>/router/metrics`)
 //!
 //! * `tracing-instrument`
 //!
@@ -191,7 +191,7 @@
 //!
 //! * `transport_multilink`
 //!
-//!   Enable multiple link connection for unicast transports. Maximal connections number is configurable in [`Config`]
+//!   Enable multiple link connection for unicast transports. Maximum number of connections is configurable in [`Config`]
 //!
 //! * `transport_quic`, `transport_quic_datagram`, `transport_serial`, `transport_tcp`, `transport_tls`,
 //!   `transport_udp`, `transport_unixpipe`, `transport_unixsock-stream`, `transport_vsock`, `transport_ws`
@@ -200,7 +200,7 @@
 //!
 //! * `unstable`
 //!
-//!   Enable the unstable APIs which may change or disappear in the further releases. The difference with `internal`
+//!   Enable the unstable APIs which may change or disappear in future releases. The difference with `internal`
 //!   is that the `unstable` API may be stabilized, while `internal` is unstable by nature, because it reveals implementation details.
 //!
 //! The features enabled by default are:
@@ -562,7 +562,7 @@ pub mod pubsub {
 /// zero or more [`Reply`](crate::query::Reply) structures, each one from each queryable
 /// that matches the request.
 /// The reply contains either a [`Sample`](crate::sample::Sample)
-/// or a [`ReplyError`](crate::query::ReplyError) structure.
+/// or a [`ReplyError`](crate::query::ReplyError).
 ///
 /// # Query parameters
 ///
@@ -588,7 +588,7 @@ pub mod pubsub {
 /// while let Ok(query) = queryable.recv_async().await {
 ///     if let Some(day)= query.selector().parameters().get("day") {
 ///         if let Some(value) = temperature_data.get(day) {
-///             let reply = query.reply(key_expr, value).await.unwrap();
+///             query.reply(key_expr, value).await.unwrap();
 ///         } else {
 ///             query.reply_err("no data for this day").await.unwrap();
 ///         }
@@ -758,6 +758,18 @@ pub mod matching {
 ///    }).await.unwrap();
 /// # }
 /// ```
+///
+/// ** Important note **
+///
+/// The callback function is called in the context of the Zenoh runtime.
+/// Calling zenoh network operations from the callback (e.g., publishing data)
+/// may lead to deadlocks and other unexpected behaviors.
+///
+/// The rust type system is not used to prevent calling zenoh network operations
+/// from the callback for two reasons:
+/// - this would be too restrictive for multithreaded scenarios
+/// - this may change in the future releases in any direction: immediate crash or allowing
+///   this behavior.
 pub mod handlers {
     #[zenoh_macros::internal]
     pub use crate::api::handlers::locked;
