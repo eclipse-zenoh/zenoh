@@ -64,7 +64,7 @@
 //!
 //! ## Other components
 //!
-//! Other important functionalities of Zenoh are:
+//! Other important functionality of Zenoh includes:
 //! - [scouting] to discover Zenoh nodes in the network. Note that it's not necessary to explicitly
 //!   discover other nodes just to publish, subscribe, or query data.
 //! - Monitor [liveliness] to be notified when a specified resource appears or disappears in the network.
@@ -759,16 +759,16 @@ pub mod matching {
 /// # }
 /// ```
 ///
-/// ** Important note **
+/// # ⚠️ Important Note
 ///
-/// The callback function is called in the context of the Zenoh runtime.
-/// Calling zenoh network operations from the callback (e.g., publishing data)
-/// may lead to deadlocks and other unexpected behaviors.
-///
-/// The rust type system is not used to prevent calling zenoh network operations
+/// > **Warning**: The callback function is called in the context of the Zenoh runtime.
+/// > Calling zenoh network operations from the callback (e.g., making queries)
+/// > may lead to deadlocks and other unexpected behaviors.
+/// >
+/// The Rust type system is not used to prevent calling zenoh network operations
 /// from the callback for two reasons:
 /// - this would be too restrictive for multithreaded scenarios
-/// - this may change in the future releases in any direction: immediate crash or allowing
+/// - this may change in future releases in any direction: immediate crash or allowing
 ///   this behavior.
 pub mod handlers {
     #[zenoh_macros::internal]
