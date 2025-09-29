@@ -36,7 +36,7 @@ use super::{
 use crate::net::{
     protocol::{linkstate::LinkEdgeWeight, network::Network},
     routing::{
-        dispatcher::{face::FaceState, interests::RemoteInterest, tables::Tables},
+        dispatcher::{face::FaceState, tables::Tables},
         hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
         router::{NodeId, Resource, SessionContext},
         RoutingContext,
@@ -105,48 +105,31 @@ fn propagate_simple_token_to(
                     || dst_face.whatami != WhatAmI::Peer
                     || hat!(tables).failover_brokering(src_face.zid, dst_face.zid))
         }
-    {
-        let matching_interests = face_hat!(dst_face)
+        && face_hat!(dst_face)
             .remote_interests
             .values()
-            .filter(|i| i.options.tokens() && i.matches(res))
-            .cloned()
-            .collect::<Vec<_>>();
-
-        for RemoteInterest {
-            res: int_res,
-            options,
-            ..
-        } in matching_interests
-        {
-            let res = if options.aggregate() {
-                int_res.as_ref().unwrap_or(res)
-            } else {
-                res
-            };
-            if !face_hat!(dst_face).local_tokens.contains_key(res) {
-                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
-                let key_expr =
-                    Resource::decl_key(res, dst_face, push_declaration_profile(tables, dst_face));
-                send_declare(
-                    &dst_face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareToken(DeclareToken {
-                                id,
-                                wire_expr: key_expr,
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
-                );
-            }
-        }
+            .any(|i| i.options.tokens() && i.matches(res))
+    {
+        let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+        face_hat_mut!(dst_face).local_tokens.insert(res.clone(), id);
+        let key_expr =
+            Resource::decl_key(res, dst_face, push_declaration_profile(tables, dst_face));
+        send_declare(
+            &dst_face.primitives,
+            RoutingContext::with_expr(
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareToken(DeclareToken {
+                        id,
+                        wire_expr: key_expr,
+                    }),
+                },
+                res.expr().to_string(),
+            ),
+        );
     }
 }
 
@@ -433,7 +416,7 @@ fn propagate_forget_simple_token(
         }) && face_hat!(face)
             .remote_interests
             .values()
-            .any(|i| i.options.tokens() && (!i.options.aggregate()) && i.matches(res))
+            .any(|i| i.options.tokens() && i.matches(res))
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
@@ -490,7 +473,7 @@ fn propagate_forget_simple_token(
                 } else if face_hat!(face)
                     .remote_interests
                     .values()
-                    .any(|i| i.options.tokens() && (!i.options.aggregate()) && i.matches(&res))
+                    .any(|i| i.options.tokens() && i.matches(&res))
                     && src_face.map_or(true, |src_face| {
                         src_face.whatami != WhatAmI::Peer
                             || face.whatami != WhatAmI::Peer
