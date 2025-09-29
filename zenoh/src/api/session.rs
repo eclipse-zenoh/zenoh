@@ -1977,7 +1977,7 @@ impl SessionInner {
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
         msg: impl FnOnce() -> &'a mut PushBody,
-        msg_interest_current: bool, // Currently only relevant for LivelinessSub due to history config
+        historical: bool,
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -1985,19 +1985,13 @@ impl SessionInner {
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
-        // For LivelinessSubscriber, Interest::Current Tokens should only run liveliness subs callbacks with history=true
-        let filter_by_interest =
-            if matches!(kind, SubscriberKind::LivelinessSubscriber) && msg_interest_current {
-                |sub: &&Arc<SubscriberState>| sub.history
-            } else {
-                |_: &&Arc<SubscriberState>| true
-            };
         if wire_expr.suffix.is_empty() {
             match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind).iter().filter(filter_by_interest) {
-                        if sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal))
+                    for sub in res.subscribers(kind).iter() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                         {
                             callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
                         }
@@ -2018,9 +2012,10 @@ impl SessionInner {
         } else {
             match state.wireexpr_to_keyexpr(wire_expr, local) {
                 Ok(key_expr) => {
-                    for sub in state.subscribers(kind).values().filter(filter_by_interest) {
+                    for sub in state.subscribers(kind).values() {
                         if (sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                             && key_expr.intersects(&sub.key_expr)
                         {
                             callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
