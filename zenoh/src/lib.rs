@@ -702,7 +702,7 @@ pub mod matching {
 /// > - this would be too restrictive for multithreaded scenarios
 /// > - this may change in future releases in any direction: immediate crash or allowing
 /// >  this behavior.
-/// 
+///
 /// Below are the details of how channels work in Zenoh.
 ///
 /// Under the hood, the sequential data from a primitive is always passed to a callback function.
