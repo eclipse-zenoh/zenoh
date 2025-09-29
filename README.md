@@ -22,12 +22,12 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 This repository contains the following elements:
 
-* [zenoh] Rust crate
+* [zenoh](zenoh) Rust crate
 
   This is the primary and reference implementation of Zenoh protocol. The Zenoh libraries for other languages are the bindings to the Rust implementaion
   (excepf of pure-C [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico))
 
-* [zenoh-ext] Rust crate
+* [zenoh-ext](zenoh-ext) Rust crate
 
   This crate contains components based on [zenoh], like `AdvancedSubscriber` and components not directly related to the Zenoh protocol (e.g. serialization).
 
