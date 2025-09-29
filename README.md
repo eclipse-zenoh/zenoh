@@ -31,15 +31,15 @@ This repository contains the following elements:
 
   This crate contains components based on [zenoh], like `AdvancedSubscriber` and components not directly related to the Zenoh protocol (e.g. serialization).
 
-* [zenohd] router binary
+* [zenohd](zenohd) router binary
 
   This standlalone tool keeps connectivity of zenoh network.
 
-* [plugins]
+* [plugins](plugins)
 
   The crates related to plugins support in `zenohd`
 
-* [examples]
+* [examples](examples)
 
   Zenoh usage examples. These examples have double purpose: they not only demonstrates writing Zenoh application on Rust but also it is a set of tools to experimenting with and testing zenoh functionality
 

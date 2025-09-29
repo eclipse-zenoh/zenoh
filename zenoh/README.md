@@ -12,9 +12,9 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 # Zenoh Rust API
 
-The crate `zenoh` provides the main implementation of the Zenoh network protocol in Rust and the API to use it.
+The crate `zenoh` provides the main implementation of the Zenoh network protocol in Rust and the [API](https://docs.rs/zenoh/latest/zenoh/) to use it.
 
-# Zenoh Functionality
+The primary features of the Zenoh are
 
 * Arbitrary network topology support
 * Publish-subscribe and query-reply paradigms
