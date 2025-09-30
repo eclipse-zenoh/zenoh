@@ -32,7 +32,10 @@ use crate::{
     key_expr::KeyExpr,
 };
 
-/// A builder for initializing a [`MatchingListener`].
+/// A builder for initializing a [`MatchingListener`]
+/// returned by the [`Publisher::matching_listener`](crate::pubsub::Publisher::matching_listener)
+/// or [`Querier::matching_listener`](crate::query::Querier::matching_listener) methods.
+///
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     pub(crate) session: &'a WeakSession,
@@ -142,9 +145,9 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 }
 
 impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
-    /// Register the listener callback to be run in background until the publisher is undeclared.
+    /// Make listener run in the background until the publisher is undeclared.
     ///
-    /// Background builder doesn't return a `MatchingListener` object anymore.
+    /// The background builder doesn't return a `MatchingListener` object anymore.
     ///
     /// # Examples
     /// ```
@@ -153,7 +156,7 @@ impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
-    /// // no need to assign and keep a variable with a background listener
+    /// // no need to assign and keep a variable for a background listener
     /// publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {

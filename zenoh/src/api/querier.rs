@@ -59,9 +59,11 @@ pub(crate) struct QuerierState {
     pub(crate) destination: Locality,
 }
 
-/// A querier that allows to send queries to a queryable.
+/// A querier that allows sending queries to a [`Queryable`](crate::query::Queryable).
 ///
-/// Queriers are automatically undeclared when dropped.
+/// The querier is a preconfigured object that can be used to send multiple
+/// queries to a given key expression. It is declared using
+/// [`Session::declare_querier`](crate::Session::declare_querier).
 ///
 /// # Examples
 /// ```
@@ -140,14 +142,18 @@ impl<'a> Querier<'a> {
         self.qos.priority()
     }
 
-    /// Get type of queryables that can reply to this querier
+    /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This getter allows you to check whether this querier accepts such disjoint replies.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn accept_replies(&self) -> ReplyKeyExpr {
         self.accept_replies
     }
 
-    /// Send a query.
+    /// Send a query. Returns a builder to customize the query. The builder
+    /// resolves to a [`handler`](crate::handlers) generating a series of
+    /// [`Reply`](crate::api::query::Reply) values for each response received.
     ///
     /// # Examples
     /// ```
@@ -189,7 +195,7 @@ impl<'a> Querier<'a> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.undeclare_on_drop = false;
         let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
         for id in ids {
@@ -200,8 +206,8 @@ impl<'a> Querier<'a> {
 
     /// Return the [`MatchingStatus`] of the querier.
     ///
-    /// [`MatchingStatus::matching`] will return true if there exist Queryables
-    /// matching the Queriers's key expression and target and false otherwise.
+    /// [`MatchingStatus::matching`] will return true if there are Queryables
+    /// matching the Querier's key expression and target, and false otherwise.
     ///
     /// # Examples
     /// ```
@@ -229,7 +235,7 @@ impl<'a> Querier<'a> {
 
     /// Return a [`MatchingListener`](crate::api::matching::MatchingListener) for this Querier.
     ///
-    /// The [`MatchingListener`](crate::api::matching::MatchingListener) that will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
+    /// The [`MatchingListener`](crate::api::matching::MatchingListener) will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
     /// the Querier changes.
     ///
     /// # Examples
@@ -271,7 +277,7 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a publisher.
+/// A [`Resolvable`] returned when undeclaring a querier.
 ///
 /// # Examples
 /// ```

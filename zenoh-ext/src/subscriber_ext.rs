@@ -153,7 +153,7 @@ pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
-    /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    /// Turn this [`Subscriber`](zenoh::subscriber::Subscriber) into an [`AdvancedSubscriber`](crate::AdvancedSubscriber).
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
@@ -294,7 +294,7 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
         AdvancedSubscriberBuilder::new(self).subscriber_detection()
     }
 
-    /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    /// Turn this [`Subscriber`](zenoh::subscriber::Subscriber) into an [`AdvancedSubscriber`](crate::AdvancedSubscriber).
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self)

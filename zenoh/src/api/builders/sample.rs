@@ -44,7 +44,7 @@ pub trait QoSBuilderTrait {
 }
 
 pub trait TimestampBuilderTrait {
-    /// Sets of clears timestamp
+    /// Sets or clears the timestamp
     fn timestamp<T: Into<Option<Timestamp>>>(self, timestamp: T) -> Self;
 }
 
@@ -61,13 +61,26 @@ pub trait EncodingBuilderTrait {
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self;
 }
 
+/// The type modifier for a [`SampleBuilder`] to create a [`Put`](crate::sample::SampleKind::Put) sample.
 #[derive(Clone, Debug)]
 pub struct SampleBuilderPut;
+/// The type modifier for a [`SampleBuilder`] to create a [`Delete`](crate::sample::SampleKind::Delete) sample.
 #[derive(Clone, Debug)]
 pub struct SampleBuilderDelete;
+/// The type modifier for a [`SampleBuilder`] for the building stage
+/// when the sample [`kind`](crate::sample::Sample::kind) is not yet specified.
+///
+/// With this modifier the `SampleBuilder` can't be resolved;
+/// the selection of the kind must be done with [`SampleBuilder::put`] or
+/// [`SampleBuilder::delete`].
 #[derive(Clone, Debug)]
 pub struct SampleBuilderAny;
 
+/// A builder for [`Sample`](crate::sample::Sample)
+///
+/// As the `Sample` struct is not mutable, the `SampleBuilder` can be used to
+/// create or modify an existing `Sample` instance or to create a new one from scratch
+/// for storing it for later use.
 #[derive(Clone, Debug)]
 pub struct SampleBuilder<T> {
     sample: Sample,
@@ -135,7 +148,7 @@ impl SampleBuilder<SampleBuilderDelete> {
 }
 
 impl<T> SampleBuilder<T> {
-    /// Allows to change keyexpr of [`Sample`]
+    /// Allows changing the key expression of a [`Sample`]
     pub fn keyexpr<IntoKeyExpr>(self, key_expr: IntoKeyExpr) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -149,7 +162,7 @@ impl<T> SampleBuilder<T> {
         }
     }
 
-    // Allows to change qos as a whole of [`Sample`]
+    // Allows changing the QoS of a [`Sample`] as a whole
     pub(crate) fn qos(self, qos: QoS) -> Self {
         Self {
             sample: Sample { qos, ..self.sample },

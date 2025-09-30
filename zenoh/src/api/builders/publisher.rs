@@ -37,32 +37,49 @@ use crate::{
     Session,
 };
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Session::put`](crate::session::Session::put) method.
 pub type SessionPutBuilder<'a, 'b> =
     PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderPut>;
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Session::delete`](crate::session::Session::delete) method.
 pub type SessionDeleteBuilder<'a, 'b> =
     PublicationBuilder<PublisherBuilder<'a, 'b>, PublicationBuilderDelete>;
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Publisher::put`](crate::pubsub::Publisher::put) method.
 pub type PublisherPutBuilder<'a> = PublicationBuilder<&'a Publisher<'a>, PublicationBuilderPut>;
 
+/// The alias for [`PublicationBuilder`]
+/// returned by the [`Publisher::delete`](crate::pubsub::Publisher::delete) method.
 pub type PublisherDeleteBuilder<'a> =
     PublicationBuilder<&'a Publisher<'a>, PublicationBuilderDelete>;
 
+/// The type-modifier for a [`PublicationBuilder`] for a `Put` operation.
+///
+/// Makes the publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Put`].
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderPut {
     pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
 }
+
+/// The type-modifier for a [`PublicationBuilder`] for a `Delete` operation.
+///
+/// Makes the publication builder make a sample of a [`kind`](crate::sample::Sample::kind) [`SampleKind::Delete`].
 #[derive(Debug, Clone)]
 pub struct PublicationBuilderDelete;
 
-/// A publication builder.
+/// Publication builder
 ///
-/// This object is returned by the following methods:
-/// - [`crate::session::Session::put`]
-/// - [`crate::session::Session::delete`]
-/// - [`crate::pubsub::Publisher::put`]
-/// - [`crate::pubsub::Publisher::delete`]
+/// A publication builder object is returned by the following methods:
+/// - [`Session::put`](crate::session::Session::put)
+/// - [`Session::delete`](crate::session::Session::delete)
+/// - [`Publisher::put`](crate::pubsub::Publisher::put)
+/// - [`Publisher::delete`](crate::pubsub::Publisher::delete)
+///
+/// It resolves to `ZResult<()>` when awaited or when calling `.wait()`.
 ///
 /// # Examples
 /// ```
@@ -92,7 +109,7 @@ pub struct PublicationBuilder<P, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
-    /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -101,7 +118,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         }
     }
 
-    /// Changes the [`crate::qos::Priority`] of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self {
@@ -113,7 +130,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     /// Changes the Express policy to apply when routing the data.
     ///
     /// When express is set to `true`, then the message will not be batched.
-    /// This usually has a positive impact on latency but negative impact on throughput.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
         Self {
@@ -124,10 +141,10 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 }
 
 impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
-    /// Changes the [`crate::sample::Locality`] applied when routing the data.
+    /// Changes the [`Locality`](crate::sample::Locality) applied when routing the data.
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
-    /// that have the given [`crate::sample::Locality`].
+    /// that have the given [`Locality`](crate::sample::Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -135,7 +152,7 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         self
     }
 
-    /// Changes the [`crate::qos::Reliability`] to apply when routing the data.
+    /// Changes the [`Reliability`](crate::qos::Reliability) to apply when routing the data.
     ///
     /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
     ///   is rather used as a marker on the wire and it may be used to select the best link
@@ -152,6 +169,7 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
+    /// Sets the default [`Encoding`](crate::bytes::Encoding) of the payload generated by this publisher.
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             encoding: encoding.into(),
@@ -162,6 +180,7 @@ impl EncodingBuilderTrait for PublisherBuilder<'_, '_> {
 
 #[zenoh_macros::internal_trait]
 impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
+    /// Sets the [`Encoding`](crate::bytes::Encoding) of the payload of this publication.
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: PublicationBuilderPut {
@@ -175,13 +194,16 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 
 #[zenoh_macros::internal_trait]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
-    #[cfg(feature = "unstable")]
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
+    #[zenoh_macros::unstable]
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
             ..self
         }
     }
+    /// Sets an optional attachment to be sent along with the publication.
+    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -193,6 +215,7 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
 
 #[zenoh_macros::internal_trait]
 impl<P, T> TimestampBuilderTrait for PublicationBuilder<P, T> {
+    /// Sets an optional timestamp to be sent along with the publication.
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -270,6 +293,8 @@ impl IntoFuture for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuil
 }
 
 /// A builder for initializing a [`Publisher`].
+/// Returned by the
+/// [`Session::declare_publisher`](crate::Session::declare_publisher) method.
 ///
 /// # Examples
 /// ```
@@ -347,7 +372,7 @@ impl Clone for PublisherBuilder<'_, '_> {
 
 #[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
-    /// Changes the [`crate::qos::CongestionControl`] to apply when routing the data.
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
     #[inline]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         Self {
@@ -356,7 +381,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
         }
     }
 
-    /// Changes the [`crate::qos::Priority`] of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) of the written data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self { priority, ..self }
@@ -365,7 +390,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
     /// Changes the Express policy to apply when routing the data.
     ///
     /// When express is set to `true`, then the message will not be batched.
-    /// This usually has a positive impact on latency but negative impact on throughput.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     #[inline]
     fn express(self, is_express: bool) -> Self {
         Self { is_express, ..self }
@@ -373,7 +398,7 @@ impl QoSBuilderTrait for PublisherBuilder<'_, '_> {
 }
 
 impl PublisherBuilder<'_, '_> {
-    /// Looks up if any configured QoS overwrites apply on the builder's key expression.
+    /// Looks up whether any configured QoS overwrites apply to the builder's key expression.
     /// Returns a new builder with the overwritten QoS parameters.
     pub(crate) fn apply_qos_overwrites(self) -> Self {
         let mut qos_overwrites = PublisherQoSConfig::default();
@@ -425,17 +450,17 @@ impl PublisherBuilder<'_, '_> {
         }
     }
 
-    /// Changes the [`crate::sample::Locality`] applied when routing the data.
+    /// Changes the [`Locality`](crate::sample::Locality) applied when routing the data.
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
-    /// that have the given [`crate::sample::Locality`].
+    /// that have the given [`Locality`](crate::sample::Locality).
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
         self
     }
 
-    /// Changes the [`crate::qos::Reliability`] to apply when routing the data.
+    /// Changes the [`Reliability`](crate::qos::Reliability) to apply when routing the data.
     ///
     /// **NOTE**: Currently `reliability` does not trigger any data retransmission on the wire. It
     ///   is rather used as a marker on the wire and it may be used to select the best link

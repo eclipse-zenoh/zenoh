@@ -22,7 +22,27 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::zenoh::ext::AttachmentType;
 
-/// Wrapper type for API ergonomicity to allow any type `T` to be converted into `Option<ZBytes>` where `T` implements `Into<ZBytes>`.
+/// Technical wrapper type for API ergonomicity.
+///
+/// It allows any type `T` implementing `Into<ZBytes>` to be converted into `Option<ZBytes>`.
+///
+/// This type is unlikely to be used explicitly by the user. Its purpose is to allow passing types
+/// like `&str`, `String`, `&[u8]`, `Vec<u8>`, etc. to API methods
+/// that accept an optional payload, like the [`attachment`](crate::pubsub::PublicationBuilder::attachment).
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// # let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").await.unwrap();
+/// // Set an attachment value directly
+/// publisher.put("value").attachment("metadata").await.unwrap();
+/// // Set an attachment value from the variable, which can contain the attachment data or not.
+/// let maybe_attachment: Option<String> = Some("metadata".to_string());
+/// publisher.put("value").attachment(maybe_attachment).await.unwrap();
+/// # }
+/// ```
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OptionZBytes(Option<ZBytes>);
@@ -66,7 +86,26 @@ impl From<OptionZBytes> for Option<ZBytes> {
     }
 }
 
-/// ZBytes contains the serialized bytes of user data.
+/// ZBytes contains the raw bytes data.
+///
+/// This type is intended to represent the data payload with minimized copying.
+/// Zenoh may construct a single `ZBytes` instance from pointers to multiple buffers
+/// in cases where data is received fragmented from the network.
+///
+/// To directly access raw data as a contiguous slice, it is preferable to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`] using [`to_bytes`](Self::to_bytes).
+/// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
+/// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
+///
+/// It is also possible to iterate over the raw data that may be scattered across different memory regions using [`slices`](Self::slices).
+///
+/// Another way to access raw data is to use a [`ZBytesReader`] obtained from [`reader`](Self::reader)
+/// that implements the standard [`std::io::Read`] trait. This is useful when deserializing data using
+/// libraries that operate on `std::io::Read`.
+///
+/// The creation of a `ZBytes` instance using the [`std::io::Write`] trait is also possible using the static
+/// [`writer`](Self::writer) method that creates a [`ZBytesWriter`].
+///
+/// # Examples
 ///
 /// `ZBytes` can be converted from/to raw bytes:
 /// ```rust
@@ -78,16 +117,19 @@ impl From<OptionZBytes> for Option<ZBytes> {
 /// assert_eq!(payload.to_bytes(), buf.as_slice());
 /// ```
 ///
-/// `ZBytes` may store data in non-contiguous regions of memory.
-/// The typical case for `ZBytes` to store data in different memory regions is when data is received fragmented from the network.
+/// Create a `ZBytes` with a writer and read it back with a reader:
+/// ```rust
+/// use std::io::{Read, Write};
+/// use zenoh::bytes::ZBytes;
 ///
-/// To directly access raw data as contiguous slice it is preferred to convert `ZBytes` into a [`std::borrow::Cow<[u8]>`] using [`to_bytes`](Self::to_bytes).
-/// If `ZBytes` contains all the data in a single memory location, this is guaranteed to be zero-copy. This is the common case for small messages.
-/// If `ZBytes` contains data scattered in different memory regions, this operation will do an allocation and a copy. This is the common case for large messages.
-///
-/// It is also possible to iterate over the raw data that may be scattered on different memory regions using [`slices`](Self::slices).
-/// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`] nor on how many slices a given [`ZBytes`] will be composed of.
-/// The only provided guarantee is on the bytes order that is preserved.
+/// let mut writer = ZBytes::writer();
+/// writer.write_all(b"some raw bytes").unwrap();
+/// let payload = writer.finish();
+/// let mut reader = payload.reader();
+/// let mut buf = [0; 14];
+/// reader.read_exact(&mut buf).unwrap();
+/// assert_eq!(&buf, b"some raw bytes");
+/// ```
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZBytes(ZBuf);
@@ -111,17 +153,17 @@ impl ZBytes {
     /// Access raw bytes contained in the [`ZBytes`].
     ///
     /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
-    /// will be done, that's why the method returns a [`Cow`].
+    /// will be done; that's why the method returns a [`Cow`].
     /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy.
     pub fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.0.contiguous()
     }
 
-    /// Try to access a string contained in the [`ZBytes`], fail if it contains non-UTF8 bytes.
+    /// Tries to access a string contained in the [`ZBytes`], and fails if it contains non-UTF-8 bytes.
     ///
     /// In the case `ZBytes` contains non-contiguous regions of memory, an allocation and a copy
-    /// will be done, that's why the method returns a [`Cow`].
-    /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy, but then the UTF8
+    /// will be done; that's why the method returns a [`Cow`].
+    /// It's also possible to use [`ZBytes::slices`] instead to avoid this copy, but then the UTF-8
     /// check has to be done manually.
     pub fn try_to_string(&self) -> Result<Cow<'_, str>, Utf8Error> {
         Ok(match self.to_bytes() {
@@ -130,7 +172,7 @@ impl ZBytes {
         })
     }
 
-    /// Get a [`ZBytesReader`] implementing [`std::io::Read`] trait.
+    /// Get a [`ZBytesReader`] implementing the [`std::io::Read`] trait.
     ///
     /// See [`ZBytesWriter`] on how to chain the deserialization of different types from a single [`ZBytes`].
     pub fn reader(&self) -> ZBytesReader<'_> {
@@ -157,12 +199,12 @@ impl ZBytes {
         }
     }
 
-    /// Return an iterator on raw bytes slices contained in the [`ZBytes`].
+    /// Return an iterator over raw byte slices contained in the [`ZBytes`].
     ///
-    /// [`ZBytes`] may store data in non-contiguous regions of memory, this iterator
-    /// then allows to access raw data directly without any attempt of deserializing it.
+    /// [`ZBytes`] may store data in non-contiguous regions of memory; this iterator
+    /// then allows accessing raw data directly without any attempt at deserializing it.
     /// Please note that no guarantee is provided on the internal memory layout of [`ZBytes`].
-    /// The only provided guarantee is on the bytes order that is preserved.
+    /// The only provided guarantee is that the byte order is preserved.
     ///
     /// ```rust
     /// use std::io::Write;
@@ -231,6 +273,26 @@ const _: () = {
 };
 
 /// A reader that implements [`std::io::Read`] trait to deserialize from a [`ZBytes`].
+///
+/// The instance of this struct is obtained from the [`ZBytes::reader`] method.
+/// It implements the standard [`std::io::Read`] and [`std::io::Seek`] traits.
+/// This allows using it with libraries that deserialize data from a `std::io::Read`.
+/// Example:
+/// ```rust
+/// use std::io::{Read, Seek, SeekFrom, Write};
+/// use zenoh::bytes::ZBytes;
+/// let mut writer = ZBytes::writer();
+/// writer.write_all(b"some raw bytes").unwrap();
+/// let payload = writer.finish();
+/// let mut reader = payload.reader();
+/// let mut buf = [0; 14];
+/// reader.read_exact(&mut buf).unwrap();
+/// assert_eq!(&buf, b"some raw bytes");
+/// reader.seek(SeekFrom::Start(5)).unwrap();
+/// let mut buf2 = [0; 4];
+/// reader.read_exact(&mut buf2).unwrap();
+/// assert_eq!(&buf2, b"raw ");
+/// ```
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct ZBytesReader<'a>(ZBufReader<'a>);
@@ -241,7 +303,7 @@ impl ZBytesReader<'_> {
         self.0.remaining()
     }
 
-    /// Returns true if no more bytes can be read
+    /// Returns true if no additional bytes can be read
     pub fn is_empty(&self) -> bool {
         self.remaining() == 0
     }
@@ -260,6 +322,26 @@ impl std::io::Seek for ZBytesReader<'_> {
 }
 
 /// A writer that implements [`std::io::Write`] trait to serialize into a [`ZBytes`].
+///
+/// The instance of this struct is obtained from the [`ZBytes::writer`] method.
+/// It implements the standard [`std::io::Write`] trait.
+/// This allows using it with libraries that serialize data into a `std::io::Write`.
+/// Example:
+/// ```rust
+/// use std::io::{Read, Write};
+/// use zenoh::bytes::ZBytes;
+/// let mut writer = ZBytes::writer();
+/// writer.write_all(b"some raw bytes").unwrap();
+/// let payload = writer.finish();
+/// let mut reader = payload.reader();
+/// let mut buf = [0; 14];
+/// reader.read_exact(&mut buf).unwrap();
+/// assert_eq!(&buf, b"some raw bytes");
+/// ```
+/// It is also possible to append existing [`ZBytes`] instances by taking ownership of them
+/// using the [`append`](Self::append) method.
+/// This allows composing a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+/// In other words, it allows creating a linear view on different memory regions without copying.
 #[derive(Debug)]
 pub struct ZBytesWriter {
     zbuf: ZBuf,
@@ -268,8 +350,8 @@ pub struct ZBytesWriter {
 
 impl ZBytesWriter {
     /// Append a [`ZBytes`] to this [`ZBytes`] by taking ownership.
-    /// This allows to compose a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
-    /// Said in other terms, it allows to create a linear view on different memory regions without copy.
+    /// This allows composing a [`ZBytes`] out of multiple [`ZBytes`] that may point to different memory regions.
+    /// In other words, it allows creating a linear view on different memory regions without copying.
     ///
     /// Example:
     /// ```
@@ -435,7 +517,7 @@ impl From<&Cow<'_, str>> for ZBytes {
 }
 
 // Define a transparent wrapper type to get around Rust's orphan rule.
-// This allows to use bytes::Bytes directly as supporting buffer of a
+// This allows using bytes::Bytes directly as the supporting buffer of a
 // ZSlice resulting in zero-copy and zero-alloc bytes::Bytes serialization.
 #[repr(transparent)]
 #[derive(Debug)]

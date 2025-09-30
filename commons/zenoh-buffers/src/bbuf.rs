@@ -192,6 +192,7 @@ impl From<BBuf> for ZSlice {
 
 #[cfg(feature = "test")]
 impl BBuf {
+    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         #[cfg(not(feature = "std"))]
         use alloc::vec::Vec;
