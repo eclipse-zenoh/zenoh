@@ -35,7 +35,7 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 - [zenoh-pllugin-rest](zenoh-plugin-rest)
 
-  The plugin implementing [REST API](https://zenoh.io/docs/apis/rest/) for zenohd.
+  The plugin implementing [REST API](https://zenoh.io/docs/apis/rest/) for `zenohd`.
 
 - [zenoh-plugin-storage-manager](zenoh-plugin-storage-manager)
 
