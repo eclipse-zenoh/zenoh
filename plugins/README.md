@@ -20,8 +20,10 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
   - the API to implement plugins
   - the API to load, start, and stop the plugins and get their status
 
-  The application-specific, functional part of plugins is implemented outsidd of this API, in the types passed as type arguments `StartArgs` and `Instance`.
-  E.g. the plugins for `zenohd` implements trait `ZenohPlugin` from `zenoh` crate (under `internal` feature)
+  The application-specific, functional part of plugins is implemented outside of this API, in the types passed as type
+  arguments `StartArgs` and `Instance`.
+  E.g. the plugins for `zenohd` should implement the trait `ZenohPlugin` from `zenoh` crate (under `internal` feature) with
+  `DynamicRuntime` and `RunningPlugin` types provided by `zenoh`.
 
   ```rust
   pub trait ZenohPlugin: Plugin<StartArgs = DynamicRuntime, Instance = RunningPlugin> {}
@@ -33,7 +35,7 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 - [zenoh-pllugin-rest](zenoh-plugin-rest)
 
-  The plugin implementing [REST API](https://zenoh.io/docs/apis/rest/) for zenohd.
+  The plugin implementing [REST API](https://zenoh.io/docs/apis/rest/) for `zenohd`.
 
 - [zenoh-plugin-storage-manager](zenoh-plugin-storage-manager)
 
