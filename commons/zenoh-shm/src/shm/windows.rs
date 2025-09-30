@@ -36,7 +36,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             tracing::trace!(
                 "CreateFileMapping({:?}, NULL, {:X}, {}, {}, '{}')",
                 INVALID_HANDLE_VALUE,
-                PAGE_READWRITE.0,
+                PAGE_READWRITE.0 | SEC_COMMIT.0,
                 high_size,
                 low_size,
                 id,
@@ -47,7 +47,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let fd = CreateFileMapping(
                 INVALID_HANDLE_VALUE,
                 None,
-                PAGE_READWRITE,
+                PAGE_READWRITE | SEC_COMMIT,
                 high_size,
                 low_size,
                 id.as_str(),
