@@ -419,7 +419,7 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = {
+        let mut peers = HashSet::<EndPoint>::from_iter(
             self.state
                 .config
                 .lock()
@@ -428,44 +428,44 @@ impl Runtime {
                 .endpoints()
                 .get(self.state.whatami)
                 .unwrap_or(&vec![])
-                .clone()
-        };
+                .iter()
+                .cloned(),
+        );
         let transports = self.manager().get_transports_unicast().await;
 
         if self.state.whatami == WhatAmI::Client {
             for transport in transports {
-                let should_close = if let Ok(Some(orch_transport)) = transport.get_callback() {
+                if let Ok(Some(orch_transport)) = transport.get_callback() {
                     if let Some(orch_transport) = orch_transport
                         .as_any()
                         .downcast_ref::<super::RuntimeSession>()
                     {
-                        let endpoints = zread!(orch_transport.endpoints);
-                        !peers.iter().any(|p| endpoints.contains(p))
-                    } else {
-                        false
+                        let should_close = {
+                            let mut endpoints = zwrite!(orch_transport.endpoints);
+                            endpoints.retain(|e| peers.contains(e));
+                            endpoints.is_empty()
+                        };
+                        if should_close {
+                            transport.close().await?;
+                        }
                     }
-                } else {
-                    false
-                };
-                if should_close {
-                    transport.close().await?;
                 }
             }
         } else {
-            for peer in peers {
-                if !transports.iter().any(|transport| {
-                    if let Ok(Some(orch_transport)) = transport.get_callback() {
-                        if let Some(orch_transport) = orch_transport
-                            .as_any()
-                            .downcast_ref::<super::RuntimeSession>()
-                        {
-                            return zread!(orch_transport.endpoints).contains(&peer);
-                        }
+            for transport in transports {
+                if let Ok(Some(orch_transport)) = transport.get_callback() {
+                    if let Some(orch_transport) = orch_transport
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        let mut endpoints = zwrite!(orch_transport.endpoints);
+                        endpoints.retain(|e| peers.contains(e));
+                        peers.retain(|p| !endpoints.contains(p));
                     }
-                    false
-                }) {
-                    self.spawn_peer_connector(peer).await?;
                 }
+            }
+            for peer in peers {
+                self.spawn_peer_connector(peer).await?;
             }
         }
 
