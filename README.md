@@ -10,7 +10,7 @@
 
 # Eclipse Zenoh
 
-The Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
+Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
 Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
@@ -24,8 +24,9 @@ This repository contains the following elements:
 
 * [zenoh](zenoh) Rust crate
 
-  This is the primary and reference implementation of Zenoh protocol. The Zenoh libraries for other languages are the bindings to the Rust implementation
-  (except for pure-C [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico)).
+  This crate is the primary and reference implementation of the Zenoh protocol. The Zenoh libraries for other languages
+  are bindings to this Rust implementation, except for the pure-C
+  [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) (see "Languages support" section below).
 
 * [zenoh-ext](zenoh-ext) Rust crate
 
@@ -53,10 +54,22 @@ This repository contains the following elements:
 
 # Build and run
 
-Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be successfully compiled with Rust stable (>= 1.75.0), so no special configuration is required from your side. If you already have the Rust toolchain installed, make sure it is up-to-date with:
+Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html).
+If you already have the Rust toolchain installed, make sure it is up-to-date with:
 
 ```bash
 rustup update
+```
+
+Zenoh can be successfully compiled with Rust stable (>= 1.75.0), but some of its dependencies may require
+higher Rust versions. The `zenoh` crate itself doesn't lock its dependencies with "=" to avoid conflicts.
+Instead we provide the crate [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75)
+with `zenoh` dependencies locked to Rust 1.75-compatible versions. To compile `zenoh` with Rust 1.75
+add dependency on it to your Cargo.toml
+
+```toml
+zenoh = "1.5.1"
+zenoh-pinned-deps-1-75 = "1.5.1"
 ```
 
 To build Zenoh, just type the following command after having followed the previous instructions:
@@ -65,13 +78,13 @@ To build Zenoh, just type the following command after having followed the previo
 cargo build --release --all-targets
 ```
 
-Router can be run with the command `cargo run` or from `target/release/zenohd`. When running by cargo use `--` to pass command line arguments to `zenohd`:
+The router can be run with the command `cargo run` or from `target/release/zenohd`. When running with cargo use `--` to pass command line arguments to `zenohd`:
 
 ```bash
 cargo run --release -- --config DEFAULT_CONFIG.json5
 ```
 
-Examples can also be executed by cargo or directly from `target/release/examples`
+Examples can also be executed with cargo or directly from `target/release/examples`
 
 Publish/subscribe
 
@@ -96,14 +109,14 @@ cargo run --example z_get
 # Languages support
 
 * Rust - this repository
-* C - there are two implementations with the same API
-  * [zenoh-c](https://github.com/eclipse-zenoh/zenoh-c) - rust library binding
+* C - there are two implementations with the same API:
+  * [zenoh-c](https://github.com/eclipse-zenoh/zenoh-c) - Rust library binding
   * [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) - pure C implementation
 * C++ [zenoh-cpp](https://github.com/eclipse-zenoh/zenoh-cpp) - C++ wrapper over C libraries
 * Python - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
 * Kotlin - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
 * Java - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
-* Typescript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - the websocket client to the plugin in [zenohd](zenohd)
+* TypeScript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - the WebSocket client to the plugin in [zenohd](zenohd)
 
 # Troubleshooting
 
