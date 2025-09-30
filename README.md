@@ -12,7 +12,7 @@
 
 Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
-Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
+Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries, and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
 Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/).
 
@@ -78,13 +78,20 @@ To build Zenoh, just type the following command after having followed the previo
 cargo build --release --all-targets
 ```
 
-The router can be run with the command `cargo run` or from `target/release/zenohd`. When running with cargo use `--` to pass command line arguments to `zenohd`:
+There are multiple features in `zenoh`; see the full list and descriptions on [docs.rs](https://docs.rs/zenoh/latest/zenoh/). For example, to
+use shared memory it has to be explicitly enabled:
+
+```toml
+zenoh = {version = "1.5.1", features = ["shared-memory"]}
+```
+
+The router can be run with the command `cargo run` or from `target/release/zenohd`. When running with cargo, use `--` to pass command line arguments to `zenohd`:
 
 ```bash
 cargo run --release -- --config DEFAULT_CONFIG.json5
 ```
 
-Examples can also be executed with cargo or directly from `target/release/examples`
+Examples can also be executed with cargo, or directly from `target/release/examples`.
 
 Publish/subscribe
 
@@ -120,5 +127,5 @@ cargo run --example z_get
 
 # Troubleshooting
 
-In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.
+In case of trouble, please first check [this page](https://zenoh.io/docs/getting-started/troubleshooting/) to see if the issue and its cause are already known.
 Otherwise, you can ask a question on the [Zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
