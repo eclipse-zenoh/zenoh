@@ -14,6 +14,7 @@
 
 use std::num::NonZeroUsize;
 
+use win_sys::Memory::SEC_COMMIT;
 use win_sys::*;
 use winapi::um::errhandlingapi::GetLastError;
 
