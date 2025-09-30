@@ -652,7 +652,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .collect();
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
-                    endpoint: std::sync::RwLock::new(None),
+                    endpoints: std::sync::RwLock::new(HashSet::new()),
                     main_handler: runtime
                         .state
                         .router
@@ -693,7 +693,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
-    pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
+    pub(super) endpoints: std::sync::RwLock<HashSet<EndPoint>>,
     pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }

@@ -367,7 +367,7 @@ impl Runtime {
         }
         // sequentially try to connect to one of the remaining peers
         // respecting connection retry delays
-        match self.peers_exclusive_connector_retry(peers_to_retry).await {
+        match self.peers_connector_retry(peers_to_retry, true).await {
             Ok(_) => Ok(()),
             Err(_) => {
                 let e = zerror!("Unable to connect to any of {:?}! ", peers);
@@ -439,11 +439,8 @@ impl Runtime {
                         .as_any()
                         .downcast_ref::<super::RuntimeSession>()
                     {
-                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
-                            !peers.contains(endpoint)
-                        } else {
-                            true
-                        }
+                        let endpoints = zread!(orch_transport.endpoints);
+                        !peers.iter().any(|p| endpoints.contains(p))
                     } else {
                         false
                     }
@@ -462,9 +459,7 @@ impl Runtime {
                             .as_any()
                             .downcast_ref::<super::RuntimeSession>()
                         {
-                            if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
-                                return *endpoint == peer;
-                            }
+                            return zread!(orch_transport.endpoints).contains(&peer);
                         }
                     }
                     false
@@ -791,7 +786,11 @@ impl Runtime {
         }
     }
 
-    async fn peers_exclusive_connector_retry(&self, peers: Vec<EndPoint>) -> ZResult<ZenohIdProto> {
+    async fn peers_connector_retry(
+        &self,
+        peers: Vec<EndPoint>,
+        stop_after_first_connection: bool,
+    ) -> ZResult<Vec<ZenohIdProto>> {
         async fn wait_next_peer_retry(
             peer: EndPoint,
             period: ConnectionRetryPeriod,
@@ -807,6 +806,8 @@ impl Runtime {
                 }
             }
         }
+
+        let mut connected_peers = Vec::new();
 
         let mut tasks = FuturesUnordered::new();
         let cancellation_token = self.get_cancellation_token();
@@ -838,10 +839,16 @@ impl Runtime {
                                 .as_any()
                                 .downcast_ref::<super::RuntimeSession>()
                             {
-                                *zwrite!(orch_transport.endpoint) = Some(peer);
+                                zwrite!(orch_transport.endpoints).insert(peer);
+                                //*zwrite!(orch_transport.endpoints) = HashSet::from_iter([peer]);
                             }
                         }
-                        return transport.get_zid();
+                        if let Ok(zid) = transport.get_zid() {
+                            connected_peers.push(zid);
+                        }
+                        if stop_after_first_connection {
+                            break;
+                        }
                     }
                     Err(e) => {
                         tracing::debug!(
@@ -861,11 +868,17 @@ impl Runtime {
                 }
             }
         }
-        bail!(zerror!("Peer connector terminated"));
+        if connected_peers.is_empty() {
+            bail!("Peer connector terminated without connecting to any endpoint")
+        } else {
+            Ok(connected_peers)
+        }
     }
 
     async fn peer_connector_retry(&self, peer: EndPoint) -> ZResult<ZenohIdProto> {
-        self.peers_exclusive_connector_retry(vec![peer]).await
+        self.peers_connector_retry(vec![peer], true)
+            .await
+            .map(|peers| peers[0])
     }
 
     pub async fn scout<Fut, F>(
@@ -1246,6 +1259,7 @@ impl Runtime {
         match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
+                zwrite!(session.endpoints).clear();
                 session.runtime.spawn_abortable(async move {
                     let retry_config = runtime.get_global_connect_retry_config();
                     let mut period = retry_config.period();
@@ -1255,27 +1269,31 @@ impl Runtime {
                 });
             }
             _ => {
-                if let Some(endpoint) = &*zread!(session.endpoint) {
-                    let peers = {
-                        session
-                            .runtime
-                            .state
-                            .config
-                            .lock()
-                            .0
-                            .connect()
-                            .endpoints()
-                            .get(session.runtime.state.whatami)
-                            .unwrap_or(&vec![])
-                            .clone()
-                    };
-                    if peers.contains(endpoint) {
-                        let endpoint = endpoint.clone();
-                        let runtime = session.runtime.clone();
-                        session
-                            .runtime
-                            .spawn(async move { runtime.peer_connector_retry(endpoint).await });
-                    }
+                if zread!(session.endpoints).is_empty() {
+                    return;
+                }
+                let mut peers = session
+                    .runtime
+                    .state
+                    .config
+                    .lock()
+                    .0
+                    .connect()
+                    .endpoints()
+                    .get(session.runtime.state.whatami)
+                    .unwrap_or(&vec![])
+                    .clone();
+
+                let mut endpoints = zwrite!(session.endpoints);
+                peers.retain(|p| endpoints.contains(p));
+                endpoints.clear();
+                drop(endpoints);
+
+                if !peers.is_empty() {
+                    let runtime = session.runtime.clone();
+                    session
+                        .runtime
+                        .spawn(async move { runtime.peers_connector_retry(peers, false).await });
                 }
             }
         }
