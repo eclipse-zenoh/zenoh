@@ -127,16 +127,16 @@ fn propagate_simple_queryable_to(
         })
         .unwrap_or(true)
     {
-        if let Some(current) = face_hat!(dst_face).local_qabls.get(res) {
+        if let Some(&(current_id, current_info)) = face_hat!(dst_face).local_qabls.get(res) {
             let info = local_qabl_info(tables, res, dst_face);
-            if current.1 != info
+            if current_info != info
                 && (dst_face.whatami != WhatAmI::Client
                     || face_hat!(dst_face)
                         .remote_interests
                         .values()
                         .any(|i| i.options.queryables() && i.matches(res)))
             {
-                let id = current.0;
+                let id = current_id;
                 send_declare_queryable(dst_face, res, id, info, send_declare);
             }
         } else if dst_face.whatami != WhatAmI::Client

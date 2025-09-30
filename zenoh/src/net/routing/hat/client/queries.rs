@@ -122,10 +122,10 @@ fn propagate_simple_queryable(
             })
             .unwrap_or(true)
         {
-            if let Some(current) = face_hat!(dst_face).local_qabls.get(res) {
+            if let Some(&(current_id, current_info)) = face_hat!(dst_face).local_qabls.get(res) {
                 let info = local_qabl_info(tables, res, &dst_face);
-                if current.1 != info {
-                    let id = current.0;
+                if current_info != info {
+                    let id = current_id;
                     send_declare_queryable(&mut dst_face, res, id, info, send_declare);
                 }
             } else {
