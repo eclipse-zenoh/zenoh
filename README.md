@@ -42,6 +42,11 @@ This repository contains the following elements:
 
   The crates related to plugins support in `zenohd`
 
+* [commons](commons)
+
+  The internal crates used by `zenoh`. These crates are not intended to be imported directly, and their public APIs can be changed at any time.
+  The stable API is provided by `zenoh` and `zenoh-ext` only.
+
 * [examples](examples)
 
   Zenoh usage examples. These examples have a double purpose: they not only demonstrate writing Zenoh applications in Rust but also serve as a set of tools for experimenting with and testing Zenoh functionality.
@@ -63,9 +68,9 @@ rustup update
 
 Zenoh can be successfully compiled with Rust stable (>= 1.75.0), but some of its dependencies may require
 higher Rust versions. The `zenoh` crate itself doesn't lock its dependencies with "=" to avoid conflicts.
-Instead we provide the crate [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75)
-with `zenoh` dependencies locked to Rust 1.75-compatible versions. To compile `zenoh` with Rust 1.75
-add dependency on it to your Cargo.toml
+Instead, we provide the crate [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75)
+with `zenoh` dependencies locked to Rust 1.75-compatible versions. To compile `zenoh` with Rust 1.75,
+add a dependency on it to your Cargo.toml:
 
 ```toml
 zenoh = "1.5.1"
@@ -93,7 +98,9 @@ cargo run --release -- --config DEFAULT_CONFIG.json5
 
 Examples can also be executed with cargo, or directly from `target/release/examples`.
 
-Publish/subscribe
+## Examples
+
+### Publish/Subscribe
 
 ```bash
 cargo run --example z_sub
@@ -103,7 +110,7 @@ cargo run --example z_sub
 cargo run --example z_pub
 ```
 
-Query/reply
+### Query/Reply
 
 ```bash
 cargo run --example z_queryable
@@ -113,17 +120,17 @@ cargo run --example z_queryable
 cargo run --example z_get
 ```
 
-# Languages support
+# Languages Support
 
-* Rust - this repository
-* C - there are two implementations with the same API:
+* **Rust** - this repository
+* **C** - there are two implementations with the same API:
   * [zenoh-c](https://github.com/eclipse-zenoh/zenoh-c) - Rust library binding
   * [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) - pure C implementation
-* C++ [zenoh-cpp](https://github.com/eclipse-zenoh/zenoh-cpp) - C++ wrapper over C libraries
-* Python - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
-* Kotlin - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
-* Java - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
-* TypeScript - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - the WebSocket client to the plugin in [zenohd](zenohd)
+* **C++** - [zenoh-cpp](https://github.com/eclipse-zenoh/zenoh-cpp) - C++ wrapper over C libraries
+* **Python** - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
+* **Kotlin** - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
+* **Java** - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
+* **TypeScript** - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - WebSocket client for the plugin in [zenohd](zenohd)
 
 # Troubleshooting
 
