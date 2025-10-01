@@ -13,10 +13,8 @@
 //
 
 use std::{
-    error::Error,
     future::{Future, IntoFuture},
     marker::PhantomData,
-    mem::MaybeUninit,
     num::NonZeroUsize,
     pin::Pin,
     sync::{atomic::Ordering, Mutex},
@@ -29,15 +27,24 @@ use zenoh_core::{zlock, zresult::ZResult, Resolvable, Wait};
 use super::{
     chunk::{AllocatedChunk, ChunkDescriptor},
     shm_provider_backend::ShmProviderBackend,
-    types::{ChunkAllocResult, ZAllocError, ZLayoutAllocError, ZLayoutError},
+    types::{
+        BufAllocResult, BufLayoutAllocResult, ChunkAllocResult, ZAllocError, ZLayoutAllocError,
+        ZLayoutError,
+    },
 };
 use crate::{
     api::{
-        buffer::{typed::Typed, zshmmut::ZShmMut},
+        buffer::{traits::ResideInShm, typed::Typed, zshmmut::ZShmMut},
         protocol_implementations::posix::posix_shm_provider_backend::{
             PosixShmProviderBackend, PosixShmProviderBackendBuilder,
         },
-        provider::memory_layout::{MemoryLayout, TypedLayout},
+        provider::{
+            memory_layout::{
+                BufferLayout, LayoutForType, MemLayout, MemoryLayout, StaticLayout,
+                TryIntoMemoryLayout,
+            },
+            types::{TypedBufAllocResult, TypedBufLayoutAllocResult},
+        },
     },
     metadata::{
         allocated_descriptor::AllocatedMetadataDescriptor, descriptor::MetadataDescriptor,
@@ -50,45 +57,124 @@ use crate::{
     ShmBufInfo, ShmBufInner,
 };
 
-/// The type of allocation.
-pub trait AllocLayout {
-    /// The buffer returned by the allocation.
-    type Buffer;
-    /// Returns the memory layouts of the allocation.
-    fn memory_layout(self) -> Result<MemoryLayout, ZLayoutError>;
-    /// Wraps the raw allocated buffer.
-    ///
-    /// # Safety
-    ///
-    /// The buffer must have the layout returned by [`Self::memory_layout`]
-    unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer;
+#[derive(Debug)]
+struct BusyChunk {
+    metadata: AllocatedMetadataDescriptor,
 }
 
-impl<T: TryInto<MemoryLayout>> AllocLayout for T
+impl BusyChunk {
+    fn new(metadata: AllocatedMetadataDescriptor) -> Self {
+        Self { metadata }
+    }
+
+    fn descriptor(&self) -> ChunkDescriptor {
+        self.metadata.header().data_descriptor()
+    }
+}
+
+struct AllocData<'a, Backend, What>
 where
-    T::Error: Into<ZLayoutError>,
+    Backend: ShmProviderBackend,
 {
-    type Buffer = ZShmMut;
+    what: What,
+    provider: &'a ShmProvider<Backend>,
+}
 
-    fn memory_layout(self) -> Result<MemoryLayout, ZLayoutError> {
-        self.try_into().map_err(Into::into)
+#[zenoh_macros::unstable_doc]
+pub struct AllocBuilder<'a, Backend, What>(AllocData<'a, Backend, What>)
+where
+    Backend: ShmProviderBackend;
+
+impl<'a, Backend, What> AllocBuilder<'a, Backend, What>
+where
+    Backend: ShmProviderBackend,
+{
+    fn new(provider: &'a ShmProvider<Backend>, what: What) -> Self {
+        Self(AllocData { what, provider })
     }
 
-    unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer {
-        buffer
+    /// Set the allocation policy
+    #[zenoh_macros::unstable_doc]
+    pub fn with_policy<Policy>(self) -> ProviderAllocBuilder<'a, Backend, What, Policy> {
+        ProviderAllocBuilder {
+            data: self.0,
+            _phantom: PhantomData,
+        }
     }
 }
 
-impl<T> AllocLayout for TypedLayout<T> {
-    type Buffer = Typed<MaybeUninit<T>, ZShmMut>;
-
-    fn memory_layout(self) -> Result<MemoryLayout, ZLayoutError> {
-        Ok(MemoryLayout::for_type::<T>())
+impl<'a, Backend, What> AllocBuilder<'a, Backend, What>
+where
+    Backend: ShmProviderBackend,
+    What: TryIntoMemoryLayout,
+{
+    /// Try to build an allocation layout
+    #[zenoh_macros::unstable_doc]
+    pub fn into_layout(self) -> Result<AllocLayout<'a, Backend, What>, ZLayoutError> {
+        AllocLayout::new(self.0.provider, self.0.what.try_into()?)
     }
+}
 
-    unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer {
-        // SAFETY: same precondition
-        unsafe { Typed::new_unchecked(buffer) }
+impl<'a, Backend> AllocBuilder<'a, Backend, MemoryLayout>
+where
+    Backend: ShmProviderBackend,
+{
+    /// Try to build an allocation layout
+    #[zenoh_macros::unstable_doc]
+    pub fn into_layout(self) -> Result<AllocLayout<'a, Backend, MemoryLayout>, ZLayoutError> {
+        AllocLayout::new(self.0.provider, self.0.what)
+    }
+}
+
+// Untyped allocation API
+#[zenoh_macros::unstable_doc]
+impl<'a, Backend, What> Resolvable for AllocBuilder<'a, Backend, What>
+where
+    Backend: ShmProviderBackend,
+    ProviderAllocBuilder<'a, Backend, What>: Resolvable<To = BufLayoutAllocResult>,
+{
+    type To = BufLayoutAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, Backend, What> Wait for AllocBuilder<'a, Backend, What>
+where
+    Backend: ShmProviderBackend,
+    ProviderAllocBuilder<'a, Backend, What>: Resolvable<To = BufLayoutAllocResult> + Wait,
+{
+    fn wait(self) -> BufLayoutAllocResult {
+        let builder = ProviderAllocBuilder::<'a, Backend, What> {
+            data: self.0,
+            _phantom: PhantomData,
+        };
+        builder.wait()
+    }
+}
+
+// Typed allocation API
+#[zenoh_macros::unstable_doc]
+impl<'a, Backend, T> Resolvable for AllocBuilder<'a, Backend, LayoutForType<T>>
+where
+    Backend: ShmProviderBackend,
+    ProviderAllocBuilder<'a, Backend, LayoutForType<T>>:
+        Resolvable<To = TypedBufLayoutAllocResult<T>>,
+{
+    type To = TypedBufLayoutAllocResult<T>;
+}
+
+// Sync alloc policy
+impl<'a, Backend, T> Wait for AllocBuilder<'a, Backend, LayoutForType<T>>
+where
+    Backend: ShmProviderBackend,
+    ProviderAllocBuilder<'a, Backend, LayoutForType<T>>:
+        Resolvable<To = TypedBufLayoutAllocResult<T>> + Wait,
+{
+    fn wait(self) -> TypedBufLayoutAllocResult<T> {
+        let builder = ProviderAllocBuilder::<'a, Backend, LayoutForType<T>> {
+            data: self.0,
+            _phantom: PhantomData,
+        };
+        builder.wait()
     }
 }
 
@@ -97,28 +183,31 @@ impl<T> AllocLayout for TypedLayout<T> {
 /// adopted for particular ShmProvider
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
-pub struct PrecomputedLayout<'a, Backend, Layout> {
+pub struct AllocLayout<'a, Backend, What>
+where
+    Backend: ShmProviderBackend,
+{
     size: NonZeroUsize,
     provider_layout: MemoryLayout,
     provider: &'a ShmProvider<Backend>,
-    _phantom: PhantomData<Layout>,
+    _phantom: PhantomData<What>,
 }
 
-impl<'a, Backend, Layout> PrecomputedLayout<'a, Backend, Layout>
+impl<'a, Backend, What> AllocLayout<'a, Backend, What>
 where
     Backend: ShmProviderBackend,
 {
     /// Allocate the new buffer with this layout
     #[zenoh_macros::unstable_doc]
-    pub fn alloc<'b>(&'b self) -> PrecomputedAllocBuilder<'b, 'a, Backend, Layout> {
-        PrecomputedAllocBuilder {
+    pub fn alloc<'b>(&'b self) -> LayoutAllocBuilder<'b, 'a, Backend, What> {
+        LayoutAllocBuilder {
             layout: self,
-            policy: JustAlloc,
+            _phantom: PhantomData,
         }
     }
 }
 
-impl<'a, Backend, Layout> PrecomputedLayout<'a, Backend, Layout>
+impl<'a, Backend, What> AllocLayout<'a, Backend, What>
 where
     Backend: ShmProviderBackend,
 {
@@ -146,281 +235,224 @@ where
         })
     }
 }
+/// Trait for deallocation policies.
+#[zenoh_macros::unstable_doc]
+pub trait ForceDeallocPolicy {
+    fn dealloc<Backend: ShmProviderBackend>(provider: &ShmProvider<Backend>) -> bool;
+}
+
+/// Try to dealloc optimal (currently eldest+1) chunk
+#[zenoh_macros::unstable_doc]
+pub struct DeallocOptimal;
+impl ForceDeallocPolicy for DeallocOptimal {
+    fn dealloc<Backend: ShmProviderBackend>(provider: &ShmProvider<Backend>) -> bool {
+        let chunk_to_dealloc = {
+            let mut guard = zlock!(provider.busy_list);
+            match guard.len() {
+                0 => return false,
+                1 => guard.remove(0),
+                _ => guard.swap_remove(1),
+            }
+        };
+        provider.backend.free(&chunk_to_dealloc.descriptor());
+        true
+    }
+}
+
+/// Try to dealloc youngest chunk
+#[zenoh_macros::unstable_doc]
+pub struct DeallocYoungest;
+impl ForceDeallocPolicy for DeallocYoungest {
+    fn dealloc<Backend: ShmProviderBackend>(provider: &ShmProvider<Backend>) -> bool {
+        match zlock!(provider.busy_list).pop() {
+            Some(val) => {
+                provider.backend.free(&val.descriptor());
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// Try to dealloc eldest chunk
+#[zenoh_macros::unstable_doc]
+pub struct DeallocEldest;
+impl ForceDeallocPolicy for DeallocEldest {
+    fn dealloc<Backend: ShmProviderBackend>(provider: &ShmProvider<Backend>) -> bool {
+        let mut guard = zlock!(provider.busy_list);
+        match guard.is_empty() {
+            true => false,
+            false => {
+                provider.backend.free(&guard.swap_remove(0).descriptor());
+                true
+            }
+        }
+    }
+}
 
 /// Trait for allocation policies
 #[zenoh_macros::unstable_doc]
-pub trait AllocPolicy<Backend> {
-    fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult;
-}
-
-/// Trait for async allocation policies
-#[zenoh_macros::unstable_doc]
-#[async_trait]
-pub trait AsyncAllocPolicy<Backend>: Send {
-    async fn alloc_async(
-        &self,
+pub trait AllocPolicy {
+    fn alloc<Backend: ShmProviderBackend>(
         layout: &MemoryLayout,
         provider: &ShmProvider<Backend>,
     ) -> ChunkAllocResult;
 }
 
-/// Marker trait for policies that are safe to use
-///
-/// # Safety
-///
-/// Policies implementing this trait must be safe to use. For example, [`Deallocate`] is not safe
-/// as it may deallocate and reuse a buffer that is currently in use. Users of unsafe policy must
-/// enforce the safety of their code by other means.
-pub unsafe trait SafePolicy {}
-
-/// Marker trait for compile-time allocation policies
+/// Trait for async allocation policies
 #[zenoh_macros::unstable_doc]
-pub trait ConstPolicy {
-    const NEW: Self;
-}
-
-/// A policy value that can be either constant or runtime provided.
-pub trait PolicyValue<T> {
-    fn get(&self) -> T;
-}
-
-impl<T: Copy> PolicyValue<T> for T {
-    fn get(&self) -> T {
-        *self
-    }
-}
-/// A const `bool`.
-pub struct ConstBool<const VALUE: bool>;
-impl<const VALUE: bool> ConstPolicy for ConstBool<VALUE> {
-    const NEW: Self = Self;
-}
-impl<const VALUE: bool> PolicyValue<bool> for ConstBool<VALUE> {
-    fn get(&self) -> bool {
-        VALUE
-    }
-}
-/// A const `usize`.
-pub struct ConstUsize<const VALUE: usize>;
-impl<const VALUE: usize> ConstPolicy for ConstUsize<VALUE> {
-    const NEW: Self = Self;
-}
-impl<const VALUE: usize> PolicyValue<usize> for ConstUsize<VALUE> {
-    fn get(&self) -> usize {
-        VALUE
-    }
+#[async_trait]
+pub trait AsyncAllocPolicy: Send {
+    async fn alloc_async<Backend: ShmProviderBackend + Sync>(
+        layout: &MemoryLayout,
+        provider: &ShmProvider<Backend>,
+    ) -> ChunkAllocResult;
 }
 
 /// Just try to allocate
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
 pub struct JustAlloc;
-impl<Backend> AllocPolicy<Backend> for JustAlloc
-where
-    Backend: ShmProviderBackend,
-{
-    fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
+impl AllocPolicy for JustAlloc {
+    fn alloc<Backend: ShmProviderBackend>(
+        layout: &MemoryLayout,
+        provider: &ShmProvider<Backend>,
+    ) -> ChunkAllocResult {
         provider.backend.alloc(layout)
     }
 }
-unsafe impl SafePolicy for JustAlloc {}
-impl ConstPolicy for JustAlloc {
-    const NEW: Self = Self;
-}
 
 /// Garbage collection policy.
-///
 /// Try to reclaim old buffers if allocation failed and allocate again
-/// if the largest reclaimed chuk is not smaller than the one required.
-///
-/// If `Safe` is set to false, the policy may lead to reallocate memory currently in-use.
+/// if the largest reclaimed chuk is not smaller than the one required
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct GarbageCollect<InnerPolicy = JustAlloc, AltPolicy = JustAlloc, Safe = ConstBool<true>> {
-    inner_policy: InnerPolicy,
-    alt_policy: AltPolicy,
-    safe: Safe,
-}
-impl<InnerPolicy, AltPolicy, Safe> GarbageCollect<InnerPolicy, AltPolicy, Safe> {
-    /// Creates a new `GarbageCollect` policy.
-    pub fn new(inner_policy: InnerPolicy, alt_policy: AltPolicy, safe: Safe) -> Self {
-        Self {
-            inner_policy,
-            alt_policy,
-            safe,
-        }
-    }
-}
-impl<Backend, InnerPolicy, AltPolicy, Safe> AllocPolicy<Backend>
-    for GarbageCollect<InnerPolicy, AltPolicy, Safe>
+pub struct GarbageCollect<InnerPolicy = JustAlloc, AltPolicy = JustAlloc>
 where
-    Backend: ShmProviderBackend,
-    InnerPolicy: AllocPolicy<Backend>,
-    AltPolicy: AllocPolicy<Backend>,
-    Safe: PolicyValue<bool>,
+    InnerPolicy: AllocPolicy,
+    AltPolicy: AllocPolicy,
 {
-    fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
-        let result = self.inner_policy.alloc(layout, provider);
+    _phantom: PhantomData<InnerPolicy>,
+    _phantom2: PhantomData<AltPolicy>,
+}
+impl<InnerPolicy, AltPolicy> AllocPolicy for GarbageCollect<InnerPolicy, AltPolicy>
+where
+    InnerPolicy: AllocPolicy,
+    AltPolicy: AllocPolicy,
+{
+    fn alloc<Backend: ShmProviderBackend>(
+        layout: &MemoryLayout,
+        provider: &ShmProvider<Backend>,
+    ) -> ChunkAllocResult {
+        let result = InnerPolicy::alloc(layout, provider);
         if result.is_err() {
             // try to alloc again only if GC managed to reclaim big enough chunk
-            let collected = if self.safe.get() {
-                provider.garbage_collect()
-            } else {
-                // SAFETY: the policy doesn't implement `SafePolicy` in this case, so the user
-                // must enforce the safety himself
-                unsafe { provider.garbage_collect_unsafe() }
-            };
-            if collected >= layout.size().get() {
-                return self.alt_policy.alloc(layout, provider);
+            if provider.garbage_collect() >= layout.size().get() {
+                return AltPolicy::alloc(layout, provider);
             }
         }
         result
     }
-}
-unsafe impl<InnerPolicy: SafePolicy, AltPolicy: SafePolicy> SafePolicy
-    for GarbageCollect<InnerPolicy, AltPolicy, ConstBool<true>>
-{
-}
-impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy, Safe: ConstPolicy> ConstPolicy
-    for GarbageCollect<InnerPolicy, AltPolicy, Safe>
-{
-    const NEW: Self = Self {
-        inner_policy: InnerPolicy::NEW,
-        alt_policy: AltPolicy::NEW,
-        safe: Safe::NEW,
-    };
 }
 
 /// Defragmenting policy.
-///
 /// Try to defragment if allocation failed and allocate again
 /// if the largest defragmented chuk is not smaller than the one required
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct Defragment<InnerPolicy = JustAlloc, AltPolicy = JustAlloc> {
-    inner_policy: InnerPolicy,
-    alt_policy: AltPolicy,
-}
-impl<InnerPolicy, AltPolicy> Defragment<InnerPolicy, AltPolicy> {
-    /// Creates a new `Defragment` policy.
-    pub fn new(inner_policy: InnerPolicy, alt_policy: AltPolicy) -> Self {
-        Self {
-            inner_policy,
-            alt_policy,
-        }
-    }
-}
-impl<Backend, InnerPolicy, AltPolicy> AllocPolicy<Backend> for Defragment<InnerPolicy, AltPolicy>
+pub struct Defragment<InnerPolicy = JustAlloc, AltPolicy = JustAlloc>
 where
-    Backend: ShmProviderBackend,
-    InnerPolicy: AllocPolicy<Backend>,
-    AltPolicy: AllocPolicy<Backend>,
+    InnerPolicy: AllocPolicy,
+    AltPolicy: AllocPolicy,
 {
-    fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
-        let result = self.inner_policy.alloc(layout, provider);
+    _phantom: PhantomData<InnerPolicy>,
+    _phantom2: PhantomData<AltPolicy>,
+}
+impl<InnerPolicy, AltPolicy> AllocPolicy for Defragment<InnerPolicy, AltPolicy>
+where
+    InnerPolicy: AllocPolicy,
+    AltPolicy: AllocPolicy,
+{
+    fn alloc<Backend: ShmProviderBackend>(
+        layout: &MemoryLayout,
+        provider: &ShmProvider<Backend>,
+    ) -> ChunkAllocResult {
+        let result = InnerPolicy::alloc(layout, provider);
         if let Err(ZAllocError::NeedDefragment) = result {
             // try to alloc again only if big enough chunk was defragmented
             if provider.defragment() >= layout.size().get() {
-                return self.alt_policy.alloc(layout, provider);
+                return AltPolicy::alloc(layout, provider);
             }
         }
         result
     }
 }
-unsafe impl<InnerPolicy: SafePolicy, AltPolicy: SafePolicy> SafePolicy
-    for Defragment<InnerPolicy, AltPolicy>
-{
-}
-impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> ConstPolicy
-    for Defragment<InnerPolicy, AltPolicy>
-{
-    const NEW: Self = Self {
-        inner_policy: InnerPolicy::NEW,
-        alt_policy: AltPolicy::NEW,
-    };
-}
 
 /// Deallocating policy.
-///
 /// Forcibly deallocate up to N buffers until allocation succeeds.
-///
-/// This policy is unsafe as it may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct Deallocate<Limit, InnerPolicy = JustAlloc, AltPolicy = InnerPolicy> {
-    limit: Limit,
-    inner_policy: InnerPolicy,
-    alt_policy: AltPolicy,
+pub struct Deallocate<
+    const N: usize,
+    InnerPolicy = JustAlloc,
+    AltPolicy = InnerPolicy,
+    DeallocatePolicy = DeallocOptimal,
+> where
+    InnerPolicy: AllocPolicy,
+    AltPolicy: AllocPolicy,
+    DeallocatePolicy: ForceDeallocPolicy,
+{
+    _phantom: PhantomData<InnerPolicy>,
+    _phantom2: PhantomData<AltPolicy>,
+    _phantom3: PhantomData<DeallocatePolicy>,
 }
-impl<Limit, InnerPolicy, AltPolicy> Deallocate<Limit, InnerPolicy, AltPolicy> {
-    /// Creates a new `Deallocate` policy.
-    pub fn new(limit: Limit, inner_policy: InnerPolicy, alt_policy: AltPolicy) -> Self {
-        Self {
-            limit,
-            inner_policy,
-            alt_policy,
-        }
-    }
-}
-impl<Backend, Limit, InnerPolicy, AltPolicy> AllocPolicy<Backend>
-    for Deallocate<Limit, InnerPolicy, AltPolicy>
+impl<const N: usize, InnerPolicy, AltPolicy, DeallocatePolicy> AllocPolicy
+    for Deallocate<N, InnerPolicy, AltPolicy, DeallocatePolicy>
 where
-    Backend: ShmProviderBackend,
-    Limit: PolicyValue<usize>,
-    InnerPolicy: AllocPolicy<Backend>,
-    AltPolicy: AllocPolicy<Backend>,
+    InnerPolicy: AllocPolicy,
+    AltPolicy: AllocPolicy,
+    DeallocatePolicy: ForceDeallocPolicy,
 {
-    fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
-        for _ in 0..self.limit.get() {
-            match self.inner_policy.alloc(layout, provider) {
-                res @ (Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory)) => {
-                    let Some(chunk) = zlock!(provider.busy_list).pop() else {
-                        return res;
-                    };
-                    provider.backend.free(&chunk.descriptor());
+    fn alloc<Backend: ShmProviderBackend>(
+        layout: &MemoryLayout,
+        provider: &ShmProvider<Backend>,
+    ) -> ChunkAllocResult {
+        let mut result = InnerPolicy::alloc(layout, provider);
+        for _ in 0..N {
+            match result {
+                Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
+                    if !DeallocatePolicy::dealloc(provider) {
+                        return result;
+                    }
                 }
-                res => return res,
+                _ => {
+                    return result;
+                }
             }
+            result = AltPolicy::alloc(layout, provider);
         }
-        self.alt_policy.alloc(layout, provider)
+        result
     }
-}
-impl<Limit: ConstPolicy, InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> ConstPolicy
-    for Deallocate<Limit, InnerPolicy, AltPolicy>
-{
-    const NEW: Self = Self {
-        limit: Limit::NEW,
-        inner_policy: InnerPolicy::NEW,
-        alt_policy: AltPolicy::NEW,
-    };
 }
 
 /// Blocking allocation policy.
 /// This policy will block until the allocation succeeds.
 /// Both sync and async modes available.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
-pub struct BlockOn<InnerPolicy = JustAlloc> {
-    inner_policy: InnerPolicy,
-}
-impl<InnerPolicy> BlockOn<InnerPolicy> {
-    /// Creates a new `BlockOn` policy.
-    pub fn new(inner_policy: InnerPolicy) -> Self {
-        Self { inner_policy }
-    }
-}
-#[async_trait]
-impl<Backend, InnerPolicy> AsyncAllocPolicy<Backend> for BlockOn<InnerPolicy>
+pub struct BlockOn<InnerPolicy = JustAlloc>
 where
-    Backend: ShmProviderBackend + Sync,
-    InnerPolicy: AllocPolicy<Backend> + Send + Sync,
+    InnerPolicy: AllocPolicy,
 {
-    async fn alloc_async(
-        &self,
+    _phantom: PhantomData<InnerPolicy>,
+}
+
+#[async_trait]
+impl<InnerPolicy> AsyncAllocPolicy for BlockOn<InnerPolicy>
+where
+    InnerPolicy: AllocPolicy + Send,
+{
+    async fn alloc_async<Backend: ShmProviderBackend + Sync>(
         layout: &MemoryLayout,
         provider: &ShmProvider<Backend>,
     ) -> ChunkAllocResult {
         loop {
-            match self.inner_policy.alloc(layout, provider) {
+            match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
                     // TODO: implement provider's async signalling instead of this!
                     tokio::time::sleep(Duration::from_millis(1)).await;
@@ -432,15 +464,16 @@ where
         }
     }
 }
-unsafe impl<InnerPolicy: SafePolicy> SafePolicy for BlockOn<InnerPolicy> {}
-impl<Backend, InnerPolicy> AllocPolicy<Backend> for BlockOn<InnerPolicy>
+impl<InnerPolicy> AllocPolicy for BlockOn<InnerPolicy>
 where
-    Backend: ShmProviderBackend,
-    InnerPolicy: AllocPolicy<Backend>,
+    InnerPolicy: AllocPolicy,
 {
-    fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
+    fn alloc<Backend: ShmProviderBackend>(
+        layout: &MemoryLayout,
+        provider: &ShmProvider<Backend>,
+    ) -> ChunkAllocResult {
         loop {
-            match self.inner_policy.alloc(layout, provider) {
+            match InnerPolicy::alloc(layout, provider) {
                 Err(ZAllocError::NeedDefragment) | Err(ZAllocError::OutOfMemory) => {
                     // TODO: implement provider's async signalling instead of this!
                     std::thread::sleep(Duration::from_millis(1));
@@ -452,210 +485,460 @@ where
         }
     }
 }
-impl<InnerPolicy: ConstPolicy> ConstPolicy for BlockOn<InnerPolicy> {
-    const NEW: Self = Self {
-        inner_policy: InnerPolicy::NEW,
-    };
+
+// TODO: allocator API
+/*pub struct ShmAllocator<
+    'a,
+    Policy: AllocPolicy,
+
+    Backend: ShmProviderBackend,
+> {
+    provider: &'a ShmProvider< Backend>,
+    allocations: lockfree::map::Map<std::ptr::NonNull<u8>, ShmBufInner>,
+    _phantom: PhantomData<Policy>,
 }
 
+impl<'a, Policy: AllocPolicy,  Backend: ShmProviderBackend>
+    ShmAllocator<'a, Policy,  Backend>
+{
+    fn allocate(&self, layout: std::alloc::Layout) -> BufAllocResult {
+        self.provider
+            .alloc_layout()
+            .size(layout.size())
+            .alignment(AllocAlignment::new(layout.align() as u32))
+            .res()?
+            .alloc()
+            .res()
+    }
+}
+
+unsafe impl<'a, Policy: AllocPolicy,  Backend: ShmProviderBackend>
+    allocator_api2::alloc::Allocator for ShmAllocator<'a, Policy,  Backend>
+{
+    fn allocate(
+        &self,
+        layout: std::alloc::Layout,
+    ) -> Result<std::ptr::NonNull<[u8]>, allocator_api2::alloc::AllocError> {
+        let allocation = self
+            .allocate(layout)
+            .map_err(|_| allocator_api2::alloc::AllocError)?;
+
+        let inner = allocation.buf.load(Ordering::Relaxed);
+        let ptr = NonNull::new(inner).ok_or(allocator_api2::alloc::AllocError)?;
+        let sl = unsafe { std::slice::from_raw_parts(inner, 2) };
+        let res = NonNull::from(sl);
+
+        self.allocations.insert(ptr, allocation);
+        Ok(res)
+    }
+
+    unsafe fn deallocate(&self, ptr: std::ptr::NonNull<u8>, _layout: std::alloc::Layout) {
+        let _ = self.allocations.remove(&ptr);
+    }
+}*/
+
+/// Builder for making allocations with instant layout calculation
 #[zenoh_macros::unstable_doc]
-pub struct AllocBuilder<'a, Backend, Layout, Policy = JustAlloc> {
-    provider: &'a ShmProvider<Backend>,
-    layout: Layout,
-    policy: Policy,
+pub struct ProviderAllocBuilder<'a, Backend, What, Policy = JustAlloc>
+where
+    Backend: ShmProviderBackend,
+{
+    data: AllocData<'a, Backend, What>,
+    _phantom: PhantomData<Policy>,
 }
 
 // Generic impl
-impl<'a, Backend, Layout, Policy> AllocBuilder<'a, Backend, Layout, Policy> {
+impl<'a, Backend, What, Policy> ProviderAllocBuilder<'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend,
+{
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<OtherPolicy: SafePolicy + ConstPolicy>(
-        self,
-    ) -> AllocBuilder<'a, Backend, Layout, OtherPolicy> {
-        // SAFETY: the policy is safe
-        unsafe { self.with_runtime_policy(OtherPolicy::NEW) }
-    }
-
-    /// Set the unsafe allocation policy
-    ///
-    /// # Safety
-    ///
-    /// The user must ensure its use of allocated buffers are safe taking into account the policy.
-    #[zenoh_macros::unstable_doc]
-    pub unsafe fn with_unsafe_policy<OtherPolicy: ConstPolicy>(
-        self,
-    ) -> AllocBuilder<'a, Backend, Layout, OtherPolicy> {
-        // SAFETY: same function contract
-        unsafe { self.with_runtime_policy(OtherPolicy::NEW) }
-    }
-
-    /// Set the unsafe allocation policy at runtime
-    ///
-    /// # Safety
-    ///
-    /// The user must ensure its use of allocated buffers are safe taking into account the policy.
-    #[zenoh_macros::unstable_doc]
-    pub unsafe fn with_runtime_policy<OtherPolicy>(
-        self,
-        policy: OtherPolicy,
-    ) -> AllocBuilder<'a, Backend, Layout, OtherPolicy> {
-        AllocBuilder {
-            provider: self.provider,
-            layout: self.layout,
-            policy,
+    pub fn with_policy<OtherPolicy>(self) -> ProviderAllocBuilder<'a, Backend, What, OtherPolicy> {
+        ProviderAllocBuilder {
+            data: self.data,
+            _phantom: PhantomData,
         }
     }
-
-    fn layout_policy(self) -> Result<(PrecomputedLayout<'a, Backend, Layout>, Policy), ZLayoutError>
-    where
-        Backend: ShmProviderBackend,
-        Layout: AllocLayout,
-    {
-        let layout = PrecomputedLayout::new(self.provider, self.layout.memory_layout()?)?;
-        Ok((layout, self.policy))
-    }
 }
 
-impl<'a, Backend: ShmProviderBackend, Layout: TryInto<MemoryLayout>>
-    AllocBuilder<'a, Backend, Layout>
+// Untyped allocation API
+impl<'a, Backend, What, Policy> Resolvable for ProviderAllocBuilder<'a, Backend, What, Policy>
 where
-    Layout::Error: Into<ZLayoutError>,
+    Backend: ShmProviderBackend,
+    What: TryIntoMemoryLayout,
 {
-    /// Try to build an allocation layout
-    #[deprecated(
-        since = "1.5.3",
-        note = "Please use `ShmProvider::alloc_layout` method instead"
-    )]
-    #[zenoh_macros::unstable_doc]
-    pub fn into_layout(self) -> Result<PrecomputedLayout<'a, Backend, Layout>, ZLayoutError> {
-        PrecomputedLayout::new(self.provider, self.layout.try_into().map_err(Into::into)?)
-    }
+    type To = BufLayoutAllocResult;
 }
 
-impl<'a, Backend, Layout: AllocLayout, Policy> Resolvable
-    for AllocBuilder<'a, Backend, Layout, Policy>
-{
-    type To = Result<Layout::Buffer, ZLayoutAllocError>;
-}
-
-impl<'a, Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait
-    for AllocBuilder<'a, Backend, Layout, Policy>
+// Sync alloc policy
+impl<'a, Backend, What, Policy> Wait for ProviderAllocBuilder<'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend,
+    What: TryIntoMemoryLayout,
+    Policy: AllocPolicy,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let (layout, policy) = self.layout_policy()?;
-        // SAFETY: same contract used to set the policy
-        Ok(unsafe { layout.alloc().with_runtime_policy(policy) }.wait()?)
+        AllocLayout::<Backend, What>::new(self.data.provider, self.data.what.try_into()?)?
+            .alloc()
+            .with_policy::<Policy>()
+            .wait()
+            .map_err(|e| e.into())
     }
 }
 
-impl<
-        'a,
-        Backend: ShmProviderBackend + Sync,
-        Layout: AllocLayout + Send + Sync + 'a,
-        Policy: AsyncAllocPolicy<Backend> + Sync + 'a,
-    > IntoFuture for AllocBuilder<'a, Backend, Layout, Policy>
+// Async alloc policy
+impl<'a, Backend, What, Policy> IntoFuture for ProviderAllocBuilder<'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    What: TryIntoMemoryLayout + Send + Sync + 'a,
+    Policy: AsyncAllocPolicy,
 {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
 
     fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move {
-            let (layout, policy) = self.layout_policy()?;
-            // SAFETY: same contract used to set the policy
-            Ok(unsafe { layout.alloc().with_runtime_policy(policy) }.await?)
-        })
+        Box::pin(
+            async move {
+                AllocLayout::<Backend, What>::new(self.data.provider, self.data.what.try_into()?)?
+                    .alloc()
+                    .with_policy::<Policy>()
+                    .await
+                    .map_err(|e| e.into())
+            }
+            .into_future(),
+        )
     }
 }
 
-/// Builder for making allocations with instant layout calculation
+// Untyped allocation API for MemoryLayout
+impl<'a, Backend, Policy> Resolvable for ProviderAllocBuilder<'a, Backend, MemoryLayout, Policy>
+where
+    Backend: ShmProviderBackend,
+{
+    type To = BufLayoutAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, Backend, Policy> Wait for ProviderAllocBuilder<'a, Backend, MemoryLayout, Policy>
+where
+    Backend: ShmProviderBackend,
+    Policy: AllocPolicy,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, self.data.what)?
+            .alloc()
+            .with_policy::<Policy>()
+            .wait()
+            .map_err(|e| e.into())
+    }
+}
+
+// Async alloc policy
+impl<'a, Backend, Policy> IntoFuture for ProviderAllocBuilder<'a, Backend, MemoryLayout, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    Policy: AsyncAllocPolicy,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(
+            async move {
+                AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, self.data.what)?
+                    .alloc()
+                    .with_policy::<Policy>()
+                    .await
+                    .map_err(|e| e.into())
+            }
+            .into_future(),
+        )
+    }
+}
+
+// Untyped allocation API for StaticLayout
+impl<'a, Backend, Policy, T> Resolvable
+    for ProviderAllocBuilder<'a, Backend, StaticLayout<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+{
+    type To = BufLayoutAllocResult;
+}
+
+// Sync alloc policy
+impl<'a, Backend, Policy, T> Wait for ProviderAllocBuilder<'a, Backend, StaticLayout<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+    Policy: AllocPolicy,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, self.data.what.into())?
+            .alloc()
+            .with_policy::<Policy>()
+            .wait()
+            .map_err(|e| e.into())
+    }
+}
+
+// Async alloc policy
+impl<'a, Backend, Policy, T> IntoFuture
+    for ProviderAllocBuilder<'a, Backend, StaticLayout<T>, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    Policy: AsyncAllocPolicy,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        let layout = self.data.what.into();
+        Box::pin(
+            async move {
+                AllocLayout::<Backend, MemoryLayout>::new(self.data.provider, layout)?
+                    .alloc()
+                    .with_policy::<Policy>()
+                    .await
+                    .map_err(|e| e.into())
+            }
+            .into_future(),
+        )
+    }
+}
+
+// Typed allocation API
+impl<'a, Backend, T, Policy> Resolvable
+    for ProviderAllocBuilder<'a, Backend, LayoutForType<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+    T: ResideInShm,
+{
+    type To = TypedBufLayoutAllocResult<T>;
+}
+
+// Sync alloc policy
+impl<'a, Backend, T, Policy> Wait for ProviderAllocBuilder<'a, Backend, LayoutForType<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+    T: ResideInShm,
+    Policy: AllocPolicy,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        AllocLayout::<Backend, LayoutForType<T>>::new(self.data.provider, self.data.what.into())?
+            .alloc()
+            .with_policy::<Policy>()
+            .wait()
+            .map_err(ZLayoutAllocError::Alloc)
+    }
+}
+
+// Async alloc policy
+impl<'a, Backend, T, Policy> IntoFuture
+    for ProviderAllocBuilder<'a, Backend, LayoutForType<T>, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    T: ResideInShm + 'a,
+    Policy: AsyncAllocPolicy,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'a + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(
+            async move {
+                AllocLayout::<Backend, LayoutForType<T>>::new(
+                    self.data.provider,
+                    self.data.what.into(),
+                )?
+                .alloc()
+                .with_policy::<Policy>()
+                .await
+                .map_err(ZLayoutAllocError::Alloc)
+            }
+            .into_future(),
+        )
+    }
+}
+
+/// Builder for making allocations through precalculated Layout
 #[zenoh_macros::unstable_doc]
-pub struct PrecomputedAllocBuilder<'b, 'a: 'b, Backend, Layout, Policy = JustAlloc> {
-    layout: &'b PrecomputedLayout<'a, Backend, Layout>,
-    policy: Policy,
+pub struct LayoutAllocBuilder<'b, 'a: 'b, Backend, What, Policy = JustAlloc>
+where
+    Backend: ShmProviderBackend,
+{
+    layout: &'b AllocLayout<'a, Backend, What>,
+    _phantom: PhantomData<Policy>,
 }
 
 // Generic impl
-impl<'b, 'a: 'b, Backend, Layout, Policy> PrecomputedAllocBuilder<'b, 'a, Backend, Layout, Policy> {
+impl<'b, 'a: 'b, Backend, What, Policy> LayoutAllocBuilder<'b, 'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend,
+{
     /// Set the allocation policy
     #[zenoh_macros::unstable_doc]
-    pub fn with_policy<OtherPolicy: ConstPolicy>(
+    pub fn with_policy<OtherPolicy>(
         self,
-    ) -> PrecomputedAllocBuilder<'b, 'a, Backend, Layout, OtherPolicy> {
-        // SAFETY: the policy is safe
-        unsafe { self.with_runtime_policy(OtherPolicy::NEW) }
-    }
-
-    /// Set the unsafe allocation policy
-    ///
-    /// # Safety
-    ///
-    /// The user must ensure its use of allocated buffers are safe taking into account the policy.
-    #[zenoh_macros::unstable_doc]
-    pub unsafe fn with_unsafe_policy<OtherPolicy: ConstPolicy>(
-        self,
-    ) -> PrecomputedAllocBuilder<'b, 'a, Backend, Layout, OtherPolicy> {
-        // SAFETY: same function contract
-        unsafe { self.with_runtime_policy(OtherPolicy::NEW) }
-    }
-
-    /// Set the unsafe allocation policy at runtime
-    ///
-    /// # Safety
-    ///
-    /// The user must ensure its use of allocated buffers are safe taking into account the policy.
-    #[zenoh_macros::unstable_doc]
-    pub unsafe fn with_runtime_policy<OtherPolicy>(
-        self,
-        policy: OtherPolicy,
-    ) -> PrecomputedAllocBuilder<'b, 'a, Backend, Layout, OtherPolicy> {
-        PrecomputedAllocBuilder {
+    ) -> LayoutAllocBuilder<'b, 'a, Backend, What, OtherPolicy> {
+        LayoutAllocBuilder {
             layout: self.layout,
-            policy,
+            _phantom: PhantomData,
         }
     }
 }
 
-impl<Backend, Layout: AllocLayout, Policy> Resolvable
-    for PrecomputedAllocBuilder<'_, '_, Backend, Layout, Policy>
+// Untyped alloc api
+impl<'b, 'a: 'b, Backend, What, Policy> Resolvable
+    for LayoutAllocBuilder<'b, 'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend,
+    What: TryIntoMemoryLayout,
 {
-    type To = Result<Layout::Buffer, ZAllocError>;
+    type To = BufAllocResult;
 }
 
-impl<Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait
-    for PrecomputedAllocBuilder<'_, '_, Backend, Layout, Policy>
+// Sync alloc policy
+impl<'b, 'a: 'b, Backend, What, Policy> Wait for LayoutAllocBuilder<'b, 'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend,
+    What: TryIntoMemoryLayout,
+    Policy: AllocPolicy,
+    Self: Resolvable<To = BufAllocResult>,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let buffer = self.layout.provider.alloc_inner(
-            self.layout.size,
-            &self.layout.provider_layout,
-            &self.policy,
-        )?;
-        // SAFETY: the buffer has been allocated with the requested layout
-        Ok(unsafe { Layout::wrap_buffer(buffer) })
+        self.layout
+            .provider
+            .alloc_inner::<Policy>(self.layout.size, &self.layout.provider_layout)
     }
 }
 
-impl<
-        'b,
-        'a: 'b,
-        Backend: ShmProviderBackend + Sync,
-        Layout: AllocLayout + Sync,
-        Policy: AsyncAllocPolicy<Backend> + Sync + 'b,
-    > IntoFuture for PrecomputedAllocBuilder<'b, 'a, Backend, Layout, Policy>
+// Async alloc policy
+impl<'a, Backend, What, Policy> IntoFuture for LayoutAllocBuilder<'a, 'a, Backend, What, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    What: TryIntoMemoryLayout + Send + Sync + 'a,
+    Policy: AsyncAllocPolicy,
+    LayoutAllocBuilder<'a, 'a, Backend, What, Policy>: Resolvable<To = BufAllocResult>,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + 'b + Send>>;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a + Send>>;
 
     fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move {
-            let buffer = self
-                .layout
-                .provider
-                .alloc_inner_async(self.layout.size, &self.layout.provider_layout, &self.policy)
-                .await?;
-            // SAFETY: the buffer has been allocated with the requested layout
-            Ok(unsafe { Layout::wrap_buffer(buffer) })
-        })
+        Box::pin(
+            async move {
+                self.layout
+                    .provider
+                    .alloc_inner_async::<Policy>(self.layout.size, &self.layout.provider_layout)
+                    .await
+            }
+            .into_future(),
+        )
+    }
+}
+
+// Untyped alloc api for MemoryLayout
+impl<'b, 'a: 'b, Backend, Policy> Resolvable
+    for LayoutAllocBuilder<'b, 'a, Backend, MemoryLayout, Policy>
+where
+    Backend: ShmProviderBackend,
+{
+    type To = BufAllocResult;
+}
+
+// Sync alloc policy
+impl<'b, 'a: 'b, Backend, Policy> Wait for LayoutAllocBuilder<'b, 'a, Backend, MemoryLayout, Policy>
+where
+    Backend: ShmProviderBackend,
+    Policy: AllocPolicy,
+    Self: Resolvable<To = BufAllocResult>,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        self.layout
+            .provider
+            .alloc_inner::<Policy>(self.layout.size, &self.layout.provider_layout)
+    }
+}
+
+// Async alloc policy
+impl<'a, Backend, Policy> IntoFuture for LayoutAllocBuilder<'a, 'a, Backend, MemoryLayout, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    Policy: AsyncAllocPolicy,
+    LayoutAllocBuilder<'a, 'a, Backend, MemoryLayout, Policy>: Resolvable<To = BufAllocResult>,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(
+            async move {
+                self.layout
+                    .provider
+                    .alloc_inner_async::<Policy>(self.layout.size, &self.layout.provider_layout)
+                    .await
+            }
+            .into_future(),
+        )
+    }
+}
+
+// Typed alloc api
+impl<'b, 'a: 'b, Backend, T, Policy> Resolvable
+    for LayoutAllocBuilder<'b, 'a, Backend, LayoutForType<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+    T: ResideInShm,
+{
+    type To = TypedBufAllocResult<T>;
+}
+
+// Sync alloc policy
+impl<'b, 'a: 'b, Backend, T, Policy> Wait
+    for LayoutAllocBuilder<'b, 'a, Backend, LayoutForType<T>, Policy>
+where
+    Backend: ShmProviderBackend,
+    T: ResideInShm,
+    Policy: AllocPolicy,
+    Self: Resolvable<To = TypedBufAllocResult<T>>,
+{
+    fn wait(self) -> <Self as Resolvable>::To {
+        let buffer = self
+            .layout
+            .provider
+            .alloc_inner::<Policy>(self.layout.size, &self.layout.provider_layout)?;
+
+        Ok(unsafe { Typed::new_unchecked(buffer) })
+    }
+}
+
+// Async alloc policy
+impl<'a, Backend, T, Policy> IntoFuture
+    for LayoutAllocBuilder<'a, 'a, Backend, LayoutForType<T>, Policy>
+where
+    Backend: ShmProviderBackend + Sync,
+    T: ResideInShm + 'a,
+    Policy: AsyncAllocPolicy,
+    LayoutAllocBuilder<'a, 'a, Backend, LayoutForType<T>, Policy>:
+        Resolvable<To = TypedBufAllocResult<T>>,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Pin<Box<dyn Future<Output = <Self as Resolvable>::To> + 'a + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        let provider = self.layout.provider;
+        let size = self.layout.size;
+        let provider_layout = self.layout.provider_layout.clone();
+
+        Box::pin(
+            async move {
+                let buffer = provider
+                    .alloc_inner_async::<Policy>(size, &provider_layout)
+                    .await?;
+
+                Ok(unsafe { Typed::new_unchecked(buffer) })
+            }
+            .into_future(),
+        )
     }
 }
 
@@ -672,8 +955,10 @@ impl ShmProviderBuilder {
 
     /// Set the default backend
     #[zenoh_macros::unstable_doc]
-    pub fn default_backend<Layout>(layout: Layout) -> ShmProviderBuilderWithDefaultBackend<Layout> {
-        ShmProviderBuilderWithDefaultBackend { layout }
+    pub fn default_backend<What: MemLayout>(
+        what: What,
+    ) -> ShmProviderBuilderWithDefaultBackend<What> {
+        ShmProviderBuilderWithDefaultBackend { what }
     }
 }
 
@@ -704,53 +989,39 @@ where
 }
 
 #[zenoh_macros::unstable_doc]
-pub struct ShmProviderBuilderWithDefaultBackend<Layout> {
-    layout: Layout,
+pub struct ShmProviderBuilderWithDefaultBackend<What: MemLayout> {
+    what: What,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout> Resolvable for ShmProviderBuilderWithDefaultBackend<Layout> {
+impl<What: MemLayout> Resolvable for ShmProviderBuilderWithDefaultBackend<What> {
     type To = ZResult<ShmProvider<PosixShmProviderBackend>>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: TryInto<MemoryLayout>> Wait for ShmProviderBuilderWithDefaultBackend<Layout>
+impl<What: MemLayout> Wait for ShmProviderBuilderWithDefaultBackend<What>
 where
-    Layout::Error: Error,
-    PosixShmProviderBackendBuilder<Layout>:
-        Resolvable<To = ZResult<PosixShmProviderBackend>> + Wait,
+    PosixShmProviderBackendBuilder<What>: Resolvable<To = ZResult<PosixShmProviderBackend>> + Wait,
 {
     /// build ShmProvider
     fn wait(self) -> <Self as Resolvable>::To {
-        let backend = PosixShmProviderBackend::builder(self.layout).wait()?;
+        let backend = PosixShmProviderBackend::builder(self.what).wait()?;
         Ok(ShmProvider::new(backend))
-    }
-}
-
-#[derive(Debug)]
-struct BusyChunk {
-    metadata: AllocatedMetadataDescriptor,
-}
-
-impl BusyChunk {
-    fn new(metadata: AllocatedMetadataDescriptor) -> Self {
-        Self { metadata }
-    }
-
-    fn descriptor(&self) -> ChunkDescriptor {
-        self.metadata.header().data_descriptor()
     }
 }
 
 /// A generalized interface for shared memory data sources
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
-pub struct ShmProvider<Backend> {
+pub struct ShmProvider<Backend>
+where
+    Backend: ShmProviderBackend,
+{
     backend: Backend,
     busy_list: Mutex<Vec<BusyChunk>>,
 }
 
-impl<Backend: Default> Default for ShmProvider<Backend> {
+impl<Backend: ShmProviderBackend + Default> Default for ShmProvider<Backend> {
     fn default() -> Self {
         Self::new(Backend::default())
     }
@@ -760,27 +1031,12 @@ impl<Backend> ShmProvider<Backend>
 where
     Backend: ShmProviderBackend,
 {
-    /// Allocates a buffer with a given memory layout.
+    /// Rich interface for making allocations
     #[zenoh_macros::unstable_doc]
-    pub fn alloc<'a, Layout>(&'a self, layout: Layout) -> AllocBuilder<'a, Backend, Layout> {
-        AllocBuilder {
-            provider: self,
-            layout,
-            policy: JustAlloc,
-        }
+    pub fn alloc<'a, What: BufferLayout>(&'a self, what: What) -> AllocBuilder<'a, Backend, What> {
+        AllocBuilder::new(self, what)
     }
 
-    /// Precompute the actual layout for an allocation.
-    #[zenoh_macros::unstable_doc]
-    pub fn alloc_layout<'a, Layout: TryInto<MemoryLayout>>(
-        &'a self,
-        layout: Layout,
-    ) -> Result<PrecomputedLayout<'a, Backend, Layout>, ZLayoutError>
-    where
-        Layout::Error: Into<ZLayoutError>,
-    {
-        PrecomputedLayout::new(self, layout.try_into().map_err(Into::into)?)
-    }
     /// Defragment memory
     #[zenoh_macros::unstable_doc]
     pub fn defragment(&self) -> usize {
@@ -802,8 +1058,18 @@ where
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
+    /// Try to collect free chunks.
+    /// Returns the size of largest collected chunk
     #[zenoh_macros::unstable_doc]
-    fn garbage_collect_impl<const SAFE: bool>(&self) -> usize {
+    pub fn garbage_collect(&self) -> usize {
+        fn is_free_chunk(chunk: &BusyChunk) -> bool {
+            let header = chunk.metadata.header();
+            if header.refcount.load(Ordering::SeqCst) != 0 {
+                return header.watchdog_invalidated.load(Ordering::SeqCst);
+            }
+            true
+        }
+
         fn retain_unordered<T>(vec: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) {
             let mut i = 0;
             while i < vec.len() {
@@ -817,39 +1083,24 @@ where
         }
 
         tracing::trace!("Running Garbage Collector");
+
         let mut largest = 0usize;
-        retain_unordered(&mut zlock!(self.busy_list), |chunk| {
-            let header = chunk.metadata.header();
-            if header.refcount.load(Ordering::SeqCst) == 0
-                || (!SAFE && header.watchdog_invalidated.load(Ordering::SeqCst))
-            {
-                tracing::trace!("Garbage Collecting Chunk: {:?}", chunk);
-                let descriptor_to_free = chunk.descriptor();
+        let mut guard = self.busy_list.lock().unwrap();
+
+        retain_unordered(&mut guard, |maybe_free| {
+            if is_free_chunk(maybe_free) {
+                tracing::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
+                let descriptor_to_free = maybe_free.descriptor();
                 self.backend.free(&descriptor_to_free);
                 largest = largest.max(descriptor_to_free.len.get());
                 return false;
             }
             true
         });
+
+        drop(guard);
+
         largest
-    }
-
-    /// Try to collect free chunks.
-    /// Returns the size of largest collected chunk
-    #[zenoh_macros::unstable_doc]
-    pub fn garbage_collect(&self) -> usize {
-        self.garbage_collect_impl::<true>()
-    }
-
-    /// Try to collect free chunks.
-    /// Returns the size of largest collected chunk
-    ///
-    /// # Safety
-    ///
-    /// User must ensure there is no data races with collected chunks, as some of them may still be in-use.
-    #[zenoh_macros::unstable_doc]
-    pub unsafe fn garbage_collect_unsafe(&self) -> usize {
-        self.garbage_collect_impl::<false>()
     }
 
     /// Bytes available for use
@@ -860,27 +1111,20 @@ where
 }
 
 // PRIVATE impls
-impl<Backend> ShmProvider<Backend> {
-    fn new(backend: Backend) -> Self {
-        Self {
-            backend,
-            busy_list: Default::default(),
-        }
-    }
-}
-
 impl<Backend> ShmProvider<Backend>
 where
     Backend: ShmProviderBackend,
 {
-    fn alloc_inner<Policy>(
-        &self,
-        size: NonZeroUsize,
-        layout: &MemoryLayout,
-        policy: &Policy,
-    ) -> Result<ZShmMut, ZAllocError>
+    fn new(backend: Backend) -> Self {
+        Self {
+            backend,
+            busy_list: Mutex::new(Vec::default()),
+        }
+    }
+
+    fn alloc_inner<Policy>(&self, size: NonZeroUsize, layout: &MemoryLayout) -> BufAllocResult
     where
-        Policy: AllocPolicy<Backend>,
+        Policy: AllocPolicy,
     {
         // allocate resources for SHM buffer
         let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
@@ -891,7 +1135,7 @@ where
         // Don't loose this chunk as it leads to memory leak at the backend side!
         // NOTE: self.backend.alloc(len) returns chunk with len >= required len,
         // and it is necessary to handle that properly and pass this len to corresponding free(...)
-        let chunk = policy.alloc(layout, self)?;
+        let chunk = Policy::alloc(layout, self)?;
 
         // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
@@ -965,10 +1209,9 @@ where
         &self,
         size: NonZeroUsize,
         backend_layout: &MemoryLayout,
-        policy: &Policy,
-    ) -> Result<ZShmMut, ZAllocError>
+    ) -> BufAllocResult
     where
-        Policy: AsyncAllocPolicy<Backend>,
+        Policy: AsyncAllocPolicy,
     {
         // allocate resources for SHM buffer
         let (allocated_metadata, confirmed_metadata) = Self::alloc_resources()?;
@@ -979,7 +1222,7 @@ where
         // Don't loose this chunk as it leads to memory leak at the backend side!
         // NOTE: self.backend.alloc(len) returns chunk with len >= required len,
         // and it is necessary to handle that properly and pass this len to corresponding free(...)
-        let chunk = policy.alloc_async(backend_layout, self).await?;
+        let chunk = Policy::alloc_async(backend_layout, self).await?;
 
         // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);

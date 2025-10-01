@@ -473,9 +473,9 @@ const _: () = {
             Self(ZSlice::from(value).into())
         }
     }
-    impl<T, Buf: Into<ZBytes>> From<Typed<T, Buf>> for ZBytes {
-        fn from(value: Typed<T, Buf>) -> Self {
-            Typed::into_inner(value).into()
+    impl<T, Tbuf: Into<ZBytes>> From<Typed<T, Tbuf>> for ZBytes {
+        fn from(value: Typed<T, Tbuf>) -> Self {
+            value.into_inner().into()
         }
     }
 };

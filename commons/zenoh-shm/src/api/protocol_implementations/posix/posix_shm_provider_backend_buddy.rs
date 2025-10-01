@@ -24,11 +24,14 @@ use zenoh_result::ZResult;
 
 use super::posix_shm_segment::PosixShmSegment;
 use crate::api::{
-    common::{types::ProtocolID, with_id::WithProtocolID},
+    common::{
+        types::{ChunkID, ProtocolID, PtrInSegment},
+        with_id::WithProtocolID,
+    },
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
     provider::{
-        chunk::ChunkDescriptor,
-        memory_layout::MemoryLayout,
+        chunk::{AllocatedChunk, ChunkDescriptor},
+        memory_layout::{MemLayout, MemoryLayout, StaticLayout, TryIntoMemoryLayout},
         shm_provider_backend::ShmProviderBackend,
         types::{AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutError},
     },
@@ -36,22 +39,44 @@ use crate::api::{
 
 /// Builder to create posix SHM provider
 #[zenoh_macros::unstable_doc]
-pub struct PosixShmProviderBackendBuddyBuilder<Layout> {
+pub struct PosixShmProviderBackendBuddyBuilder<Layout: MemLayout> {
     layout: Layout,
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout> Resolvable for PosixShmProviderBackendBuddyBuilder<Layout> {
+impl<Layout: TryIntoMemoryLayout> Resolvable for PosixShmProviderBackendBuddyBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBuddy>;
 }
 
 #[zenoh_macros::unstable_doc]
-impl<Layout: TryInto<MemoryLayout>> Wait for PosixShmProviderBackendBuddyBuilder<Layout>
-where
-    Layout::Error: Into<ZLayoutError>,
-{
+impl<Layout: TryIntoMemoryLayout> Wait for PosixShmProviderBackendBuddyBuilder<Layout> {
     fn wait(self) -> <Self as Resolvable>::To {
-        PosixShmProviderBackendBuddy::new(&self.layout.try_into().map_err(Into::into)?)
+        let layout: MemoryLayout = self.layout.try_into()?;
+        PosixShmProviderBackendBuddy::new(&layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl Resolvable for PosixShmProviderBackendBuddyBuilder<&MemoryLayout> {
+    type To = ZResult<PosixShmProviderBackendBuddy>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl Wait for PosixShmProviderBackendBuddyBuilder<&MemoryLayout> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendBuddy::new(self.layout)
+    }
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Resolvable for PosixShmProviderBackendBuddyBuilder<StaticLayout<T>> {
+    type To = ZResult<PosixShmProviderBackendBuddy>;
+}
+
+#[zenoh_macros::unstable_doc]
+impl<T> Wait for PosixShmProviderBackendBuddyBuilder<StaticLayout<T>> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        PosixShmProviderBackendBuddy::new(&self.layout.into())
     }
 }
 
@@ -71,7 +96,9 @@ const BUDDY_ORDER: usize = 30;
 impl PosixShmProviderBackendBuddy {
     /// Get the builder to construct a new instance
     #[zenoh_macros::unstable_doc]
-    pub fn builder<Layout>(layout: Layout) -> PosixShmProviderBackendBuddyBuilder<Layout> {
+    pub fn builder<Layout: MemLayout>(
+        layout: Layout,
+    ) -> PosixShmProviderBackendBuddyBuilder<Layout> {
         PosixShmProviderBackendBuddyBuilder { layout }
     }
 
@@ -123,7 +150,17 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
         };
 
         match alloc {
-            Ok(buf) => Ok(self.segment.clone().allocated_chunk(buf, layout)),
+            Ok(buf) => {
+                let descriptor = {
+                    let chunk_id = unsafe { self.segment.segment.index(buf.as_ptr()) } as ChunkID;
+                    let size = layout.size();
+                    ChunkDescriptor::new(self.segment.segment.id(), chunk_id, size)
+                };
+
+                let data = PtrInSegment::new(buf.as_ptr(), self.segment.clone());
+
+                Ok(AllocatedChunk { descriptor, data })
+            }
             Err(_) => Err(ZAllocError::OutOfMemory),
         }
     }

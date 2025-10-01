@@ -1,4 +1,3 @@
-use std::mem::MaybeUninit;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,9 +15,8 @@ use std::sync::atomic::AtomicUsize;
 
 use zenoh::{
     shm::{
-        AllocAlignment, BlockOn, ConstBool, ConstUsize, Deallocate, Defragment, GarbageCollect,
-        JustAlloc, MemoryLayout, PosixShmProviderBackend, ResideInShm, ShmProviderBuilder, Typed,
-        TypedLayout, ZShmMut,
+        AllocAlignment, BlockOn, BuildLayout, Deallocate, Defragment, GarbageCollect,
+        PosixShmProviderBackend, ResideInShm, ShmProviderBuilder,
     },
     Config, Wait,
 };
@@ -36,8 +34,7 @@ async fn run() -> zenoh::Result<()> {
         // Option 1: simple way to create default ShmProvider initialized with default-configured
         {
             // SHM backend (PosixShmProviderBackend)
-            let _simple =
-                ShmProviderBuilder::default_backend(MemoryLayout::try_from(42).unwrap()).wait()?;
+            let _simple = ShmProviderBuilder::default_backend(65536).wait()?;
         }
 
         // Option 2: comprehensive ShmProvider creation
@@ -73,11 +70,13 @@ async fn run() -> zenoh::Result<()> {
     // Layout is reusable and is designed to handle series of similar allocations
     {
         // Option 1: Simple configuration:
-        let simple_layout = provider.alloc_layout(512)?;
+        let simple_layout = provider.alloc(512).into_layout()?;
         let _shm_buf = simple_layout.alloc().wait()?;
 
         // Option 2: Comprehensive configuration:
-        let comprehensive_layout = provider.alloc_layout((512, AllocAlignment::ALIGN_2_BYTES))?;
+        let comprehensive_layout = provider
+            .alloc((512, AllocAlignment::ALIGN_2_BYTES))
+            .into_layout()?;
         let _shm_buf = comprehensive_layout.alloc().wait()?;
     };
 
@@ -94,14 +93,13 @@ async fn run() -> zenoh::Result<()> {
         unsafe impl ResideInShm for SharedData {}
 
         // typed layout
+        let typed_layout = BuildLayout::for_type::<SharedData>();
 
-        // allocate typed SHM buffer; the allocated type is wrapped into `MaybeUninit`
-        let typed_buf: Typed<MaybeUninit<SharedData>, ZShmMut> = provider
-            .alloc(TypedLayout::<SharedData>::new())
-            .wait()
-            .unwrap();
-        // the underlying buffer can be extracted
-        let _buf: ZShmMut = Typed::into_inner(typed_buf);
+        // allocate **typed** SHM buffer
+        let _typed_buf = provider.alloc(typed_layout).wait().unwrap();
+
+        // allocate **untyped** SHM buffer
+        let _untyped_buf = provider.alloc(typed_layout.layout()).wait().unwrap();
     }
 
     // Allocation policies
@@ -141,13 +139,10 @@ async fn run() -> zenoh::Result<()> {
 
         // Option: The comprehensive allocation policy that tries to GC, defragment and then deallocates up to
         // 10 buffers if provider is not able to allocate
-        let _comprehensive_alloc = unsafe {
-            provider.alloc(512).with_unsafe_policy::<Deallocate<
-                ConstUsize<10>,
-                Defragment<GarbageCollect<JustAlloc, JustAlloc, ConstBool<false>>>,
-            >>()
-        }
-        .wait()?;
+        let _comprehensive_alloc = provider
+            .alloc(512)
+            .with_policy::<Deallocate<10, Defragment<GarbageCollect>>>()
+            .wait()?;
 
         default_alloc
     };
