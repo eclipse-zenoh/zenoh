@@ -807,6 +807,16 @@ impl Session {
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let peers = session.config().get("connect/endpoints").unwrap();
+    /// # }
+    /// ```
     #[zenoh_macros::unstable]
     pub fn config(&self) -> &crate::config::Notifier<Config> {
         self.0.runtime.config()
@@ -817,7 +827,6 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
