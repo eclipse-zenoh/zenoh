@@ -199,6 +199,7 @@ impl Notifier<Config> {
         }
     }
 
+    #[cfg(feature = "plugins")]
     pub fn subscribe(&self) -> flume::Receiver<Notification> {
         let (tx, rx) = flume::unbounded();
         self.lock_subscribers().push(tx);

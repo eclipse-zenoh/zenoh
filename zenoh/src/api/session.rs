@@ -766,29 +766,13 @@ impl Session {
 
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
-    /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
-    /// zenoh configuration through the `get` function or
-    /// modify the zenoh configuration through the `insert`,
-    /// or `insert_json5` function.
-    ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
-    /// # }
-    /// ```
-    ///
-    /// ### Modify current zenoh configuration
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
     #[zenoh_macros::unstable]
@@ -801,7 +785,6 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
