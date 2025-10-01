@@ -245,6 +245,13 @@ impl Notifier<Config> {
     }
 
     pub fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
+        if !key.starts_with("plugins/") {
+            bail!(
+                "Error inserting conf value {} : updating config is only \
+                    supported for keys starting with `plugins/`",
+                key
+            );
+        }
         self.lock_config().insert_json5(key, value)?;
         self.notify(key);
         Ok(())
