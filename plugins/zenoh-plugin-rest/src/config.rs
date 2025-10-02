@@ -11,24 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::fmt;
-
-use schemars::JsonSchema;
-use serde::{
-    de,
-    de::{Unexpected, Visitor},
-    Deserialize, Deserializer,
+use std::{
+    fmt,
+    net::{Ipv6Addr, SocketAddr},
 };
 
-const DEFAULT_HTTP_INTERFACE: &str = "[::]";
+use schemars::JsonSchema;
+use serde::{de, de::Visitor, Deserialize, Deserializer};
+
 pub const DEFAULT_WORK_THREAD_NUM: usize = 2;
 pub const DEFAULT_MAX_BLOCK_THREAD_NUM: usize = 50;
 
 #[derive(JsonSchema, Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    #[serde(deserialize_with = "deserialize_http_port")]
-    pub http_port: String,
+    #[serde(rename = "http_port", deserialize_with = "deserialize_http_port")]
+    pub addr: SocketAddr,
     #[serde(default = "default_work_thread_num")]
     pub work_thread_num: usize,
     #[serde(default = "default_max_block_thread_num")]
@@ -46,7 +44,7 @@ impl From<&Config> for serde_json::Value {
     }
 }
 
-fn deserialize_http_port<'de, D>(deserializer: D) -> Result<String, D::Error>
+fn deserialize_http_port<'de, D>(deserializer: D) -> Result<SocketAddr, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -64,7 +62,7 @@ fn default_max_block_thread_num() -> usize {
 struct HttpPortVisitor;
 
 impl Visitor<'_> for HttpPortVisitor {
-    type Value = String;
+    type Value = SocketAddr;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str(r#"either a port number as an integer or a string, either a string with format "<local_ip>:<port_number>""#)
@@ -74,26 +72,30 @@ impl Visitor<'_> for HttpPortVisitor {
     where
         E: de::Error,
     {
-        Ok(format!("{DEFAULT_HTTP_INTERFACE}:{value}"))
+        Ok(SocketAddr::new(
+            Ipv6Addr::UNSPECIFIED.into(),
+            value
+                .try_into()
+                .map_err(|_| de::Error::custom("invalid port"))?,
+        ))
     }
 
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        let parts: Vec<&str> = value.split(':').collect();
-        if parts.len() > 2 {
-            return Err(E::invalid_value(Unexpected::Str(value), &self));
-        }
-        let (interface, port) = if parts.len() == 1 {
-            (DEFAULT_HTTP_INTERFACE, parts[0])
-        } else {
-            (parts[0], parts[1])
+        let (ip, port) = match value.split_once(':') {
+            Some((ip, port)) => (
+                ip.parse()
+                    .map_err(|_| de::Error::custom("invalid ip address"))?,
+                port,
+            ),
+            None => (Ipv6Addr::UNSPECIFIED.into(), value),
         };
-        if port.parse::<u32>().is_err() {
-            return Err(E::invalid_value(Unexpected::Str(port), &self));
-        }
-        Ok(format!("{interface}:{port}"))
+        let port = port
+            .parse()
+            .map_err(|_| de::Error::custom("invalid port"))?;
+        Ok(SocketAddr::new(ip, port))
     }
 }
 
@@ -159,7 +161,7 @@ impl<'de> serde::de::Visitor<'de> for PathVisitor {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, DEFAULT_HTTP_INTERFACE};
+    use super::Config;
 
     #[test]
     fn test_path_field() {
@@ -169,13 +171,13 @@ mod tests {
 
         assert!(config.is_ok());
         let Config {
-            http_port,
+            addr: http_port,
             __required__,
             __path__,
             ..
         } = config.unwrap();
 
-        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(http_port.to_string(), "[::]:8080");
         assert_eq!(__path__, Some(vec![String::from("/example/path")]));
         assert_eq!(__required__, None);
     }
@@ -186,13 +188,13 @@ mod tests {
         let config = serde_json::from_str::<Config>(r#"{"__required__": true, "http_port": 8080}"#);
         assert!(config.is_ok());
         let Config {
-            http_port,
+            addr: http_port,
             __required__,
             __path__,
             ..
         } = config.unwrap();
 
-        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(http_port.to_string(), "[::]:8080");
         assert_eq!(__path__, None);
         assert_eq!(__required__, Some(true));
     }
@@ -206,13 +208,13 @@ mod tests {
 
         assert!(config.is_ok());
         let Config {
-            http_port,
+            addr: http_port,
             __required__,
             __path__,
             ..
         } = config.unwrap();
 
-        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(http_port.to_string(), "[::]:8080");
         assert_eq!(__path__, Some(vec![String::from("/example/path")]));
         assert_eq!(__required__, Some(true));
     }
@@ -224,13 +226,13 @@ mod tests {
 
         assert!(config.is_ok());
         let Config {
-            http_port,
+            addr: http_port,
             __required__,
             __path__,
             ..
         } = config.unwrap();
 
-        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(http_port.to_string(), "[::]:8080");
         assert_eq!(__path__, None);
         assert_eq!(__required__, None);
     }
