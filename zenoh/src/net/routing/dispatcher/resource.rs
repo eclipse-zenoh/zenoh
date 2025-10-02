@@ -177,24 +177,22 @@ impl SessionContext {
         }
     }
 
-    pub(crate) fn remove_queryable(&mut self, complete_only: bool) {
-        if let Some(q) = &mut self.qabl {
-            if complete_only {
-                q.complete = false;
-            } else {
-                self.qabl = None;
-            }
-        }
-    }
-
     pub(crate) fn add_queryable(&mut self, q_info: &QueryableInfoType) {
         if let Some(q) = &mut self.qabl {
-            q.complete = q.complete || q_info.complete;
-            q.distance = q.distance.min(q_info.distance);
+            *q = merge_qabl_infos(*q, &q_info);
         } else {
             self.qabl = Some(*q_info);
         }
     }
+}
+
+pub(crate) fn merge_qabl_infos(
+    mut this: QueryableInfoType,
+    info: &QueryableInfoType,
+) -> QueryableInfoType {
+    this.complete = this.complete || info.complete;
+    this.distance = std::cmp::min(this.distance, info.distance);
+    this
 }
 
 /// Global version number for route computation.
