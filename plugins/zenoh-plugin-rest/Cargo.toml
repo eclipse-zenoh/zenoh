@@ -26,26 +26,26 @@ version = { workspace = true }
 [features]
 default = ["dynamic_plugin", "zenoh/default"]
 dynamic_plugin = []
-static_plugin = ['async-std']
+static_plugin = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 name = "zenoh_plugin_rest"
 
 [dependencies]
-anyhow = { workspace = true, features = ["default"] }
-async-std = { workspace = true, features = ["tokio1"], optional = true }
+axum = { workspace = true, features = ["tokio"] }
 base64 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-http-types = { workspace = true }
+http = { workspace = true }
 lazy_static = { workspace = true }
+mime = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
-tide = { workspace = true }
 tokio = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "set-header", "trace"] }
 tracing = { workspace = true }
 zenoh = { workspace = true, default-features = false, features = [
   "internal",
@@ -75,6 +75,3 @@ license-file = ["../../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 name = "zenoh-plugin-rest"
 section = "net"
-
-[package.metadata.cargo-machete]
-ignored = ["async-std"]

@@ -27,7 +27,8 @@ version = { workspace = true }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-lock = "=3.4.1"
+axum = "=0.8.4"
+axum-core = "=0.5.2"
 base64ct = "=1.6.0"
 clap_builder = "=4.5.60"
 clap_lex = "=1.0.0"
@@ -72,7 +73,8 @@ security-framework = "=3.6.0"
 
 [package.metadata.cargo-machete]
 ignored = [
-  "async-lock",
+  "axum",
+  "axum-core",
   "base64ct",
   "clap_builder",
   "clap_lex",
