@@ -156,27 +156,6 @@ macro_rules! to_u64 {
     };
 }
 
-// This macro allows to spawn the right amount of threads in the
-// async_std executor
-#[macro_export]
-macro_rules! zasync_executor_init {
-    () => {
-        use async_global_executor;
-
-        // Zenoh requires at least 4 threads to run
-        const ASYNC_STD_THREAD_COUNT_MIN: usize = 4;
-
-        let count = async_global_executor::spawn_more_threads(ASYNC_STD_THREAD_COUNT_MIN)
-            .await
-            .unwrap();
-
-        tracing::trace!(
-            "Spawned {} additional threads in the async global executor",
-            count
-        );
-    };
-}
-
 // This macro allows to parse a string to the target type
 #[macro_export]
 macro_rules! zparse {
