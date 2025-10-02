@@ -176,14 +176,6 @@ impl SessionContext {
             e_interceptor_cache: InterceptorCache::empty(),
         }
     }
-
-    pub(crate) fn add_queryable(&mut self, q_info: &QueryableInfoType) {
-        if let Some(q) = &mut self.qabl {
-            *q = merge_qabl_infos(*q, q_info);
-        } else {
-            self.qabl = Some(*q_info);
-        }
-    }
 }
 
 pub(crate) fn merge_qabl_infos(

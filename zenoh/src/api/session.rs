@@ -2458,9 +2458,17 @@ impl Primitives for WeakSession {
                         .map(|e| e.into_owned())
                     {
                         Ok(expr) => {
-                            state
+                            let prev = state
                                 .remote_queryables
                                 .insert(m.id, (expr.clone(), m.ext_info.complete));
+                            if let Some((prev_expr, prev_complete)) = prev {
+                                self.update_matching_status(
+                                    &state,
+                                    &prev_expr,
+                                    MatchingStatusType::Queryables(prev_complete),
+                                    false,
+                                );
+                            }
                             self.update_matching_status(
                                 &state,
                                 &expr,

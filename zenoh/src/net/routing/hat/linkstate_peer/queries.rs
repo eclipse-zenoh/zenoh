@@ -320,7 +320,7 @@ fn register_simple_queryable(
                 .entry(face.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
-        .add_queryable(qabl_info);
+        .qabl = Some(*qabl_info);
     }
     face_hat_mut!(face)
         .remote_qabls
@@ -569,15 +569,6 @@ pub(super) fn undeclare_simple_queryable(
         if simple_qabls.is_empty() {
             undeclare_linkstatepeer_queryable(tables, None, res, &tables.zid.clone(), send_declare);
         } else {
-            if remote_qabl_info.is_some() {
-                undeclare_linkstatepeer_queryable(
-                    tables,
-                    None,
-                    res,
-                    &tables.zid.clone(),
-                    send_declare,
-                );
-            }
             let local_info = local_peer_qabl_info(tables, res);
             register_linkstatepeer_queryable(
                 tables,

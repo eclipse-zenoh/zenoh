@@ -177,7 +177,7 @@ fn register_simple_queryable(
                 .entry(face.id)
                 .or_insert_with(|| Arc::new(SessionContext::new(face.clone()))),
         )
-        .add_queryable(qabl_info);
+        .qabl = Some(*qabl_info);
     }
     face_hat_mut!(face)
         .remote_qabls
@@ -292,9 +292,6 @@ pub(super) fn undeclare_simple_queryable(
         if simple_qabls.is_empty() {
             propagate_forget_simple_queryable(tables, res, send_declare);
         } else {
-            if remote_qabl_info.is_some() {
-                propagate_forget_simple_queryable(tables, res, send_declare);
-            }
             propagate_simple_queryable(tables, res, None, send_declare);
         }
         if simple_qabls.len() == 1 {
