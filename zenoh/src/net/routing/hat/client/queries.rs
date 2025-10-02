@@ -214,12 +214,8 @@ pub(super) fn undeclare_simple_queryable(
     send_declare: &mut SendDeclare,
 ) {
     let remote_qabl_info = get_remote_qabl_info(&face_hat_mut!(face).remote_qabls, res);
-    let need_qabl_info_update = match remote_qabl_info {
-        Some(qi) => !(qi >= *qabl_info),
-        None => true,
-    };
 
-    if need_qabl_info_update {
+    if !qabl_info.is_included_in(&remote_qabl_info) {
         if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).qabl = remote_qabl_info;
         }

@@ -179,7 +179,7 @@ impl SessionContext {
 
     pub(crate) fn add_queryable(&mut self, q_info: &QueryableInfoType) {
         if let Some(q) = &mut self.qabl {
-            *q = merge_qabl_infos(*q, &q_info);
+            *q = merge_qabl_infos(*q, q_info);
         } else {
             self.qabl = Some(*q_info);
         }

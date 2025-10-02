@@ -479,6 +479,13 @@ pub mod queryable {
                 distance: 0,
             };
 
+            pub fn is_included_in(&self, other: &Option<QueryableInfoType>) -> bool {
+                match other {
+                    Some(qi) => qi.partial_cmp(self).map(|o| o.is_ge()).unwrap_or(false),
+                    None => false,
+                }
+            }
+
             #[cfg(feature = "test")]
             pub fn rand() -> Self {
                 use rand::Rng;
