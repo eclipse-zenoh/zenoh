@@ -108,7 +108,7 @@ impl HasWriter for &mut BBuf {
     }
 }
 
-impl Writer for &mut BBuf {
+impl Writer for BBuf {
     fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
         let mut writer = self.as_writable_slice().writer();
         let len = writer.write(bytes)?;
@@ -143,7 +143,7 @@ impl Writer for &mut BBuf {
     }
 }
 
-impl BacktrackableWriter for &mut BBuf {
+impl BacktrackableWriter for BBuf {
     type Mark = usize;
 
     fn mark(&mut self) -> Self::Mark {
@@ -157,7 +157,7 @@ impl BacktrackableWriter for &mut BBuf {
 }
 
 #[cfg(feature = "std")]
-impl std::io::Write for &mut BBuf {
+impl std::io::Write for BBuf {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match <Self as Writer>::write(self, buf) {
             Ok(n) => Ok(n.get()),

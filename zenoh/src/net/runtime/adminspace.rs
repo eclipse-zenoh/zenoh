@@ -46,6 +46,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
+#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
+use crate::internal::runtime::DynamicRuntime;
 use crate::{
     api::{
         bytes::ZBytes,
@@ -89,7 +91,10 @@ impl ConfigValidator for AdminSpace {
                 // on config comparison (see `PluginDiff`)
                 return Ok(None);
             };
-            plugin.instance().config_checker(path, current, new)
+            plugin
+                .instance()
+                .config_checker(path, &current.into(), &new.into())
+                .map(|m| m.map(|kv| kv.into()))
         }
         #[cfg(not(feature = "plugins"))]
         {
@@ -104,7 +109,7 @@ impl AdminSpace {
     fn start_plugin(
         plugin_mgr: &mut PluginsManager,
         config: &zenoh_config::PluginLoad,
-        start_args: &Runtime,
+        start_args: &DynamicRuntime,
         required: bool,
     ) -> ZResult<()> {
         let id = &config.id;
@@ -302,10 +307,11 @@ impl AdminSpace {
                                     }
                                 }
                                 PluginDiff::Start(plugin) => {
+                                    let dynamic_runtime = admin.context.runtime.clone().into();
                                     if let Err(e) = Self::start_plugin(
                                         &mut plugins_mgr,
                                         &plugin,
-                                        &admin.context.runtime,
+                                        &dynamic_runtime,
                                         plugin.required,
                                     ) {
                                         if plugin.required {
@@ -989,14 +995,13 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 Ok(Ok(responses)) => {
                     for response in responses {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
-                            match serde_json::to_vec(&response.value) {
+                            match serde_json::to_vec::<serde_json::Value>(&response.value.into()) {
                                 Ok(bytes) => {
                                     if let Err(e) = query.reply(key_expr, bytes).encoding(Encoding::APPLICATION_JSON).wait() {
                                         tracing::error!("Error sending AdminSpace reply: {:?}", e);
                                     }
                                 }
                                 Err(e) => tracing::debug!("Admin query error: {}", e),
-
                             }
                         } else {
                             tracing::error!("Error: plugin {} replied with an invalid key", plugin_key);

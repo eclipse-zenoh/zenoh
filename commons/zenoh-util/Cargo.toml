@@ -42,6 +42,7 @@ home = { workspace = true }
 humantime = { workspace = true }
 lazy_static = { workspace = true }
 libloading = { workspace = true }
+schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 shellexpand = { workspace = true }

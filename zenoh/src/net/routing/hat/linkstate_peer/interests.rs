@@ -70,13 +70,13 @@ impl HatInterestTrait for HatCode {
             )
         }
         if options.tokens() {
+            // Note: aggregation is forbidden for tokens. The flag is ignored.
             declare_token_interest(
                 tables,
                 face,
                 id,
                 res.as_ref().map(|r| (*r).clone()).as_mut(),
                 mode,
-                options.aggregate(),
                 send_declare,
             )
         }

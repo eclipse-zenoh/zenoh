@@ -33,9 +33,14 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_collections::{IntHashMap, SingleOrVec};
-use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
+#[cfg(feature = "unstable")]
+use zenoh_config::GenericConfig;
+use zenoh_config::{
+    qos::{PublisherQoSConfList, PublisherQoSConfig},
+    wrappers::ZenohId,
+};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
+use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -67,6 +72,8 @@ use zenoh_task::TaskController;
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
+#[cfg(feature = "internal")]
+use crate::net::runtime::Runtime;
 use crate::{
     api::{
         admin,
@@ -102,11 +109,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        routing::{
-            dispatcher::face::Face,
-            namespace::{ENamespace, Namespace},
-        },
-        runtime::{Runtime, RuntimeBuilder},
+        runtime::{GenericRuntime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,
@@ -123,7 +126,6 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
@@ -153,7 +155,6 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            liveliness_qid_counter: AtomicRequestId::new(0),
             local_resources: IntHashMap::new(),
             remote_resources: IntHashMap::new(),
             remote_subscribers: HashMap::new(),
@@ -337,6 +338,7 @@ impl SessionState {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback,
+            history: false,
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -509,12 +511,10 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
     weak_counter: Mutex<usize>,
-    pub(crate) runtime: Runtime,
+    pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: u16,
-    owns_runtime: bool,
     task_controller: TaskController,
-    namespace: Option<OwnedNonWildKeyExpr>,
     face_id: OnceCell<usize>,
 }
 
@@ -655,17 +655,15 @@ impl std::error::Error for SessionClosedError {}
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
-        runtime: Runtime,
+        runtime: GenericRuntime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
-            let router = runtime.router();
-            let config = runtime.config().lock();
-            let publisher_qos = config.0.qos().publication().clone();
-            let namespace = config.0.namespace().clone();
-            drop(config);
+            let publisher_qos = runtime
+                .get_config()
+                .get_typed::<PublisherQoSConfList>("qos/publication")
+                .unwrap();
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
@@ -676,31 +674,15 @@ impl Session {
                 runtime: runtime.clone(),
                 state,
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                owns_runtime,
                 task_controller: TaskController::default(),
-                namespace: namespace.clone(),
                 face_id: OnceCell::new(),
             }));
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
-
-            let primitives: Arc<dyn Primitives> = match namespace {
-                Some(ns) => {
-                    let face = router.new_primitives(Arc::new(ENamespace::new(
-                        ns.clone(),
-                        Arc::new(session.downgrade()),
-                    )));
-                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
-                    Arc::new(Namespace::new(ns, face))
-                }
-                None => {
-                    let face = router.new_primitives(Arc::new(session.downgrade()));
-                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
-                    face
-                }
-            };
+            let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
+            session.0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
 
             admin::init(session.downgrade());
 
@@ -784,13 +766,7 @@ impl Session {
 
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
-    /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
-    /// zenoh configuration through the `get` function or
-    /// modify the zenoh configuration through the `insert`,
-    /// or `insert_json5` function.
-    ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -799,19 +775,9 @@ impl Session {
     /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # }
     /// ```
-    ///
-    /// ### Modify current zenoh configuration
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
-    /// # }
-    /// ```
     #[zenoh_macros::unstable]
-    pub fn config(&self) -> &crate::config::Notifier<Config> {
-        self.0.runtime.config()
+    pub fn config(&self) -> GenericConfig {
+        self.0.runtime.get_config()
     }
 
     /// Get a new Timestamp from a Zenoh [`Session`].
@@ -819,7 +785,6 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -855,7 +820,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            runtime: self.0.runtime.clone(),
+            runtime: self.0.runtime.deref().clone(),
         }
     }
 
@@ -1005,10 +970,8 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        let timeout = {
-            let conf = &self.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
-        };
+        let timeout =
+            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         QuerierBuilder {
             session: self,
@@ -1204,10 +1167,8 @@ impl Session {
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
-        let timeout = {
-            let conf = &self.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
-        };
+        let timeout =
+            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         SessionGetBuilder {
             session: self,
@@ -1245,10 +1206,9 @@ impl Session {
             let mut runtime = runtime.build().await?;
 
             let session = Self::init(
-                runtime.clone(),
+                runtime.clone().into(),
                 aggregated_subscribers,
                 aggregated_publishers,
-                true,
             )
             .await;
             runtime.start().await?;
@@ -1733,6 +1693,7 @@ impl SessionInner {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback: callback.clone(),
+            history,
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1900,55 +1861,12 @@ impl SessionInner {
         destination: Locality,
         matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
-        if let Some(ns) = &self.namespace {
-            self.matching_status_remote_inner(
-                &(ns / key_expr.deref()).into(),
-                destination,
-                matching_type,
-            )
-        } else {
-            self.matching_status_remote_inner(key_expr, destination, matching_type)
-        }
-    }
-
-    fn matching_status_remote_inner(
-        &self,
-        key_expr: &KeyExpr,
-        destination: Locality,
-        matching_type: MatchingStatusType,
-    ) -> ZResult<MatchingStatus> {
-        let router = self.runtime.router();
-        let tables = zread!(router.tables.tables);
-
-        let matches = match matching_type {
-            MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    key_expr,
-                )
-            }
-            MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    key_expr,
-                    complete,
-                )
-            }
-        };
-
-        drop(tables);
-        let matching = match destination {
-            Locality::Any => !matches.is_empty(),
-            Locality::Remote => matches
-                .values()
-                .any(|dir| dir.id != *self.face_id.get().unwrap()),
-            Locality::SessionLocal => matches
-                .values()
-                .any(|dir| dir.id == *self.face_id.get().unwrap()),
-        };
-        Ok(MatchingStatus { matching })
+        Ok(self.runtime.matching_status_remote(
+            key_expr,
+            destination,
+            matching_type,
+            *self.face_id.get().unwrap(),
+        ))
     }
 
     pub(crate) fn matching_status(
@@ -2042,6 +1960,7 @@ impl SessionInner {
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
         msg: impl FnOnce() -> &'a mut PushBody,
+        historical: bool,
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -2052,9 +1971,10 @@ impl SessionInner {
         if wire_expr.suffix.is_empty() {
             match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind) {
-                        if sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal))
+                    for sub in res.subscribers(kind).iter() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                         {
                             callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
                         }
@@ -2078,6 +1998,7 @@ impl SessionInner {
                     for sub in state.subscribers(kind).values() {
                         if (sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                             && key_expr.intersects(&sub.key_expr)
                         {
                             callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
@@ -2161,28 +2082,13 @@ impl SessionInner {
             ..Push::from(make_body())
         };
         if destination != Locality::SessionLocal {
-            match &self.namespace {
-                Some(_) => {
-                    let face = primitives.as_any().downcast_ref::<Namespace>().unwrap();
-                    face.send_push(
-                        &mut push,
-                        #[cfg(feature = "unstable")]
-                        reliability,
-                        #[cfg(not(feature = "unstable"))]
-                        Reliability::DEFAULT,
-                    );
-                }
-                None => {
-                    let face = primitives.as_any().downcast_ref::<Face>().unwrap();
-                    face.send_push(
-                        &mut push,
-                        #[cfg(feature = "unstable")]
-                        reliability,
-                        #[cfg(not(feature = "unstable"))]
-                        Reliability::DEFAULT,
-                    );
-                }
-            }
+            primitives.send_push(
+                &mut push,
+                #[cfg(feature = "unstable")]
+                reliability,
+                #[cfg(not(feature = "unstable"))]
+                Reliability::DEFAULT,
+            );
         }
         if destination != Locality::Remote {
             self.execute_subscriber_callbacks(
@@ -2197,11 +2103,18 @@ impl SessionInner {
                     }
                     &mut push.payload
                 },
+                false,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
         }
         Ok(())
+    }
+
+    #[cfg(feature = "internal")]
+    #[allow(dead_code)]
+    pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
+        self.runtime.static_runtime()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2341,7 +2254,10 @@ impl SessionInner {
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.state);
-        let id = state.liveliness_qid_counter.fetch_add(1, Ordering::SeqCst);
+        // Queries must use the same id generator as liveliness subscribers.
+        // This is because both query's id and subscriber's id are used as interest id,
+        // so both must not overlap.
+        let id = self.runtime.next_id();
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
@@ -2623,6 +2539,9 @@ impl Primitives for WeakSession {
                                 &m.wire_expr,
                                 Default::default(),
                                 || body.insert(Put::default().into()),
+                                // interest_id is set if the Token is an Interest::Current.
+                                // This is used to decide if subs with history=false should be called or not
+                                msg.interest_id.is_some(),
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
                             );
@@ -2640,6 +2559,10 @@ impl Primitives for WeakSession {
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
+                    // interest_id is set if the Token is an Interest::Current.
+                    // This is used to decide if liveliness subs with history=false should be called or not
+                    // NOTE: an UndeclareToken is most likely not an Interest::Current
+                    let interest_current = msg.interest_id.is_some();
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
                         let mut body = None;
@@ -2649,6 +2572,7 @@ impl Primitives for WeakSession {
                             &key_expr.to_wire(self),
                             Default::default(),
                             || body.insert(Del::default().into()),
+                            interest_current,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
                         );
@@ -2666,6 +2590,7 @@ impl Primitives for WeakSession {
                                     &key_expr.to_wire(self),
                                     Default::default(),
                                     || body.insert(Del::default().into()),
+                                    interest_current,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
                                 );
@@ -2698,6 +2623,7 @@ impl Primitives for WeakSession {
             &msg.wire_expr,
             msg.ext_qos,
             || &mut msg.payload,
+            false,
             #[cfg(feature = "unstable")]
             _reliability,
         );
@@ -3014,10 +2940,12 @@ impl Closee for Arc<SessionInner> {
             return;
         };
 
-        if self.owns_runtime {
+        if let Some(r) = self.runtime.static_runtime() {
+            // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
             info!(zid = %self.zid(), "close session");
             self.task_controller.terminate_all_async().await;
-            self.runtime.get_closee().close_inner().await;
+            let closee = r.get_closee();
+            closee.close_inner().await;
         } else {
             self.task_controller.terminate_all_async().await;
             primitives.send_close();

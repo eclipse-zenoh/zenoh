@@ -14,7 +14,7 @@
 pub mod batch;
 mod close;
 mod fragment;
-mod frame;
+pub mod frame;
 mod init;
 mod join;
 mod keepalive;

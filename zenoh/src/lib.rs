@@ -100,7 +100,11 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+pub const GIT_VERSION: &str = git_version::git_version!(
+    args = ["--always", "--dirty=-modified", "--abbrev=40"],
+    prefix = "v",
+    cargo_prefix = "v"
+);
 #[doc(hidden)]
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
@@ -513,7 +517,7 @@ pub mod internal {
     pub mod runtime {
         pub use zenoh_runtime::ZRuntime;
 
-        pub use crate::net::runtime::{AdminSpace, Runtime, RuntimeBuilder};
+        pub use crate::net::runtime::{AdminSpace, DynamicRuntime, Runtime, RuntimeBuilder};
     }
     /// Plugins support
     #[cfg(feature = "plugins")]
@@ -554,21 +558,15 @@ pub mod shm {
         },
         provider::{
             chunk::{AllocatedChunk, ChunkDescriptor},
-            memory_layout::{
-                BufferLayout, BuildLayout, LayoutForType, MemLayout, MemoryLayout, StaticLayout,
-                TryIntoMemoryLayout,
-            },
+            memory_layout::{MemoryLayout, TypedLayout},
             shm_provider::{
-                AllocBuilder, AllocLayout, AllocPolicy, AsyncAllocPolicy, BlockOn, DeallocEldest,
-                DeallocOptimal, DeallocYoungest, Deallocate, Defragment, ForceDeallocPolicy,
-                GarbageCollect, JustAlloc, LayoutAllocBuilder, ProviderAllocBuilder, ShmProvider,
-                ShmProviderBuilder,
+                AllocBuilder, AllocPolicy, AsyncAllocPolicy, BlockOn, ConstBool, ConstPolicy,
+                ConstUsize, Deallocate, Defragment, GarbageCollect, JustAlloc, PolicyValue,
+                PrecomputedLayout, SafePolicy, ShmProvider, ShmProviderBuilder,
             },
             shm_provider_backend::ShmProviderBackend,
             types::{
-                AllocAlignment, BufAllocResult, BufLayoutAllocResult, ChunkAllocResult,
-                TypedBufAllocResult, TypedBufLayoutAllocResult, ZAllocError, ZLayoutAllocError,
-                ZLayoutError,
+                AllocAlignment, ChunkAllocResult, ZAllocError, ZLayoutAllocError, ZLayoutError,
             },
         },
     };

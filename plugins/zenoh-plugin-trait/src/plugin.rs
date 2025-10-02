@@ -176,7 +176,7 @@ pub trait PluginControl {
 
 pub trait PluginStartArgs: StructVersion {}
 
-pub trait PluginInstance: StructVersion + PluginControl + Send + Sync {}
+pub trait PluginInstance: PluginControl + Send + Sync {}
 
 /// Base plugin trait. The loaded plugin
 pub trait Plugin: Sized + 'static {

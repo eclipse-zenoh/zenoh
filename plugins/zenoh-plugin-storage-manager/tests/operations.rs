@@ -86,7 +86,8 @@ async fn test_updates_in_order() {
     let runtime = zenoh::internal::runtime::RuntimeBuilder::new(config)
         .build()
         .await
-        .unwrap();
+        .unwrap()
+        .into();
     let storage =
         zenoh_plugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
