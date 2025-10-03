@@ -410,7 +410,17 @@ impl Runtime {
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
         match self.manager().open_transport_unicast(peer.clone()).await {
-            Ok(_) => Ok(()),
+            Ok(transport) => {
+                if let Ok(Some(orch_transport)) = transport.get_callback() {
+                    if let Some(orch_transport) = orch_transport
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        zwrite!(orch_transport.endpoints).insert(peer);
+                    }
+                }
+                Ok(())
+            }
             Err(e) => {
                 tracing::warn!("Unable to connect to {}! {}", peer, e);
                 Err(e)
@@ -480,11 +490,6 @@ impl Runtime {
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
         let guard = &self.state.config.lock().0;
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
-    }
-
-    fn get_global_connect_retry_config(&self) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
-        zenoh_config::get_retry_config(guard, None, false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
@@ -840,7 +845,6 @@ impl Runtime {
                                 .downcast_ref::<super::RuntimeSession>()
                             {
                                 zwrite!(orch_transport.endpoints).insert(peer);
-                                //*zwrite!(orch_transport.endpoints) = HashSet::from_iter([peer]);
                             }
                         }
                         if let Ok(zid) = transport.get_zid() {
@@ -1256,46 +1260,55 @@ impl Runtime {
             return;
         }
 
-        match session.runtime.whatami() {
-            WhatAmI::Client => {
-                let runtime = session.runtime.clone();
-                zwrite!(session.endpoints).clear();
-                session.runtime.spawn_abortable(async move {
-                    let retry_config = runtime.get_global_connect_retry_config();
-                    let mut period = retry_config.period();
-                    while runtime.start_client().await.is_err() {
-                        tokio::time::sleep(period.next_duration()).await;
-                    }
-                });
-            }
-            _ => {
-                if zread!(session.endpoints).is_empty() {
-                    return;
-                }
-                let mut peers = session
-                    .runtime
-                    .state
-                    .config
-                    .lock()
-                    .0
-                    .connect()
-                    .endpoints()
-                    .get(session.runtime.state.whatami)
-                    .unwrap_or(&vec![])
-                    .clone();
+        if zread!(session.endpoints).is_empty() {
+            return;
+        }
+        let mut peers = session
+            .runtime
+            .state
+            .config
+            .lock()
+            .0
+            .connect()
+            .endpoints()
+            .get(session.runtime.state.whatami)
+            .unwrap_or(&vec![])
+            .clone();
 
-                let mut endpoints = zwrite!(session.endpoints);
-                peers.retain(|p| endpoints.contains(p));
-                endpoints.clear();
-                drop(endpoints);
+        let mut endpoints = zwrite!(session.endpoints);
+        peers.retain(|p| endpoints.contains(p));
+        endpoints.clear();
+        drop(endpoints);
 
-                if !peers.is_empty() {
-                    let runtime = session.runtime.clone();
-                    session
-                        .runtime
-                        .spawn(async move { runtime.peers_connector_retry(peers, false).await });
-                }
-            }
+        if !peers.is_empty() {
+            let runtime = session.runtime.clone();
+            session
+                .runtime
+                .spawn(async move { runtime.peers_connector_retry(peers, false).await });
+        }
+    }
+
+    pub(super) fn closed_link(session: &RuntimeSession, endpoint: EndPoint) {
+        if session.runtime.is_closed() {
+            return;
+        }
+        let peers = session
+            .runtime
+            .state
+            .config
+            .lock()
+            .0
+            .connect()
+            .endpoints()
+            .get(session.runtime.state.whatami)
+            .unwrap_or(&vec![])
+            .clone();
+
+        if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
+            let runtime = session.runtime.clone();
+            session.runtime.spawn(async move {
+                let _ = runtime.peer_connector_retry(endpoint).await;
+            });
         }
     }
 

@@ -715,6 +715,7 @@ impl TransportPeerEventHandler for RuntimeSession {
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
         }
+        Runtime::closed_link(self, link.dst.to_endpoint());
     }
 
     fn closed(&self) {
