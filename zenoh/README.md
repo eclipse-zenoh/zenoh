@@ -85,3 +85,8 @@ async fn main() {
     }
 }
 ```
+
+# Documentation and examples
+
+For more information, see its documentation: <https://docs.rs/zenoh>
+and some examples of usage in <https://github.com/eclipse-zenoh/zenoh/tree/main/examples>

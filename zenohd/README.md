@@ -48,6 +48,12 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 - **`--plugin-search-dir <PATH>`**  
   Directory in which to search for plugin libraries to load. Repeat this option to specify several search directories.
 
+- **`--rest-http-port <SOCKET>`**  
+  Configures HTTP interface for the REST API plugin (enabled by default on port 8000). Accepted values:
+  - a port number
+  - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)  
+  - `none` to disable the REST API
+
 ### Behavioral Options
 
 - **`--no-timestamp`**  
@@ -55,14 +61,6 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 - **`--no-multicast-scouting`**  
   By default, zenohd replies to multicast scouting messages to be discovered by peers and clients. This option disables this feature.
-
-### Network & API Configuration
-
-- **`--rest-http-port <SOCKET>`**  
-  Configures HTTP interface for the REST API (enabled by default on port 8000). Accepted values:
-  - a port number
-  - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)  
-  - `none` to disable the REST API
 
 ### Advanced Configuration
 
@@ -94,9 +92,9 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 The Zenoh router is delivered with two statically linked plugins:
 
-- [zenoh-plugin-rest](zenoh-plugin-rest) is the plugin exposing a [REST API](https://zenoh.io/docs/apis/rest/)
+- [zenoh-plugin-rest](../plugins/zenoh-plugin-rest) is the plugin exposing a [REST API](https://zenoh.io/docs/apis/rest/)
 
-- [zenoh-plugin-storage-manager](zenoh-plugin-storage-manager) is the plugin that manages
+- [zenoh-plugin-storage-manager](../plugins/zenoh-plugin-storage-manager) is the plugin that manages
   [backends and storages](https://zenoh.io/docs/manual/plugin-storage-manager/#backends-and-volumes)
 
 There are other plugins in independent repositories:

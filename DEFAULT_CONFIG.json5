@@ -927,13 +927,13 @@
   //    },
   //  },
 
-  /// Plugin configuration example using `__config__` property
-  plugins: {
-    rest: {
-      __config__: "./plugins/zenoh-plugin-rest/config.json5",
-    },
-    storage_manager: {
-      __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
-    }
-  },
+  // /// Plugin configuration example using `__config__` property
+  // plugins: {
+  //   rest: {
+  //     __config__: "./plugins/zenoh-plugin-rest/config.json5",
+  //   },
+  //   storage_manager: {
+  //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
+  //   }
+  // },
 }
