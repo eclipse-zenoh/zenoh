@@ -113,7 +113,6 @@ hashbrown = "0.16.0"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
 home = "0.5.9"
-http = "1.3.1"
 humantime = "2.3.0"
 itertools = "0.14.0"
 json5 = "0.4.1"
@@ -183,6 +182,7 @@ tokio = { version = "1.47.1", default-features = false } # Default features are 
 tokio-rustls = { version = "0.26.2", default-features = false }
 tokio-tungstenite = "0.24.0"
 tokio-util = "0.7.16"
+tower = "0.5.2"
 tower-http = "0.6.6"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
