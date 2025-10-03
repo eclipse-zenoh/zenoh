@@ -264,7 +264,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 zid,
             };
 
-            if let Some(entry) = self.enforcer.subject_store.query(&query) {
+            for entry in self.enforcer.subject_store.query(&query) {
                 auth_subjects.insert(AuthSubject {
                     id: entry.id,
                     name: format!("{query}"),
