@@ -269,8 +269,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             flags,
             fd.as_raw_fd()
         );
-
         let ptr = unsafe { mmap(None, len, prot, flags, fd, 0) }?;
+
+        tracing::trace!("mlock(addr={:?}, length={})", ptr, len,);
         unsafe { mlock(ptr, len.get()) }?;
 
         Ok(ptr)
