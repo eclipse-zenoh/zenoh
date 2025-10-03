@@ -10,9 +10,9 @@
 
 # Eclipse Zenoh
 
-The Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
+Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
-Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
+Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest, and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries, and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
 Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/).
 
@@ -20,14 +20,14 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 # Storage manager plugin for `zenohd` router
 
-A plugin that allows connecting `zenohd` to different storages (e.g. databases). This plugin is a plugin manager
-itself which loads its own plugins - `backends` - specific for the external storage API.
+A plugin that allows connecting `zenohd` to different storages (e.g., databases). This plugin is a plugin manager
+itself that loads its own plugins - `backends` - specific for the external storage API.
 
 ## Backends available
 
 - `memory` backend
 
-   Stores data in the hashmap in memory, statically linked to storage manager
+   Stores data in a hashmap in memory, statically linked to the storage manager.
 
 - [zenoh-backend-filesystem](https://github.com/eclipse-zenoh/zenoh-backend-filesystem/)
 
@@ -35,7 +35,7 @@ itself which loads its own plugins - `backends` - specific for the external stor
 
 - [zenoh-backend-s3](https://github.com/eclipse-zenoh/zenoh-backend-s3/)
 
-  This backend relies on [Amazon S3](https://aws.amazon.com/s3/?nc1=h_ls) to implement the storages. It is also compatible to work with [MinIO](https://min.io/) object storage.
+  This backend relies on [Amazon S3](https://aws.amazon.com/s3/?nc1=h_ls) to implement the storages. It is also compatible with [MinIO](https://min.io/) object storage.
 
 - [zenoh-backend-rocksdb](https://github.com/eclipse-zenoh/zenoh-backend-rocksdb/)
 
@@ -48,21 +48,18 @@ to implement the storages.
 
 ## Configuring storages
 
-The `zenoh-plugin-storage-manager` internally provides the `memory` backend which demonstrates storing
-key/value pair in hashmap in memory.
-
 The storages are configured in the storage manager plugin configuration in the `plugins` section of the
-[config.json](https://docs.rs/zenoh/latest/zenoh/struct.Config.html)
+[config.json](https://docs.rs/zenoh/latest/zenoh/struct.Config.html).
 
-There are two concepts in the storage manager plugin: "volumes" and "storages".
+There are two concepts in the storage manager: "volumes" and "storages".
 
-The "volume" is a specific database backend plugin (memory, s3, rocksdb, etc) plus
-concrete backend configuration (database name, user name, password, etc).
+The "volume" is a specific database backend plugin (memory, s3, rocksdb, etc.) plus
+a concrete backend configuration (database name, username, password, etc.).
 
-The "storage" is a mapping from glob key expression to a volume, defining where data
+The "storage" is a mapping from a glob key expression to a volume, defining where data
 for each path is stored.
 
-Here is a simple example config which sets up two storages. The `__path__` explicitly
+Here is a simple example config that sets up two storages. The `__path__` explicitly
 sets up paths to dynamic plugins for different platforms.
 
 ```json
@@ -87,20 +84,19 @@ sets up paths to dynamic plugins for different platforms.
 }
 ```
 
-## Usage examples
+## Usage of storages
 
-Assume that we are in the root of [zenoh](https://github.com/eclipse-zenoh/zenoh) repository.
+Assume that we are in the root of the [zenoh](https://github.com/eclipse-zenoh/zenoh) repository.
 Uncomment the following piece of code in the `DEFAULT_CONFIG.json5` which demonstrates using
 external plugin config files.
 
 ```json
-  /// Plugin configuration example using `__config__` property
   plugins: {
-    rest: {
-      __config__: "./plugins/zenoh-plugin-rest/config.json5",
+    "rest": {
+      "__config__": "./plugins/zenoh-plugin-rest/config.json5",
     },
-    storage_manager: {
-      __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
+    "storage_manager": {
+      "__config__": "./plugins/zenoh-plugin-storage-manager/config.json5",
     }
   },
 ```
@@ -111,11 +107,11 @@ Run the `zenohd` router with adminspace write permissions enabled:
 RUST_LOG=info cargo run -- --config DEFAULT_CONFIG.json5 --adminspace-permissions rw
 ```
 
-The `RUST_LOG=info` is important to enable logging from `zenoh_plugin_storage_manager` itself. Otherwise the logs from plugins are suppressed.
+The `RUST_LOG=info` is important to enable logging from `zenoh_plugin_storage_manager` itself. Otherwise, the logs from plugins are suppressed.
 
-**Note**: The adminspace write permissions allow you to manage storages dynamically at runtime via the admin space REST API.
+The adminspace write permissions allow you to manage storages dynamically at runtime via the admin space REST API. See the example at the end.
 
-Verify that the plugin loaded successfully: the output should contain lines like
+Verify that the plugin loaded successfully: the output should contain lines like:
 
 ```sh
 2025-10-02T13:33:38.279758Z  INFO main ThreadId(01) zenoh::api::loader: Loading  plugin "rest"
@@ -136,7 +132,7 @@ Now we can store and retrieve data. This can be done by zenoh `put` and `get` op
 
 ### Store and retrieve data
 
-#### Using zenoh examples
+#### Using zenoh operations
 
 Store some data using put:
 
@@ -150,22 +146,22 @@ Then query the stored data:
 cargo run --example z_get -- -s "demo/memory/test"
 ```
 
-Expected output:
+Expected output with the stored data
 
 ```console
 >> Received ('demo/memory/test': 'Hello from zenoh put')
 ```
 
-The storage manager will automatically respond with the stored data when queried.
+Notice that this would not work without storage enabled. The `put` operation belongs to the publish/subscribe API, while the `get` is part of the query/reply API.
+It's the storage that runs a subscriber and querier for its key expression. In other words, storages link pub/sub and query/reply APIs together in
+the Zenoh network.
 
 #### Using REST API
 
 Store data via REST PUT:
 
 ```bash
-curl -X PUT -d '"Hello from REST"' \
-  -H "Content-Type: application/json" \
-  http://localhost:8080/demo/memory/test
+curl -X PUT -d '"Hello from REST"' -H "Content-Type: application/json" http://localhost:8080/demo/memory/test
 ```
 
 Retrieve data via REST GET:
@@ -180,7 +176,8 @@ Expected output:
 [{"key":"demo/memory/test","value":"Hello from REST","encoding":"application/json","timestamp":"7556630592622444272/d3f8913b8af0c842078d30652a04bd8f"}]
 ```
 
-Note: Use `application/json` content type and quoted value in `PUT` to get normal string value in `GET` json output. Otherwise value is base-64 encoded.
+**Note**: Use the `application/json` content type and quoted value in `PUT` to get data as a string value in `GET` json output. Otherwise, the value is base-64 encoded to
+ensure correctness of the json format.
 
 Delete stored data with REST DELETE:
 
@@ -202,7 +199,7 @@ Expected output (empty array, indicating no data found):
 
 ### Using the admin space to manage storages
 
-You can manage storages dynamically via the admin space REST API:
+You can manage storages dynamically via the admin space - the predefined key expression starting with `@/` and local to the router.
 
 To view current storages:
 
@@ -246,7 +243,7 @@ Delete example storage dynamically:
 curl -X DELETE http://localhost:8080/@/local/router/config/plugins/storage_manager/storages/example
 ```
 
-Verify the new memory storage is created and example storage is deleted:
+Verify the new memory storage is created and the example storage is deleted:
 
 ```bash
 curl -s 'http://localhost:8080/@/local/router/**/storages/*' | jq

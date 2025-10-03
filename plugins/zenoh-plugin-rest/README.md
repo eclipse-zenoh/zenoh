@@ -78,4 +78,4 @@ and `curl` prints
 [{"key":"foo/bar","value":"UXVlcnlhYmxlIGZyb20gUnVzdCE=","encoding":"zenoh/bytes","timestamp":null}]
 ```
 
-See also examples of using `REST` API for storages in the [zenoh-plugin-storage-manager](https://crates.io/crates/zenoh-plugin-storage-manager).
+See also examples of using REST API for storages in the [zenoh-plugin-storage-manager](https://crates.io/crates/zenoh-plugin-storage-manager).
