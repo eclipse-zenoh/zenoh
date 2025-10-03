@@ -8,5 +8,7 @@ extend-exclude = [
 
 
 [default.extend-words]
-mis = "mis" # mismatch
-thr = "thr" # throughput
+Closee = "Closee" # Closee
+closee = "closee" # closee
+mis = "mis"       # mismatch
+thr = "thr"       # throughput

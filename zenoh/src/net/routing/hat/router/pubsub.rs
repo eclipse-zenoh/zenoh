@@ -1147,7 +1147,7 @@ impl HatPubSubTrait for HatCode {
     }
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
-        // Compute the list of known suscriptions (keys)
+        // Compute the list of known subscriptions (keys)
         hat!(tables)
             .router_subs
             .iter()
