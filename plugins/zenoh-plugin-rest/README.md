@@ -28,9 +28,9 @@ The port can also be configured in the plugin configuration in the `plugins` sec
 of the [config.json](https://docs.rs/zenoh/latest/zenoh/struct.Config.html).
 
 ```json
-plugins: {
-  rest: {
-    http_port: 8000,
+"plugins": {
+  "rest": {
+    "http_port": 8000,
   }
 }
 ```

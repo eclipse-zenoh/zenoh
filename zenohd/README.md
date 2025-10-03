@@ -49,10 +49,9 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
   Directory in which to search for plugin libraries to load. Repeat this option to specify several search directories.
 
 - **`--rest-http-port <SOCKET>`**  
-  Configures HTTP interface for the REST API plugin (enabled by default on port 8000). Accepted values:
+  Enables REST API plugin and configures HTTP interface for it. Accepted values:
   - a port number
   - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)  
-  - `none` to disable the REST API
 
 ### Behavioral Options
 
