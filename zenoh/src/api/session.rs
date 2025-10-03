@@ -798,7 +798,7 @@ impl Session {
             Some(hlc) => hlc.new_timestamp(),
             None => {
                 // Called in the case that the runtime is not initialized with an hlc
-                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissible here
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
                 Timestamp::new(now, self.0.zid().into())
             }

@@ -21,7 +21,7 @@
 //! as the [`keformat`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.keformat.htmll) and [`kewrite`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 //!
 //! ## The format syntax
-//! KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
+//! KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formats support "specification" chunks.
 //! These chunks must follow the one of the following syntaxes: `${id:pattern}`, `${id:pattern#default}`, `$#{id:pattern}#`, or `$#{id:pattern#default}#`, where:
 //! - `id` is the chunk identifier: it cannot contain the `:` character, and is used to name the chunk in accessors.
 //! - `pattern` must be a valid KE (and therefore cannot contain `#`) and defines the range of values that the chunk may adopt.
@@ -71,7 +71,7 @@ use support::{IterativeConstructor, Spec};
 /// as the [`keformat`](https://docs.rs/zenoh/latest/zenoh/key_expr/format/macro.keformat.html) and [`kewrite`](https://docs.rs/zenoh/latest/zenoh/macro.kewrite.html) macros will be able to tell you if you're attempting to set fields of the format that do not exist.
 ///
 /// ## The format syntax
-/// KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formmats support "specification" chunks.
+/// KE formats are defined following a syntax that extends the [`keyexpr`] syntax. In addition to existing chunk types, KE formats support "specification" chunks.
 /// These chunks must follow the one of the following syntaxes: `${id:pattern}`, `${id:pattern#default}`, `$#{id:pattern}#`, or `$#{id:pattern#default}#`, where:
 /// - `id` is the chunk identifier: it cannot contain the `:` character, and is used to name the chunk in accessors.
 /// - `pattern` must be a valid KE (and therefore cannot contain `#`) and defines the range of values that the chunk may adopt.

@@ -786,7 +786,7 @@ impl Closee for Arc<RuntimeState> {
         // TODO: the call below is needed to prevent intermittent leak
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
-        // This should be resolved by identfying correspodning task, and placing
+        // This should be resolved by identifying corresponding task, and placing
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
         tables.root_res.close();
