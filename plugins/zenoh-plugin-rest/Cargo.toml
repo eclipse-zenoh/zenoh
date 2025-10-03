@@ -38,13 +38,13 @@ base64 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-http = { workspace = true }
 lazy_static = { workspace = true }
 mime = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true }
 tower-http = { workspace = true, features = ["cors", "set-header", "trace"] }
 tracing = { workspace = true }
 zenoh = { workspace = true, default-features = false, features = [
