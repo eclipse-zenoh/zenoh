@@ -55,10 +55,9 @@ struct Args {
     /// By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature.
     #[arg(long)]
     no_multicast_scouting: bool,
-    /// Configures HTTP interface for the REST API (enabled by default on port 8000). Accepted values:
+    /// Enables REST API plugin and configures HTTP interface for it. Accepted values:
     ///   - a port number
     ///   - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
-    ///   - `none` to disable the REST API
     #[arg(long, value_name = "SOCKET")]
     rest_http_port: Option<String>,
     /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs,

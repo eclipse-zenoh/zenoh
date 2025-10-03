@@ -1,8 +1,7 @@
 {
   "volumes": {
     "example": {
-      "__path__": ["target/debug/libzenoh_backend_example.so","target/debug/libzenoh_backend_example.dylib"],
-      "__config__": "../../plugins/example-storage-plugin/config.json5"
+      "__path__": ["target/debug/libzenoh_backend_example.so","target/debug/libzenoh_backend_example.dylib"]
     }
   },
   "storages": {
