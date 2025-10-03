@@ -10,7 +10,7 @@
 
 # Eclipse Zenoh
 
-The Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
+Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
 Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
@@ -20,7 +20,7 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 # Zenoh router
 
-The `zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. Technically the `zenohd` is the Zenoh runtime with a plugin manager.
+`zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. Technically, `zenohd` is the Zenoh runtime with a plugin manager.
 
 ## Command Line Arguments
 
@@ -29,7 +29,7 @@ The `zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. 
 - **`-c, --config <PATH>`**  
   The configuration file. Currently, this file must be a valid JSON5 or YAML file.
 
-  The commented example configuration file for `zenohd` is in the [documentation](https://docs.rs/zenoh/latest/zenoh/config/struct.Config.html)
+  The commented example configuration file for `zenohd` is in the [documentation](https://docs.rs/zenoh/latest/zenoh/config/struct.Config.html).
 
 - **`-l, --listen <ENDPOINT>`**  
   Locators on which this router will listen for incoming sessions. Repeat this option to open several listeners.
@@ -38,23 +38,23 @@ The `zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. 
   A peer locator this router will try to connect to. Repeat this option to connect to several peers.
 
 - **`-i, --id <ID>`**  
-  The identifier (as an hexadecimal string, with odd number of chars - e.g.: A0B23...) that zenohd must use. If not set, a random unsigned 128bit integer will be used. WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
+  The identifier (as a hexadecimal string, with an odd number of chars - e.g.: A0B23...) that zenohd must use. If not set, a random unsigned 128-bit integer will be used. WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
 
 ### Plugin Management
 
 - **`-P, --plugin <PLUGIN>`**  
-  A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named `libzenoh_plugin_<name>.so` (exact name depending the OS). Or you can give such a string: `<plugin_name>:<library_path>`. Repeat this option to load several plugins. If loading failed, zenohd will exit.
+  A plugin that MUST be loaded. You can give just the name of the plugin; zenohd will search for a library named `libzenoh_plugin_<name>.so` (exact name depending on the OS). Alternatively, you can provide a string in this format: `<plugin_name>:<library_path>`. Repeat this option to load several plugins. If loading fails, zenohd will exit.
 
 - **`--plugin-search-dir <PATH>`**  
-  Directory where to search for plugins libraries to load. Repeat this option to specify several search directories.
+  Directory in which to search for plugin libraries to load. Repeat this option to specify several search directories.
 
 ### Behavioral Options
 
 - **`--no-timestamp`**  
-  By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature.
+  By default, zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature.
 
 - **`--no-multicast-scouting`**  
-  By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature.
+  By default, zenohd replies to multicast scouting messages to be discovered by peers and clients. This option disables this feature.
 
 ### Network & API Configuration
 
@@ -67,8 +67,8 @@ The `zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. 
 ### Advanced Configuration
 
 - **`--cfg <CFG>`**  
-  Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where the empty key is used to represent the entire configuration:
-  - KEY must be a valid config path, or empty string if the whole configuration is defined
+  Allows arbitrary configuration changes as colon-separated KEY:VALUE pairs, where the empty key is used to represent the entire configuration:
+  - KEY must be a valid config path, or an empty string if the whole configuration is defined
   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field
   
   Examples:
@@ -90,16 +90,29 @@ The `zenohd` is a daemon router whose purpose is to build Zenoh infrastructure. 
 ## Plugins
 
 > [!WARNING]
-> As Rust doesn't have a stable ABI, the plugins should be
-built with the exact same Rust version as `zenohd`, and using for `zenoh` dependency the same version (or commit number) as `zenohd` with the same
-set of features. A plugin compiled with different Rust version or with different set of `zenoh` crate features will be rejected when `zenohd` attempts to load it. Otherwise, incompatibilities in memory mapping of structures shared between `zenohd` and the library could lead to a `"SIGSEGV"` crash.
+> As Rust doesn't have a stable ABI, plugins should be built with the exact same Rust version as `zenohd`, and should use the same version (or commit number) of the `zenoh` dependency as `zenohd` with the same set of features. A plugin compiled with a different Rust version or with a different set of `zenoh` crate features will be rejected when `zenohd` attempts to load it. Otherwise, incompatibilities in memory mapping of structures shared between `zenohd` and the library could lead to a `"SIGSEGV"` crash.
 
-By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via Zenoh puts on individual parts of the configuration.
+The Zenoh router is delivered with two statically linked plugins:
 
-**[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
-This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.
+- [zenoh-plugin-rest](zenoh-plugin-rest) is the plugin exposing a [REST API](https://zenoh.io/docs/apis/rest/)
 
-Note that to activate the REST plugin on `zenohd` the CLI argument should be passed: `--rest-http-port=8000` (or any other port of your choice).
+- [zenoh-plugin-storage-manager](zenoh-plugin-storage-manager) is the plugin that manages
+  [backends and storages](https://zenoh.io/docs/manual/plugin-storage-manager/#backends-and-volumes)
 
-**[Storages plugin](https://zenoh.io/docs/manual/plugin-storage-manager/)** (managing [backends and storages](https://zenoh.io/docs/manual/plugin-storage-manager/#backends-and-volumes))
-This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) for info on how to configure them.
+There are other plugins in independent repositories:
+
+- [zenoh-plugin-dds](https://github.com/eclipse-zenoh/zenoh-plugin-dds/)
+
+  Bridges [DDS](https://www.dds-foundation.org/) with Zenoh.
+
+- [zenoh-plugin-ros2dds](https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds/)
+
+  Bridges all [ROS 2](https://ros.org/) communications using [DDS](https://www.dds-foundation.org/) over Zenoh.
+
+- [zenoh-plugin-webserver](https://github.com/eclipse-zenoh/zenoh-plugin-webserver/)
+
+  Implements an HTTP server mapping URLs to zenoh keys.
+
+- [zenoh-plugin-remote-api](https://github.com/eclipse-zenoh/zenoh-ts/)
+
+  The WebSocket server supporting TypeScript API

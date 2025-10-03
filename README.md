@@ -18,7 +18,7 @@ Check the website [zenoh.io](http://zenoh.io) for more information and [installa
 
 See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detailed technical information.
 
-# Structure of the repository
+# Structure of the Repository
 
 This repository contains the following elements:
 
@@ -26,21 +26,21 @@ This repository contains the following elements:
 
   This crate is the primary and reference implementation of the Zenoh protocol. The Zenoh libraries for other languages
   are bindings to this Rust implementation, except for the pure-C
-  [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) (see "Languages support" section below).
+  [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) (see "Language support" section below).
 
 * [zenoh-ext](zenoh-ext) Rust crate
 
   This crate contains extended components of Zenoh:
-  * `AdvancedPublisher` / `AdvancedSubscriber` - the API to send/receive data with advanced delivery guarantees.
+  * `AdvancedPublisher` / `AdvancedSubscriber` - the API for sending/receiving data with advanced delivery guarantees.
   * Data serialization support. This serialization is lightweight and universal for all `zenoh` bindings, which simplifies interoperability.
 
 * [zenohd](zenohd) router binary
 
-  The zenoh router - the standalone daemon which is used to support zenoh network infrastructure.
+  The Zenoh router - a standalone daemon used to support Zenoh network infrastructure.
 
 * [plugins](plugins)
 
-  The crates related to plugins support in `zenohd`
+  The crates related to plugin support in `zenohd`
 
 * [commons](commons)
 
@@ -77,28 +77,22 @@ zenoh = "1.5.1"
 zenoh-pinned-deps-1-75 = "1.5.1"
 ```
 
-To build Zenoh, just type the following command after having followed the previous instructions:
+To build Zenoh, simply type the following command after having followed the previous instructions:
 
 ```bash
 cargo build --release --all-targets
 ```
 
 There are multiple features in `zenoh`; see the full list and descriptions on [docs.rs](https://docs.rs/zenoh/latest/zenoh/). For example, to
-use shared memory it has to be explicitly enabled:
+use shared memory, it has to be explicitly enabled:
 
 ```toml
 zenoh = {version = "1.5.1", features = ["shared-memory"]}
 ```
 
-The router can be run with the command `cargo run` or from `target/release/zenohd`. When running with cargo, use `--` to pass command line arguments to `zenohd`:
-
-```bash
-cargo run --release -- --config DEFAULT_CONFIG.json5
-```
-
-Examples can also be executed with cargo, or directly from `target/release/examples`.
-
 ## Examples
+
+[Examples](examples) can be executed with Cargo, or directly from `target/release/examples`. When running with Cargo, use `--` to pass command line arguments to the examples:
 
 ### Publish/Subscribe
 
@@ -120,7 +114,18 @@ cargo run --example z_queryable
 cargo run --example z_get
 ```
 
-# Languages Support
+## Zenohd Router and Plugins
+
+The [zenohd](zenohd) router can be run with the command `cargo run` or from `target/release/zenohd`. When running with Cargo, use `--` to pass command line arguments to `zenohd`:
+
+```bash
+cargo run -- --config DEFAULT_CONFIG.json5
+```
+
+The router's purpose is to support Zenoh network infrastructure and provide additional services using [plugins].
+See the directory of available plugins in the [zenohd](zenohd) readme. Plugins may be dynamically or statically linked.
+
+# Language Support
 
 * **Rust** - this repository
 * **C** - there are two implementations with the same API:

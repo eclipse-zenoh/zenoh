@@ -16,13 +16,13 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
   The zenoh plugin [API](https://docs.rs/zenoh-plugin-trait/latest/zenoh_plugin_trait/).
 
-  This crate introduces common plugin library which provides
+  This crate introduces a common plugin library which provides:
   - the API to implement plugins
-  - the API to load, start, and stop the plugins and get their status
+  - the API to load, start, and stop plugins and get their status
 
   The application-specific, functional part of plugins is implemented outside of this API, in the types passed as type
   arguments `StartArgs` and `Instance`.
-  E.g. the plugins for `zenohd` should implement the trait `ZenohPlugin` from `zenoh` crate (under `internal` feature) with
+  For example, the plugins for `zenohd` should implement the trait `ZenohPlugin` from the `zenoh` crate (under the `internal` feature) with
   `DynamicRuntime` and `RunningPlugin` types provided by `zenoh`.
 
   ```rust
@@ -31,21 +31,21 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 
 - [zenoh-plugin-example](zenoh-plugin-example)
 
-  The simple example plugin for `zenohd`
+  A simple example plugin for `zenohd`
 
-- [zenoh-pllugin-rest](zenoh-plugin-rest)
+- [zenoh-plugin-rest](zenoh-plugin-rest)
 
-  The plugin implementing [REST API](https://zenoh.io/docs/apis/rest/) for `zenohd`.
+  The plugin implementing the [REST API](https://zenoh.io/docs/apis/rest/) for `zenohd`.
 
 - [zenoh-plugin-storage-manager](zenoh-plugin-storage-manager)
 
-  The plugin which allows you to connect `zenohd` to different storages (e.g. databases). This plugin is a plugin manager itself which loads its own plugins - `backends` -
-  specific for the external storage API.
+  The plugin which allows connecting `zenohd` to different storages (e.g., databases). This plugin is a plugin manager itself which loads its own plugins - `backends` -
+  specific for external storage APIs.
 
 - [zenoh-backend-traits](zenoh-backend-traits)
 
-  The backend API for storage manager. It exports types `VolumeConfig` and `VolumeInstance` which are used by backends as `Plugin`'s trait type arguments.
+  The backend API for the storage manager. It exports types `VolumeConfig` and `VolumeInstance` which are used by backends as the `Plugin` trait's type arguments.
 
 - [zenoh-backend-example](zenoh-backend-example)
 
-  The simple example backend plugin for `zenoh-plugin-storage-manager`
+  A simple example backend plugin for `zenoh-plugin-storage-manager`

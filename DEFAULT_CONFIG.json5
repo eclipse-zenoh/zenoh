@@ -9,7 +9,7 @@
   // id: "1234567890abcdef",
 
   /// The node's mode (router, peer or client)
-  mode: "peer",
+  mode: "router",
 
   /// The node's metadata (name, location, DNS name, etc.) Arbitrary JSON data not interpreted by zenoh and available in admin space @/<zid>/router, @/<zid>/peer or @/<zid>/client
   metadata: {
@@ -927,13 +927,13 @@
   //    },
   //  },
 
-  // /// Plugin configuration example using `__config__` property
-  // plugins: {
-  //   rest: {
-  //     __config__: "./plugins/zenoh-plugin-rest/config.json5",
-  //   },
-  //   storage_manager: {
-  //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
-  //   }
-  // },
+  /// Plugin configuration example using `__config__` property
+  plugins: {
+    rest: {
+      __config__: "./plugins/zenoh-plugin-rest/config.json5",
+    },
+    storage_manager: {
+      __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
+    }
+  },
 }
