@@ -43,7 +43,7 @@ use crate::{
     key_expr::KeyExpr,
     net::routing::{
         hat::{HatTrait, SendDeclare},
-        router::{get_or_set_route, QueryRouteBuilder},
+        router::{get_or_set_route, merge_qabl_infos, QueryRouteBuilder},
     },
 };
 
@@ -672,4 +672,22 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
                 ext_tstamp: None,
             });
     }
+}
+
+pub(crate) fn get_remote_qabl_info(
+    queryables: &HashMap<u32, (Arc<Resource>, QueryableInfoType)>,
+    res: &Arc<Resource>,
+) -> Option<QueryableInfoType> {
+    queryables
+        .values()
+        .fold(None, |accu, (ref r, ref qabl_info)| {
+            if *r == *res {
+                match accu {
+                    Some(qi) => Some(merge_qabl_infos(qi, qabl_info)),
+                    None => Some(*qabl_info),
+                }
+            } else {
+                accu
+            }
+        })
 }

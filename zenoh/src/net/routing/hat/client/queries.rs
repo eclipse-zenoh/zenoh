@@ -39,16 +39,10 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
         hat::{HatQueriesTrait, SendDeclare, Sources},
+        router::{get_remote_qabl_info, merge_qabl_infos},
         RoutingContext,
     },
 };
-
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
-    this.complete = this.complete || info.complete;
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
 
 #[inline]
 fn local_qabl_info(
@@ -154,7 +148,9 @@ fn register_simple_queryable(
         )
         .qabl = Some(*qabl_info);
     }
-    face_hat_mut!(face).remote_qabls.insert(id, res.clone());
+    face_hat_mut!(face)
+        .remote_qabls
+        .insert(id, (res.clone(), *qabl_info));
 }
 
 fn declare_simple_queryable(
@@ -214,15 +210,14 @@ pub(super) fn undeclare_simple_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
+    qabl_info: &QueryableInfoType,
     send_declare: &mut SendDeclare,
 ) {
-    if !face_hat_mut!(face)
-        .remote_qabls
-        .values()
-        .any(|s| *s == *res)
-    {
+    let remote_qabl_info = get_remote_qabl_info(&face_hat_mut!(face).remote_qabls, res);
+
+    if !qabl_info.is_included_in(&remote_qabl_info) {
         if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).qabl = None;
+            get_mut_unchecked(ctx).qabl = remote_qabl_info;
         }
 
         let mut simple_qabls = simple_qabls(res);
@@ -261,8 +256,8 @@ fn forget_simple_queryable(
     id: QueryableId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
-    if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
-        undeclare_simple_queryable(tables, face, &mut res, send_declare);
+    if let Some((mut res, qabl_info)) = face_hat_mut!(face).remote_qabls.remove(&id) {
+        undeclare_simple_queryable(tables, face, &mut res, &qabl_info, send_declare);
         Some(res)
     } else {
         None
@@ -280,7 +275,7 @@ pub(super) fn queries_new_face(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        for qabl in face_hat!(face).remote_qabls.values() {
+        for (qabl, _) in face_hat!(face).remote_qabls.values() {
             propagate_simple_queryable(tables, qabl, Some(&mut face.clone()), send_declare);
         }
     }
@@ -320,7 +315,7 @@ impl HatQueriesTrait for HatCode {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
         for src_face in tables.faces.values() {
-            for qabl in face_hat!(src_face).remote_qabls.values() {
+            for (ref qabl, _) in face_hat!(src_face).remote_qabls.values() {
                 // Insert the key in the list of known queryables
                 let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
                 // Append src_face as a queryable source in the proper list
