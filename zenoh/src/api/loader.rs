@@ -93,7 +93,7 @@ pub(crate) fn start_plugins(runtime: &Runtime) {
             Err(e) => {
                 let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
                         Ok(s) => s,
-                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
+                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI instability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
                     };
                 if required {
                     panic!(
