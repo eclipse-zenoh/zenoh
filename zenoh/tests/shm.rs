@@ -18,7 +18,7 @@
 ))]
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -63,6 +63,12 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
         .transport_optimization
         .set_message_size_threshold(1)
         .unwrap();
+    config
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_pool_size(std::num::NonZero::new(8 * 1024 * 1024).unwrap())
+        .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {endpoints:?}");
     let peer01 = ztimeout!(zenoh::open(config)).unwrap();
@@ -89,6 +95,12 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
         .shared_memory
         .transport_optimization
         .set_message_size_threshold(1)
+        .unwrap();
+    config
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_pool_size(std::num::NonZero::new(8 * 1024 * 1024).unwrap())
         .unwrap();
     println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
@@ -308,22 +320,29 @@ async fn zenoh_shm_unicast_to_non_shm() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_implicit_optimization() {
     // Initiate logging
-    zenoh::init_log_from_env_or("error");
+    zenoh::init_log_from_env_or("trace");
 
     let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19453"]).await;
 
     {
         let key = "warmup";
+        let shm_works = Arc::new(AtomicBool::new(false));
+        let c_shm_works = shm_works.clone();
         let _sub = peer01
-            .declare_subscriber("warmup")
-            .callback(|_| {})
+            .declare_subscriber(key)
+            .callback(move |samle| {
+                if samle.payload().as_shm().is_some() {
+                    c_shm_works.store(true, Ordering::Relaxed);
+                }
+            })
             .wait()
             .unwrap();
-        // Wait for the declaration to propagate
-        tokio::time::sleep(SLEEP).await;
-        peer02.put(key, "test").wait().unwrap();
-        // Wait for implicit SHM to init
-        tokio::time::sleep(SLEEP).await;
+
+        while !shm_works.load(Ordering::Relaxed) {
+            peer02.put(key, "test").wait().unwrap();
+            // Wait for implicit SHM to init
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     test_session_pubsub::<false>(
