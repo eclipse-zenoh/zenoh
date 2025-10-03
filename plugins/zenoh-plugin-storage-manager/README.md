@@ -248,4 +248,3 @@ Verify the new memory storage is created and the example storage is deleted:
 ```bash
 curl -s 'http://localhost:8080/@/local/router/**/storages/*' | jq
 ```
-
