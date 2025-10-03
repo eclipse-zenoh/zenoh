@@ -96,6 +96,12 @@ async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
         .transport_optimization
         .set_message_size_threshold(1)
         .unwrap();
+    config
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_pool_size(std::num::NonZero::new(8 * 1024 * 1024).unwrap())
+        .unwrap();
     println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = ztimeout!(zenoh::open(config)).unwrap();
 
