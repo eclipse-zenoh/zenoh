@@ -10,21 +10,21 @@
 
 Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
-Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
+Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
-Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/)
+Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/).
 
 See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detailed technical information.
 
 # Zenoh Rust 1.75 pinned dependencies
 
-The [zenoh](http://crates.io/crates/zenoh)'s minimal Rust version is 1.75, but if you just add `zenoh` as a dependency and try to compile your project with
+The [zenoh](http://crates.io/crates/zenoh) crate's minimal Rust version is 1.75, but if you just add `zenoh` as a dependency and try to compile your project with
 
 ```sh
 cargo +1.75 build
 ```
 
-it will fail because recent versions of crates which `zenoh` depends on require newer Rust versions. `zenoh` doesn't use "=" in its dependencies to lock
+it will fail because recent versions of crates that `zenoh` depends on require newer Rust versions. `zenoh` doesn't use "=" in its dependencies to lock
 the latest 1.75-compatible versions of these crates, as such a lock would lead to conflicts in projects dependent on `zenoh`. Instead, we provide a separate crate with
 these locks. Add a dependency on it to your `Cargo.toml` if you need Rust 1.75 compatibility:
 

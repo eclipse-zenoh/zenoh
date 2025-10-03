@@ -12,7 +12,7 @@
 
 Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
-Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries, and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
+Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest, and computations. It carefully blends traditional pub/sub with geo-distributed storage, queries, and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
 Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/).
 
@@ -26,26 +26,26 @@ This repository contains the following elements:
 
   This crate is the primary and reference implementation of the Zenoh protocol. The Zenoh libraries for other languages
   are bindings to this Rust implementation, except for the pure-C
-  [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) (see "Language support" section below).
+  [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) (see the "Language Support" section below).
 
 * [zenoh-ext](zenoh-ext) Rust crate
 
   This crate contains extended components of Zenoh:
-  * `AdvancedPublisher` / `AdvancedSubscriber` - the API for sending/receiving data with advanced delivery guarantees.
+  * `AdvancedPublisher` / `AdvancedSubscriber` - APIs for sending/receiving data with advanced delivery guarantees.
   * Data serialization support. This serialization is lightweight and universal for all `zenoh` bindings, which simplifies interoperability.
 
 * [zenohd](zenohd) router binary
 
-  The Zenoh router - a standalone daemon used to support Zenoh network infrastructure.
+  The Zenoh router is a standalone daemon used to support Zenoh network infrastructure.
 
 * [plugins](plugins)
 
-  The crates related to plugin support in `zenohd`
+  The crates related to plugin support in `zenohd`.
 
 * [commons](commons)
 
   The internal crates used by `zenoh`. These crates are not intended to be imported directly, and their public APIs can be changed at any time.
-  The stable API is provided by `zenoh` and `zenoh-ext` only.
+  Stable APIs are provided by `zenoh` and `zenoh-ext` only.
 
 * [examples](examples)
 
@@ -60,7 +60,7 @@ This repository contains the following elements:
 # Build and run
 
 Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html).
-If you already have the Rust toolchain installed, make sure it is up-to-date with:
+If you already have the Rust toolchain installed, make sure it is up to date with:
 
 ```bash
 rustup update
@@ -68,14 +68,8 @@ rustup update
 
 Zenoh can be successfully compiled with Rust stable (>= 1.75.0), but some of its dependencies may require
 higher Rust versions. The `zenoh` crate itself doesn't lock its dependencies with "=" to avoid conflicts.
-Instead, we provide the crate [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75)
-with `zenoh` dependencies locked to Rust 1.75-compatible versions. To compile `zenoh` with Rust 1.75,
-add a dependency on it to your Cargo.toml:
-
-```toml
-zenoh = "1.5.1"
-zenoh-pinned-deps-1-75 = "1.5.1"
-```
+Instead, we provide the [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75) crate
+with `zenoh` dependencies locked to Rust 1.75-compatible versions.
 
 To build Zenoh, simply type the following command after having followed the previous instructions:
 
@@ -84,7 +78,7 @@ cargo build --release --all-targets
 ```
 
 There are multiple features in `zenoh`; see the full list and descriptions on [docs.rs](https://docs.rs/zenoh/latest/zenoh/). For example, to
-use shared memory, it has to be explicitly enabled:
+use shared memory, it must be explicitly enabled:
 
 ```toml
 zenoh = {version = "1.5.1", features = ["shared-memory"]}
@@ -123,7 +117,7 @@ cargo run -- --config DEFAULT_CONFIG.json5
 ```
 
 The router's purpose is to support Zenoh network infrastructure and provide additional services using [plugins].
-See the directory of available plugins in the [zenohd](zenohd) readme. Plugins may be dynamically or statically linked.
+See more details and a directory of available plugins in the [zenohd](zenohd) readme.
 
 # Language Support
 
