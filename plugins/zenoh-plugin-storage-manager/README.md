@@ -91,14 +91,14 @@ Uncomment the following piece of code in the `DEFAULT_CONFIG.json5` which demons
 external plugin config files.
 
 ```json
-  plugins: {
-    "rest": {
-      "__config__": "./plugins/zenoh-plugin-rest/config.json5",
-    },
-    "storage_manager": {
-      "__config__": "./plugins/zenoh-plugin-storage-manager/config.json5",
-    }
+"plugins|": {
+  "rest": {
+    "__config__": "./plugins/zenoh-plugin-rest/config.json5",
   },
+  "storage_manager": {
+    "__config__": "./plugins/zenoh-plugin-storage-manager/config.json5",
+  }
+},
 ```
 
 Run the `zenohd` router with adminspace write permissions enabled:
@@ -199,7 +199,7 @@ Expected output (empty array, indicating no data found):
 
 ### Using the admin space to manage storages
 
-You can manage storages dynamically via the admin space - the predefined key expression starting with `@/` and local to the router.
+You can manage storages dynamically via the admin space - the predefined key expression starting with `@/`.
 
 To view current storages:
 
