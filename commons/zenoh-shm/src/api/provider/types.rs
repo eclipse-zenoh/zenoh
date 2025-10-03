@@ -12,10 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Display, num::NonZeroUsize};
+use std::{convert::Infallible, fmt::Display, num::NonZeroUsize};
 
 use super::chunk::AllocatedChunk;
-use crate::api::buffer::{typed::Typed, zshmmut::ZShmMut};
 
 /// Allocation error.
 #[zenoh_macros::unstable_doc]
@@ -86,18 +85,18 @@ impl AllocAlignment {
         }
     }
 
-    /// Create a new AllocAlignment for value type
-    #[zenoh_macros::unstable_doc]
-    pub const fn for_val<T: Sized>(_: &T) -> Self {
-        Self::for_type::<T>()
-    }
-
     /// Create a new AllocAlignment for type
     #[zenoh_macros::unstable_doc]
     pub const fn for_type<T: Sized>() -> Self {
         let align = std::mem::align_of::<T>();
         let pow = align.trailing_zeros() as u8;
         Self { pow }
+    }
+
+    /// Create a new AllocAlignment for value type
+    #[zenoh_macros::unstable_doc]
+    pub const fn for_value<T: Sized>(_: &T) -> Self {
+        Self::for_type::<T>()
     }
 
     /// Get alignment in normal units (bytes)
@@ -186,17 +185,15 @@ impl Display for ZLayoutError {
 
 impl std::error::Error for ZLayoutError {}
 
+impl From<Infallible> for ZLayoutError {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
+    }
+}
+
 /// SHM chunk allocation result
 #[zenoh_macros::unstable_doc]
 pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
-
-/// SHM buffer allocation result
-#[zenoh_macros::unstable_doc]
-pub type BufAllocResult = Result<ZShmMut, ZAllocError>;
-
-/// SHM buffer allocation result
-#[zenoh_macros::unstable_doc]
-pub type TypedBufAllocResult<T> = Result<Typed<T, ZShmMut>, ZAllocError>;
 
 /// Layout or allocation error.
 #[zenoh_macros::unstable_doc]
@@ -230,11 +227,3 @@ impl From<ZAllocError> for ZLayoutAllocError {
         Self::Alloc(value)
     }
 }
-
-/// SHM buffer layouting and allocation result
-#[zenoh_macros::unstable_doc]
-pub type BufLayoutAllocResult = Result<ZShmMut, ZLayoutAllocError>;
-
-/// Typed SHM buffer layouting and allocation result
-#[zenoh_macros::unstable_doc]
-pub type TypedBufLayoutAllocResult<T> = Result<Typed<T, ZShmMut>, ZLayoutAllocError>;

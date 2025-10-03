@@ -55,6 +55,7 @@ fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> Qu
     this
 }
 
+#[inline]
 fn local_qabl_info(
     _tables: &Tables,
     res: &Arc<Resource>,
@@ -80,6 +81,37 @@ fn local_qabl_info(
 }
 
 #[inline]
+fn send_declare_queryable(
+    dst_face: &mut Arc<FaceState>,
+    res: &Arc<Resource>,
+    id: u32,
+    info: QueryableInfoType,
+    send_declare: &mut SendDeclare,
+) {
+    face_hat_mut!(dst_face)
+        .local_qabls
+        .insert(res.clone(), (id, info));
+    let key_expr = Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
+    send_declare(
+        &dst_face.primitives,
+        RoutingContext::with_expr(
+            Declare {
+                interest_id: None,
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                    id,
+                    wire_expr: key_expr,
+                    ext_info: info,
+                }),
+            },
+            res.expr().to_string(),
+        ),
+    );
+}
+
+#[inline]
 fn propagate_simple_queryable_to(
     tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
@@ -87,49 +119,36 @@ fn propagate_simple_queryable_to(
     src_face: &Option<&mut Arc<FaceState>>,
     send_declare: &mut SendDeclare,
 ) {
-    let info = local_qabl_info(tables, res, dst_face);
-    let current = face_hat!(dst_face).local_qabls.get(res);
     if src_face
         .as_ref()
-        .map(|src_face| dst_face.id != src_face.id)
+        .map(|src_face| {
+            dst_face.id != src_face.id
+                && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        })
         .unwrap_or(true)
-        && (current.is_none() || current.unwrap().1 != info)
-        && (dst_face.whatami != WhatAmI::Client
+    {
+        if let Some(&(current_id, current_info)) = face_hat!(dst_face).local_qabls.get(res) {
+            let info = local_qabl_info(tables, res, dst_face);
+            if current_info != info
+                && (dst_face.whatami != WhatAmI::Client
+                    || face_hat!(dst_face)
+                        .remote_interests
+                        .values()
+                        .any(|i| i.options.queryables() && i.matches(res)))
+            {
+                let id = current_id;
+                send_declare_queryable(dst_face, res, id, info, send_declare);
+            }
+        } else if dst_face.whatami != WhatAmI::Client
             || face_hat!(dst_face)
                 .remote_interests
                 .values()
-                .any(|i| i.options.queryables() && i.matches(res)))
-        && src_face
-            .as_ref()
-            .map(|src_face| {
-                src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
-            })
-            .unwrap_or(true)
-    {
-        let id = current
-            .map(|c| c.0)
-            .unwrap_or(face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst));
-        face_hat_mut!(dst_face)
-            .local_qabls
-            .insert(res.clone(), (id, info));
-        let key_expr = Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
-        send_declare(
-            &dst_face.primitives,
-            RoutingContext::with_expr(
-                Declare {
-                    interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id,
-                        wire_expr: key_expr,
-                        ext_info: info,
-                    }),
-                },
-                res.expr().to_string(),
-            ),
-        );
+                .any(|i| i.options.queryables() && i.matches(res))
+        {
+            let info = local_qabl_info(tables, res, dst_face);
+            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
+            send_declare_queryable(dst_face, res, id, info, send_declare);
+        }
     }
 }
 
@@ -635,7 +654,7 @@ impl HatQueriesTrait for HatCode {
                     let has_interest_finalized = expr
                         .resource()
                         .and_then(|res| res.session_ctxs.get(&face.id))
-                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                        .is_some_and(|ctx| ctx.queryable_interest_finalized);
                     if !has_interest_finalized {
                         let wire_expr = expr.get_best_key(face.id);
                         route.push(QueryTargetQabl {

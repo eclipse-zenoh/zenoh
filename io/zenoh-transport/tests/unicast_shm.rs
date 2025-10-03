@@ -227,7 +227,7 @@ mod tests {
             ztimeout!(peer_shm01_manager.get_transport_unicast(&peer_net01)).unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
-        let layout = shm01.alloc(MSG_SIZE).into_layout().unwrap();
+        let layout = shm01.alloc_layout(MSG_SIZE).unwrap();
 
         // Send the message
         println!("Transport SHM [3a]");

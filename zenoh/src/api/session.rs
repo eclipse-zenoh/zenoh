@@ -126,7 +126,6 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) liveliness_qid_counter: AtomicRequestId,
     pub(crate) local_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
@@ -156,7 +155,6 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            liveliness_qid_counter: AtomicRequestId::new(0),
             local_resources: IntHashMap::new(),
             remote_resources: IntHashMap::new(),
             remote_subscribers: HashMap::new(),
@@ -340,6 +338,7 @@ impl SessionState {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback,
+            history: false,
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -767,29 +766,13 @@ impl Session {
 
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
-    /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
-    /// zenoh configuration through the `get` function or
-    /// modify the zenoh configuration through the `insert`,
-    /// or `insert_json5` function.
-    ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let peers = session.config().get("connect/endpoints").unwrap();
-    /// # }
-    /// ```
-    ///
-    /// ### Modify current zenoh configuration
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # }
     /// ```
     #[zenoh_macros::unstable]
@@ -802,7 +785,6 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -1711,6 +1693,7 @@ impl SessionInner {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback: callback.clone(),
+            history,
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1977,6 +1960,7 @@ impl SessionInner {
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
         msg: impl FnOnce() -> &'a mut PushBody,
+        historical: bool,
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -1987,9 +1971,10 @@ impl SessionInner {
         if wire_expr.suffix.is_empty() {
             match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind) {
-                        if sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal))
+                    for sub in res.subscribers(kind).iter() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                         {
                             callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
                         }
@@ -2013,6 +1998,7 @@ impl SessionInner {
                     for sub in state.subscribers(kind).values() {
                         if (sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                             && key_expr.intersects(&sub.key_expr)
                         {
                             callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
@@ -2117,6 +2103,7 @@ impl SessionInner {
                     }
                     &mut push.payload
                 },
+                false,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
@@ -2267,7 +2254,10 @@ impl SessionInner {
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.state);
-        let id = state.liveliness_qid_counter.fetch_add(1, Ordering::SeqCst);
+        // Queries must use the same id generator as liveliness subscribers.
+        // This is because both query's id and subscriber's id are used as interest id,
+        // so both must not overlap.
+        let id = self.runtime.next_id();
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
@@ -2549,6 +2539,9 @@ impl Primitives for WeakSession {
                                 &m.wire_expr,
                                 Default::default(),
                                 || body.insert(Put::default().into()),
+                                // interest_id is set if the Token is an Interest::Current.
+                                // This is used to decide if subs with history=false should be called or not
+                                msg.interest_id.is_some(),
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
                             );
@@ -2566,6 +2559,10 @@ impl Primitives for WeakSession {
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
+                    // interest_id is set if the Token is an Interest::Current.
+                    // This is used to decide if liveliness subs with history=false should be called or not
+                    // NOTE: an UndeclareToken is most likely not an Interest::Current
+                    let interest_current = msg.interest_id.is_some();
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
                         let mut body = None;
@@ -2575,6 +2572,7 @@ impl Primitives for WeakSession {
                             &key_expr.to_wire(self),
                             Default::default(),
                             || body.insert(Del::default().into()),
+                            interest_current,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
                         );
@@ -2592,6 +2590,7 @@ impl Primitives for WeakSession {
                                     &key_expr.to_wire(self),
                                     Default::default(),
                                     || body.insert(Del::default().into()),
+                                    interest_current,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
                                 );
@@ -2624,6 +2623,7 @@ impl Primitives for WeakSession {
             &msg.wire_expr,
             msg.ext_qos,
             || &mut msg.payload,
+            false,
             #[cfg(feature = "unstable")]
             _reliability,
         );
