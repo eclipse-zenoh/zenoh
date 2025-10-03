@@ -428,60 +428,6 @@ impl Runtime {
         }
     }
 
-    pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let mut peers = HashSet::<EndPoint>::from_iter(
-            self.state
-                .config
-                .lock()
-                .0
-                .connect()
-                .endpoints()
-                .get(self.state.whatami)
-                .unwrap_or(&vec![])
-                .iter()
-                .cloned(),
-        );
-        let transports = self.manager().get_transports_unicast().await;
-
-        if self.state.whatami == WhatAmI::Client {
-            for transport in transports {
-                if let Ok(Some(orch_transport)) = transport.get_callback() {
-                    if let Some(orch_transport) = orch_transport
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        let should_close = {
-                            let mut endpoints = zwrite!(orch_transport.endpoints);
-                            endpoints.retain(|e| peers.contains(e));
-                            endpoints.is_empty()
-                        };
-                        if should_close {
-                            transport.close().await?;
-                        }
-                    }
-                }
-            }
-        } else {
-            for transport in transports {
-                if let Ok(Some(orch_transport)) = transport.get_callback() {
-                    if let Some(orch_transport) = orch_transport
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        let mut endpoints = zwrite!(orch_transport.endpoints);
-                        endpoints.retain(|e| peers.contains(e));
-                        peers.retain(|p| !endpoints.contains(p));
-                    }
-                }
-            }
-            for peer in peers {
-                self.spawn_peer_connector(peer).await?;
-            }
-        }
-
-        Ok(())
-    }
-
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
         let guard = &self.state.config.lock().0;
         zenoh_config::get_retry_config(guard, Some(endpoint), true)
