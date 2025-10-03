@@ -21,6 +21,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt::Write,
     future::Future,
+    net::SocketAddr,
     pin::Pin,
     str::FromStr,
     sync::atomic::{AtomicUsize, Ordering},
@@ -30,17 +31,16 @@ use std::{
 
 use axum::{
     extract::{FromRequest, FromRequestParts, Path, Request, State},
-    http::Method,
+    http::{header, request::Parts, HeaderValue, Method, StatusCode, Uri},
     response::{sse::Event, Html, IntoResponse, Response, Sse},
     routing::get,
     Json, Router,
 };
 use base64::Engine;
-use futures::{FutureExt, Stream, StreamExt};
-use http::{header, request::Parts, HeaderValue, StatusCode, Uri};
+use futures::{FutureExt, Stream, StreamExt, TryFutureExt};
 use mime::Mime;
 use serde::Serialize;
-use tokio::{task::JoinHandle, time::timeout};
+use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
 use tower_http::{
     cors::{Any, CorsLayer},
     set_header::SetResponseHeaderLayer,
@@ -68,7 +68,6 @@ pub use config::Config;
 use zenoh::{
     handlers::{fifo::RecvStream, FifoChannelHandler},
     pubsub::Subscriber,
-    session::ZenohId,
     time::Timestamp,
 };
 
@@ -221,7 +220,7 @@ impl Plugin for RestPlugin {
         WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
         MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
 
-        let task = run(runtime.clone(), conf.clone());
+        let task = run(runtime.clone(), conf.addr);
         let task =
             blockon_runtime(async { timeout(Duration::from_millis(1), spawn_runtime(task)).await });
 
@@ -284,10 +283,41 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     result
 }
 
+fn app(session: Session) -> Router {
+    Router::new()
+        .route(
+            "/{*key_expr}",
+            get(subscribe_or_query)
+                .put(publish)
+                .patch(publish)
+                .delete(publish),
+        )
+        .with_state(AppState { session })
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().include_headers(true))
+                .on_request(DefaultOnRequest::new().level(Level::TRACE))
+                .on_response(
+                    DefaultOnResponse::new()
+                        .level(Level::TRACE)
+                        .include_headers(true),
+                ),
+        )
+        .layer(
+            CorsLayer::new()
+                .allow_methods([Method::GET, Method::PUT, Method::PATCH, Method::DELETE])
+                .allow_origin(Any)
+                .allow_credentials(false),
+        )
+        .layer(SetResponseHeaderLayer::overriding(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("*"),
+        ))
+}
+
 #[derive(Clone)]
 struct AppState {
     session: Session,
-    zid: ZenohId,
 }
 
 async fn subscribe(state: AppState, key_expr: KeyExpr<'static>) -> Response {
@@ -400,6 +430,7 @@ async fn publish(
     ZBytesBody(bytes): ZBytesBody,
 ) -> Response {
     // @TODO: Define the right congestion control value
+    dbg!(&method);
     let res = if method == Method::DELETE {
         state.session.delete(key_expr).await
     } else {
@@ -411,56 +442,20 @@ async fn publish(
     }
 }
 
-pub async fn run(runtime: DynamicRuntime, conf: Config) -> ZResult<()> {
+pub async fn run(runtime: DynamicRuntime, addr: SocketAddr) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
     zenoh::init_log_from_env_or("error");
 
-    let zid = runtime.zid();
-    let session = zenoh::session::init(runtime).await?;
-
-    let app = Router::new()
-        .route(
-            "/{*key_expr}",
-            get(subscribe_or_query)
-                .put(publish)
-                .patch(publish)
-                .delete(publish),
-        )
-        .with_state(AppState { session, zid })
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().include_headers(true))
-                .on_request(DefaultOnRequest::new().level(Level::TRACE))
-                .on_response(
-                    DefaultOnResponse::new()
-                        .level(Level::TRACE)
-                        .include_headers(true),
-                ),
-        )
-        .layer(
-            CorsLayer::new()
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::PUT,
-                    Method::PATCH,
-                    Method::DELETE,
-                ])
-                .allow_origin(Any)
-                .allow_credentials(false),
-        )
-        .layer(SetResponseHeaderLayer::overriding(
-            header::ACCESS_CONTROL_ALLOW_ORIGIN,
-            HeaderValue::from_static("*"),
-        ));
-
-    match tokio::net::TcpListener::bind(conf.addr).await {
-        Ok(listener) => axum::serve(listener, app).await?,
-        Err(e) => {
-            tracing::error!("Unable to start http server for REST: {:?}", e);
-            return Err(e.into());
+    match tokio::try_join!(
+        zenoh::session::init(runtime),
+        TcpListener::bind(addr).map_err(Into::into)
+    ) {
+        Ok((session, listener)) => axum::serve(listener, app(session)).await?,
+        Err(err) => {
+            tracing::error!("Unable to start http server for REST: {:?}", err);
+            return Err(err);
         }
     }
     Ok(())
@@ -480,7 +475,7 @@ impl FromRequestParts<AppState> for KeyExprPath {
             .map_err(IntoResponse::into_response)?;
         if let Some(suffix) = key_expr.strip_prefix("@/local") {
             if suffix.is_empty() || suffix.starts_with('/') {
-                key_expr = format!("@/{zid}{suffix}", zid = state.zid);
+                key_expr = format!("@/{zid}{suffix}", zid = state.session.zid());
             }
         }
         match KeyExpr::try_from(key_expr) {
@@ -552,5 +547,197 @@ impl FromRequest<AppState> for ZBytesBody {
             }
         }
         Ok(ZBytesBody(writer.finish()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use axum::{
+        body::{Body, Bytes},
+        http::{header, Method, Request},
+    };
+    use futures::{FutureExt, StreamExt};
+    use tokio::time::timeout;
+    use tower::ServiceExt;
+    use zenoh::{bytes::Encoding, sample::SampleKind, Config, Session, Wait};
+
+    use crate::app;
+
+    const TEST_PORT: u16 = 42000;
+
+    async fn setup() -> (Session, Session) {
+        let mut config1 = Config::default();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config1
+            .listen
+            .endpoints
+            .set(vec![format!("tcp/127.0.0.1:{}", TEST_PORT)
+                .parse()
+                .unwrap()])
+            .unwrap();
+
+        let mut config2 = Config::default();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config2
+            .connect
+            .endpoints
+            .set(vec![format!("tcp/127.0.0.1:{}", TEST_PORT)
+                .parse()
+                .unwrap()])
+            .unwrap();
+        let (s1, s2) = tokio::try_join!(zenoh::open(config1), zenoh::open(config2)).unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        (s1, s2)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn publish() {
+        let (pub_session, sub_session) = setup().await;
+        let subscriber = sub_session.declare_subscriber("test/**").await.unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        for method in [Method::PUT, Method::PATCH] {
+            let response = app(pub_session.clone())
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/test/publish")
+                        .header(header::CONTENT_TYPE, "text/plain")
+                        .body(Body::from("payload"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(response.status().is_success());
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let sample = subscriber.try_recv().unwrap().unwrap();
+            assert_eq!(sample.kind(), SampleKind::Put);
+            assert_eq!(sample.key_expr().as_str(), "test/publish");
+            assert_eq!(sample.payload().try_to_string().unwrap(), "payload");
+            assert_eq!(sample.encoding(), &Encoding::TEXT_PLAIN);
+        }
+        let response = app(pub_session.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/test/publish")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let sample = subscriber.try_recv().unwrap().unwrap();
+        assert_eq!(sample.kind(), SampleKind::Delete);
+        assert_eq!(sample.key_expr().as_str(), "test/publish");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn subscribe() {
+        let (pub_session, sub_session) = setup().await;
+        let response = app(sub_session.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/test/subscribe")
+                    .header(header::ACCEPT, "text/event-stream")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        let mut stream = response.into_body().into_data_stream();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        for i in 0..2 {
+            pub_session
+                .put("test/subscribe", format!("payload {i}"))
+                .encoding(Encoding::TEXT_PLAIN)
+                .await
+                .unwrap();
+            let sample = timeout(Duration::from_secs(1), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(
+                    std::str::from_utf8(&sample)
+                        .unwrap()
+                        .strip_prefix("data: ")
+                        .unwrap()
+                )
+                .unwrap(),
+                serde_json::json!({
+                    "key": "test/subscribe",
+                    "value": format!("payload {i}"),
+                    "encoding": "text/plain",
+                    "timestamp": null,
+                }),
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn query() {
+        let (get_session, queryable_session) = setup().await;
+        let _queryable = queryable_session
+            .declare_queryable("test/**")
+            .callback(|q| {
+                q.reply(q.key_expr(), "reply")
+                    .encoding(Encoding::TEXT_PLAIN)
+                    .wait()
+                    .unwrap()
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let check_json: fn(Bytes) = |body| {
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+                serde_json::json!([{
+                    "key": "test/query",
+                    "value": "reply",
+                    "encoding": "text/plain",
+                    "timestamp": null,
+                }]),
+            )
+        };
+        let check_html: fn(Bytes) =
+            |body: Bytes| assert_eq!(body, "<dl>\n<dt>test/query</dt>\n<dd>reply</dd>\n</dl>\n");
+        let check_raw: fn(Bytes) = |body| assert_eq!(body, "reply");
+        for (query, accept, check) in [
+            ("", "application/json", check_json),
+            ("", "text/html; charset=utf-8", check_html),
+            ("?_raw=true", "text/plain", check_raw),
+        ] {
+            let response = app(get_session.clone())
+                .oneshot(
+                    Request::builder()
+                        .method(Method::GET)
+                        .uri(format!("/test/query{query}"))
+                        .header(header::ACCEPT, accept)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(response.status().is_success());
+            assert_eq!(
+                response.headers().get(header::CONTENT_TYPE).unwrap(),
+                accept
+            );
+            let body = response
+                .into_body()
+                .into_data_stream()
+                .next()
+                .now_or_never()
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            check(body);
+        }
     }
 }
