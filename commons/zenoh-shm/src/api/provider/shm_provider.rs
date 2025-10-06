@@ -544,7 +544,7 @@ impl<'a, Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<B
     fn wait(self) -> <Self as Resolvable>::To {
         let (layout, policy) = self.layout_policy()?;
         // SAFETY: same contract used to set the policy
-        unsafe { layout.alloc().with_runtime_policy(policy) }.wait()
+        Ok(unsafe { layout.alloc().with_runtime_policy(policy) }.wait()?)
     }
 }
 
@@ -562,7 +562,7 @@ impl<
         Box::pin(async move {
             let (layout, policy) = self.layout_policy()?;
             // SAFETY: same contract used to set the policy
-            unsafe { layout.alloc().with_runtime_policy(policy) }.await
+            Ok(unsafe { layout.alloc().with_runtime_policy(policy) }.await?)
         })
     }
 }
@@ -618,7 +618,7 @@ impl<'b, 'a: 'b, Backend, Layout, Policy> PrecomputedAllocBuilder<'b, 'a, Backen
 impl<Backend, Layout: AllocLayout, Policy> Resolvable
     for PrecomputedAllocBuilder<'_, '_, Backend, Layout, Policy>
 {
-    type To = Result<Layout::Buffer, ZLayoutAllocError>;
+    type To = Result<Layout::Buffer, ZAllocError>;
 }
 
 impl<Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait

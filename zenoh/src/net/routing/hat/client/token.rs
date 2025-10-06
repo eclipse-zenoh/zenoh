@@ -322,64 +322,35 @@ pub(crate) fn declare_token_interest(
     id: InterestId,
     res: Option<&mut Arc<Resource>>,
     mode: InterestMode,
-    aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
     if mode.current() {
         let interest_id = (!mode.future()).then_some(id);
         if let Some(res) = res.as_ref() {
-            if aggregate {
-                if tables.faces.values().any(|src_face| {
-                    face_hat!(src_face)
-                        .remote_tokens
-                        .values()
-                        .any(|token| token.context.is_some() && token.matches(res))
-                }) {
-                    let id = make_token_id(res, face, mode);
-                    let wire_expr = Resource::decl_key(res, face, true);
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
-            } else {
-                for src_face in tables
-                    .faces
-                    .values()
-                    .filter(|f| f.whatami == WhatAmI::Client)
-                    .cloned()
-                    .collect::<Vec<Arc<FaceState>>>()
-                {
-                    for token in face_hat!(src_face).remote_tokens.values() {
-                        if token.context.is_some() && token.matches(res) {
-                            let id = make_token_id(token, face, mode);
-                            let wire_expr = Resource::decl_key(token, face, true);
-                            send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id,
-                                        ext_qos: ext::QoSType::default(),
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::DeclareToken(DeclareToken {
-                                            id,
-                                            wire_expr,
-                                        }),
-                                    },
-                                    res.expr().to_string(),
-                                ),
-                            )
-                        }
+            for src_face in tables
+                .faces
+                .values()
+                .filter(|f| f.whatami == WhatAmI::Client)
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                for token in face_hat!(src_face).remote_tokens.values() {
+                    if token.context.is_some() && token.matches(res) {
+                        let id = make_token_id(token, face, mode);
+                        let wire_expr = Resource::decl_key(token, face, true);
+                        send_declare(
+                            &face.primitives,
+                            RoutingContext::with_expr(
+                                Declare {
+                                    interest_id,
+                                    ext_qos: ext::QoSType::default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
+                                },
+                                res.expr().to_string(),
+                            ),
+                        )
                     }
                 }
             }
