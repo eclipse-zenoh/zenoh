@@ -19,7 +19,7 @@
 ### z_advanced_pub
 
    Declares an AdvancedPublisher with a given key expression.  
-   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for hsitory
+   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for history
    or retransmission.
 
    Typical usage:

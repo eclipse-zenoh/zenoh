@@ -140,7 +140,7 @@ impl AnnotableItem {
 #[proc_macro_attribute]
 /// Adds only piece of documentation about the item being unstable but no unstable attribute itself.
 /// This is useful when the whole crate is supposed to be used in unstable mode only, it makes sense
-/// to mention it in dcoumentation for the crate items, but not to add `#[cfg(feature = "unstable")]` to every item.
+/// to mention it in documentation for the crate items, but not to add `#[cfg(feature = "unstable")]` to every item.
 pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
