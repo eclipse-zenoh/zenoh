@@ -308,7 +308,7 @@ async fn zenoh_shm_unicast_to_non_shm() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast_implicit_optimization() {
     // Initiate logging
-    zenoh::init_log_from_env_or("trace");
+    zenoh::init_log_from_env_or("error");
 
     let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19453"]).await;
 
