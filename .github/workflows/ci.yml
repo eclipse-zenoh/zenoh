@@ -229,7 +229,7 @@ jobs:
       - name: Turn off some process limits
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          sudo prlimit --memlock=unlimited
+          sudo prlimit --memlock=unlimited --pid=$$
 
       - name: Run tests stable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
