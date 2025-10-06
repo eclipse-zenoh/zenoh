@@ -140,8 +140,6 @@ jobs:
       - name: Turn off some process limits
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y util-linux
           sudo prlimit --memlock=unlimited
   
       - name: Code format check
