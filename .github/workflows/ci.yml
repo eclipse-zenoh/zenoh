@@ -139,7 +139,7 @@ jobs:
 
       - name: Turn off some process limits
         run: |
-          sudo prlimit -lunlimited
+          sudo ulimit -l unlimited
 
       - name: Code format check
         run: rustfmt +nightly --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
