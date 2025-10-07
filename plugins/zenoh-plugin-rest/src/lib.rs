@@ -288,6 +288,7 @@ fn app(session: Session) -> Router {
         .route(
             "/{*key_expr}",
             get(subscribe_or_query)
+                .post(subscribe_or_query)
                 .put(publish)
                 .patch(publish)
                 .delete(publish),
@@ -305,7 +306,13 @@ fn app(session: Session) -> Router {
         )
         .layer(
             CorsLayer::new()
-                .allow_methods([Method::GET, Method::PUT, Method::PATCH, Method::DELETE])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::DELETE,
+                ])
                 .allow_origin(Any)
                 .allow_credentials(false),
         )
