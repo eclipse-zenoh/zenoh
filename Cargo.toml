@@ -230,7 +230,7 @@ zenoh-link-unixsock_stream = { version = "=1.5.1", path = "io/zenoh-links/zenoh-
 zenoh-link-vsock = { version = "=1.5.1", path = "io/zenoh-links/zenoh-link-vsock" }
 zenoh-link-ws = { version = "=1.5.1", path = "io/zenoh-links/zenoh-link-ws" }
 zenoh-macros = { version = "=1.5.1", path = "commons/zenoh-macros" }
-zenoh-pinned-deps = { version = "=1.5.1", path = "commons/zenoh-pinned-deps", default-features = false }
+zenoh-pinned-deps-1-75 = { version = "=1.5.1", path = "commons/zenoh-pinned-deps-1-75", default-features = false }
 zenoh-plugin-trait = { version = "=1.5.1", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "=1.5.1", path = "commons/zenoh-protocol", default-features = false }
 zenoh-result = { version = "=1.5.1", path = "commons/zenoh-result", default-features = false }
