@@ -61,6 +61,8 @@ zerofrom = "=0.1.5"
 
 [package.metadata.cargo-machete]
 ignored = [
+  "axum",
+  "axum-core",
   "base64ct",
   "derive_more",
   "generic-array",
