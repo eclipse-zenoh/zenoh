@@ -110,7 +110,7 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 parent: Option<std::sync::Weak<$parent_type>>,
                 children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
-                filtered: arc_swap::ArcSwap<Vec<std::sync::Arc<FilteredStats<$struct_name>>>>,
+                filtered: arc_swap::ArcSwap<Vec<FilteredStats<$struct_name>>>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
@@ -154,7 +154,7 @@ macro_rules! stats_struct {
                     a
                 }
 
-                $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<std::sync::Arc<FilteredStats<$struct_name>>>> {
+                $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<FilteredStats<$struct_name>>> {
                     &self.filtered
                 }
 
@@ -447,18 +447,22 @@ stats_struct! {
 
 pub struct FilteredStats<S = TransportStats> {
     key_expr: OwnedKeyExpr,
-    stats: S,
+    stats: std::sync::Arc<S>,
 }
 
 impl FilteredStats {
-    pub fn new(key_expr: OwnedKeyExpr) -> Self {
+    pub fn new(key_expr: OwnedKeyExpr, parent: Option<std::sync::Weak<TransportStats>>) -> Self {
         Self {
             key_expr,
-            stats: TransportStats::default(),
+            stats: TransportStats::new(parent, Default::default()),
         }
     }
 
-    pub fn stats(&self) -> &TransportStats {
+    pub fn key_expr(&self) -> &OwnedKeyExpr {
+        &self.key_expr
+    }
+
+    pub fn stats(&self) -> &std::sync::Arc<TransportStats> {
         &self.stats
     }
 }

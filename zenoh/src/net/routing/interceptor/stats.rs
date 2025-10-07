@@ -18,7 +18,10 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::{Arc, Weak},
+};
 
 use zenoh_buffers::buffer::Buffer;
 use zenoh_config::StatsConfig;
@@ -42,31 +45,37 @@ pub(crate) fn stats_interceptor_factories(
 }
 
 struct StatsInterceptorFactory {
-    filters_tree: Arc<KeBoxTree<Arc<FilteredStats>>>,
-    stats: Arc<Vec<Arc<FilteredStats>>>,
+    parent_stats: Arc<Vec<FilteredStats>>,
 }
 
 impl StatsInterceptorFactory {
     fn new(conf: &StatsConfig) -> Self {
-        let mut tree = KeBoxTree::new();
-        let mut stats = Vec::new();
-        for filter in conf.filters() {
-            let filtered_stats = Arc::new(FilteredStats::new(filter.key.clone()));
-            tree.insert(&filter.key, filtered_stats.clone());
-            stats.push(filtered_stats);
-        }
         Self {
-            filters_tree: Arc::new(tree),
-            stats: Arc::new(stats),
+            parent_stats: Arc::new(
+                conf.filters()
+                    .iter()
+                    .map(|filter| FilteredStats::new(filter.key.clone(), None))
+                    .collect(),
+            ),
         }
     }
 
     fn make_interceptor(&self, stats: &TransportStats, flow: InterceptorFlow) -> Interceptor {
-        stats.filtered().store(self.stats.clone());
-        Box::new(StatsInterceptor {
-            filters_tree: self.filters_tree.clone(),
-            flow,
-        })
+        if let Some(parent) = stats.parent().as_ref().and_then(Weak::upgrade) {
+            parent.filtered().store(self.parent_stats.clone())
+        }
+        let mut filters_tree = KeBoxTree::new();
+        let mut child_stats = Vec::new();
+        for parent_stats in self.parent_stats.iter() {
+            let filtered_stats = FilteredStats::new(
+                parent_stats.key_expr().clone(),
+                Some(Arc::downgrade(parent_stats.stats())),
+            );
+            filters_tree.insert(filtered_stats.key_expr(), filtered_stats.stats().clone());
+            child_stats.push(filtered_stats);
+        }
+        stats.filtered().store(Arc::new(child_stats));
+        Box::new(StatsInterceptor { filters_tree, flow })
     }
 }
 
@@ -96,12 +105,12 @@ impl InterceptorFactoryTrait for StatsInterceptorFactory {
 }
 
 struct StatsInterceptor {
-    filters_tree: Arc<KeBoxTree<Arc<FilteredStats>>>,
+    filters_tree: KeBoxTree<Arc<TransportStats>>,
     flow: InterceptorFlow,
 }
 
 impl StatsInterceptor {
-    fn compute_filtered_stats(&self, key_expr: &keyexpr) -> Vec<Arc<FilteredStats>> {
+    fn compute_filtered_stats(&self, key_expr: &keyexpr) -> Vec<Arc<TransportStats>> {
         self.filters_tree
             .intersecting_nodes(key_expr)
             .filter_map(|n| n.weight().cloned())
@@ -112,10 +121,10 @@ impl StatsInterceptor {
         &self,
         msg: &NetworkMessageMut,
         ctx: &'a dyn InterceptorContext,
-    ) -> Cow<'a, [Arc<FilteredStats>]> {
+    ) -> Cow<'a, [Arc<TransportStats>]> {
         match ctx
             .get_cache(msg)
-            .and_then(|c| c.downcast_ref::<Vec<Arc<FilteredStats>>>())
+            .and_then(|c| c.downcast_ref::<Vec<Arc<TransportStats>>>())
         {
             Some(v) => Cow::Borrowed(v),
             None => ctx.full_keyexpr(msg).map_or_else(Cow::default, |k| {
@@ -126,20 +135,20 @@ impl StatsInterceptor {
 
     fn incr_stats(
         &self,
-        filtered_stats: &[Arc<FilteredStats>],
+        filtered_stats: &[Arc<TransportStats>],
         payload_bytes: usize,
         ingress: impl Fn(&TransportStats) -> (&DiscriminatedStats, &DiscriminatedStats),
         egress: impl Fn(&TransportStats) -> (&DiscriminatedStats, &DiscriminatedStats),
     ) {
-        for filtered_stats in filtered_stats {
+        for stats in filtered_stats {
             match self.flow {
                 InterceptorFlow::Ingress => {
-                    let (rx_msgs, rx_pl_bytes) = ingress(filtered_stats.stats());
+                    let (rx_msgs, rx_pl_bytes) = ingress(stats);
                     rx_msgs.inc_user(1);
                     rx_pl_bytes.inc_user(payload_bytes);
                 }
                 InterceptorFlow::Egress => {
-                    let (tx_msgs, tx_pl_bytes) = egress(filtered_stats.stats());
+                    let (tx_msgs, tx_pl_bytes) = egress(stats);
                     tx_msgs.inc_user(1);
                     tx_pl_bytes.inc_user(payload_bytes);
                 }
