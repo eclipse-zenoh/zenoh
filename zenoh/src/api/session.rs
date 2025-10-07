@@ -126,7 +126,7 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) local_resources: IntHashMap<ExprId, Resource>,
+    pub(crate) local_resources: IntHashMap<ExprId, LocalResource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
@@ -187,13 +187,13 @@ impl SessionState {
 
     #[inline]
     fn get_local_res(&self, id: &ExprId) -> Option<&Resource> {
-        self.local_resources.get(id)
+        Some(&self.local_resources.get(id)?.resource)
     }
 
     #[inline]
     fn get_remote_res(&self, id: &ExprId, mapping: Mapping) -> Option<&Resource> {
         match mapping {
-            Mapping::Receiver => self.local_resources.get(id),
+            Mapping::Receiver => Some(&self.local_resources.get(id)?.resource),
             Mapping::Sender => self.remote_resources.get(id),
         }
     }
@@ -387,7 +387,7 @@ impl SessionState {
         for res in self
             .local_resources
             .values_mut()
-            .filter_map(Resource::as_node_mut)
+            .filter_map(LocalResource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
                 res.subscribers_mut(SubscriberKind::Subscriber)
@@ -480,6 +480,17 @@ impl Resource {
             Resource::Prefix { .. } => None,
             Resource::Node(node) => Some(node),
         }
+    }
+}
+
+pub(crate) struct LocalResource {
+    resource: Resource,
+    declared: bool,
+}
+
+impl LocalResource {
+    pub(crate) fn as_node_mut(&mut self) -> Option<&mut ResourceNode> {
+        self.resource.as_node_mut()
     }
 }
 
@@ -1034,7 +1045,11 @@ impl Session {
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
-            let expr_id = self.0.declare_prefix(key_expr.as_str()).wait()?;
+            let expr_id = self
+                .0
+                .declare_prefix(key_expr.as_str(), true)
+                .wait()?
+                .unwrap();
             let key_expr = match key_expr.0 {
                 KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                     KeyExpr(KeyExprInner::BorrowedWire {
@@ -1225,7 +1240,8 @@ impl SessionInner {
     pub(crate) fn declare_prefix<'a>(
         &'a self,
         prefix: &'a str,
-    ) -> impl Resolve<ZResult<ExprId>> + 'a {
+        force: bool,
+    ) -> impl Resolve<ZResult<Option<ExprId>>> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -1233,9 +1249,10 @@ impl SessionInner {
             match state
                 .local_resources
                 .iter()
-                .find(|(_expr_id, res)| res.name() == prefix)
+                .find(|(_expr_id, res)| res.resource.name() == prefix)
             {
-                Some((expr_id, _res)) => Ok(*expr_id),
+                Some((expr_id, res)) if force || res.declared => Ok(Some(*expr_id)),
+                Some(_) => Ok(None),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
@@ -1251,7 +1268,13 @@ impl SessionInner {
                             }
                         }
                     }
-                    state.local_resources.insert(expr_id, res);
+                    state.local_resources.insert(
+                        expr_id,
+                        LocalResource {
+                            resource: res,
+                            declared: false,
+                        },
+                    );
                     drop(state);
                     primitives.send_declare(&mut Declare {
                         interest_id: None,
@@ -1267,7 +1290,11 @@ impl SessionInner {
                             },
                         }),
                     });
-                    Ok(expr_id)
+                    let mut state = zwrite!(self.state);
+                    if let Some(res) = state.local_resources.get_mut(&expr_id) {
+                        res.declared = true;
+                    }
+                    Ok(Some(expr_id))
                 }
             }
         })
@@ -1432,12 +1459,13 @@ impl SessionInner {
     pub(crate) fn optimize_nonwild_prefix(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
         let ke = key_expr.as_keyexpr();
         if let Some(prefix) = ke.get_nonwild_prefix() {
-            let expr_id = self.declare_prefix(prefix.as_str()).wait()?;
-            return Ok(WireExpr {
-                scope: expr_id,
-                suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
-                mapping: Mapping::Sender,
-            });
+            if let Some(expr_id) = self.declare_prefix(prefix.as_str(), false).wait()? {
+                return Ok(WireExpr {
+                    scope: expr_id,
+                    suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
+                    mapping: Mapping::Sender,
+                });
+            }
         }
         Ok(key_expr.to_wire(self).to_owned())
     }
@@ -1487,7 +1515,7 @@ impl SessionInner {
             for res in state
                 .local_resources
                 .values_mut()
-                .filter_map(Resource::as_node_mut)
+                .filter_map(LocalResource::as_node_mut)
             {
                 res.subscribers_mut(kind)
                     .retain(|sub| sub.id != sub_state.id);
@@ -1705,7 +1733,7 @@ impl SessionInner {
         for res in state
             .local_resources
             .values_mut()
-            .filter_map(Resource::as_node_mut)
+            .filter_map(LocalResource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
                 res.subscribers_mut(SubscriberKind::LivelinessSubscriber)
