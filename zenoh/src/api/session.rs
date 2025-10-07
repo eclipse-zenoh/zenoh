@@ -16,10 +16,7 @@ use std::{
     convert::TryInto,
     fmt, mem,
     ops::Deref,
-    sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Mutex, RwLock, RwLockReadGuard,
-    },
+    sync::{atomic::Ordering, Arc, Mutex, RwLock, RwLockReadGuard},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -33,12 +30,12 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_collections::{IntHashMap, SingleOrVec};
-#[cfg(feature = "unstable")]
-use zenoh_config::GenericConfig;
 use zenoh_config::{
     qos::{PublisherQoSConfList, PublisherQoSConfig},
     wrappers::ZenohId,
 };
+#[cfg(feature = "unstable")]
+use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 use zenoh_protocol::{
@@ -513,7 +510,7 @@ pub(crate) struct SessionInner {
     weak_counter: Mutex<usize>,
     pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
-    pub(crate) id: u16,
+    pub(crate) id: EntityId,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
 }
@@ -652,7 +649,6 @@ impl fmt::Display for SessionClosedError {
 
 impl std::error::Error for SessionClosedError {}
 
-static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
         runtime: GenericRuntime,
@@ -673,7 +669,7 @@ impl Session {
                 weak_counter: Mutex::new(0),
                 runtime: runtime.clone(),
                 state,
-                id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
+                id: runtime.next_id(),
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
             }));
@@ -694,6 +690,12 @@ impl Session {
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
     pub fn zid(&self) -> ZenohId {
         self.info().zid().wait()
+    }
+
+    /// Returns the [`EntityGlobalId`] of this Session.
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId::new(self.zid(), self.0.id)
     }
 
     #[zenoh_macros::internal]
@@ -1030,7 +1032,7 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        let sid = self.0.id;
+        let session_id = self.0.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
@@ -1042,7 +1044,7 @@ impl Session {
                         expr_id,
                         mapping: Mapping::Sender,
                         prefix_len,
-                        session_id: sid,
+                        session_id,
                     })
                 }
                 KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
@@ -1051,7 +1053,7 @@ impl Session {
                         expr_id,
                         mapping: Mapping::Sender,
                         prefix_len,
-                        session_id: sid,
+                        session_id,
                     })
                 }
             };

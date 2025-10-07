@@ -17,6 +17,7 @@ use std::{
     str::FromStr,
 };
 
+use zenoh_config::wrappers::EntityId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
@@ -35,7 +36,7 @@ pub(crate) enum KeyExprInner<'a> {
         expr_id: ExprId,
         mapping: Mapping,
         prefix_len: u32,
-        session_id: u16,
+        session_id: EntityId,
     },
     Owned(OwnedKeyExpr),
     Wire {
@@ -43,7 +44,7 @@ pub(crate) enum KeyExprInner<'a> {
         expr_id: ExprId,
         mapping: Mapping,
         prefix_len: u32,
-        session_id: u16,
+        session_id: EntityId,
     },
 }
 
