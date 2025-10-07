@@ -565,17 +565,15 @@ mod tests {
 
     use crate::app;
 
-    const TEST_PORT: u16 = 42000;
+    const TEST_PORTS: [u16; 3] = [42000, 42001, 42002];
 
-    async fn setup() -> (Session, Session) {
+    async fn setup(port: u16) -> (Session, Session) {
         let mut config1 = Config::default();
         config1.scouting.multicast.set_enabled(Some(false)).unwrap();
         config1
             .listen
             .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{}", TEST_PORT)
-                .parse()
-                .unwrap()])
+            .set(vec![format!("tcp/127.0.0.1:{}", port).parse().unwrap()])
             .unwrap();
 
         let mut config2 = Config::default();
@@ -583,9 +581,7 @@ mod tests {
         config2
             .connect
             .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{}", TEST_PORT)
-                .parse()
-                .unwrap()])
+            .set(vec![format!("tcp/127.0.0.1:{}", port).parse().unwrap()])
             .unwrap();
         let (s1, s2) = tokio::try_join!(zenoh::open(config1), zenoh::open(config2)).unwrap();
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -594,7 +590,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn publish() {
-        let (pub_session, sub_session) = setup().await;
+        let (pub_session, sub_session) = setup(TEST_PORTS[0]).await;
         let subscriber = sub_session.declare_subscriber("test/**").await.unwrap();
         tokio::time::sleep(Duration::from_secs(1)).await;
         for method in [Method::PUT, Method::PATCH] {
@@ -636,7 +632,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn subscribe() {
-        let (pub_session, sub_session) = setup().await;
+        let (pub_session, sub_session) = setup(TEST_PORTS[1]).await;
         let response = app(sub_session.clone())
             .oneshot(
                 Request::builder()
@@ -682,7 +678,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn query() {
-        let (get_session, queryable_session) = setup().await;
+        let (get_session, queryable_session) = setup(TEST_PORTS[2]).await;
         let _queryable = queryable_session
             .declare_queryable("test/**")
             .callback(|q| {
