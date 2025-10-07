@@ -185,15 +185,9 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_id, (mut res, qabl_info)) in hat_face.remote_qabls.drain() {
+        for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_queryable(
-                &mut wtables,
-                &mut face_clone,
-                &mut res,
-                &qabl_info,
-                send_declare,
-            );
+            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {

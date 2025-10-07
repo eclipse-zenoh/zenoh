@@ -553,16 +553,11 @@ pub(super) fn undeclare_simple_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    qabl_info: &QueryableInfoType,
     send_declare: &mut SendDeclare,
 ) {
     let remote_qabl_info = get_remote_qabl_info(&face_hat_mut!(face).remote_qabls, res);
 
-    if !qabl_info.is_included_in(&remote_qabl_info) {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).qabl = remote_qabl_info;
-        }
-
+    if Resource::update_queryable_info(res, face.id, &remote_qabl_info) {
         let mut simple_qabls = simple_qabls(res);
         let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, res);
 
@@ -643,8 +638,8 @@ fn forget_simple_queryable(
     id: QueryableId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
-    if let Some((mut res, qabl_info)) = face_hat_mut!(face).remote_qabls.remove(&id) {
-        undeclare_simple_queryable(tables, face, &mut res, &qabl_info, send_declare);
+    if let Some((mut res, _)) = face_hat_mut!(face).remote_qabls.remove(&id) {
+        undeclare_simple_queryable(tables, face, &mut res, send_declare);
         Some(res)
     } else {
         None

@@ -459,32 +459,11 @@ pub mod queryable {
             pub distance: u16,  // Default 0: distance is null (e.g. intra-process communication)
         }
 
-        impl PartialOrd for QueryableInfoType {
-            fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-                if self.complete == other.complete {
-                    Some(other.distance.cmp(&self.distance))
-                } else if self.complete && self.distance <= other.distance {
-                    Some(core::cmp::Ordering::Greater)
-                } else if !self.complete && self.distance >= other.distance {
-                    Some(core::cmp::Ordering::Less)
-                } else {
-                    None
-                }
-            }
-        }
-
         impl QueryableInfoType {
             pub const DEFAULT: Self = Self {
                 complete: false,
                 distance: 0,
             };
-
-            pub fn is_included_in(&self, other: &Option<QueryableInfoType>) -> bool {
-                match other {
-                    Some(qi) => qi.partial_cmp(self).map(|o| o.is_ge()).unwrap_or(false),
-                    None => false,
-                }
-            }
 
             #[cfg(feature = "test")]
             pub fn rand() -> Self {
