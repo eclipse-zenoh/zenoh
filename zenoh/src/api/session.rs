@@ -695,7 +695,11 @@ impl Session {
     /// Returns the [`EntityGlobalId`] of this Session.
     #[zenoh_macros::unstable]
     pub fn id(&self) -> EntityGlobalId {
-        EntityGlobalId::new(self.zid(), self.0.id)
+        zenoh_protocol::core::EntityGlobalIdProto {
+            zid: self.zid().into(),
+            eid: self.0.id,
+        }
+        .into()
     }
 
     #[zenoh_macros::internal]
