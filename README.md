@@ -116,7 +116,7 @@ The [zenohd](zenohd) router can be run with the command `cargo run` or from `tar
 cargo run -- --config DEFAULT_CONFIG.json5
 ```
 
-The router's purpose is to support Zenoh network infrastructure and provide additional services using [plugins].
+The router's purpose is to support Zenoh network infrastructure and provide additional services using [plugins](plugins).
 See more details and a directory of available plugins in the [zenohd](zenohd) readme.
 
 # Language Support
