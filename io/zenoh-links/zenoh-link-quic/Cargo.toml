@@ -28,6 +28,7 @@ version = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 quinn = { workspace = true }
+quinn-proto = { workspace = true }
 rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
 rustls-webpki = { workspace = true }
@@ -44,6 +45,7 @@ tokio = { workspace = true, features = [
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 webpki-roots = { workspace = true }
+webpki-root-certs = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["quic"] }
