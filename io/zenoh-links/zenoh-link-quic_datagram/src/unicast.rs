@@ -37,7 +37,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{Address, EndPoint, Locator},
+    core::{Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -100,20 +100,20 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Priority) -> ZResult<usize> {
         let amt = buffer.len();
         self.connection
             .send_datagram(Bytes::copy_from_slice(buffer))?;
         Ok(amt)
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Priority) -> ZResult<()> {
         self.connection
             .send_datagram(Bytes::copy_from_slice(buffer))?;
         Ok(())
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<usize> {
         let bytes = self.connection.read_datagram().await?;
         buffer
             .get_mut(..bytes.len())
@@ -128,7 +128,7 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
         Ok(bytes.len())
     }
 
-    async fn read_exact(&self, _: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, _: &mut [u8], _priority: Priority) -> ZResult<()> {
         unreachable!()
     }
 
@@ -168,6 +168,11 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        false
     }
 }
 

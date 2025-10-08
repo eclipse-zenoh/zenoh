@@ -40,7 +40,7 @@ use zenoh_link_commons::{
     LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, ZResult};
@@ -478,19 +478,19 @@ impl LinkUnicastTrait for UnicastPipe {
         Ok(())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Priority) -> ZResult<usize> {
         self.get_w_mut().write(buffer).await
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Priority) -> ZResult<()> {
         self.get_w_mut().write_all(buffer).await
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<usize> {
         self.get_r_mut().read(buffer).await
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<()> {
         self.get_r_mut().read_exact(buffer).await
     }
 
@@ -529,6 +529,11 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Unixpipe
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        false
     }
 }
 

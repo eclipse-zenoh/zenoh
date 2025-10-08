@@ -35,14 +35,13 @@ use crate::{
     common::{
         batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
         pipeline::{
-            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
-            TransmissionPipelineProducer,
+            PipelineConsumer, TransmissionPipeline, TransmissionPipelineConf,
+            TransmissionPipelineConsumer, TransmissionPipelineProducer,
         },
         priority::TransportPriorityTx,
     },
     multicast::transport::TransportMulticastInner,
 };
-
 /****************************/
 /* TRANSPORT MULTICAST LINK */
 /****************************/
@@ -320,7 +319,7 @@ impl TransportLinkMulticastUniversal {
                 queue_alloc: self.transport.manager.config.queue_alloc,
             };
             // The pipeline
-            let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx);
+            let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx, false);
             self.pipeline = Some(producer);
 
             // Spawn the TX task
