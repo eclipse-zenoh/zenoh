@@ -432,8 +432,10 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 ))
             }
         };
-        let query_part = url.query();
-        let parameters = Parameters::from(query_part.unwrap_or_default());
+        // The parameters in Zenoh selector is separated by ';', while in URL it is '&'
+        // So we need to convert '&' to ';'
+        let query_part = url.query().unwrap_or_default().replace('&', ";");
+        let parameters = Parameters::from(query_part);
         let consolidation = if parameters.time_range().is_some() {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
