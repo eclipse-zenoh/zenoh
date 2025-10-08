@@ -43,7 +43,7 @@ use crate::{
     key_expr::KeyExpr,
     net::routing::{
         hat::{HatTrait, SendDeclare},
-        router::{get_or_set_route, merge_qabl_infos, QueryRouteBuilder},
+        router::{get_or_set_route, QueryRouteBuilder},
     },
 };
 
@@ -672,6 +672,19 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
                 ext_tstamp: None,
             });
     }
+}
+
+pub(crate) fn merge_qabl_infos(
+    mut this: QueryableInfoType,
+    info: &QueryableInfoType,
+) -> QueryableInfoType {
+    this.distance = match (this.complete, info.complete) {
+        (true, true) | (false, false) => std::cmp::min(this.distance, info.distance),
+        (true, false) => this.distance,
+        (false, true) => info.distance,
+    };
+    this.complete = this.complete || info.complete;
+    this
 }
 
 pub(crate) fn get_remote_qabl_info(

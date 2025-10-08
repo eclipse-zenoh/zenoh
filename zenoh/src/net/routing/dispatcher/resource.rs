@@ -178,15 +178,6 @@ impl SessionContext {
     }
 }
 
-pub(crate) fn merge_qabl_infos(
-    mut this: QueryableInfoType,
-    info: &QueryableInfoType,
-) -> QueryableInfoType {
-    this.complete = this.complete || info.complete;
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
-
 /// Global version number for route computation.
 /// Use 64bit to not care about rollover.
 pub type RoutesVersion = u64;
