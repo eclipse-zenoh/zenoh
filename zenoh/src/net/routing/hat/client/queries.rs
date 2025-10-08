@@ -39,7 +39,7 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
         },
         hat::{HatQueriesTrait, SendDeclare, Sources},
-        router::{get_remote_qabl_info, merge_qabl_infos},
+        router::{get_remote_qabl_info, merge_qabl_infos, update_queryable_info},
         RoutingContext,
     },
 };
@@ -213,7 +213,7 @@ pub(super) fn undeclare_simple_queryable(
     send_declare: &mut SendDeclare,
 ) {
     let remote_qabl_info = get_remote_qabl_info(&face_hat_mut!(face).remote_qabls, res);
-    if Resource::update_queryable_info(res, face.id, &remote_qabl_info) {
+    if update_queryable_info(res, face.id, &remote_qabl_info) {
         let mut simple_qabls = simple_qabls(res);
         if simple_qabls.is_empty() {
             propagate_forget_simple_queryable(tables, res, send_declare);

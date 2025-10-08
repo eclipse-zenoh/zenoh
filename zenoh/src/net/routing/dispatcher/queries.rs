@@ -704,3 +704,25 @@ pub(crate) fn get_remote_qabl_info(
             }
         })
 }
+
+pub(crate) fn update_queryable_info(
+    res: &mut Arc<Resource>,
+    face_id: usize,
+    new_qabl_info: &Option<QueryableInfoType>,
+) -> bool {
+    if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face_id) {
+        if ctx.qabl != *new_qabl_info {
+            get_mut_unchecked(ctx).qabl = *new_qabl_info;
+            true
+        } else {
+            false
+        }
+    } else {
+        tracing::warn!(
+            "Request to update QueryableInfo for inexistent face id: {}, on resource: '{}'",
+            face_id,
+            res.expr()
+        );
+        false
+    }
+}
