@@ -44,8 +44,8 @@ tokio = { workspace = true, features = [
 # tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
-webpki-roots = { workspace = true }
 webpki-root-certs = { workspace = true }
+webpki-roots = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["quic"] }
@@ -54,4 +54,4 @@ zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["rustls-webpki", "quinn-proto", "webpki-root-certs"]
+ignored = ["quinn-proto", "rustls-webpki", "webpki-root-certs"]

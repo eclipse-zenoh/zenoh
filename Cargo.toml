@@ -199,8 +199,8 @@ uuid = { version = "1.18.1", default-features = false, features = [
 validated_struct = "2.2.0"
 vec_map = "0.8.2"
 # Pin webpki to 0.26.8 until clarification on CDLA-Permissive-2.0 license compliance with Eclipse Foundation
-webpki-roots = "=0.26.8"
 webpki-root-certs = "=0.26.8"
+webpki-roots = "=0.26.8"
 win-sys = "0.3"
 winapi = { version = "0.3.9", features = ["iphlpapi", "winerror"] }
 windows-sys = { version = "0.61.0", features = [
