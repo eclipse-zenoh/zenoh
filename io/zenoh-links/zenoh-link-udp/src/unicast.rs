@@ -29,7 +29,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{Address, EndPoint, Locator},
+    core::{Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -166,32 +166,32 @@ impl LinkUnicastTrait for LinkUnicastUdp {
         }
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Priority) -> ZResult<usize> {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.write(buffer).await,
             LinkUnicastUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
         }
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
+            written += self.write(&buffer[written..], priority).await?;
         }
         Ok(())
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<usize> {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.read(buffer).await,
             LinkUnicastUdpVariant::Unconnected(link) => link.read(buffer).await,
         }
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], priority: Priority) -> ZResult<()> {
         let mut read: usize = 0;
         while read < buffer.len() {
-            let n = self.read(&mut buffer[read..]).await?;
+            let n = self.read(&mut buffer[read..], priority).await?;
             read += n;
         }
         Ok(())
@@ -230,6 +230,11 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Udp
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        false
     }
 }
 
