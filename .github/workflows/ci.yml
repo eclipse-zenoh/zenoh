@@ -351,9 +351,6 @@ jobs:
               docker-images: true
               swap-storage: true
 
-          - name: Uninstall pre-installed packages
-            run: sudo apt remove dotnet* azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox temurin-8-jdk powershell mysql-server-core-8.0 mono-devel -y
-
           - name: Checkout sources
             uses: actions/checkout@v4
 
