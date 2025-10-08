@@ -318,8 +318,8 @@ async fn zenoh_shm_unicast_implicit_optimization() {
         let c_shm_works = shm_works.clone();
         let _sub = peer01
             .declare_subscriber(key)
-            .callback(move |samle| {
-                if samle.payload().as_shm().is_some() {
+            .callback(move |sample| {
+                if sample.payload().as_shm().is_some() {
                     c_shm_works.store(true, Ordering::Relaxed);
                 }
             })
