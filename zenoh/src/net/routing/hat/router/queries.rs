@@ -48,18 +48,14 @@ use crate::{
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },
             hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
-            router::disable_matches_query_routes,
+            router::{
+                disable_matches_query_routes, get_remote_qabl_info, merge_qabl_infos,
+                update_queryable_info,
+            },
             RoutingContext,
         },
     },
 };
-
-#[inline]
-fn merge_qabl_infos(mut this: QueryableInfoType, info: &QueryableInfoType) -> QueryableInfoType {
-    this.complete = this.complete || info.complete;
-    this.distance = std::cmp::min(this.distance, info.distance);
-    this
-}
 
 #[inline]
 fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfoType {
@@ -469,7 +465,9 @@ fn register_simple_queryable(
         )
         .qabl = Some(*qabl_info);
     }
-    face_hat_mut!(face).remote_qabls.insert(id, res.clone());
+    face_hat_mut!(face)
+        .remote_qabls
+        .insert(id, (res.clone(), *qabl_info));
 }
 
 fn declare_simple_queryable(
@@ -810,15 +808,9 @@ pub(super) fn undeclare_simple_queryable(
     res: &mut Arc<Resource>,
     send_declare: &mut SendDeclare,
 ) {
-    if !face_hat_mut!(face)
-        .remote_qabls
-        .values()
-        .any(|s| *s == *res)
-    {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).qabl = None;
-        }
+    let remote_qabl_info = get_remote_qabl_info(&face_hat_mut!(face).remote_qabls, res);
 
+    if update_queryable_info(res, face.id, &remote_qabl_info) {
         let mut simple_qabls = simple_qabls(res);
         let router_qabls = remote_router_qabls(tables, res);
         let linkstatepeer_qabls = remote_linkstatepeer_qabls(tables, res);
@@ -895,7 +887,7 @@ fn forget_simple_queryable(
     id: QueryableId,
     send_declare: &mut SendDeclare,
 ) -> Option<Arc<Resource>> {
-    if let Some(mut res) = face_hat_mut!(face).remote_qabls.remove(&id) {
+    if let Some((mut res, _)) = face_hat_mut!(face).remote_qabls.remove(&id) {
         undeclare_simple_queryable(tables, face, &mut res, send_declare);
         Some(res)
     } else {
@@ -1020,7 +1012,7 @@ pub(super) fn queries_linkstate_change(
                 if src_face.id != dst_face.id
                     && HatTables::failover_brokering_to(links, &dst_face.zid)
                 {
-                    for res in face_hat!(src_face).remote_qabls.values() {
+                    for (ref res, _) in face_hat!(src_face).remote_qabls.values() {
                         if !face_hat!(dst_face).local_qabls.contains_key(res) {
                             let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
                             let info = local_qabl_info(tables, res, &dst_face);
