@@ -76,4 +76,4 @@ zenoh-runtime = { workspace = true }
 zenoh-util = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["rustls-webpki"]
+ignored = ["rustls-webpki", "quinn-proto", "webpki-root-certs"]
