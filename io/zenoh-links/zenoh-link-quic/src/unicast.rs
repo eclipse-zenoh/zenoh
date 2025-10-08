@@ -13,7 +13,7 @@
 //
 
 use std::{
-    fmt,
+    array, fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -39,7 +39,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{Address, EndPoint, Locator},
+    core::{Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -51,8 +51,8 @@ pub struct LinkUnicastQuic {
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    send: AsyncMutex<quinn::SendStream>,
-    recv: AsyncMutex<quinn::RecvStream>,
+    send: [AsyncMutex<Option<quinn::SendStream>>; Priority::NUM],
+    recv: [AsyncMutex<Option<quinn::RecvStream>>; Priority::NUM],
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
@@ -62,19 +62,23 @@ impl LinkUnicastQuic {
         connection: quinn::Connection,
         src_addr: SocketAddr,
         dst_locator: Locator,
-        send: quinn::SendStream,
-        recv: quinn::RecvStream,
+        send_control: quinn::SendStream,
+        recv_control: quinn::RecvStream,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
+        let mut send = Some(send_control);
+        let send = array::from_fn(|i| AsyncMutex::new((i == 0).then(|| send.take().unwrap())));
+        let mut recv = Some(recv_control);
+        let recv = array::from_fn(|i| AsyncMutex::new((i == 0).then(|| recv.take().unwrap())));
         // Build the Quic object
         LinkUnicastQuic {
             connection,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
-            send: AsyncMutex::new(send),
-            recv: AsyncMutex::new(recv),
+            send,
+            recv,
             auth_identifier,
             expiration_manager,
         }
@@ -83,12 +87,44 @@ impl LinkUnicastQuic {
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
-        let mut guard = zasynclock!(self.send);
-        if let Err(e) = guard.finish() {
+        let mut guard = zasynclock!(self.send[Priority::Control as usize]);
+        if let Err(e) = guard.as_mut().unwrap().finish() {
             tracing::trace!("Error closing QUIC stream {}: {}", self, e);
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
+    }
+
+    async fn write_stream<'a>(
+        &self,
+        stream: &'a mut Option<quinn::SendStream>,
+        priority: Priority,
+    ) -> ZResult<&'a mut quinn::SendStream> {
+        if stream.is_none() {
+            let send = self.connection.open_uni().await.map_err(|e| {
+                let e = zerror!("Open error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e
+            })?;
+            send.set_priority(-(priority as i32)).ok();
+            *stream = Some(send);
+        }
+        Ok(stream.as_mut().unwrap())
+    }
+
+    async fn read_stream<'a>(
+        &self,
+        stream: &'a mut Option<quinn::RecvStream>,
+    ) -> ZResult<&'a mut quinn::RecvStream> {
+        if stream.is_none() {
+            let recv = self.connection.accept_uni().await.map_err(|e| {
+                let e = zerror!("Accept error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e
+            })?;
+            *stream = Some(recv);
+        }
+        Ok(stream.as_mut().unwrap())
     }
 }
 
@@ -109,26 +145,34 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.send);
-        guard.write(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
+    async fn write(&self, buffer: &[u8], priority: Priority) -> ZResult<usize> {
+        let mut guard = zasynclock!(self.send[priority as usize]);
+        self.write_stream(&mut guard, priority)
+            .await?
+            .write(buffer)
+            .await
+            .map_err(|e| {
+                tracing::trace!("Write error on QUIC link {}: {}", self, e);
+                zerror!(e).into()
+            })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.send);
-        guard.write_all(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
-        })
+    async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()> {
+        let mut guard = zasynclock!(self.send[priority as usize]);
+        self.write_stream(&mut guard, priority)
+            .await?
+            .write_all(buffer)
+            .await
+            .map_err(|e| {
+                tracing::trace!("Write error on QUIC link {}: {}", self, e);
+                zerror!(e).into()
+            })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.recv);
-        guard
-            .read(buffer)
+    async fn read(&self, buffer: &mut [u8], priority: Priority) -> ZResult<usize> {
+        let mut guard = zasynclock!(self.recv[priority as usize]);
+        let recv = self.read_stream(&mut guard).await?;
+        recv.read(buffer)
             .await
             .map_err(|e| {
                 let e = zerror!("Read error on QUIC link {}: {}", self, e);
@@ -139,20 +183,24 @@ impl LinkUnicastTrait for LinkUnicastQuic {
                 let e = zerror!(
                     "Read error on QUIC link {}: stream {} has been closed",
                     self,
-                    guard.id()
+                    recv.id()
                 );
                 tracing::trace!("{}", &e);
                 e.into()
             })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.recv);
-        guard.read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+    async fn read_exact(&self, buffer: &mut [u8], priority: Priority) -> ZResult<()> {
+        let mut guard = zasynclock!(self.recv[priority as usize]);
+        self.read_stream(&mut guard)
+            .await?
+            .read_exact(buffer)
+            .await
+            .map_err(|e| {
+                let e = zerror!("Read error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e.into()
+            })
     }
 
     #[inline(always)]
@@ -188,6 +236,11 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        true
     }
 }
 
@@ -398,7 +451,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // We do not accept unidireactional streams.
         Arc::get_mut(&mut server_config.transport)
             .unwrap()
-            .max_concurrent_uni_streams(0_u8.into());
+            .max_concurrent_uni_streams((Priority::NUM - 1).try_into().unwrap());
         // For the time being we only allow one bidirectional stream
         Arc::get_mut(&mut server_config.transport)
             .unwrap()

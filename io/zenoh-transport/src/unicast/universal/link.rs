@@ -11,14 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{
+    array,
+    future::{poll_fn, Future},
+    pin::Pin,
+    task::Poll,
+    time::Duration,
+};
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
-use zenoh_protocol::transport::{KeepAlive, TransportMessage};
+use zenoh_protocol::{
+    core::Priority,
+    transport::{KeepAlive, TransportMessage},
+};
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+use zenoh_sync::RecyclingObjectPool;
 #[cfg(feature = "stats")]
 use {crate::common::stats::TransportStats, std::sync::Arc};
 
@@ -27,8 +35,8 @@ use crate::{
     common::{
         batch::{BatchConfig, RBatch},
         pipeline::{
-            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
-            TransmissionPipelineProducer,
+            PipelineConsumer, TransmissionPipeline, TransmissionPipelineConf,
+            TransmissionPipelineConsumer, TransmissionPipelineProducer,
         },
         priority::TransportPriorityTx,
     },
@@ -73,7 +81,8 @@ impl TransportLinkUnicastUniversal {
         };
 
         // The pipeline
-        let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
+        let (producer, consumer) =
+            TransmissionPipeline::make(config, priority_tx, link.link.supports_priorities());
 
         let result = Self {
             link,
@@ -184,7 +193,53 @@ impl TransportLinkUnicastUniversal {
 /*              TASKS                */
 /*************************************/
 async fn tx_task(
-    mut pipeline: TransmissionPipelineConsumer,
+    pipeline: TransmissionPipelineConsumer,
+    link: &mut TransportLinkUnicastTx,
+    keep_alive: Duration,
+    token: CancellationToken,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+) -> ZResult<()> {
+    if link.inner.link.supports_priorities() {
+        let tasks = pipeline
+            .split()
+            .into_iter()
+            .map(|pipeline| {
+                let mut link = link.clone();
+                let token = token.clone();
+                #[cfg(feature = "stats")]
+                let stats = stats.clone();
+                zenoh_runtime::ZRuntime::TX.spawn(async move {
+                    write_loop(
+                        pipeline,
+                        &mut link,
+                        keep_alive,
+                        token,
+                        #[cfg(feature = "stats")]
+                        stats,
+                    )
+                    .await
+                })
+            })
+            .collect::<Vec<_>>();
+        for task in tasks {
+            task.await.unwrap()?;
+        }
+    } else {
+        write_loop(
+            pipeline,
+            link,
+            keep_alive,
+            token,
+            #[cfg(feature = "stats")]
+            stats,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn write_loop(
+    mut pipeline: impl PipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     token: CancellationToken,
@@ -195,7 +250,7 @@ async fn tx_task(
             res = tokio::time::timeout(keep_alive, pipeline.pull()) => {
                 match res {
                     Ok(Some((mut batch, priority))) => {
-                        link.send_batch(&mut batch).await?;
+                        link.send_batch(&mut batch, priority).await?;
 
                         #[cfg(feature = "stats")]
                         {
@@ -233,10 +288,13 @@ async fn tx_task(
 
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
-    for (mut b, _) in batches.drain(..) {
-        tokio::time::timeout(keep_alive, link.send_batch(&mut b))
-            .await
-            .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
+    for (mut b, prio) in batches.drain(..) {
+        tokio::time::timeout(
+            keep_alive,
+            link.send_batch(&mut b, Priority::try_from(prio as u8).unwrap()),
+        )
+        .await
+        .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
 
         #[cfg(feature = "stats")]
         {
@@ -256,21 +314,6 @@ async fn rx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-    async fn read<T, F>(
-        link: &mut TransportLinkUnicastRx,
-        pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<RBatch>
-    where
-        T: ZSliceBuffer + 'static,
-        F: Fn() -> T,
-        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
-    {
-        let batch = link
-            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
-            .await?;
-        Ok(batch)
-    }
-
     // The pool of buffers
     let mtu = link.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
@@ -278,17 +321,82 @@ async fn rx_task(
         tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
         n = 1;
     }
+    let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
 
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    if link.link.supports_priorities() {
+        let mut tasks: [_; Priority::NUM] = array::from_fn(|prio| {
+            let mut link = link.clone();
+            let transport = transport.clone();
+            let token = token.clone();
+            #[cfg(feature = "stats")]
+            let stats = stats.clone();
+            let pool = pool.clone();
+            zenoh_runtime::ZRuntime::RX.spawn(async move {
+                read_loop(
+                    Priority::try_from(prio as u8).unwrap(),
+                    &mut link,
+                    transport,
+                    lease,
+                    token,
+                    #[cfg(feature = "stats")]
+                    stats,
+                    &pool,
+                )
+                .await
+            })
+        });
+        poll_fn(|cx| {
+            for task in &mut tasks {
+                if let Poll::Ready(res) = Pin::new(task).poll(cx) {
+                    return Poll::Ready(res.unwrap());
+                }
+            }
+            Poll::Pending
+        })
+        .await
+    } else {
+        read_loop(
+            Priority::Control,
+            link,
+            transport,
+            lease,
+            token,
+            #[cfg(feature = "stats")]
+            stats,
+            &pool,
+        )
+        .await
+    }
+}
+
+async fn read_loop<F: Fn() -> Box<[u8]>>(
+    priority: Priority,
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    token: CancellationToken,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    pool: &RecyclingObjectPool<Box<[u8]>, F>,
+) -> ZResult<()> {
+    async fn read<F: Fn() -> Box<[u8]>>(
+        link: &mut TransportLinkUnicastRx,
+        priority: Priority,
+        pool: &RecyclingObjectPool<Box<[u8]>, F>,
+    ) -> ZResult<RBatch> {
+        let batch = link
+            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()), priority)
+            .await?;
+        Ok(batch)
+    }
+
     let l = Link::new_unicast(
         &link.link,
         link.config.priorities.clone(),
         link.config.reliability,
     );
-
     loop {
         tokio::select! {
-            batch = tokio::time::timeout(lease, read(link, &pool)) => {
+            batch = tokio::time::timeout(lease, read(link, priority, pool)) => {
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {
@@ -297,9 +405,7 @@ async fn rx_task(
                 transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
             }
 
-            _ = token.cancelled() => break
+            _ = token.cancelled() => return Ok(()),
         }
     }
-
-    Ok(())
 }
