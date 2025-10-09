@@ -92,7 +92,7 @@ impl TransportLinkUnicast {
 
     pub(crate) async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         let mut link = self.tx();
-        link.send(msg).await
+        link.send(msg, Priority::Control).await
     }
 
     pub(crate) async fn recv(&self) -> ZResult<TransportMessage> {
@@ -173,14 +173,18 @@ impl TransportLinkUnicastTx {
         Ok(())
     }
 
-    pub(crate) async fn send(&mut self, msg: &TransportMessage) -> ZResult<usize> {
+    pub(crate) async fn send(
+        &mut self,
+        msg: &TransportMessage,
+        priority: Priority,
+    ) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
 
         // Create the batch for serializing the message
         let mut batch = WBatch::new(self.inner.config.batch);
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
-        self.send_batch(&mut batch, Priority::Control).await?;
+        self.send_batch(&mut batch, priority).await?;
         Ok(len)
     }
 }
@@ -301,7 +305,7 @@ impl MaybeOpenAck {
                     // Then then we re-enable it, in case it was enabled, after the OpenAck has been sent.
                     let compression = self.link.inner.config.batch.is_compression;
                     self.link.inner.config.batch.is_compression = false;
-                    self.link.send(&msg.into()).await?;
+                    self.link.send(&msg.into(), Priority::Control).await?;
                     self.link.inner.config.batch.is_compression = compression;
                 },
                 {

@@ -241,8 +241,8 @@ async fn tx_task(
                 let stats = stats.clone();
                 zenoh_runtime::ZRuntime::TX.spawn(async move {
                     write_loop(
+                        pipeline.priority(),
                         pipeline,
-                        |p| p,
                         &mut link,
                         keep_alive,
                         token,
@@ -258,10 +258,8 @@ async fn tx_task(
         }
     } else {
         write_loop(
+            Priority::Control,
             pipeline,
-            // ensure that messages are always written with control priority when link doesn't
-            // support priorities
-            |p| Priority::Control,
             link,
             keep_alive,
             token,
@@ -274,8 +272,8 @@ async fn tx_task(
 }
 
 async fn write_loop(
+    keep_alive_prio: Priority,
     mut pipeline: impl PipelineConsumer,
-    write_priority: impl Fn(Priority) -> Priority,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     token: CancellationToken,
@@ -286,7 +284,7 @@ async fn write_loop(
             res = tokio::time::timeout(keep_alive, pipeline.pull()) => {
                 match res {
                     Ok(Some((mut batch, priority))) => {
-                        link.send_batch(&mut batch, write_priority(priority)).await?;
+                        link.send_batch(&mut batch, priority).await?;
 
                         #[cfg(feature = "stats")]
                         {
@@ -307,7 +305,7 @@ async fn write_loop(
                         let message: TransportMessage = KeepAlive.into();
 
                         #[allow(unused_variables)] // Used when stats feature is enabled
-                        let n = link.send(&message).await?;
+                        let n = link.send(&message, keep_alive_prio).await?;
 
                         #[cfg(feature = "stats")]
                         {

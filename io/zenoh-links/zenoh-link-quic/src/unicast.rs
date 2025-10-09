@@ -13,7 +13,7 @@
 //
 
 use std::{
-    array, fmt,
+    fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -24,7 +24,7 @@ use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, Notify};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
@@ -52,7 +52,8 @@ pub struct LinkUnicastQuic {
     src_locator: Locator,
     dst_locator: Locator,
     send: [AsyncMutex<Option<quinn::SendStream>>; Priority::NUM],
-    recv: [AsyncMutex<Option<quinn::RecvStream>>; Priority::NUM],
+    recv: [(AsyncMutex<Option<quinn::RecvStream>>, Notify); Priority::NUM],
+    accept_lock: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
@@ -67,18 +68,20 @@ impl LinkUnicastQuic {
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
-        let mut send = Some(send_control);
-        let send = array::from_fn(|i| AsyncMutex::new((i == 0).then(|| send.take().unwrap())));
-        let mut recv = Some(recv_control);
-        let recv = array::from_fn(|i| AsyncMutex::new((i == 0).then(|| recv.take().unwrap())));
+        let mut send = vec![AsyncMutex::new(Some(send_control))];
+        send.resize_with(Priority::NUM, || AsyncMutex::new(None));
+        let mut recv = vec![(AsyncMutex::new(Some(recv_control)), Notify::new())];
+        recv.resize_with(Priority::NUM, || (AsyncMutex::new(None), Notify::new()));
+
         // Build the Quic object
         LinkUnicastQuic {
             connection,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
-            send,
-            recv,
+            send: send.try_into().unwrap(),
+            recv: recv.try_into().unwrap(),
+            accept_lock: AsyncMutex::new(()),
             auth_identifier,
             expiration_manager,
         }
@@ -101,30 +104,67 @@ impl LinkUnicastQuic {
         priority: Priority,
     ) -> ZResult<&'a mut quinn::SendStream> {
         if stream.is_none() {
-            let send = self.connection.open_uni().await.map_err(|e| {
-                let e = zerror!("Open error on QUIC link {}: {}", self, e);
-                tracing::trace!("{}", &e);
-                e
+            let mut send = self.connection.open_uni().await.map_err(|e| {
+                tracing::trace!("Open error on QUIC link {}: {}", self, e);
+                zerror!(e)
             })?;
             send.set_priority(-(priority as i32)).ok();
+            send.write_all(&[priority as u8]).await.map_err(|e| {
+                tracing::trace!("Write error on QUIC link {}: {}", self, e);
+                zerror!(e)
+            })?;
             *stream = Some(send);
         }
         Ok(stream.as_mut().unwrap())
     }
 
-    async fn read_stream<'a>(
-        &self,
-        stream: &'a mut Option<quinn::RecvStream>,
-    ) -> ZResult<&'a mut quinn::RecvStream> {
-        if stream.is_none() {
-            let recv = self.connection.accept_uni().await.map_err(|e| {
-                let e = zerror!("Accept error on QUIC link {}: {}", self, e);
-                tracing::trace!("{}", &e);
+    async fn read_stream<'a: 'b, 'b>(
+        &'a self,
+        stream: &'b mut Option<AsyncMutexGuard<'a, Option<quinn::RecvStream>>>,
+        priority: Priority,
+    ) -> ZResult<&'b mut quinn::RecvStream> {
+        if stream.as_ref().unwrap().is_none() {
+            drop(stream.take());
+            tokio::select! {
+                biased;
+                _ = self.recv[priority as usize].1.notified() => {}
+                _guard = self.accept_lock.lock() => self.accept_loop(priority).await?
+            }
+            *stream = Some(self.recv[priority as usize].0.lock().await);
+        }
+        Ok(stream.as_mut().unwrap().as_mut().unwrap())
+    }
+
+    async fn accept_loop(&self, priority: Priority) -> ZResult<()> {
+        loop {
+            let mut recv = self.connection.accept_uni().await.map_err(|e| {
+                tracing::trace!("Accept error on QUIC link {}: {}", self, e);
+                zerror!(e)
+            })?;
+            let mut prio_byte = [0];
+            recv.read_exact(&mut prio_byte).await.map_err(|e| {
+                tracing::trace!("Read error on QUIC link {}: {}", self, e);
+                zerror!(e)
+            })?;
+            let accepted_prio = Priority::try_from(prio_byte[0]).map_err(|e| {
+                tracing::trace!("Invalid priority accepted on QUIC link {}: {}", self, e);
                 e
             })?;
-            *stream = Some(recv);
+            let mut accepted_stream = self.recv[accepted_prio as usize].0.lock().await;
+            if accepted_stream.is_some() {
+                tracing::trace!(
+                    "duplicate priority accepted on QUIC link {}: {:?}",
+                    self,
+                    accepted_prio
+                );
+                bail!("duplicate stream");
+            }
+            *accepted_stream = Some(recv);
+            if accepted_prio == priority {
+                return Ok(());
+            }
+            self.recv[accepted_prio as usize].1.notify_one();
         }
-        Ok(stream.as_mut().unwrap())
     }
 }
 
@@ -170,8 +210,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn read(&self, buffer: &mut [u8], priority: Priority) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.recv[priority as usize]);
-        let recv = self.read_stream(&mut guard).await?;
+        let mut guard = Some(zasynclock!(self.recv[priority as usize].0));
+        let recv = self.read_stream(&mut guard, priority).await?;
         recv.read(buffer)
             .await
             .map_err(|e| {
@@ -191,8 +231,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn read_exact(&self, buffer: &mut [u8], priority: Priority) -> ZResult<()> {
-        let mut guard = zasynclock!(self.recv[priority as usize]);
-        self.read_stream(&mut guard)
+        let mut guard = Some(zasynclock!(self.recv[priority as usize].0));
+        self.read_stream(&mut guard, priority)
             .await?
             .read_exact(buffer)
             .await
@@ -448,14 +488,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
         let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
 
-        // We do not accept unidireactional streams.
-        Arc::get_mut(&mut server_config.transport)
-            .unwrap()
-            .max_concurrent_uni_streams((Priority::NUM - 1).try_into().unwrap());
-        // For the time being we only allow one bidirectional stream
+        // We accept one bidirectional streams for control priority, and unidirectional for others.
         Arc::get_mut(&mut server_config.transport)
             .unwrap()
             .max_concurrent_bidi_streams(1_u8.into());
+        Arc::get_mut(&mut server_config.transport)
+            .unwrap()
+            .max_concurrent_uni_streams((Priority::NUM - 1).try_into().unwrap());
 
         // Initialize the Endpoint
         let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
