@@ -71,7 +71,7 @@ newer Rust versions. The `zenoh` crate itself doesn't lock its dependencies with
 Instead, we provide the [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75) crate
 with `zenoh` dependencies locked to Rust 1.75-compatible versions.
 
-To build Zenoh, simply type the following command after having followed the previous instructions:
+To build Zenoh, simply type the command below after having followed the previous instructions:
 
 ```bash
 cargo build --release --all-targets
