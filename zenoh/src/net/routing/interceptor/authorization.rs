@@ -118,12 +118,14 @@ pub(crate) struct SubjectStore {
 }
 
 impl SubjectStore {
-    pub(crate) fn query(&self, query: &SubjectQuery) -> Vec<&SubjectEntry> {
+    pub(crate) fn query<'a: 'b, 'b>(
+        &'a self,
+        query: &'b SubjectQuery,
+    ) -> impl Iterator<Item = &'a SubjectEntry> + 'b {
         // FIXME: Can this search be better than linear?
         self.inner
             .iter()
             .filter(|entry| entry.subject.matches(query))
-            .collect()
     }
 }
 
