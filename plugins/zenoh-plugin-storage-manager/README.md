@@ -101,7 +101,7 @@ external plugin config files.
 },
 ```
 
-Also either change option `timestanping -> enabled -> peer` to `true` or change the `mode` to `router` to enable message
+Also either change option `timestamping -> enabled -> peer` to `true` or change the `mode` to `router` to enable message
 timnestamping which is required by storage manager.
 
 Run the `zenohd` router with adminspace write permissions enabled:
