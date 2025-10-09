@@ -67,7 +67,7 @@ rustup update
 ```
 
 Zenoh can be successfully compiled with Rust stable (>= 1.75.0), but some of its dependencies may require
-higher Rust versions. The `zenoh` crate itself doesn't lock its dependencies with "=" to avoid conflicts.
+newer Rust versions. The `zenoh` crate itself doesn't lock its dependencies with "=" to avoid conflicts.
 Instead, we provide the [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75) crate
 with `zenoh` dependencies locked to Rust 1.75-compatible versions.
 
