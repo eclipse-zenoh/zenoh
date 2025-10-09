@@ -27,6 +27,8 @@ version = { workspace = true }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+axum = "=0.8.4"
+axum-core = "=0.5.2"
 base64ct = "=1.6.0"
 home = "=0.5.9"
 icu_normalizer = "=1.5.0"
@@ -51,6 +53,8 @@ zerofrom = "=0.1.5"
 
 [package.metadata.cargo-machete]
 ignored = [
+  "axum",
+  "axum-core",
   "base64ct",
   "home",
   "icu_normalizer",
