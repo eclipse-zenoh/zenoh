@@ -14,6 +14,7 @@
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv6Addr, SocketAddr},
+    ops::DerefMut,
     str::FromStr,
     time::Duration,
 };
@@ -367,7 +368,7 @@ impl Runtime {
         }
         // sequentially try to connect to one of the remaining peers
         // respecting connection retry delays
-        match self.peers_exclusive_connector_retry(peers_to_retry).await {
+        match self.peers_connector_retry(peers_to_retry, true).await {
             Ok(_) => Ok(()),
             Err(_) => {
                 let e = zerror!("Unable to connect to any of {:?}! ", peers);
@@ -410,7 +411,17 @@ impl Runtime {
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
         match self.manager().open_transport_unicast(peer.clone()).await {
-            Ok(_) => Ok(()),
+            Ok(transport) => {
+                if let Ok(Some(orch_transport)) = transport.get_callback() {
+                    if let Some(orch_transport) = orch_transport
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        zwrite!(orch_transport.endpoints).insert(peer);
+                    }
+                }
+                Ok(())
+            }
             Err(e) => {
                 tracing::warn!("Unable to connect to {}! {}", peer, e);
                 Err(e)
@@ -426,11 +437,6 @@ impl Runtime {
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
         let guard = &self.state.config.lock().0;
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
-    }
-
-    fn get_global_connect_retry_config(&self) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
-        zenoh_config::get_retry_config(guard, None, false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
@@ -732,7 +738,11 @@ impl Runtime {
         }
     }
 
-    async fn peers_exclusive_connector_retry(&self, peers: Vec<EndPoint>) -> ZResult<ZenohIdProto> {
+    async fn peers_connector_retry(
+        &self,
+        peers: Vec<EndPoint>,
+        stop_after_first_connection: bool,
+    ) -> ZResult<Vec<ZenohIdProto>> {
         async fn wait_next_peer_retry(
             peer: EndPoint,
             period: ConnectionRetryPeriod,
@@ -748,6 +758,8 @@ impl Runtime {
                 }
             }
         }
+
+        let mut connected_peers = Vec::new();
 
         let mut tasks = FuturesUnordered::new();
         let cancellation_token = self.get_cancellation_token();
@@ -779,10 +791,15 @@ impl Runtime {
                                 .as_any()
                                 .downcast_ref::<super::RuntimeSession>()
                             {
-                                *zwrite!(orch_transport.endpoint) = Some(peer);
+                                zwrite!(orch_transport.endpoints).insert(peer);
                             }
                         }
-                        return transport.get_zid();
+                        if let Ok(zid) = transport.get_zid() {
+                            connected_peers.push(zid);
+                        }
+                        if stop_after_first_connection {
+                            break;
+                        }
                     }
                     Err(e) => {
                         tracing::debug!(
@@ -802,11 +819,17 @@ impl Runtime {
                 }
             }
         }
-        bail!(zerror!("Peer connector terminated"));
+        if connected_peers.is_empty() {
+            bail!("Peer connector terminated without connecting to any endpoint")
+        } else {
+            Ok(connected_peers)
+        }
     }
 
     async fn peer_connector_retry(&self, peer: EndPoint) -> ZResult<ZenohIdProto> {
-        self.peers_exclusive_connector_retry(vec![peer]).await
+        self.peers_connector_retry(vec![peer], true)
+            .await
+            .map(|peers| peers[0])
     }
 
     pub async fn scout<Fut, F>(
@@ -1184,41 +1207,62 @@ impl Runtime {
             return;
         }
 
-        match session.runtime.whatami() {
-            WhatAmI::Client => {
-                let runtime = session.runtime.clone();
-                session.runtime.spawn_abortable(async move {
-                    let retry_config = runtime.get_global_connect_retry_config();
-                    let mut period = retry_config.period();
-                    while runtime.start_client().await.is_err() {
-                        tokio::time::sleep(period.next_duration()).await;
-                    }
-                });
-            }
-            _ => {
-                if let Some(endpoint) = &*zread!(session.endpoint) {
-                    let peers = {
-                        session
-                            .runtime
-                            .state
-                            .config
-                            .lock()
-                            .0
-                            .connect()
-                            .endpoints()
-                            .get(session.runtime.state.whatami)
-                            .unwrap_or(&vec![])
-                            .clone()
-                    };
-                    if peers.contains(endpoint) {
-                        let endpoint = endpoint.clone();
-                        let runtime = session.runtime.clone();
-                        session
-                            .runtime
-                            .spawn(async move { runtime.peer_connector_retry(endpoint).await });
-                    }
-                }
-            }
+        if zread!(session.endpoints).is_empty() {
+            return;
+        }
+        let mut peers = session
+            .runtime
+            .state
+            .config
+            .lock()
+            .0
+            .connect()
+            .endpoints()
+            .get(session.runtime.state.whatami)
+            .unwrap_or(&vec![])
+            .clone();
+
+        if session.runtime.whatami() != WhatAmI::Client {
+            let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
+            peers.retain(|p| endpoints.contains(p));
+        }
+
+        if !peers.is_empty() {
+            let runtime = session.runtime.clone();
+            session.runtime.spawn(async move {
+                runtime
+                    .peers_connector_retry(peers, runtime.whatami() == WhatAmI::Client)
+                    .await
+            });
+        }
+    }
+
+    pub(super) fn closed_link(session: &RuntimeSession, endpoint: EndPoint) {
+        if session.runtime.whatami() == WhatAmI::Client {
+            // Currently Client can have only one link,
+            // so we process reconnect in closed_session
+            return;
+        }
+        if session.runtime.is_closed() {
+            return;
+        }
+        let peers = session
+            .runtime
+            .state
+            .config
+            .lock()
+            .0
+            .connect()
+            .endpoints()
+            .get(session.runtime.state.whatami)
+            .unwrap_or(&vec![])
+            .clone();
+
+        if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
+            let runtime = session.runtime.clone();
+            session.runtime.spawn(async move {
+                let _ = runtime.peer_connector_retry(endpoint).await;
+            });
         }
     }
 
