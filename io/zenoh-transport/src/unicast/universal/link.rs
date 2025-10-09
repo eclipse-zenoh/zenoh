@@ -320,12 +320,9 @@ async fn write_loop(
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
     for (mut b, prio) in batches.drain(..) {
-        tokio::time::timeout(
-            keep_alive,
-            link.send_batch(&mut b, Priority::try_from(prio as u8).unwrap()),
-        )
-        .await
-        .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
+        tokio::time::timeout(keep_alive, link.send_batch(&mut b, prio))
+            .await
+            .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
 
         #[cfg(feature = "stats")]
         {
