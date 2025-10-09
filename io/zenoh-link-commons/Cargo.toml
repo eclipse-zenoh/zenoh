@@ -45,6 +45,7 @@ base64 = { workspace = true, optional = true }
 flume = { workspace = true }
 futures = { workspace = true }
 quinn = { workspace = true, optional = true }
+quinn-proto = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }
@@ -62,6 +63,7 @@ tokio = { workspace = true, features = [
 ] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
+webpki-root-certs = { workspace = true, optional = true }
 webpki-roots = { workspace = true, optional = true }
 x509-parser = { workspace = true, optional = true }
 zenoh-buffers = { workspace = true }
@@ -74,4 +76,4 @@ zenoh-runtime = { workspace = true }
 zenoh-util = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["rustls-webpki"]
+ignored = ["quinn-proto", "rustls-webpki", "webpki-root-certs"]
