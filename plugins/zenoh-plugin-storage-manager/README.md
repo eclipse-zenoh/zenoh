@@ -43,7 +43,7 @@ itself that loads its own plugins - `backends` - specific for the external stora
 
 - [zenoh-backend-influxdb](https://github.com/eclipse-zenoh/zenoh-backend-influxdb/)
 
-  This backend relies on an [InfluxDB](https://www.influxdata.com/products/influxdb/) server
+  This backend relies on [InfluxDB](https://www.influxdata.com/products/influxdb/) server
 to implement the storages.
 
 ## Configuring storages
