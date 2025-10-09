@@ -18,7 +18,7 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_core::{Resolvable, Wait};
+use zenoh_core::{Resolvable, Resolve, Wait};
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
@@ -206,11 +206,11 @@ impl<Handler> Subscriber<Handler> {
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> SubscriberUndeclaration<Handler>
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>>
     where
         Handler: Send,
     {
-        self.undeclare_inner(())
+        UndeclarableSealed::undeclare_inner(self, ())
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {

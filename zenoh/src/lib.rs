@@ -188,7 +188,7 @@ pub mod key_expr {
         canon::Canonize, keyexpr, nonwild_keyexpr, OwnedKeyExpr, OwnedNonWildKeyExpr,
     };
 
-    pub use crate::api::key_expr::{KeyExpr, KeyExprUndeclaration};
+    pub use crate::api::key_expr::KeyExpr;
     // keyexpr format macro support
     #[zenoh_macros::unstable]
     pub mod format {
@@ -275,7 +275,7 @@ pub mod pubsub {
             },
             subscriber::SubscriberBuilder,
         },
-        publisher::{Publisher, PublisherUndeclaration},
+        publisher::Publisher,
         subscriber::Subscriber,
     };
 }
@@ -302,7 +302,7 @@ pub mod query {
         },
         querier::Querier,
         query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
-        queryable::{Query, Queryable, QueryableUndeclaration},
+        queryable::{Query, Queryable},
         selector::Selector,
     };
     #[zenoh_macros::unstable]
@@ -312,7 +312,7 @@ pub mod query {
 pub mod matching {
     pub use crate::api::{
         builders::matching_listener::MatchingListenerBuilder,
-        matching::{MatchingListener, MatchingListenerUndeclaration, MatchingStatus},
+        matching::{MatchingListener, MatchingStatus},
     };
 }
 
@@ -439,7 +439,7 @@ pub mod scouting {
 pub mod liveliness {
     pub use crate::api::liveliness::{
         Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
-        LivelinessTokenBuilder, LivelinessTokenUndeclaration,
+        LivelinessTokenBuilder,
     };
 }
 
