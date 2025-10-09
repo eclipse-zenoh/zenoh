@@ -630,6 +630,8 @@ validated_struct::validator! {
                 /// Maximum number of unicast sessions (default: 1000)
                 max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
+                /// If set to value greater than 1, the multipple outcoming links is allowed,
+                /// otherwise only one outcoming link is allowed.
                 max_links: usize,
                 /// Enables the LowLatency transport (default `false`).
                 /// This option does not make LowLatency transport mandatory, the actual implementation of transport
