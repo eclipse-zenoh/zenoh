@@ -1083,6 +1083,12 @@ pub(crate) struct SplitTransmissionPipelineConsumer {
     status: Arc<TransmissionPipelineStatus>,
 }
 
+impl SplitTransmissionPipelineConsumer {
+    pub(crate) fn priority(&self) -> Priority {
+        self.priority
+    }
+}
+
 impl PipelineConsumer for SplitTransmissionPipelineConsumer {
     #[allow(private_interfaces)]
     fn status(&self) -> &TransmissionPipelineStatus {
