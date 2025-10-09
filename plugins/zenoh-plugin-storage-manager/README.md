@@ -87,7 +87,7 @@ sets up paths to dynamic plugins for different platforms.
 ## Usage of storages
 
 Assume that we are in the root of the [zenoh](https://github.com/eclipse-zenoh/zenoh) repository.
-Uncomment the following piece of code in the `DEFAULT_CONFIG.json5` which demonstrates using
+Uncomment the following part in the `DEFAULT_CONFIG.json5` which demonstrates using
 external plugin config files.
 
 ```json
