@@ -28,7 +28,7 @@ The library implements encoding and decoding data in simple, compact, and platfo
 described in [Zenoh serialization format](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Serialization.md).
 
 The serialization functions are supported not only in the Rust library, but also in all other language bindings (C, C++,
-Java, Kotlin, Python, TypeScript), which significantly simplifies interoperability.
+Java, Kotlin, Python, TypeScript) as well as zenoh-pico, which significantly simplifies interoperability.
 
 ### Serialization example
 
