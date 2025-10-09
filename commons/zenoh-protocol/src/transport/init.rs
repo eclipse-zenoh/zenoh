@@ -177,6 +177,7 @@ pub mod ext {
 
 impl InitSyn {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -249,6 +250,7 @@ pub struct InitAck {
 
 impl InitAck {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

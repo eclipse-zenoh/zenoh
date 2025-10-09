@@ -114,6 +114,12 @@ pub trait Deserialize: Sized {
 ///
 /// Serialization doesn't take the ownership of the data.
 ///
+/// This function takes any type implementing the [`Serialize`] trait and
+/// creates [`ZBytes`] containing the serialized data.
+/// This trait is implemented for all the primitive types (integers, floats, bool) and
+/// standard collections (arrays, slices, `Vec`, `String`, `HashMap`, `HashSet`, etc)
+/// and could be implemented for user-defined types.
+///
 /// # Examples
 ///
 /// ```rust
@@ -130,6 +136,9 @@ pub fn z_serialize<T: Serialize + ?Sized>(t: &T) -> ZBytes {
 }
 
 /// Deserialize an object according to the [Zenoh serialization format][1].
+///
+/// The destination type is given as a type parameter. If the data cannot be
+/// deserialized into the given type, an error is returned.
 ///
 /// # Examples
 ///
@@ -545,6 +554,15 @@ impl_tuple!(
     T15 / 15,
 );
 
+/// The [LEB128](https://en.wikipedia.org/wiki/LEB128) variable-length integer encoding.
+///
+/// The `zenoh-ext` implements serialization and deserialization of integers in variable-length `LEB128` format.
+/// Currently it's implemented for `usize` only using the wrapper struct `VarInt<usize>`:
+/// the traits [`Serialize`] and [`Deserialize`] are implemented for `VarInt<usize>` using
+/// [leb128](https://crates.io/crates/leb128) crate.
+///
+/// This is used internally for serializing lengths of sequences (slices, `Vec`, `String`, `HashMap`, etc)
+/// and could be used by users to serialize integer values in a more compact way.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VarInt<T>(pub T);

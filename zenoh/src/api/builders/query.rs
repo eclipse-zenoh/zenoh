@@ -39,7 +39,10 @@ use crate::{
     query::{QueryConsolidation, Reply},
 };
 
-/// A builder for initializing a `query`.
+/// A builder for configuring a [`get`](crate::Session::get)
+/// operation from a [`Session`](crate::Session).
+/// The builder resolves to a [`handler`](crate::handlers) generating a series of
+/// [`Reply`](crate::api::query::Reply) for each response received.
 ///
 /// # Examples
 /// ```
@@ -241,13 +244,29 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         self
     }
 
-    /// Change the target of the query.
+    /// Change the target(s) of the query.
+    ///
+    /// This method allows to specify whether the request should just return the
+    /// data available in the network which matches the key expression
+    /// ([QueryTarget::BestMatching], default) or if it should arrive to
+    /// all queryables matching the key expression ([QueryTarget::All],
+    /// [QueryTarget::AllComplete]).
+    ///
+    /// See also the [`complete`](crate::query::QueryableBuilder::complete) setting
+    /// of the [`Queryable`](crate::query::Queryable)
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
         Self { target, ..self }
     }
 
     /// Change the consolidation mode of the query.
+    ///
+    /// The multiple replies to a query may arrive from the network. The
+    /// [`ConsolidationMode`](crate::query::ConsolidationMode) enum defines
+    /// the strategies of filtering and reordering these replies.
+    /// The wrapper struct [`QueryConsolidation`](crate::query::QueryConsolidation)
+    /// allows to set an [`ConsolidationMode::AUTO`](crate::query::QueryConsolidation::AUTO)
+    /// mode, which lets the implementation choose the best strategy.
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
         Self {
@@ -256,8 +275,6 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    ///
-    ///
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
@@ -269,19 +286,15 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Set query timeout.
+    /// Set the query timeout.
     #[inline]
     pub fn timeout(self, timeout: Duration) -> Self {
         Self { timeout, ..self }
     }
 
-    ///
-    ///
-    /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
-    /// with the queried key expression.
-    ///
-    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
-    /// expressions that don't intersect with the query's.
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This setter allows you to define whether this get operation accepts such disjoint replies.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {

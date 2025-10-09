@@ -426,6 +426,7 @@ impl std::io::Read for &mut ZSlice {
 
 #[cfg(feature = "test")]
 impl ZSlice {
+    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         use rand::Rng;
 
