@@ -14,6 +14,7 @@
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv6Addr, SocketAddr},
+    ops::DerefMut,
     str::FromStr,
     time::Duration,
 };
@@ -1221,20 +1222,27 @@ impl Runtime {
             .unwrap_or(&vec![])
             .clone();
 
-        let mut endpoints = zwrite!(session.endpoints);
-        peers.retain(|p| endpoints.contains(p));
-        endpoints.clear();
-        drop(endpoints);
+        if session.runtime.whatami() != WhatAmI::Client {
+            let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
+            peers.retain(|p| endpoints.contains(p));
+        }
 
         if !peers.is_empty() {
             let runtime = session.runtime.clone();
-            session
-                .runtime
-                .spawn(async move { runtime.peers_connector_retry(peers, false).await });
+            session.runtime.spawn(async move {
+                runtime
+                    .peers_connector_retry(peers, runtime.whatami() == WhatAmI::Client)
+                    .await
+            });
         }
     }
 
     pub(super) fn closed_link(session: &RuntimeSession, endpoint: EndPoint) {
+        if session.runtime.whatami() == WhatAmI::Client {
+            // Currently Client can have only one link,
+            // so we process reconnect in closed_session
+            return;
+        }
         if session.runtime.is_closed() {
             return;
         }
