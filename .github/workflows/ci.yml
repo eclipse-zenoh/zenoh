@@ -353,7 +353,7 @@ jobs:
 
           - name: Install build-essential (Ubuntu)
             if: ${{ matrix.os == 'ubuntu-latest' }}
-            run: sudo apt-get install -y build-essential
+            run: sudo apt-get install -y build-essential clang libc6-dev
 
           - name: Checkout sources
             uses: actions/checkout@v4
