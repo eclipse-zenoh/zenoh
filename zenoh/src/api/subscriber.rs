@@ -58,13 +58,12 @@ pub(crate) struct SubscriberInner {
     pub(crate) undeclare_on_drop: bool,
 }
 
-/// A [`Resolvable`] returned when undeclaring a subscriber.
+/// A [`Resolvable`] returned by [`Subscriber::undeclare`]
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
@@ -100,32 +99,27 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// Subscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::Session::declare_subscriber) function.
 ///
-/// Callback subscribers will run in background until the session is closed,
-/// or until it is undeclared.
-/// On the other hand, subscribers with a handler are automatically undeclared when dropped.
-///
 /// # Examples
 ///
-/// Using callback:
+/// Run subscriber with callback in the background until the session is closed:
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session
 ///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received: {} {:?}", sample.key_expr(), sample.payload()) })
+///     .background()
 ///     .await
 ///     .unwrap();
-/// // subscriber run in background until the session is closed
+/// // subscriber runs in the background until the session is closed
 /// # }
 /// ```
 ///
-/// Using channel handler:
+/// Run subscriber with channel handler:
 /// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
@@ -175,22 +169,22 @@ impl<Handler> Subscriber<Handler> {
     }
 
     /// Returns a reference to this subscriber's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
-    /// The default handler is [`crate::handlers::DefaultHandler`].
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
 
     /// Returns a mutable reference to this subscriber's handler.
-    /// An handler is anything that implements [`crate::handlers::IntoHandler`].
-    /// The default handler is [`crate::handlers::DefaultHandler`].
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
 
     /// Undeclare the [`Subscriber`].
     ///
-    /// This subscriber's [`crate::handlers::Callback`] will be dropped as part of the
+    /// This subscriber's [`Callback`](crate::handlers::Callback) will be dropped as part of the
     /// undeclaration.
     ///
     /// # Examples
@@ -214,7 +208,7 @@ impl<Handler> Subscriber<Handler> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.inner.undeclare_on_drop = false;
         self.inner
             .session

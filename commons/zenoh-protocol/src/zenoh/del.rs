@@ -63,6 +63,7 @@ pub mod ext {
 
 impl Del {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

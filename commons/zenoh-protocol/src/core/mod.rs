@@ -76,6 +76,7 @@ impl ZenohIdProto {
         self.0.to_le_bytes()
     }
 
+    #[doc(hidden)]
     pub fn rand() -> ZenohIdProto {
         ZenohIdProto(uhlc::ID::rand())
     }
@@ -287,6 +288,7 @@ pub struct EntityGlobalIdProto {
 
 impl EntityGlobalIdProto {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         Self {
@@ -341,6 +343,7 @@ impl PriorityRange {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -455,10 +458,13 @@ impl TryFrom<u8> for Priority {
     }
 }
 
+/// Reliability guarantees for message delivery.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Reliability {
+    /// Messages may be lost.
     BestEffort = 0,
+    /// Messages are guaranteed to be delivered.
     #[default]
     Reliable = 1,
 }
@@ -467,6 +473,7 @@ impl Reliability {
     pub const DEFAULT: Self = Self::Reliable;
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

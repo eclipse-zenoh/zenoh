@@ -166,7 +166,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber to run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
     #[zenoh_macros::unstable]
@@ -606,7 +606,7 @@ impl<
 where
     TryIntoSample: ExtractSample,
 {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber to run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
     #[zenoh_macros::unstable]

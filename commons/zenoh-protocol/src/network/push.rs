@@ -67,6 +67,7 @@ pub mod ext {
 
 impl Push {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

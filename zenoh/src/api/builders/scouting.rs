@@ -24,7 +24,8 @@ use crate::api::{
     scouting::{Scout, _scout},
 };
 
-/// A builder for initializing a [`Scout`].
+/// A builder for initializing a [`Scout`], returned by the
+/// [`zenoh::scout`](crate::scout) function.
 ///
 /// # Examples
 /// ```no_run

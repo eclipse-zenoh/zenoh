@@ -26,7 +26,9 @@ use crate::{
     Session,
 };
 
-/// A builder for initializing a [`crate::pubsub::Subscriber<Handler>`].
+/// A builder for initializing a [`Subscriber`](crate::pubsub::Subscriber).
+/// Returned by the
+/// [`Session::declare_subscriber`](crate::Session::declare_subscriber) method.
 ///
 /// # Examples
 /// ```
@@ -154,9 +156,9 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber run in the background until the session is closed.
     ///
-    /// Background builder doesn't return a `Subscriber` object anymore.
+    /// The background builder doesn't return a `Subscriber` object anymore.
     ///
     /// # Examples
     /// ```
@@ -184,10 +186,10 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, Callback<Sample>> {
 }
 
 impl<Handler, const BACKGROUND: bool> SubscriberBuilder<'_, '_, Handler, BACKGROUND> {
-    /// Changes the [`crate::sample::Locality`] of received publications.
+    /// Changes the [`Locality`](crate::sample::Locality) of received publications.
     ///
-    /// Restricts the matching publications that will be receive by this [`Subscriber`] to the ones
-    /// that have the given [`crate::sample::Locality`].
+    /// Restricts the matching publications that will be received by this [`Subscriber`] to the ones
+    /// that have the given [`Locality`](crate::sample::Locality).
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;

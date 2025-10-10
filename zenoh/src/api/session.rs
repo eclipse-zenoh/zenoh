@@ -532,22 +532,52 @@ impl fmt::Debug for SessionInner {
     }
 }
 
-/// The entrypoint of the zenoh API.
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object,
+/// which maintains the state of the connection of the node to the Zenoh network.
 ///
-/// Zenoh session is instantiated using [`zenoh::open`](crate::open) and it can be used to declare various
-/// entities like publishers, subscribers, or querybables, as well as issuing queries.
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc.
+/// and keeps them functioning. Closing the session will close all associated entities.
 ///
-/// Session is an `Arc`-like type, it can be cloned, and it is closed when the last instance
-/// is dropped (see [`Session::close`]).
+/// The session is cloneable so it's easy to share it between tasks and threads. Each clone of the
+/// session is an `Arc` to the internal session object, so cloning is cheap and fast.
+///
+/// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
+/// with parameters specified in the [`Config`] object.
+///
+/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher),
+/// [`Subscriber`](crate::pubsub::Subscriber), [`Querier`](crate::query::Querier), etc.),
+/// have lifetimes independent of the session, but they stop functioning if all clones of the session
+/// object are dropped or the session is closed with the [`close`](crate::session::Session::close) method.
+///
+/// ### Background entities
+///
+/// Sometimes it is inconvenient to keep a reference to an object (for example,
+/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to
+/// avoid keeping this reference and keep the object alive until the session is closed.
+/// To do this, call the [`background`](crate::query::QueryableBuilder::background) method on the
+/// corresponding builder. This causes the builder to return `()` instead of the object instance and
+/// keeps the instance alive while the session is alive.
+///
+/// ### Difference between session and runtime
+/// The session object holds all declared zenoh entities (publishers, subscribers, etc.) and
+/// a shared reference to the runtime object which maintains the state of the zenoh node.
+/// Closing the session will close all associated entities and drop the reference to the runtime.
+///
+/// Typically each session has its own runtime, but in some cases
+/// the session may share the runtime with other sessions. This is the case for the plugins
+/// where each plugin has its own session but all plugins share the same `zenohd` runtime
+/// for efficiency.
+/// In this case, all these sessions will have the same network identity
+/// [`Session::zid`](crate::session::Session::zid).
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
+/// ```
 #[derive(RefCastCustom)]
 #[repr(transparent)]
 pub struct Session(pub(crate) Arc<SessionInner>);
@@ -588,18 +618,19 @@ impl Drop for Session {
 }
 
 /// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
-/// It allows notably to establish reference cycles inside the session, for the primitive
+/// It provides weak-like semantics to the arc-like session, without using [`Weak`].
+/// Notably, it allows establishing reference cycles inside the session for the primitive
 /// implementation.
-/// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
+/// When all `Session` instances are dropped, [`Session::close`] is called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
 /// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
-/// to implement it, because atomic manipulations to achieve this semantic would not have been
+/// to implement, because atomic manipulations to achieve these semantics would not have been
 /// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
 /// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
 /// performance penalty when it comes to session entities cloning/dropping.
 ///
-/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+/// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
@@ -720,12 +751,12 @@ impl Session {
 
     /// Close the zenoh [`Session`](Session).
     ///
-    /// Every subscriber and queryable declared will stop receiving data, and further attempt to
+    /// Every subscriber and queryable declared will stop receiving data, and further attempts to
     /// publish or query with the session or publishers will result in an error. Undeclaring an
     /// entity after session closing is a no-op. Session state can be checked with
     /// [`Session::is_closed`].
     ///
-    /// Session are automatically closed when all its instances are dropped, same as `Arc`.
+    /// Sessions are automatically closed when all their instances are dropped, same as `Arc`.
     /// You may still want to use this function to handle errors or close the session
     /// asynchronously.
     /// <br>
@@ -750,7 +781,7 @@ impl Session {
     /// });
     /// session.close().await.unwrap();
     /// // subscriber task will end as `subscriber.recv_async()` will return `Err`
-    /// // subscriber undeclaration has not been sent on the wire
+    /// // subscriber undeclaration has not been sent over the wire
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
@@ -770,10 +801,27 @@ impl Session {
     /// session.close().await.unwrap();
     /// assert!(session.is_closed());
     /// # }
+    /// ```
     pub fn is_closed(&self) -> bool {
         zread!(self.0.state).primitives.is_none()
     }
 
+    /// Undeclare a zenoh entity declared by the session.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let keyexpr = session.declare_keyexpr("key/expression").await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber(&keyexpr)
+    ///     .await
+    ///     .unwrap();
+    /// session.undeclare(subscriber).await.unwrap();
+    /// session.undeclare(keyexpr).await.unwrap();
+    /// # }
+    /// ```
     pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
         T: Undeclarable<&'a Session> + 'a,
@@ -782,6 +830,11 @@ impl Session {
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
+    ///
+    /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
+    /// zenoh configuration through the `get` function or
+    /// modify the zenoh configuration through the `insert`
+    /// or `insert_json5` function.
     ///
     /// # Examples
     /// ```
@@ -802,6 +855,7 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
+    /// ### Get a new timestamp
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -814,8 +868,8 @@ impl Session {
         match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
-                // Called in the case that the runtime is not initialized with an hlc
-                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissible here
+                // Called when the runtime is not initialized with an HLC.
+                // UNIX_EPOCH returns a Timespec::zero(); unwrap should be permissible here.
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
                 Timestamp::new(now, self.0.zid().into())
             }
@@ -845,7 +899,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resourkey expression to subscribe to
+    /// * `key_expr` - The resource key expression to subscribe to
     ///
     /// # Examples
     /// ```no_run
@@ -1080,7 +1134,9 @@ impl Session {
         })
     }
 
-    /// Put data.
+    /// Publish [`SampleKind::Put`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`put`](crate::api::publisher::Publisher::put)
+    /// on it.
     ///
     /// # Arguments
     ///
@@ -1125,7 +1181,8 @@ impl Session {
         }
     }
 
-    /// Delete data.
+    /// Publish a [`SampleKind::Delete`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`delete`](crate::api::publisher::Publisher::delete) on it.
     ///
     /// # Arguments
     ///
@@ -1158,9 +1215,11 @@ impl Session {
             source_info: SourceInfo::empty(),
         }
     }
-    /// Query data from the matching queryables in the system.
+    /// Query data from the matching queryables in the system. This is a shortcut for declaring
+    /// a [`Querier`](crate::query::Querier) and calling [`get`](crate::api::querier::Querier::get) on it.
     ///
-    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies), replies are guaranteed to have
+    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies),
+    /// replies are guaranteed to have
     /// key expressions that match the requested `selector`.
     ///
     /// # Arguments
@@ -1861,7 +1920,7 @@ impl SessionInner {
                         .call(MatchingStatus { matching: true });
                 }
             }
-            Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
+            Err(e) => tracing::error!("Error trying to acquire MatchingListener lock: {}", e),
         }
         Ok(listener_state)
     }
@@ -1957,7 +2016,7 @@ impl SessionInner {
                                 }
                                 Err(e) => {
                                     tracing::error!(
-                                        "Error trying to acquire MathginListener lock: {}",
+                                        "Error trying to acquire MatchingListener lock: {}",
                                         e
                                     );
                                 }
@@ -2751,7 +2810,7 @@ impl Primitives for WeakSession {
                             zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
                         if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
-                                "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
+                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
                                 query.selector()

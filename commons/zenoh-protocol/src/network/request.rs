@@ -108,6 +108,7 @@ pub mod ext {
         pub const DEFAULT: Self = Self::BestMatching;
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::prelude::*;
             let mut rng = rand::thread_rng();
@@ -133,6 +134,7 @@ pub mod ext {
 
 impl Request {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use core::num::NonZeroU32;
 
