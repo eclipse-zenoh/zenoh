@@ -147,7 +147,7 @@ rustdoc-args = ["--cfg", "doc_auto_cfg"]
 [package.metadata.deb]
 assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.5.1), zenoh-plugin-rest (=1.5.1), zenoh-plugin-storage-manager (=1.5.1)"
+depends = "zenohd (=1.6.0), zenoh-plugin-rest (=1.6.0), zenoh-plugin-storage-manager (=1.6.0)"
 license-file = ["../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 maintainer-scripts = ".deb"

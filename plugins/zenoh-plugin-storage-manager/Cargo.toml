@@ -68,7 +68,7 @@ uhlc = { workspace = true }
 
 [package.metadata.deb]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.5.1)"
+depends = "zenohd (=1.6.0)"
 license-file = ["../../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 name = "zenoh-plugin-storage-manager"
