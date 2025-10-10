@@ -72,7 +72,7 @@ homepage = "http://zenoh.io"
 license = "EPL-2.0 OR Apache-2.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 rust-version = "1.75.0"
-version = "1.5.1"
+version = "1.6.0"
 
 # DEFAULT-FEATURES NOTE: Be careful with default-features and additivity!
 #                        (https://github.com/rust-lang/cargo/issues/11329)
