@@ -263,7 +263,7 @@ stats_struct! {
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct SHMStats {
-        # DISCRIMINANT "media"
+        # DISCRIMINANT "medium"
         pub net,
         pub shm,
     }
