@@ -34,7 +34,7 @@ use zenoh_result::{bail, ZResult};
 /// Example configuration file:
 #[doc = concat!(
     "```json5\n",
-    include_str!("../../../DEFAULT_CONFIG.json5"),
+    include_str!("../../DEFAULT_CONFIG.json5"),
     "\n```"
 )]
 ///
