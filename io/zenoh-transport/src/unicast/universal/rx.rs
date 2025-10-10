@@ -46,6 +46,20 @@ impl TransportUnicastUniversal {
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessage,
     ) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        {
+            #[cfg(feature = "shared-memory")]
+            {
+                use zenoh_protocol::network::NetworkMessageExt;
+                if msg.is_shm() {
+                    self.stats.rx_n_msgs.inc_shm(1);
+                } else {
+                    self.stats.rx_n_msgs.inc_net(1);
+                }
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.stats.rx_n_msgs.inc_net(1);
+        }
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
@@ -55,8 +69,6 @@ impl TransportUnicastUniversal {
                 }
             }
         }
-        #[cfg(feature = "stats")]
-        self.stats.inc_rx_n_msgs(1);
         callback.handle_message(msg.as_mut())
     }
 

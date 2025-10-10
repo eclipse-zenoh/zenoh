@@ -31,6 +31,8 @@ pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
 use crate::core::{CongestionControl, Priority, Reliability, WireExpr};
+#[cfg(feature = "shared-memory")]
+use crate::zenoh::PushBody;
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -156,6 +158,33 @@ pub trait NetworkMessageExt {
             NetworkBodyRef::Interest(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::OAM(msg) => msg.ext_qos.get_congestion_control(),
+        }
+    }
+
+    #[inline]
+    #[cfg(feature = "shared-memory")]
+    fn is_shm(&self) -> bool {
+        use crate::zenoh::{RequestBody, ResponseBody};
+
+        match self.body() {
+            NetworkBodyRef::Push(Push { payload, .. }) => match payload {
+                PushBody::Put(p) => p.ext_shm.is_some(),
+                PushBody::Del(_) => false,
+            },
+            NetworkBodyRef::Request(Request { payload, .. }) => match payload {
+                RequestBody::Query(b) => b.ext_body.as_ref().is_some_and(|b| b.ext_shm.is_some()),
+            },
+            NetworkBodyRef::Response(Response { payload, .. }) => match payload {
+                ResponseBody::Reply(b) => match &b.payload {
+                    PushBody::Put(p) => p.ext_shm.is_some(),
+                    PushBody::Del(_) => false,
+                },
+                ResponseBody::Err(e) => e.ext_shm.is_some(),
+            },
+            NetworkBodyRef::ResponseFinal(_)
+            | NetworkBodyRef::Interest(_)
+            | NetworkBodyRef::Declare(_)
+            | NetworkBodyRef::OAM(_) => false,
         }
     }
 
