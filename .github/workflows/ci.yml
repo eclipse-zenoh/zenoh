@@ -136,7 +136,7 @@ jobs:
         
       - name: Install latest taplo
         uses: taiki-e/install-action@taplo
-
+  
       - name: Code format check
         run: rustfmt +nightly --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
@@ -270,7 +270,9 @@ jobs:
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$ 
+          cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report
         if: ${{ matrix.os == 'ubuntu-latest' }}
