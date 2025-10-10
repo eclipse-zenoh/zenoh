@@ -309,7 +309,7 @@ impl MaybeOpenAck {
                     self.link.inner.config.batch.is_compression = compression;
                 },
                 {
-                    self.link.send(&msg.into()).await?;
+                    self.link.send(&msg.into(), Priority::Control).await?;
                 }
             )
         }
