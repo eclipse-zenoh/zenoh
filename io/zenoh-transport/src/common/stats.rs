@@ -98,10 +98,17 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 parent: Option<std::sync::Weak<$struct_name>>,
                 children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
+                filtered: arc_swap::ArcSwap<Vec<FilteredStats<$struct_name>>>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
                 )*
+            }
+
+            $(#[$meta])*
+            $vis struct [<Filtered $struct_name Report>] {
+                key: OwnedKeyExpr,
+                stats: [<$struct_name Report>]
             }
 
             $(#[$meta])*
@@ -136,6 +143,10 @@ macro_rules! stats_struct {
                     &self.parent
                 }
 
+                $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<FilteredStats<$struct_name>>> {
+                    &self.filtered
+                }
+
                 $vis fn report(&self) -> [<$struct_name Report>] {
                     let report = [<$struct_name Report>] {
                         labels: self.labels.clone(),
@@ -148,6 +159,10 @@ macro_rules! stats_struct {
                     report
                 }
 
+                $vis fn filtered_report(&self) -> Vec<[<Filtered $struct_name Report>]> {
+                    self.filtered.load().iter().map(|f| [<Filtered $struct_name Report>] {key: f.key_expr.clone(), stats: f.stats.report()}).collect()
+                }
+
                 $(
                     stats_struct!(@get $vis $field_name $($field_type)?);
                     stats_struct!(@increment $vis $field_name $($field_type)?);
@@ -157,10 +172,11 @@ macro_rules! stats_struct {
             impl Default for $struct_name {
                 fn default() -> Self {
                     Self {
-                        labels: std::collections::HashMap::default(),
-                        parent: None,
-                        children: std::sync::Arc::new(std::sync::Mutex::new(std::vec::Vec::new())),
-                        $($field_name: stats_struct!(@new(None, std::collections::HashMap::default()) $($field_type)?),)*
+                        labels: Default::default(),
+                        parent: Default::default(),
+                        children: Default::default(),
+                        filtered: Default::default(),
+                        $($field_name: stats_struct!(@new(Default::default(), Default::default()) $($field_type)?),)*
                     }
                 }
             }
@@ -233,8 +249,8 @@ macro_rules! stats_struct {
             impl Default for [<$struct_name Report>] {
                 fn default() -> Self {
                     Self {
-                        labels: std::collections::HashMap::default(),
-                        children: std::vec::Vec::default(),
+                        labels: Default::default(),
+                        children: Default::default(),
                         $($field_name: stats_struct!(@report_default $($field_type)?),)*
                     }
                 }
@@ -246,6 +262,8 @@ macro_rules! stats_struct {
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
+
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct DiscriminatedStats {
@@ -376,5 +394,27 @@ stats_struct! {
         # HELP "Counter of messages dropped by egress low-pass filter."
         # TYPE "counter"
         pub tx_low_pass_dropped_msgs,
+    }
+}
+
+pub struct FilteredStats<S = TransportStats> {
+    key_expr: OwnedKeyExpr,
+    stats: std::sync::Arc<S>,
+}
+
+impl FilteredStats {
+    pub fn new(key_expr: OwnedKeyExpr, parent: Option<std::sync::Weak<TransportStats>>) -> Self {
+        Self {
+            key_expr,
+            stats: TransportStats::new(parent, Default::default()),
+        }
+    }
+
+    pub fn key_expr(&self) -> &OwnedKeyExpr {
+        &self.key_expr
+    }
+
+    pub fn stats(&self) -> &std::sync::Arc<TransportStats> {
+        &self.stats
     }
 }
