@@ -631,11 +631,16 @@ fn local_data(context: &AdminContext, query: Query) {
             .iter()
             .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats)))
             .collect_vec();
+        #[cfg(feature = "shared-memory")]
+        let shm = transport.is_shm().unwrap_or_default();
+        #[cfg(not(feature = "shared-memory"))]
+        let shm = false;
         let json = json!({
             "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": links,
-            "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid))
+            "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid)),
+            "shm": shm,
         });
         #[cfg(feature = "stats")]
         let json = insert_stats(json, transport.get_stats().ok().as_ref());

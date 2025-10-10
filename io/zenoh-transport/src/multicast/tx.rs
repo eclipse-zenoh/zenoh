@@ -55,7 +55,7 @@ impl TransportMulticastInner {
 
         #[cfg(feature = "stats")]
         if res {
-            self.stats.inc_tx_n_msgs(1);
+            self.stats.tx_n_msgs.inc_net(1);
         } else {
             self.stats.inc_tx_n_dropped(1);
         }
