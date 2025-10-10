@@ -317,10 +317,6 @@ stats_struct! {
         # TYPE "counter"
         pub rx_n_msgs,
 
-        # HELP "Counter of dropped network messages."
-        # TYPE "counter"
-        pub rx_n_dropped,
-
         # HELP "Counter of received zenoh put messages."
         # TYPE "counter"
         pub rx_z_put_msgs DiscriminatedStats,

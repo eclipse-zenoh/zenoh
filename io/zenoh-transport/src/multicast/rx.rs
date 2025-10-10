@@ -51,7 +51,8 @@ impl TransportMulticastInner {
                 }
             }
         }
-
+        #[cfg(feature = "stats")]
+        self.stats.inc_rx_n_msgs(1);
         peer.handler.handle_message(msg.as_mut())
     }
 
