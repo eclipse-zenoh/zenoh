@@ -630,6 +630,9 @@ validated_struct::validator! {
                 /// Maximum number of unicast sessions (default: 1000)
                 max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
+                /// If set to a value greater than 1, multiple outgoing links are also allowed;
+                /// otherwise, only one outgoing link is allowed.
+                /// Issue https://github.com/eclipse-zenoh/zenoh/issues/1533
                 max_links: usize,
                 /// Enables the LowLatency transport (default `false`).
                 /// This option does not make LowLatency transport mandatory, the actual implementation of transport
