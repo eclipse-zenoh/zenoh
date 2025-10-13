@@ -61,6 +61,18 @@ impl WhatAmI {
             .choose(&mut rng)
             .unwrap()
     }
+
+    pub const fn is_client(self) -> bool {
+        matches!(self, WhatAmI::Client)
+    }
+
+    pub const fn is_peer(self) -> bool {
+        matches!(self, WhatAmI::Peer)
+    }
+
+    pub const fn is_router(self) -> bool {
+        matches!(self, WhatAmI::Router)
+    }
 }
 
 impl TryFrom<u8> for WhatAmI {

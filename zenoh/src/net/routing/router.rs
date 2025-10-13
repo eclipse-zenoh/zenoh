@@ -118,7 +118,7 @@ impl<'conf> RouterBuilder<'conf> {
                         .hats
                         .iter()
                         .copied()
-                        .map(|(b, wai)| (b, hat::new_hat(wai, config, b)))
+                        .map(|(b, wai)| (b, hat::new_hat(wai, b)))
                         .collect(),
                 }),
                 ctrl_lock: Mutex::new(()),
@@ -148,10 +148,12 @@ impl Router {
         Ok(())
     }
 
-    pub(crate) fn new_primitives(
+    pub(crate) fn new_face(
         &self,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
         bound: Bound,
+        whatami: WhatAmI,
+        is_local: bool,
     ) -> Arc<Face> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -173,8 +175,8 @@ impl Router {
                         primitives.clone(),
                         tables.hats.map(|hat| hat.new_face()),
                     )
-                    .whatami(WhatAmI::Client)
-                    .local(true)
+                    .whatami(whatami)
+                    .local(is_local)
                     .build(),
                 )
             })
@@ -203,6 +205,14 @@ impl Router {
             m.with_mut(|m| p.send_declare(m));
         }
         Arc::new(face)
+    }
+
+    pub(crate) fn new_session(
+        &self,
+        primitives: Arc<dyn EPrimitives + Send + Sync>,
+        bound: Bound,
+    ) -> Arc<Face> {
+        self.new_face(primitives, bound, WhatAmI::Client, true)
     }
 
     pub fn new_transport_unicast(

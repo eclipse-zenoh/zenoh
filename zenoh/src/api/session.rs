@@ -686,7 +686,7 @@ impl Session {
 
             let primitives: Arc<dyn Primitives> = match namespace {
                 Some(ns) => {
-                    let face = router.new_primitives(
+                    let face = router.new_session(
                         Arc::new(ENamespace::new(ns.clone(), Arc::new(session.downgrade()))),
                         Bound::session(),
                     );
@@ -694,8 +694,7 @@ impl Session {
                     Arc::new(Namespace::new(ns, face))
                 }
                 None => {
-                    let face =
-                        router.new_primitives(Arc::new(session.downgrade()), Bound::session());
+                    let face = router.new_session(Arc::new(session.downgrade()), Bound::session());
                     session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
                     face
                 }

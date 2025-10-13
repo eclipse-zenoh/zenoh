@@ -38,7 +38,7 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
         router::{Direction, DEFAULT_NODE_ID},
         RoutingContext,
     },
@@ -84,8 +84,9 @@ impl Hat {
         src_face: Option<&mut Arc<FaceState>>,
         send_declare: &mut SendDeclare,
     ) {
-        let faces = self.faces(tables).values().cloned();
+        let faces = self.faces(tables).values().cloned(); // FIXME(regions): move all these calls to .owned_faces(..)
         for mut dst_face in faces {
+            tracing::trace!(face = %dst_face, res = %res.expr(), "Considering face for propagation");
             let info = self.local_qabl_info(tables, res, &dst_face);
             let current = self.face_hat(&dst_face).local_qabls.get(res);
             if src_face
@@ -95,11 +96,10 @@ impl Hat {
                 && (current.is_none() || current.unwrap().1 != info)
                 && src_face
                     .as_ref()
-                    .map(|src_face| {
-                        src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
-                    })
+                    .map(|src_face| self.should_route_between(src_face, &dst_face))
                     .unwrap_or(true)
             {
+                tracing::trace!(face = %dst_face, res = %res.expr(), "Propagating to face!");
                 let id = current.map(|c| c.0).unwrap_or(
                     self.face_hat(&dst_face)
                         .next_id
@@ -159,6 +159,7 @@ impl Hat {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         send_declare: &mut SendDeclare,
+        profile: InterestProfile,
     ) {
         self.register_simple_queryable(tables, face, id, res, qabl_info);
         self.propagate_simple_queryable(tables, res, Some(face), send_declare);
@@ -292,9 +293,8 @@ impl HatQueriesTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         qabl_info: &QueryableInfoType,
-        _profile: InterestProfile,
+        profile: InterestProfile,
     ) {
-        // FIXME(regions): InterestProfile is ignored
         self.declare_simple_queryable(
             ctx.tables,
             ctx.src_face,
@@ -302,6 +302,7 @@ impl HatQueriesTrait for Hat {
             res,
             qabl_info,
             ctx.send_declare,
+            profile,
         );
     }
 
@@ -356,7 +357,7 @@ impl HatQueriesTrait for Hat {
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        face: &FaceState,
+        src_face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -364,7 +365,7 @@ impl HatQueriesTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
-        let source_type = face.whatami;
+        let source_type = src_face.whatami;
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
@@ -383,8 +384,7 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                // REVIEW(regions): not sure
-                if !face.bound.is_north() ^ !ctx.face.bound.is_north() {
+                if self.should_route_between(src_face, &ctx.face) {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
@@ -394,7 +394,7 @@ impl HatQueriesTrait for Hat {
             }
         }
 
-        if !face.bound.is_north() {
+        if !src_face.bound.is_north() {
             // REVIEW(regions): there should only be one such face?
             for face in self.faces(tables).values().filter(|f| f.bound.is_north()) {
                 let has_interest_finalized = expr

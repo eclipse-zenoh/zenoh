@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{any::Any, collections::HashMap, fmt::Display, sync::Arc};
 
-use zenoh_config::{Config, WhatAmI};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -216,6 +216,14 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
     fn whatami(&self) -> WhatAmI;
+
+    /// Returns `true` if the hat should route data or queries between `src` and `dst`.
+    fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
+        // REVIEW(regions): not sure
+        !src.bound.is_north() ^ !dst.bound.is_north()
+            || src.whatami.is_client()
+            || dst.whatami.is_client()
+    }
 }
 
 pub(crate) trait HatInterestTrait {
@@ -396,11 +404,7 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(
-    whatami: WhatAmI,
-    _config: &Config,
-    bound: Bound,
-) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(whatami: WhatAmI, bound: Bound) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
         WhatAmI::Client => Box::new(client::Hat::new(bound)),
         WhatAmI::Peer => Box::new(peer::Hat::new(bound)),

@@ -36,7 +36,7 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
     },
@@ -374,12 +374,7 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for (sid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some()
-                    // REVIEW(regions): not sure
-                    && (src_face.bound.is_north() ^ ctx.face.bound.is_north()
-                        || source_type == WhatAmI::Client
-                        || ctx.face.whatami == WhatAmI::Client)
-                {
+                if ctx.subs.is_some() && self.should_route_between(src_face, &ctx.face) {
                     route.insert(*sid, || {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(*sid);

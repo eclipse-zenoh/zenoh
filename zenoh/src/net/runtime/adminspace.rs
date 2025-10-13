@@ -319,7 +319,7 @@ impl AdminSpace {
         let primitives = runtime
             .state
             .router
-            .new_primitives(admin.clone(), Bound::session());
+            .new_session(admin.clone(), Bound::session());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(&mut Declare {

@@ -525,7 +525,7 @@ impl Primitives for Face {
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
-                route_query(&self.tables, &self.state, msg);
+                self.route_query(msg);
             }
         }
     }

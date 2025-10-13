@@ -45,8 +45,8 @@ use crate::{
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
             },
             hat::{
-                BaseContext, CurrentFutureTrait, HatQueriesTrait, InterestProfile, SendDeclare,
-                Sources,
+                BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, InterestProfile,
+                SendDeclare, Sources,
             },
             router::{disable_matches_query_routes, Direction, DEFAULT_NODE_ID},
             RoutingContext,
@@ -200,9 +200,7 @@ impl Hat {
                 && dst_face.whatami != WhatAmI::Router
                 && src_face
                     .as_ref()
-                    .map(|src_face| {
-                        src_face.whatami != WhatAmI::Peer || dst_face.whatami != WhatAmI::Peer
-                    })
+                    .map(|src_face| self.should_route_between(src_face, &dst_face))
                     .unwrap_or(true)
             {
                 let id = current.map(|c| c.0).unwrap_or(
@@ -1231,7 +1229,7 @@ impl HatQueriesTrait for Hat {
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        face: &FaceState,
+        src_face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -1243,7 +1241,7 @@ impl HatQueriesTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
-        let source_type = face.whatami;
+        let source_type = src_face.whatami;
         tracing::trace!(
             "compute_query_route({}, {:?}, {:?})",
             key_expr,
@@ -1276,11 +1274,7 @@ impl HatQueriesTrait for Hat {
             );
 
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                // REVIEW(regions): not sure
-                if face.bound.is_north() ^ ctx.face.bound.is_north()
-                    || face.whatami == WhatAmI::Client
-                    || ctx.face.whatami == WhatAmI::Client
-                {
+                if self.should_route_between(src_face, &ctx.face) {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");

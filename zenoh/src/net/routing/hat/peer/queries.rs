@@ -42,7 +42,7 @@ use crate::{
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
         hat::{
-            peer::initial_interest, BaseContext, CurrentFutureTrait, HatQueriesTrait,
+            peer::initial_interest, BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait,
             InterestProfile, SendDeclare, Sources,
         },
         router::{Direction, DEFAULT_NODE_ID},
@@ -107,9 +107,7 @@ impl Hat {
                     .any(|i| i.options.queryables() && i.matches(res)))
             && src_face
                 .as_ref()
-                .map(|src_face| {
-                    src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
-                })
+                .map(|src_face| self.should_route_between(src_face, dst_face))
                 .unwrap_or(true)
         {
             let id = current.map(|c| c.0).unwrap_or(
@@ -647,11 +645,7 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                // REVIEW(regions): not sure
-                if src_face.bound.is_north() ^ ctx.face.bound.is_north()
-                    || src_face.whatami == WhatAmI::Client
-                    || ctx.face.whatami == WhatAmI::Client
-                {
+                if self.should_route_between(src_face, &ctx.face) {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");

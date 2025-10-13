@@ -41,7 +41,8 @@ use crate::{
         },
         hat::{
             peer::{initial_interest, Hat},
-            BaseContext, CurrentFutureTrait, HatPubSubTrait, InterestProfile, SendDeclare, Sources,
+            BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, InterestProfile,
+            SendDeclare, Sources,
         },
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
@@ -61,9 +62,7 @@ impl Hat {
     ) {
         if (src_face.id != dst_face.id)
             && !self.face_hat(dst_face).local_subs.contains_key(res)
-            && (src_face.bound.is_north() ^ dst_face.bound.is_north()
-                || src_face.whatami == WhatAmI::Client
-                || dst_face.whatami == WhatAmI::Client)
+            && self.should_route_between(src_face, dst_face)
         {
             if dst_face.whatami != WhatAmI::Client && profile.is_push() {
                 let id = self
@@ -669,12 +668,7 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for (fid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some()
-                    // REVIEW(regions): not sure
-                    && (src_face.bound.is_north() ^ ctx.face.bound.is_north()
-                        || source_type == WhatAmI::Client
-                        || ctx.face.whatami == WhatAmI::Client)
-                {
+                if ctx.subs.is_some() && self.should_route_between(src_face, &ctx.face) {
                     route.insert(*fid, || {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(*fid);

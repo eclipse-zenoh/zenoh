@@ -52,7 +52,7 @@ fn base_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives, Bound::north());
+    let face = router.new_session(primitives, Bound::north());
     register_expr(&tables, &mut face.state.clone(), 1, &"one/two/three".into());
     register_expr(
         &tables,
@@ -138,7 +138,7 @@ fn match_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives, Bound::north());
+    let face = router.new_session(primitives, Bound::north());
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
@@ -175,7 +175,7 @@ fn multisub_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = router.new_primitives(primitives, Bound::north());
+    let face0 = router.new_session(primitives, Bound::north());
 
     // --------------
     let sub_info = SubscriberInfo;
@@ -226,7 +226,7 @@ async fn clean_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = &router.new_primitives(primitives, Bound::north());
+    let face0 = &router.new_session(primitives, Bound::north());
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
@@ -530,7 +530,7 @@ fn client_test() {
     let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = router.new_primitives(primitives0.clone(), Bound::north());
+    let face0 = router.new_session(primitives0.clone(), Bound::north());
     register_expr(&tables, &mut face0.state.clone(), 11, &"test/client".into());
     Primitives::send_declare(
         primitives0.as_ref(),
@@ -573,7 +573,7 @@ fn client_test() {
     );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = router.new_primitives(primitives1.clone(), Bound::north());
+    let face1 = router.new_session(primitives1.clone(), Bound::north());
     register_expr(&tables, &mut face1.state.clone(), 21, &"test/client".into());
     Primitives::send_declare(
         primitives1.as_ref(),
@@ -616,7 +616,7 @@ fn client_test() {
     );
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = router.new_primitives(primitives2.clone(), Bound::north());
+    let face2 = router.new_session(primitives2.clone(), Bound::north());
     register_expr(&tables, &mut face2.state.clone(), 31, &"test/client".into());
     Primitives::send_declare(
         primitives2.as_ref(),
@@ -766,9 +766,9 @@ fn get_best_key_test() {
         .unwrap();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face1 = router.new_primitives(primitives.clone(), Bound::north());
-    let face2 = router.new_primitives(primitives.clone(), Bound::north());
-    let face3 = router.new_primitives(primitives, Bound::north());
+    let face1 = router.new_session(primitives.clone(), Bound::north());
+    let face2 = router.new_session(primitives.clone(), Bound::north());
+    let face3 = router.new_session(primitives, Bound::north());
 
     let root = zread!(router.tables.tables).data._get_root().clone();
     let register_expr = |face: &Face, id: ExprId, expr: &str| {
@@ -818,7 +818,7 @@ fn big_key_expr() {
         .unwrap();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives.clone(), Bound::north());
+    let face = router.new_session(primitives.clone(), Bound::north());
 
     let root = zread!(router.tables.tables).data._get_root().clone();
     let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();
