@@ -160,6 +160,33 @@ pub trait NetworkMessageExt {
     }
 
     #[inline]
+    #[cfg(feature = "shared-memory")]
+    fn is_shm(&self) -> bool {
+        use crate::zenoh::{PushBody, RequestBody, ResponseBody};
+
+        match self.body() {
+            NetworkBodyRef::Push(Push { payload, .. }) => match payload {
+                PushBody::Put(p) => p.ext_shm.is_some(),
+                PushBody::Del(_) => false,
+            },
+            NetworkBodyRef::Request(Request { payload, .. }) => match payload {
+                RequestBody::Query(b) => b.ext_body.as_ref().is_some_and(|b| b.ext_shm.is_some()),
+            },
+            NetworkBodyRef::Response(Response { payload, .. }) => match payload {
+                ResponseBody::Reply(b) => match &b.payload {
+                    PushBody::Put(p) => p.ext_shm.is_some(),
+                    PushBody::Del(_) => false,
+                },
+                ResponseBody::Err(e) => e.ext_shm.is_some(),
+            },
+            NetworkBodyRef::ResponseFinal(_)
+            | NetworkBodyRef::Interest(_)
+            | NetworkBodyRef::Declare(_)
+            | NetworkBodyRef::OAM(_) => false,
+        }
+    }
+
+    #[inline]
     fn is_droppable(&self) -> bool {
         !self.is_reliable() || self.congestion_control() == CongestionControl::Drop
     }
