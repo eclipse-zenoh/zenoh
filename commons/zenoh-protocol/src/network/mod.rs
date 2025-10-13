@@ -31,8 +31,6 @@ pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
 use crate::core::{CongestionControl, Priority, Reliability, WireExpr};
-#[cfg(feature = "shared-memory")]
-use crate::zenoh::PushBody;
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -164,7 +162,7 @@ pub trait NetworkMessageExt {
     #[inline]
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool {
-        use crate::zenoh::{RequestBody, ResponseBody};
+        use crate::zenoh::{PushBody, RequestBody, ResponseBody};
 
         match self.body() {
             NetworkBodyRef::Push(Push { payload, .. }) => match payload {
