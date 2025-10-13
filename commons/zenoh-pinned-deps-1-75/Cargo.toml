@@ -53,8 +53,8 @@ zerofrom = "=0.1.5"
 [package.metadata.cargo-machete]
 ignored = [
   "base64ct",
-  "home",
   "generic-array",
+  "home",
   "icu_normalizer",
   "librocksdb-sys",
   "litemap",
