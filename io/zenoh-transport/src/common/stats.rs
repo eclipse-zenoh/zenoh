@@ -253,7 +253,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct DiscriminatedStats {
+    pub struct AdminStats {
         # DISCRIMINANT "space"
         pub user,
         pub admin,
@@ -290,35 +290,35 @@ stats_struct! {
 
         # HELP "Counter of sent zenoh put messages."
         # TYPE "counter"
-        pub tx_z_put_msgs DiscriminatedStats,
+        pub tx_z_put_msgs AdminStats,
 
         # HELP "Counter of sent bytes in zenoh put message payloads."
         # TYPE "counter"
-        pub tx_z_put_pl_bytes DiscriminatedStats,
+        pub tx_z_put_pl_bytes AdminStats,
 
         # HELP "Counter of sent zenoh del messages."
         # TYPE "counter"
-        pub tx_z_del_msgs DiscriminatedStats,
+        pub tx_z_del_msgs AdminStats,
 
          # HELP "Counter of received bytes in zenoh del message attachments."
         # TYPE "counter"
-        pub tx_z_del_pl_bytes DiscriminatedStats,
+        pub tx_z_del_pl_bytes AdminStats,
 
         # HELP "Counter of sent zenoh query messages."
         # TYPE "counter"
-        pub tx_z_query_msgs DiscriminatedStats,
+        pub tx_z_query_msgs AdminStats,
 
         # HELP "Counter of sent bytes in zenoh query message payloads."
         # TYPE "counter"
-        pub tx_z_query_pl_bytes DiscriminatedStats,
+        pub tx_z_query_pl_bytes AdminStats,
 
         # HELP "Counter of sent zenoh reply messages."
         # TYPE "counter"
-        pub tx_z_reply_msgs DiscriminatedStats,
+        pub tx_z_reply_msgs AdminStats,
 
         # HELP "Counter of sent bytes in zenoh reply message payloads."
         # TYPE "counter"
-        pub tx_z_reply_pl_bytes DiscriminatedStats,
+        pub tx_z_reply_pl_bytes AdminStats,
 
         # HELP "Counter of received bytes."
         # TYPE "counter"
@@ -334,35 +334,35 @@ stats_struct! {
 
         # HELP "Counter of received zenoh put messages."
         # TYPE "counter"
-        pub rx_z_put_msgs DiscriminatedStats,
+        pub rx_z_put_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh put message payloads."
         # TYPE "counter"
-        pub rx_z_put_pl_bytes DiscriminatedStats,
+        pub rx_z_put_pl_bytes AdminStats,
 
         # HELP "Counter of received zenoh del messages."
         # TYPE "counter"
-        pub rx_z_del_msgs DiscriminatedStats,
+        pub rx_z_del_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh del message attachments."
         # TYPE "counter"
-        pub rx_z_del_pl_bytes DiscriminatedStats,
+        pub rx_z_del_pl_bytes AdminStats,
 
         # HELP "Counter of received zenoh query messages."
         # TYPE "counter"
-        pub rx_z_query_msgs DiscriminatedStats,
+        pub rx_z_query_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh query message payloads."
         # TYPE "counter"
-        pub rx_z_query_pl_bytes DiscriminatedStats,
+        pub rx_z_query_pl_bytes AdminStats,
 
         # HELP "Counter of received zenoh reply messages."
         # TYPE "counter"
-        pub rx_z_reply_msgs DiscriminatedStats,
+        pub rx_z_reply_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh reply message payloads."
         # TYPE "counter"
-        pub rx_z_reply_pl_bytes DiscriminatedStats,
+        pub rx_z_reply_pl_bytes AdminStats,
 
         # HELP "Counter of messages dropped by ingress downsampling."
         # TYPE "counter"
