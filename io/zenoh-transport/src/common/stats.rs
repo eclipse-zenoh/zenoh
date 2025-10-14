@@ -11,6 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+macro_rules! ifdef {
+    (() $code:tt) => {};
+    (($($target:tt)+) $code:tt) => {
+        $code
+    };
+}
+
 macro_rules! stats_struct {
     (@field_type ) => {AtomicUsize};
     (@field_type $field_type:ident) => {std::sync::Arc<$field_type>};
@@ -18,6 +26,8 @@ macro_rules! stats_struct {
     (@report_field_type $field_type:ident) => {paste::paste! {[<$field_type Report>]}};
     (@new($parent:expr, $id:expr) ) => {AtomicUsize::new(0)};
     (@new($parent:expr, $id:expr) $field_type:ident) => {$field_type::new($parent, $id)};
+    (@from($parent:expr, $field_name:ident) ) => {AtomicUsize::new($parent.$field_name.load(std::sync::atomic::Ordering::Relaxed))};
+    (@from($parent:expr, $field_name:ident) $field_type:ident) => {std::sync::Arc::new($field_type::from(&*$parent.$field_name))};
     (@report_default ) => {0};
     (@report_default $field_type:ident) => {paste::paste! {[<$field_type Report>]::default()}};
     (@get $vis:vis $field_name:ident) => {
@@ -84,7 +94,9 @@ macro_rules! stats_struct {
     (
      $(#[$meta:meta])*
      $vis:vis struct $struct_name:ident {
+        # PARENT $parent_type:ident
         $(# DISCRIMINANT $discriminant:literal)?
+        $(# RECURSIVE $recursive:tt)?
         $(
             $(# HELP $help:literal)?
             $(# TYPE $type:literal)?
@@ -96,7 +108,7 @@ macro_rules! stats_struct {
         paste::paste! {
             $vis struct $struct_name {
                 labels: std::collections::HashMap<String, String>,
-                parent: Option<std::sync::Weak<$struct_name>>,
+                parent: Option<std::sync::Weak<$parent_type>>,
                 children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
                 $(
                 $(#[$field_meta])*
@@ -118,7 +130,7 @@ macro_rules! stats_struct {
 
             impl $struct_name {
                 $(const DISCRIMINANT: &str = $discriminant;)?
-                $vis fn new(parent: Option<std::sync::Weak<$struct_name>>, labels: std::collections::HashMap<String, String>) -> std::sync::Arc<Self> {
+                $vis fn new(parent: Option<std::sync::Weak<$parent_type>>, labels: std::collections::HashMap<String, String>) -> std::sync::Arc<Self> {
                     let s = $struct_name {
                         labels: labels.clone(),
                         parent: parent.clone(),
@@ -126,15 +138,13 @@ macro_rules! stats_struct {
                         ..Default::default()
                     };
                     let a = std::sync::Arc::new(s);
-                    match parent.and_then(|p| p.upgrade()) {
-                        Some(p) => p.children.lock().unwrap().push(a.clone()),
-                        None => {}
-                    };
+                    ifdef!(($($recursive)?) {
+                        match parent.and_then(|p| p.upgrade()) {
+                            Some(p) => p.children.lock().unwrap().push(a.clone()),
+                            None => {}
+                        };
+                    });
                     a
-                }
-
-                $vis fn parent(&self) -> &Option<std::sync::Weak<$struct_name>> {
-                    &self.parent
                 }
 
                 $vis fn report(&self) -> [<$struct_name Report>] {
@@ -150,8 +160,8 @@ macro_rules! stats_struct {
                 }
 
                 $(
-                    stats_struct!(@get $vis $field_name $($field_type)?);
-                    stats_struct!(@increment $vis $field_name $($field_type)?);
+                    stats_struct!(@get $field_vis $field_name $($field_type)?);
+                    stats_struct!(@increment $field_vis $field_name $($field_type)?);
                 )*
             }
 
@@ -159,9 +169,20 @@ macro_rules! stats_struct {
                 fn default() -> Self {
                     Self {
                         labels: std::collections::HashMap::default(),
-                        parent: None,
+                        parent: None as Option<std::sync::Weak<$parent_type>>,
                         children: std::sync::Arc::new(std::sync::Mutex::new(std::vec::Vec::new())),
                         $($field_name: stats_struct!(@new(None, std::collections::HashMap::default()) $($field_type)?),)*
+                    }
+                }
+            }
+
+            impl From<&$parent_type> for $struct_name {
+                fn from(v: &$parent_type) -> Self {
+                    $struct_name {
+                        labels: std::collections::HashMap::new(),
+                        parent: None,
+                        $($field_name: stats_struct!(@from(v, $field_name) $($field_type)?),)*
+                        ..Default::default()
                     }
                 }
             }
@@ -254,6 +275,7 @@ use serde::{Deserialize, Serialize};
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct AdminStats {
+        # PARENT AdminStats
         # DISCRIMINANT "space"
         pub user,
         pub admin,
@@ -263,6 +285,7 @@ stats_struct! {
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct SHMStats {
+        # PARENT SHMStats
         # DISCRIMINANT "medium"
         pub net,
         pub shm,
@@ -272,6 +295,9 @@ stats_struct! {
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct TransportStats {
+        # PARENT TransportStats
+        # RECURSIVE true
+
         # HELP "Counter of sent bytes."
         # TYPE "counter"
         pub tx_bytes,
@@ -387,5 +413,16 @@ stats_struct! {
         # HELP "Counter of messages dropped by egress low-pass filter."
         # TYPE "counter"
         pub tx_low_pass_dropped_msgs,
+    }
+}
+
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct LinkStats {
+        # PARENT TransportStats
+        pub tx_bytes,
+        pub tx_t_msgs,
+        pub rx_bytes,
+        pub rx_t_msgs,
     }
 }

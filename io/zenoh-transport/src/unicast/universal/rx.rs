@@ -26,7 +26,7 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "stats")]
-use crate::stats::TransportStats;
+use crate::stats::LinkStats;
 use crate::{
     common::{
         batch::{Decode, RBatch},
@@ -228,7 +228,7 @@ impl TransportUnicastUniversal {
         &self,
         mut batch: RBatch,
         link: &Link,
-        #[cfg(feature = "stats")] stats: &TransportStats,
+        #[cfg(feature = "stats")] stats: &LinkStats,
     ) -> ZResult<()> {
         while !batch.is_empty() {
             if let Ok(frame) = batch.decode() {
