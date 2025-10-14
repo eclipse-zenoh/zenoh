@@ -63,6 +63,7 @@ use crate::net::{
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
+        router::LocalSubscribers,
     },
     runtime::Runtime,
 };
@@ -945,7 +946,7 @@ struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
     remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
@@ -959,7 +960,7 @@ impl HatFace {
             link_id: 0,
             next_id: AtomicU32::new(0),
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashMap::new(),

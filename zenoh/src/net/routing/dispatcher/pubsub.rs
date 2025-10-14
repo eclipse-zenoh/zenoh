@@ -12,12 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use zenoh_core::zread;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WireExpr},
-    network::{declare::SubscriberId, push::ext, Push},
+    network::{declare::SubscriberId, interest::InterestId, push::ext, Push},
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
@@ -379,5 +382,218 @@ pub fn route_data(
                 msg.wire_expr.scope
             );
         }
+    }
+}
+
+pub(crate) struct SubscriberResourceData {
+    pub(crate) id: SubscriberId,
+    pub(crate) aggregated_to: HashSet<Arc<Resource>>,
+    pub(crate) interest_ids: HashSet<InterestId>,
+}
+
+pub(crate) struct AggregatedSubscriberResourceData {
+    pub(crate) id: SubscriberId,
+    pub(crate) aggregates: HashSet<Arc<Resource>>,
+    pub(crate) interest_ids: HashSet<InterestId>,
+}
+
+pub(crate) struct LocalSubscribers {
+    subs: HashMap<Arc<Resource>, SubscriberResourceData>,
+    aggregate_to_subs: HashMap<Arc<Resource>, AggregatedSubscriberResourceData>,
+}
+
+impl LocalSubscribers {
+    pub(crate) fn new() -> Self {
+        LocalSubscribers {
+            subs: HashMap::new(),
+            aggregate_to_subs: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn contains_key(&self, key: &Arc<Resource>) -> bool {
+        self.subs.contains_key(key)
+    }
+
+    pub(crate) fn keys(&self) -> impl Iterator<Item = &Arc<Resource>> {
+        self.subs.keys()
+    }
+
+    pub(crate) fn insert<F>(
+        &mut self,
+        key: Arc<Resource>,
+        f_id: F,
+        interests: HashSet<InterestId>,
+    ) -> SubscriberId
+    where
+        F: FnOnce() -> SubscriberId,
+    {
+        match self.subs.entry(key.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
+                occupied_entry.get_mut().interest_ids.extend(interests);
+                occupied_entry.get().id
+            }
+            std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                let mut aggregated_to = HashSet::new();
+                for (a, subs) in &mut self.aggregate_to_subs {
+                    if key.matches(a) {
+                        subs.aggregates.insert(key.clone());
+                        aggregated_to.insert(a.clone());
+                    }
+                }
+                let id = self.aggregate_to_subs.get(&key).map_or_else(f_id, |r| r.id);
+                vacant_entry.insert(SubscriberResourceData {
+                    id,
+                    aggregated_to,
+                    interest_ids: interests,
+                });
+                id
+            }
+        }
+    }
+
+    pub(crate) fn insert_aggregate<F>(
+        &mut self,
+        key: Arc<Resource>,
+        f_id: F,
+        interests: HashSet<InterestId>,
+    ) -> SubscriberId
+    where
+        F: FnOnce() -> SubscriberId,
+    {
+        match self.aggregate_to_subs.entry(key.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
+                occupied_entry.get_mut().interest_ids.extend(interests);
+                occupied_entry.get().id
+            }
+            std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                let mut aggregates = HashSet::new();
+                for (s, data) in &mut self.subs {
+                    if s.matches(&key) {
+                        data.aggregated_to.insert(key.clone());
+                        aggregates.insert(s.clone());
+                    }
+                }
+                let id = self.subs.get(&key).map_or_else(f_id, |r| r.id);
+                vacant_entry.insert(AggregatedSubscriberResourceData {
+                    id,
+                    aggregates,
+                    interest_ids: interests,
+                });
+                id
+            }
+        }
+    }
+
+    // Returns SubscribersId of removed subscribers (there can be more than one due to aggregation) for which an interest was declared
+    pub(crate) fn remove(&mut self, key: &Arc<Resource>) -> HashMap<SubscriberId, Arc<Resource>> {
+        let mut out = HashMap::new();
+        if let Some(s) = self.subs.remove(key) {
+            if !s.interest_ids.is_empty() {
+                // there was an interest for this specific resource
+                out.insert(s.id, key.clone());
+            }
+            if !s.aggregated_to.is_empty() {
+                // resource is aggregated - return ids of all its aggregates that no longer point to any real resource
+                for a in &s.aggregated_to {
+                    let entry = self.aggregate_to_subs.get_mut(a).unwrap();
+                    entry.aggregates.remove(key);
+                    if entry.aggregates.is_empty() {
+                        out.insert(entry.id, a.clone());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    pub(crate) fn remove_key_interest(
+        &mut self,
+        key: &Option<Arc<Resource>>,
+        interest: InterestId,
+    ) {
+        let mut subs_to_remove = Vec::new();
+        for res in self.subs.keys() {
+            if key.as_ref().map(|k| k.matches(res)).unwrap_or(true) {
+                subs_to_remove.push(res.clone());
+            }
+        }
+
+        for sub in subs_to_remove {
+            if let std::collections::hash_map::Entry::Occupied(mut occupied_entry) =
+                self.subs.entry(sub)
+            {
+                if occupied_entry.get_mut().interest_ids.remove(&interest) {
+                    if occupied_entry.get().interest_ids.is_empty()
+                        && occupied_entry.get().aggregated_to.is_empty()
+                    {
+                        occupied_entry.remove();
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn remove_aggregate_interest(
+        &mut self,
+        key: &Arc<Resource>,
+        interest: InterestId,
+    ) -> bool {
+        match self.aggregate_to_subs.entry(key.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
+                if occupied_entry.get_mut().interest_ids.remove(&interest) {
+                    if occupied_entry.get_mut().interest_ids.is_empty() {
+                        // the aggregate can be removed if there is no other interest for it
+                        let subs = occupied_entry.remove().aggregates;
+                        for s in subs {
+                            if let std::collections::hash_map::Entry::Occupied(mut e) =
+                                self.subs.entry(s)
+                            {
+                                e.get_mut().aggregated_to.remove(key);
+                                if e.get().interest_ids.is_empty()
+                                    && e.get().aggregated_to.is_empty()
+                                {
+                                    // remove simple resource if there is no interest for it, nor it is aggregated into another one
+                                    e.remove();
+                                }
+                            }
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(_) => false,
+        }
+    }
+
+    pub(crate) fn get_aggregate(
+        &self,
+        res: &Arc<Resource>,
+    ) -> Option<&AggregatedSubscriberResourceData> {
+        self.aggregate_to_subs.get(res)
+    }
+
+    pub(crate) fn get_aggregate_mut(
+        &mut self,
+        res: &Arc<Resource>,
+    ) -> Option<&mut AggregatedSubscriberResourceData> {
+        self.aggregate_to_subs.get_mut(res)
+    }
+
+    pub(crate) fn get_resource(&self, res: &Arc<Resource>) -> Option<&SubscriberResourceData> {
+        self.subs.get(res)
+    }
+
+    pub(crate) fn get_resource_mut(
+        &mut self,
+        res: &Arc<Resource>,
+    ) -> Option<&mut SubscriberResourceData> {
+        self.subs.get_mut(res)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.subs.clear();
+        self.aggregate_to_subs.clear();
     }
 }

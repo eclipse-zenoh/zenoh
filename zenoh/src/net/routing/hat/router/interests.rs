@@ -57,6 +57,12 @@ impl HatInterestTrait for HatCode {
             );
             options -= InterestOptions::AGGREGATE;
         }
+        if options.aggregate() && res.is_none() {
+            tracing::warn!(
+                "Received Interest with aggregate=true with empty key expression. Not supported!"
+            );
+            options -= InterestOptions::AGGREGATE;
+        }
         if options.subscribers() {
             declare_sub_interest(
                 tables,
@@ -115,7 +121,21 @@ impl HatInterestTrait for HatCode {
     }
 
     fn undeclare_interest(&self, _tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
-        face_hat_mut!(face).remote_interests.remove(&id);
+        if let Some(i) = face_hat_mut!(face).remote_interests.remove(&id) {
+            if i.options.subscribers() {
+                if i.options.aggregate() {
+                    if let Some(ires) = &i.res {
+                        face_hat_mut!(face)
+                            .local_subs
+                            .remove_aggregate_interest(ires, id);
+                    }
+                } else {
+                    face_hat_mut!(face)
+                        .local_subs
+                        .remove_key_interest(&i.res, id);
+                }
+            }
+        }
     }
 
     fn declare_final(&self, _tables: &mut Tables, _face: &mut Arc<FaceState>, _id: InterestId) {
