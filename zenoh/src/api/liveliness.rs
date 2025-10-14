@@ -539,6 +539,8 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
 }
 
 impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handler, BACKGROUND> {
+    /// If set to true, the liveliness subscriber will receive liveliness tokens created before the subscriber was declared.
+    /// Otherwise, only newly created liveliness tokens will be received.
     #[inline]
     pub fn history(mut self, history: bool) -> Self {
         self.history = history;
