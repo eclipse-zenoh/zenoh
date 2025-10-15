@@ -572,7 +572,7 @@ impl TransportManager {
         let is_multilink = zcondfeat!("transport_multilink", config.multilink.is_some(), false);
 
         #[cfg(feature = "stats")]
-        let mut labels = HashMap::from([("zid".to_string(), config.zid.to_string())]);
+        let mut labels = HashMap::from([("remote_zid".to_string(), config.zid.to_string())]);
         #[cfg(feature = "stats")]
         if let Some(cert_common_name) = link.link.link.get_auth_id().get_cert_common_name() {
             labels.insert("cert_common_name".to_owned(), cert_common_name.to_owned());
