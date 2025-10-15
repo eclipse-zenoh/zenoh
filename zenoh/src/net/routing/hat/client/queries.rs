@@ -86,7 +86,6 @@ impl Hat {
     ) {
         let faces = self.faces(tables).values().cloned(); // FIXME(regions): move all these calls to .owned_faces(..)
         for mut dst_face in faces {
-            tracing::trace!(face = %dst_face, res = %res.expr(), "Considering face for propagation");
             let info = self.local_qabl_info(tables, res, &dst_face);
             let current = self.face_hat(&dst_face).local_qabls.get(res);
             if src_face
@@ -354,6 +353,7 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.bound))]
     fn compute_query_route(
         &self,
         tables: &TablesData,

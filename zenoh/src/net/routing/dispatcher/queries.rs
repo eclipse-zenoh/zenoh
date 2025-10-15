@@ -345,8 +345,6 @@ impl Face {
                             bnd,
                         );
 
-                        tracing::trace!(query_targets = ?qabls, %bnd);
-
                         compute_final_route(
                             &rtables,
                             &mut query_dirs,

@@ -610,7 +610,7 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr))]
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.bound))]
     fn compute_query_route(
         &self,
         tables: &TablesData,
