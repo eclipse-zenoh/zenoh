@@ -86,6 +86,7 @@ pub struct KeepAlive;
 
 impl KeepAlive {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         Self
     }

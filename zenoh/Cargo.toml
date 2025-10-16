@@ -19,7 +19,7 @@ edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
 name = "zenoh"
-readme = "../README.md"
+readme = "README.md"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
@@ -87,6 +87,7 @@ ahash = { workspace = true, default-features = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
+const_format = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
@@ -147,7 +148,7 @@ rustdoc-args = ["--cfg", "doc_auto_cfg"]
 [package.metadata.deb]
 assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.5.1), zenoh-plugin-rest (=1.5.1), zenoh-plugin-storage-manager (=1.5.1)"
+depends = "zenohd (=1.6.1), zenoh-plugin-rest (=1.6.1), zenoh-plugin-storage-manager (=1.6.1)"
 license-file = ["../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 maintainer-scripts = ".deb"

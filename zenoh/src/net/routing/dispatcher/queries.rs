@@ -673,3 +673,56 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
             });
     }
 }
+
+pub(crate) fn merge_qabl_infos(
+    mut this: QueryableInfoType,
+    info: &QueryableInfoType,
+) -> QueryableInfoType {
+    this.distance = match (this.complete, info.complete) {
+        (true, true) | (false, false) => std::cmp::min(this.distance, info.distance),
+        (true, false) => this.distance,
+        (false, true) => info.distance,
+    };
+    this.complete = this.complete || info.complete;
+    this
+}
+
+pub(crate) fn get_remote_qabl_info(
+    queryables: &HashMap<u32, (Arc<Resource>, QueryableInfoType)>,
+    res: &Arc<Resource>,
+) -> Option<QueryableInfoType> {
+    queryables
+        .values()
+        .fold(None, |accu, (ref r, ref qabl_info)| {
+            if *r == *res {
+                match accu {
+                    Some(qi) => Some(merge_qabl_infos(qi, qabl_info)),
+                    None => Some(*qabl_info),
+                }
+            } else {
+                accu
+            }
+        })
+}
+
+pub(crate) fn update_queryable_info(
+    res: &mut Arc<Resource>,
+    face_id: usize,
+    new_qabl_info: &Option<QueryableInfoType>,
+) -> bool {
+    if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face_id) {
+        if ctx.qabl != *new_qabl_info {
+            get_mut_unchecked(ctx).qabl = *new_qabl_info;
+            true
+        } else {
+            false
+        }
+    } else {
+        tracing::warn!(
+            "Request to update QueryableInfo for inexistent face id: {}, on resource: '{}'",
+            face_id,
+            res.expr()
+        );
+        false
+    }
+}

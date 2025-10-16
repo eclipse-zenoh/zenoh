@@ -136,6 +136,7 @@ pub mod ext {
 
 impl OpenSyn {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -202,6 +203,7 @@ pub struct OpenAck {
 
 impl OpenAck {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

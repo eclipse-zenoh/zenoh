@@ -185,6 +185,7 @@ where
 }
 
 #[cfg(feature = "test")]
+#[doc(hidden)]
 pub fn rand(into: &mut String) {
     use rand::{
         distributions::{Alphanumeric, DistString},

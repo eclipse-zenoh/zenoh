@@ -27,11 +27,11 @@ use crate::api::handlers::{
     callback::Callback, CallbackParameter, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE,
 };
 
-/// An handler implementing FIFO semantics.
+/// A handler implementing FIFO semantics.
 ///
-/// Note that pushing on a full [`FifoChannel`] that is full will block until a slot is available.
-/// E.g., a slow subscriber could block the underlying Zenoh thread because is not emptying the
-/// [`FifoChannel`] fast enough. In this case, you may want to look into [`crate::api::handlers::RingChannel`] that
+/// Note that pushing on a [`FifoChannel`] that is full will block until a slot is available.
+/// E.g., a slow subscriber could block the underlying Zenoh thread because it is not emptying the
+/// [`FifoChannel`] fast enough. In this case, you may want to look into [`handlers::RingChannel`](crate::api::handlers::RingChannel) that
 /// will drop samples when full.
 pub struct FifoChannel {
     capacity: usize,
@@ -51,6 +51,7 @@ impl Default for FifoChannel {
 }
 
 /// [`FifoChannel`] handler.
+/// This is the receiver side of the channel, which implements all data-receiving methods.
 #[derive(Debug, Clone)]
 pub struct FifoChannelHandler<T>(flume::Receiver<T>);
 
@@ -169,7 +170,7 @@ impl<T> FifoChannelHandler<T> {
         self.0.receiver_count()
     }
 
-    /// Returns whether the receivers are belong to the same channel.
+    /// Returns whether the receivers belong to the same channel.
     pub fn same_channel(&self, other: &Self) -> bool {
         self.0.same_channel(&other.0)
     }
@@ -206,7 +207,7 @@ impl<T> Iterator for Iter<'_, T> {
     }
 }
 
-/// An non-blocking iterator over the msgs received from a channel.
+/// A non-blocking iterator over the msgs received from a channel.
 pub struct TryIter<'a, T>(flume::TryIter<'a, T>);
 
 impl<T> Iterator for TryIter<'_, T> {
@@ -217,7 +218,7 @@ impl<T> Iterator for TryIter<'_, T> {
     }
 }
 
-/// An fixed-sized iterator over the msgs drained from a channel.
+/// A fixed-size iterator over the msgs drained from a channel.
 #[derive(Debug)]
 pub struct Drain<'a, T>(flume::Drain<'a, T>);
 
@@ -327,7 +328,7 @@ impl<T> RecvStream<'_, T> {
         self.0.capacity()
     }
 
-    /// Returns whether the SendSinks are belong to the same channel.
+    /// Returns whether the SendSinks belong to the same channel.
     pub fn same_channel(&self, other: &Self) -> bool {
         self.0.same_channel(&other.0)
     }
