@@ -147,9 +147,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             info.RegionSize
         };
 
-        if !VirtualLock(data_ptr.as_mut_ptr() as *mut std::ffi::c_void, len) {
-            let last_error = unsafe { GetLastError() };
-            return Err(Error::new(last_error, HSTRING::new()));
+        if VirtualLock(data_ptr.as_mut_ptr() as *mut winapi::ctypes::c_void, len)
+            == winapi::shared::minwindef::FALSE
+        {
+            return Err(Error::from_win32());
         }
 
         Ok((data_ptr, len))
@@ -158,10 +159,11 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
-        if !VirtualUnlock(
-            self.data_ptr.as_mut_ptr() as *mut std::ffi::c_void,
+        if VirtualUnlock(
+            self.data_ptr.as_mut_ptr() as *mut winapi::ctypes::c_void,
             self.len,
-        ) {
+        ) == winapi::shared::minwindef::FALSE
+        {
             tracing::trace!("VirtualUnlock failed");
         }
     }
