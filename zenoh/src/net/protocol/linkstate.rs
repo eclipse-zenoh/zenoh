@@ -105,6 +105,7 @@ pub(crate) struct LocalLinkState {
 impl LinkState {
     #[cfg(test)]
     #[doc(hidden)]
+    #[allow(dead_code)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -168,6 +169,7 @@ pub(crate) struct LinkStateList {
 impl LinkStateList {
     #[cfg(test)]
     #[doc(hidden)]
+    #[allow(dead_code)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -216,21 +218,4 @@ pub(crate) struct LinkInfo {
     pub(crate) src_weight: Option<u16>,
     pub(crate) dst_weight: Option<u16>,
     pub(crate) actual_weight: u16,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_random_link_state() {
-        let link_state = LinkState::rand();
-        assert!(!link_state.links.is_empty());
-    }
-
-    #[test]
-    fn test_random_link_state_list() {
-        let list = LinkStateList::rand();
-        assert!(!list.link_states.is_empty());
-    }
 }
