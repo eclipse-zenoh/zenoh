@@ -147,9 +147,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             info.RegionSize
         };
 
-        if !VirtualLock(data_ptr.as_mut_ptr().cast(), len) {
+        if !VirtualLock(data_ptr.as_mut_ptr() as *mut std::ffi::c_void, len) {
             let last_error = unsafe { GetLastError() };
-            return Error::new(last_error, HSTRING::new());
+            return Err(Error::new(last_error, HSTRING::new()));
         }
 
         Ok((data_ptr, len))
@@ -158,7 +158,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
-        if !VirtualUnlock(self.data_ptr.as_mut_ptr().cast(), self.len) {
+        if !VirtualUnlock(
+            self.data_ptr.as_mut_ptr() as *mut std::ffi::c_void,
+            self.len,
+        ) {
             tracing::trace!("VirtualUnlock failed");
         }
     }
