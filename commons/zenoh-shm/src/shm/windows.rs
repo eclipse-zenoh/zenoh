@@ -149,7 +149,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
         if !VirtualLock(data_ptr.as_mut_ptr(), len) {
             let last_error = unsafe { GetLastError() };
-            return Error::new(last_error, "");
+            return Error::new(last_error, HSTRING::new());
         }
 
         Ok((data_ptr, len))
@@ -159,7 +159,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
         if !VirtualUnlock(self.data_ptr.as_mut_ptr(), self.len) {
-            tracing::trace("VirtualUnlock failed");
+            tracing::trace!("VirtualUnlock failed");
         }
     }
 }
