@@ -331,6 +331,24 @@ jobs:
           config: '.markdownlint.yaml'
           globs: '**/README.md'
 
+  doc:
+    name: Generate documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      # Use a similar command than docs.rs build: rustdoc with nightly toolchain
+      - name: Install Rust toolchain nightly for docs gen
+        run: rustup toolchain install nightly
+
+      - name: Run rustdoc using Nightly Rust and Zenoh unstable
+        # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
+        run: |
+          cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
+            -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples \
+            --config build.rustdocflags='["--cfg", "docsrs", "--cfg", "doc_auto_cfg", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
+
   coverage:
         name: Coverage
         strategy:
@@ -409,7 +427,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check, test, valgrind, typos, markdown_lint, coverage]
+    needs: [check_rust, check, test, valgrind, typos, markdown_lint, doc, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass
