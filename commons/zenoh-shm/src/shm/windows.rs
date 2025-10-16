@@ -15,7 +15,7 @@
 use std::num::NonZeroUsize;
 
 use win_sys::{Memory::SEC_COMMIT, *};
-use winapi::um::{errhandlingapi::GetLastError, memoryapi::VirtualLock};
+use winapi::um::{errhandlingapi::GetLastError, memoryapi::{VirtualLock, VirtualUnlock}};
 
 use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
@@ -145,7 +145,8 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         if !VirtualLock(data_ptr.as_mut_ptr(), len) {
-            return Err("VirtualLock failed: unable to lock SHM region in physical memory");
+            let last_error = unsafe { GetLastError() };
+            return Error::new(last_error, "");
         }
 
         Ok((data_ptr, len))
