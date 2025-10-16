@@ -155,3 +155,6 @@ name = "zenoh"
 section = "net"
 
 [lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(nolocal_thread_not_available)',
+] }

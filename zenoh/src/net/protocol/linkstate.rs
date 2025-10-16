@@ -103,7 +103,7 @@ pub(crate) struct LocalLinkState {
 }
 
 impl LinkState {
-    #[cfg(feature = "test")]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -134,6 +134,13 @@ impl LinkState {
         };
         let n = rng.gen_range(MIN..=MAX);
         let links = (0..n).map(|_| rng.gen()).collect::<Vec<u64>>();
+        let link_weights = if rng.gen_bool(0.5) {
+            let n = rng.gen_range(MIN..=MAX);
+            let weights = (0..n).map(|_| rng.gen()).collect::<Vec<u16>>();
+            Some(weights)
+        } else {
+            None
+        };
 
         Self {
             psid,
@@ -142,6 +149,7 @@ impl LinkState {
             whatami,
             locators,
             links,
+            link_weights,
         }
     }
 }
@@ -158,7 +166,7 @@ pub(crate) struct LinkStateList {
 }
 
 impl LinkStateList {
-    #[cfg(feature = "test")]
+    #[cfg(test)]
     #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -208,4 +216,21 @@ pub(crate) struct LinkInfo {
     pub(crate) src_weight: Option<u16>,
     pub(crate) dst_weight: Option<u16>,
     pub(crate) actual_weight: u16,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_random_link_state() {
+        let link_state = LinkState::rand();
+        assert!(!link_state.links.is_empty());
+    }
+
+    #[test]
+    fn test_random_link_state_list() {
+        let list = LinkStateList::rand();
+        assert!(!list.link_states.is_empty());
+    }
 }
