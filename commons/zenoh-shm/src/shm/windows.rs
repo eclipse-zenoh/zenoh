@@ -15,7 +15,10 @@
 use std::num::NonZeroUsize;
 
 use win_sys::{Memory::SEC_COMMIT, *};
-use winapi::um::{errhandlingapi::GetLastError, memoryapi::{VirtualLock, VirtualUnlock}};
+use winapi::um::{
+    errhandlingapi::GetLastError,
+    memoryapi::{VirtualLock, VirtualUnlock},
+};
 
 use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
