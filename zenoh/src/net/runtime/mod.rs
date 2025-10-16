@@ -144,6 +144,10 @@ impl IConfig for Notifier<Config> {
     fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
         self.insert_json5(key, value)
     }
+
+    fn to_json(&self) -> String {
+        self.lock().to_string()
+    }
 }
 
 impl IRuntime for RuntimeState {
