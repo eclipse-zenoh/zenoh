@@ -13,7 +13,7 @@
 //
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
@@ -44,6 +44,7 @@ use crate::{
         routing::{
             dispatcher::{
                 face::FaceState,
+                local_resources::ResourceState,
                 resource::{NodeId, Resource, SessionContext},
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },
@@ -234,36 +235,124 @@ fn send_sourced_queryable_to_net_children(
 }
 
 #[inline]
-fn send_declare_queryable(
+fn maybe_register_local_queryable(
     tables: &Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    id: u32,
-    info: QueryableInfoType,
     send_declare: &mut SendDeclare,
 ) {
-    face_hat_mut!(dst_face)
-        .local_qabls
-        .insert(res.clone(), (id, info));
-    let push_declaration = push_declaration_profile(tables, dst_face);
-    let key_expr = Resource::decl_key(res, dst_face, push_declaration);
-    send_declare(
-        &dst_face.primitives,
-        RoutingContext::with_expr(
-            Declare {
-                interest_id: None,
-                ext_qos: ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
-                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                    id,
-                    wire_expr: key_expr,
-                    ext_info: info,
-                }),
+    let (should_notify, simple_interests) = face_hat!(dst_face)
+        .remote_interests
+        .iter()
+        .filter(|(_, i)| i.options.queryables() && i.matches(res))
+        .fold(
+            (false, HashSet::new()),
+            |(_, mut simple_interests), (id, i)| {
+                if !i.options.aggregate() {
+                    simple_interests.insert(*id);
+                }
+                (true, simple_interests)
             },
-            res.expr().to_string(),
-        ),
+        );
+
+    if !should_notify {
+        return;
+    }
+
+    let new_info = local_qabl_info(tables, res, dst_face);
+    let face_hat_mut = face_hat_mut!(dst_face);
+    let (_, qabls_to_notify) = face_hat_mut.local_qabls.insert_simple_resource(
+        res.clone(),
+        new_info,
+        || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+        simple_interests,
     );
+
+    for update in qabls_to_notify {
+        let key_expr = Resource::decl_key(
+            &update.resource,
+            dst_face,
+            push_declaration_profile(tables, dst_face),
+        );
+        send_declare(
+            &dst_face.primitives,
+            RoutingContext::with_expr(
+                Declare {
+                    interest_id: None,
+                    ext_qos: ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                        id: update.id,
+                        wire_expr: key_expr.clone(),
+                        ext_info: update.state,
+                    }),
+                },
+                update.resource.expr().to_string(),
+            ),
+        );
+    }
+}
+
+#[inline]
+fn maybe_unregister_local_queryable(
+    tables: &Tables,
+    face: &mut Arc<FaceState>,
+    res: &Arc<Resource>,
+    send_ext_wire_expr: bool,
+    send_declare: &mut SendDeclare,
+) {
+    for update in face_hat_mut!(face).local_qabls.remove(res) {
+        let ext_wire_expr = if send_ext_wire_expr {
+            WireExprType {
+                wire_expr: Resource::get_best_key(&update.resource, "", face.id),
+            }
+        } else {
+            WireExprType::null()
+        };
+        match update.update {
+            Some(new_qabl_info) => {
+                let key_expr = Resource::decl_key(
+                    &update.resource,
+                    face,
+                    push_declaration_profile(tables, face),
+                );
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id: update.id,
+                                wire_expr: key_expr.clone(),
+                                ext_info: new_qabl_info,
+                            }),
+                        },
+                        update.resource.expr().to_string(),
+                    ),
+                );
+            }
+            None => send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: update.id,
+                            ext_wire_expr,
+                        }),
+                    },
+                    update.resource.expr().to_string(),
+                ),
+            ),
+        };
+    }
 }
 
 fn propagate_simple_queryable(
@@ -293,26 +382,7 @@ fn propagate_simple_queryable(
                         .unwrap_or(true)
             }
         {
-            if let Some(&(current_id, current_info)) = face_hat!(dst_face).local_qabls.get(res) {
-                let info = local_qabl_info(tables, res, &dst_face);
-                if current_info != info
-                    && face_hat!(dst_face)
-                        .remote_interests
-                        .values()
-                        .any(|i| i.options.queryables() && i.matches(res))
-                {
-                    let id = current_id;
-                    send_declare_queryable(tables, &mut dst_face, res, id, info, send_declare);
-                }
-            } else if face_hat!(dst_face)
-                .remote_interests
-                .values()
-                .any(|i| i.options.queryables() && i.matches(res))
-            {
-                let info = local_qabl_info(tables, res, &dst_face);
-                let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                send_declare_queryable(tables, &mut dst_face, res, id, info, send_declare);
-            }
+            maybe_register_local_queryable(tables, &mut dst_face, res, send_declare);
         }
     }
 }
@@ -517,13 +587,6 @@ fn simple_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_qabls(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
-        .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.qabl.is_some())
-}
-
-#[inline]
 fn send_forget_sourced_queryable_to_net_children(
     tables: &Tables,
     net: &Network,
@@ -572,58 +635,7 @@ fn propagate_forget_simple_queryable(
     send_declare: &mut SendDeclare,
 ) {
     for mut face in tables.faces.values().cloned() {
-        if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
-            send_declare(
-                &face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
-            );
-        }
-        for res in face_hat!(&mut face)
-            .local_qabls
-            .keys()
-            .cloned()
-            .collect::<Vec<Arc<Resource>>>()
-        {
-            if !res.context().matches.iter().any(|m| {
-                m.upgrade().is_some_and(|m| {
-                    m.context.is_some()
-                        && (remote_simple_qabls(&m, &face)
-                            || remote_linkstatepeer_qabls(tables, &m)
-                            || remote_router_qabls(tables, &m))
-                })
-            }) {
-                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
-            }
-        }
+        maybe_unregister_local_queryable(tables, &mut face, res, false, send_declare);
     }
 }
 
@@ -643,7 +655,7 @@ fn propagate_forget_simple_queryable_to_peers(
             .collect::<Vec<Arc<FaceState>>>()
         {
             if face.whatami == WhatAmI::Peer
-                && face_hat!(face).local_qabls.contains_key(res)
+                && face_hat!(face).local_qabls.contains_simple_resource(res)
                 && !res.session_ctxs.values().any(|s| {
                     face.zid != s.face.zid
                         && s.qabl.is_some()
@@ -652,24 +664,7 @@ fn propagate_forget_simple_queryable_to_peers(
                                 && hat!(tables).failover_brokering(s.face.zid, face.zid)))
                 })
             {
-                if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(res) {
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
+                maybe_unregister_local_queryable(tables, &mut face, res, false, send_declare);
             }
         }
     }
@@ -824,59 +819,8 @@ pub(super) fn undeclare_simple_queryable(
         }
 
         if simple_qabls.len() == 1 && !router_qabls && !linkstatepeer_qabls {
-            let mut face = &mut simple_qabls[0];
-            if let Some((id, _)) = face_hat_mut!(face).local_qabls.remove(res) {
-                send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
-                );
-            }
-            for res in face_hat!(face)
-                .local_qabls
-                .keys()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade().is_some_and(|m| {
-                        m.context.is_some()
-                            && (remote_simple_qabls(&m, face)
-                                || remote_linkstatepeer_qabls(tables, &m)
-                                || remote_router_qabls(tables, &m))
-                    })
-                }) {
-                    if let Some((id, _)) = face_hat_mut!(&mut face).local_qabls.remove(&res) {
-                        send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ),
-                        );
-                    }
-                }
-            }
+            let face = &mut simple_qabls[0];
+            maybe_unregister_local_queryable(tables, face, res, false, send_declare);
         }
     }
 }
@@ -970,7 +914,7 @@ pub(super) fn queries_linkstate_change(
         if hat!(tables).router_peers_failover_brokering && src_face.whatami == WhatAmI::Peer {
             let to_forget = face_hat!(src_face)
                 .local_qabls
-                .keys()
+                .simple_resources()
                 .filter(|res| {
                     let client_qabls = res
                         .session_ctxs
@@ -987,25 +931,7 @@ pub(super) fn queries_linkstate_change(
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>();
             for res in to_forget {
-                if let Some((id, _)) = face_hat_mut!(&mut src_face).local_qabls.remove(&res) {
-                    let wire_expr = Resource::get_best_key(&res, "", src_face.id);
-                    send_declare(
-                        &src_face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id,
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
+                maybe_unregister_local_queryable(tables, &mut src_face, &res, true, send_declare);
             }
 
             for mut dst_face in tables.faces.values().cloned() {
@@ -1013,32 +939,7 @@ pub(super) fn queries_linkstate_change(
                     && HatTables::failover_brokering_to(links, &dst_face.zid)
                 {
                     for (ref res, _) in face_hat!(src_face).remote_qabls.values() {
-                        if !face_hat!(dst_face).local_qabls.contains_key(res) {
-                            let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-                            let info = local_qabl_info(tables, res, &dst_face);
-                            face_hat_mut!(&mut dst_face)
-                                .local_qabls
-                                .insert(res.clone(), (id, info));
-                            let push_declaration = push_declaration_profile(tables, &dst_face);
-                            let key_expr = Resource::decl_key(res, &mut dst_face, push_declaration);
-                            send_declare(
-                                &dst_face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                            id,
-                                            wire_expr: key_expr,
-                                            ext_info: info,
-                                        }),
-                                    },
-                                    res.expr().to_string(),
-                                ),
-                            );
-                        }
+                        maybe_register_local_queryable(tables, &mut dst_face, res, send_declare);
                     }
                 }
             }
@@ -1135,150 +1036,141 @@ lazy_static::lazy_static! {
     static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
 }
 
-#[inline]
-fn make_qabl_id(
-    res: &Arc<Resource>,
-    face: &mut Arc<FaceState>,
-    mode: InterestMode,
-    info: QueryableInfoType,
-) -> u32 {
-    if mode.future() {
-        if let Some((id, _)) = face_hat!(face).local_qabls.get(res) {
-            *id
-        } else {
-            let id = face_hat!(face).next_id.fetch_add(1, Ordering::SeqCst);
-            face_hat_mut!(face)
-                .local_qabls
-                .insert(res.clone(), (id, info));
-            id
-        }
-    } else {
-        0
-    }
+fn get_queryables_matching_resource<'a>(
+    tables: &'a Tables,
+    face: &Arc<FaceState>,
+    res: Option<&'a Arc<Resource>>,
+) -> impl Iterator<Item = &'a Arc<Resource>> {
+    let face_id = face.id;
+    let face_zid = face.zid;
+    let face_what_am_i = face.whatami;
+
+    hat!(tables).router_qabls.iter().filter(move |qabl| {
+        qabl.context.is_some()
+            && res.as_ref().map(|r| qabl.matches(r)).unwrap_or(true)
+            && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
+                || res_hat!(qabl)
+                    .linkstatepeer_qabls
+                    .keys()
+                    .any(|r| *r != tables.zid)
+                || qabl.session_ctxs.values().any(|s| {
+                    s.face.id != face_id
+                        && s.qabl.is_some()
+                        && (s.face.whatami == WhatAmI::Client
+                            || face_what_am_i == WhatAmI::Client
+                            || (s.face.whatami == WhatAmI::Peer
+                                && hat!(tables).failover_brokering(s.face.zid, face_zid)))
+                }))
+    })
 }
 
 pub(crate) fn declare_qabl_interest(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    id: InterestId,
+    interest_id: InterestId,
     res: Option<&mut Arc<Resource>>,
     mode: InterestMode,
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if mode.current() {
-        let interest_id = Some(id);
-        if let Some(res) = res.as_ref() {
-            if aggregate {
-                if hat!(tables).router_qabls.iter().any(|qabl| {
-                    qabl.context.is_some()
-                        && qabl.matches(res)
-                        && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-                            || res_hat!(qabl)
-                                .linkstatepeer_qabls
-                                .keys()
-                                .any(|r| *r != tables.zid)
-                            || qabl.session_ctxs.values().any(|s| {
-                                s.face.id != face.id
-                                    && s.qabl.is_some()
-                                    && (s.face.whatami == WhatAmI::Client
-                                        || face.whatami == WhatAmI::Client
-                                        || (s.face.whatami == WhatAmI::Peer
-                                            && hat!(tables)
-                                                .failover_brokering(s.face.zid, face.zid)))
-                            }))
-                }) {
-                    let info = local_qabl_info(tables, res, face);
-                    let id = make_qabl_id(res, face, mode, info);
-                    let wire_expr =
-                        Resource::decl_key(res, face, push_declaration_profile(tables, face));
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id,
-                                    wire_expr,
-                                    ext_info: info,
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
+    if !mode.future() && !mode.current() {
+        return;
+    }
+
+    let res = res.map(|r| r.clone());
+    let matching_qabls = get_queryables_matching_resource(tables, face, res.as_ref());
+
+    if aggregate {
+        if let Some(aggregated_res) = &res {
+            let (resource_id, qabl_info) = if mode.future() {
+                for qabl in matching_qabls {
+                    let qabl_info = local_qabl_info(tables, qabl, face);
+                    let face_hat_mut = face_hat_mut!(face);
+                    face_hat_mut.local_qabls.insert_simple_resource(
+                        qabl.clone(),
+                        qabl_info,
+                        || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                        HashSet::new(),
                     );
                 }
+                let face_hat_mut = face_hat_mut!(face);
+                face_hat_mut.local_qabls.insert_aggregated_resource(
+                    aggregated_res.clone(),
+                    || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                    HashSet::from_iter([interest_id]),
+                )
             } else {
-                for qabl in hat!(tables).router_qabls.iter() {
-                    if qabl.context.is_some()
-                        && qabl.matches(res)
-                        && (res_hat!(qabl).router_qabls.keys().any(|r| *r != tables.zid)
-                            || res_hat!(qabl)
-                                .linkstatepeer_qabls
-                                .keys()
-                                .any(|r| *r != tables.zid)
-                            || qabl.session_ctxs.values().any(|s| {
-                                s.qabl.is_some()
-                                    && (s.face.whatami != WhatAmI::Peer
-                                        || face.whatami != WhatAmI::Peer
-                                        || hat!(tables).failover_brokering(s.face.zid, face.zid))
-                            }))
-                    {
-                        let info = local_qabl_info(tables, qabl, face);
-                        let id = make_qabl_id(qabl, face, mode, info);
-                        let key_expr =
-                            Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
-                        send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id,
-                                        wire_expr: key_expr,
-                                        ext_info: info,
-                                    }),
-                                },
-                                qabl.expr().to_string(),
-                            ),
-                        );
-                    }
-                }
+                (
+                    0,
+                    QueryableInfoType::merge_many(
+                        aggregated_res,
+                        matching_qabls.map(|q| (q, local_qabl_info(tables, q, face))),
+                    ),
+                )
+            };
+            if let Some(ext_info) = mode.current().then_some(qabl_info).flatten() {
+                // send declare only if there is at least one resource matching the aggregate
+                let wire_expr = Resource::decl_key(
+                    aggregated_res,
+                    face,
+                    push_declaration_profile(tables, face),
+                );
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(interest_id),
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id: resource_id,
+                                wire_expr,
+                                ext_info,
+                            }),
+                        },
+                        aggregated_res.expr().to_string(),
+                    ),
+                );
             }
-        } else {
-            for qabl in hat!(tables).router_qabls.iter() {
-                if qabl.context.is_some()
-                    && (remote_simple_qabls(qabl, face)
-                        || remote_linkstatepeer_qabls(tables, qabl)
-                        || remote_router_qabls(tables, qabl))
-                {
-                    let info = local_qabl_info(tables, qabl, face);
-                    let id = make_qabl_id(qabl, face, mode, info);
-                    let key_expr =
-                        Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
-                    send_declare(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id,
-                                ext_qos: ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id,
-                                    wire_expr: key_expr,
-                                    ext_info: info,
-                                }),
-                            },
-                            qabl.expr().to_string(),
-                        ),
-                    );
-                }
+        }
+    } else {
+        for qabl in matching_qabls {
+            let qabl_info = local_qabl_info(tables, qabl, face);
+            let resource_id = if mode.future() {
+                let face_hat_mut = face_hat_mut!(face);
+                face_hat_mut
+                    .local_qabls
+                    .insert_simple_resource(
+                        qabl.clone(),
+                        qabl_info,
+                        || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                        HashSet::from_iter([interest_id]),
+                    )
+                    .0
+            } else {
+                0
+            };
+            if mode.current() {
+                let wire_expr =
+                    Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(interest_id),
+                            ext_qos: ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id: resource_id,
+                                wire_expr,
+                                ext_info: qabl_info,
+                            }),
+                        },
+                        qabl.expr().to_string(),
+                    ),
+                );
             }
         }
     }

@@ -135,6 +135,19 @@ impl HatInterestTrait for HatCode {
                         .remove_simple_resource_interest(&i.res, id);
                 }
             }
+            if i.options.queryables() {
+                if i.options.aggregate() {
+                    if let Some(ires) = &i.res {
+                        face_hat_mut!(face)
+                            .local_qabls
+                            .remove_aggregated_resource_interest(ires, id);
+                    }
+                } else {
+                    face_hat_mut!(face)
+                        .local_qabls
+                        .remove_simple_resource_interest(&i.res, id);
+                }
+            }
         }
     }
 

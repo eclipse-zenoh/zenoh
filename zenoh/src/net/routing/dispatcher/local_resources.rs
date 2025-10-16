@@ -72,10 +72,16 @@ impl<Id: Copy, State: ResourceState> AggregatedResourceData<Id, State> {
     }
 }
 
-pub(crate) struct LocalResourceUpdateResult<Id: Copy, State: ResourceState> {
+pub(crate) struct LocalResourceRemoveResult<Id: Copy, State: ResourceState> {
     pub(crate) id: Id,
     pub(crate) resource: Arc<Resource>,
     pub(crate) update: Option<State>,
+}
+
+pub(crate) struct LocalResourceInsertResult<Id: Copy, State: ResourceState> {
+    pub(crate) id: Id,
+    pub(crate) resource: Arc<Resource>,
+    pub(crate) state: State,
 }
 
 pub(crate) struct LocalResources<Id: Copy, State: ResourceState> {
@@ -106,7 +112,7 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
         state: State,
         f_id: F,
         interests: HashSet<InterestId>,
-    ) -> (Id, Vec<LocalResourceUpdateResult<Id, State>>)
+    ) -> (Id, Vec<LocalResourceInsertResult<Id, State>>)
     where
         F: FnOnce() -> Id,
     {
@@ -117,10 +123,10 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
                     let s_res_data = occupied_entry.get_mut();
                     s_res_data.interest_ids.extend(interests);
                     if !s_res_data.interest_ids.is_empty() && s_res_data.state != state {
-                        updated_resources.push(LocalResourceUpdateResult {
+                        updated_resources.push(LocalResourceInsertResult {
                             id: s_res_data.id,
                             resource: key.clone(),
-                            update: Some(state),
+                            state,
                         });
                     }
                     s_res_data.state = state;
@@ -132,10 +138,10 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
                         let new_state = a_res_data.recompute_state(a_res, &self.simple_resources);
                         if new_state != a_res_data.state {
                             a_res_data.state = new_state;
-                            updated_resources.push(LocalResourceUpdateResult {
+                            updated_resources.push(LocalResourceInsertResult {
                                 id: a_res_data.id,
                                 resource: a_res.clone(),
-                                update: new_state,
+                                state: new_state.unwrap(), // aggregated resource contains at least one simple - so it is guaranteed to have an initialized state
                             });
                         }
                     }
@@ -151,13 +157,13 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
                 let mut aggregated_to = HashSet::new();
                 for (a_res, a_res_data) in &mut self.aggregated_resources {
                     if key.matches(a_res) {
-                        let new_state = Some(State::merge(a_res_data.state, a_res, &state, &key));
-                        if new_state != a_res_data.state {
-                            a_res_data.state = new_state;
-                            updated_resources.push(LocalResourceUpdateResult {
+                        let new_state = State::merge(a_res_data.state, a_res, &state, &key);
+                        if Some(new_state) != a_res_data.state {
+                            a_res_data.state = Some(new_state);
+                            updated_resources.push(LocalResourceInsertResult {
                                 id: a_res_data.id,
                                 resource: a_res.clone(),
-                                update: new_state,
+                                state: new_state,
                             });
                         }
                         a_res_data.aggregates.insert(key.clone());
@@ -171,10 +177,10 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
                     state,
                 });
                 if !inserted_res.interest_ids.is_empty() {
-                    updated_resources.push(LocalResourceUpdateResult {
+                    updated_resources.push(LocalResourceInsertResult {
                         id,
                         resource: key,
-                        update: Some(state),
+                        state,
                     });
                 }
                 (id, updated_resources)
@@ -187,14 +193,14 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
         key: Arc<Resource>,
         f_id: F,
         interests: HashSet<InterestId>,
-    ) -> Id
+    ) -> (Id, Option<State>)
     where
         F: FnOnce() -> Id,
     {
         match self.aggregated_resources.entry(key.clone()) {
             std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
                 occupied_entry.get_mut().interest_ids.extend(interests);
-                occupied_entry.get().id
+                (occupied_entry.get().id, occupied_entry.get().state)
             }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                 let mut aggregates = HashSet::new();
@@ -204,15 +210,14 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
                         aggregates.insert(s_res.clone());
                     }
                 }
-                let id = self.simple_resources.get(&key).map_or_else(f_id, |r| r.id);
                 let inserted_res = vacant_entry.insert(AggregatedResourceData {
-                    id,
+                    id: self.simple_resources.get(&key).map_or_else(f_id, |r| r.id),
                     aggregates,
                     interest_ids: interests,
                     state: None,
                 });
                 inserted_res.state = inserted_res.recompute_state(&key, &self.simple_resources);
-                id
+                (inserted_res.id, inserted_res.state)
             }
         }
     }
@@ -221,12 +226,12 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
     pub(crate) fn remove(
         &mut self,
         key: &Arc<Resource>,
-    ) -> Vec<LocalResourceUpdateResult<Id, State>> {
+    ) -> Vec<LocalResourceRemoveResult<Id, State>> {
         let mut updated_resources = Vec::new();
         if let Some(s_res_data) = self.simple_resources.remove(key) {
             if !s_res_data.interest_ids.is_empty() {
                 // there was an interest for this specific resource
-                updated_resources.push(LocalResourceUpdateResult {
+                updated_resources.push(LocalResourceRemoveResult {
                     id: s_res_data.id,
                     resource: key.clone(),
                     update: None,
@@ -239,7 +244,7 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
                     let new_state = a_res_data.recompute_state(a_res, &self.simple_resources);
                     if new_state != a_res_data.state {
                         a_res_data.state = new_state;
-                        updated_resources.push(LocalResourceUpdateResult {
+                        updated_resources.push(LocalResourceRemoveResult {
                             id: a_res_data.id,
                             resource: a_res.clone(),
                             update: new_state,
@@ -267,12 +272,11 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
             if let std::collections::hash_map::Entry::Occupied(mut occupied_entry) =
                 self.simple_resources.entry(res)
             {
-                if occupied_entry.get_mut().interest_ids.remove(&interest) {
-                    if occupied_entry.get().interest_ids.is_empty()
-                        && occupied_entry.get().aggregated_to.is_empty()
-                    {
-                        occupied_entry.remove();
-                    }
+                if occupied_entry.get_mut().interest_ids.remove(&interest)
+                    && occupied_entry.get().interest_ids.is_empty()
+                    && occupied_entry.get().aggregated_to.is_empty()
+                {
+                    occupied_entry.remove();
                 }
             }
         }

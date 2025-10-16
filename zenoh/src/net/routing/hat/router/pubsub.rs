@@ -96,15 +96,13 @@ fn send_sourced_subscription_to_net_children(
     }
 }
 
+#[inline]
 fn maybe_register_local_subscriber(
     tables: &Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
     send_declare: &mut SendDeclare,
 ) {
-    // if contains resource with same state - exit
-    // if does not contain contains resource, or it is in different state -> update state and propagate changes to aggregates
-
     if face_hat!(dst_face).local_subs.contains_simple_resource(res) {
         return;
     }
@@ -128,7 +126,7 @@ fn maybe_register_local_subscriber(
     let face_hat_mut = face_hat_mut!(dst_face);
     let (_, subs_to_notify) = face_hat_mut.local_subs.insert_simple_resource(
         res.clone(),
-        SubscriberInfo::default(),
+        SubscriberInfo,
         || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
         simple_interests,
     );
@@ -158,6 +156,7 @@ fn maybe_register_local_subscriber(
     }
 }
 
+#[inline]
 fn maybe_unregister_local_subscriber(
     face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
@@ -425,13 +424,6 @@ fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
 }
 
 #[inline]
-fn remote_simple_subs(res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-    res.session_ctxs
-        .values()
-        .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
-}
-
-#[inline]
 fn send_forget_sourced_subscription_to_net_children(
     tables: &Tables,
     net: &Network,
@@ -659,24 +651,6 @@ pub(super) fn undeclare_simple_subscription(
         if simple_subs.len() == 1 && !router_subs && !linkstatepeer_subs {
             let face = &mut simple_subs[0];
             maybe_unregister_local_subscriber(face, res, false, send_declare);
-
-            for res in face_hat!(face)
-                .local_subs
-                .simple_resources()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade().is_some_and(|m| {
-                        m.context.is_some()
-                            && (remote_simple_subs(&m, face)
-                                || remote_linkstatepeer_subs(tables, &m)
-                                || remote_router_subs(tables, &m))
-                    })
-                }) {
-                    maybe_unregister_local_subscriber(face, &res, false, send_declare);
-                }
-            }
         }
     }
 }
@@ -883,14 +857,12 @@ pub(crate) fn declare_sub_interest(
 
     if aggregate {
         if let Some(aggregated_res) = &res {
-            let mut has_matching_subs = false;
-            let resource_id = if mode.future() {
+            let (resource_id, sub_info) = if mode.future() {
                 let face_hat_mut = face_hat_mut!(face);
                 for sub in matching_subs {
-                    has_matching_subs = true;
                     face_hat_mut.local_subs.insert_simple_resource(
                         sub.clone(),
-                        SubscriberInfo::default(),
+                        SubscriberInfo,
                         || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
                         HashSet::new(),
                     );
@@ -902,10 +874,9 @@ pub(crate) fn declare_sub_interest(
                     HashSet::from_iter([interest_id]),
                 )
             } else {
-                has_matching_subs = matching_subs.next().is_some();
-                0
+                (0, matching_subs.next().map(|_| SubscriberInfo))
             };
-            if mode.current() && has_matching_subs {
+            if mode.current() && sub_info.is_some() {
                 // send declare only if there is at least one resource matching the aggregate
                 let wire_expr = Resource::decl_key(
                     aggregated_res,
@@ -938,7 +909,7 @@ pub(crate) fn declare_sub_interest(
                     .local_subs
                     .insert_simple_resource(
                         sub.clone(),
-                        SubscriberInfo::default(),
+                        SubscriberInfo,
                         || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
                         HashSet::from_iter([interest_id]),
                     )
@@ -948,7 +919,7 @@ pub(crate) fn declare_sub_interest(
             };
             if mode.current() {
                 let wire_expr =
-                    Resource::decl_key(&sub, face, push_declaration_profile(tables, face));
+                    Resource::decl_key(sub, face, push_declaration_profile(tables, face));
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(

@@ -42,6 +42,7 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
+        dispatcher::local_resources::{LocalResources, ResourceState},
         hat::{HatTrait, SendDeclare},
         router::{get_or_set_route, QueryRouteBuilder},
     },
@@ -726,3 +727,39 @@ pub(crate) fn update_queryable_info(
         false
     }
 }
+
+impl ResourceState for QueryableInfoType {
+    fn merge(
+        self_val: Option<Self>,
+        self_res: &Arc<Resource>,
+        other_val: &Self,
+        other_res: &Arc<Resource>,
+    ) -> Self {
+        // shortcut to avoid checking inclusion of ke, since we only care about completeness in aggregates and can ignore distance
+        if let Some(val) = self_val {
+            if val.complete == other_val.complete {
+                return val;
+            }
+        }
+
+        let other_complete = if other_val.complete {
+            if let (Some(self_ke), Some(other_ke)) = (self_res.keyexpr(), other_res.keyexpr()) {
+                other_ke.includes(self_ke)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        let mut other_val = *other_val;
+        other_val.complete = other_complete;
+
+        if let Some(val) = self_val {
+            merge_qabl_infos(val, &other_val)
+        } else {
+            other_val
+        }
+    }
+}
+
+pub(crate) type LocalQueryables = LocalResources<QueryableId, QueryableInfoType>;
