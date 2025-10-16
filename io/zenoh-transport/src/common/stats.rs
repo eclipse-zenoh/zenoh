@@ -155,6 +155,10 @@ macro_rules! stats_struct {
                     &self.parent
                 }
 
+                $vis fn labels(&self) -> &std::collections::HashMap<String, String> {
+                    &self.labels
+                }
+
                 $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<FilteredStats>> {
                     &self.filtered
                 }
@@ -248,7 +252,7 @@ macro_rules! stats_struct {
                     s
                 }
 
-                $vis fn openmetrics_text(&self) -> String {
+                fn _openmetrics_text(&self, unlabelled: bool) -> String {
                     let mut s = String::new();
                     $(
                         $(
@@ -265,15 +269,21 @@ macro_rules! stats_struct {
                             s.push_str($type);
                             s.push_str("\n");
                         )?
-                        stats_struct!(@openmetrics(self, s) $field_name $($field_type)?);
+                        if unlabelled {
+                            stats_struct!(@openmetrics(self, s) $field_name $($field_type)?);
+                        }
                         for c in &self.children {
                             stats_struct!(@openmetrics_labels(c, s, c.labels) $field_name $($field_type)?)
                         }
                     )*
                     for f in &self.filtered {
-                        s.push_str(&f.stats.openmetrics_text());
+                        s.push_str(&f.stats._openmetrics_text(false));
                     }
                     s
+                }
+
+                $vis fn openmetrics_text(&self) -> String {
+                    self._openmetrics_text(true)
                 }
             }
 
@@ -482,8 +492,13 @@ pub struct FilteredStats {
 }
 
 impl FilteredStats {
-    pub fn new(key_expr: OwnedKeyExpr, parent: Option<std::sync::Weak<MessageStats>>) -> Self {
-        let labels = [("key_expr".to_string(), key_expr.to_string())].into();
+    pub fn new(
+        key_expr: OwnedKeyExpr,
+        parent: Option<std::sync::Weak<MessageStats>>,
+        labels: impl Into<std::collections::HashMap<String, String>>,
+    ) -> Self {
+        let mut labels = labels.into();
+        labels.insert("key_expr".to_string(), key_expr.to_string());
         Self {
             key_expr,
             stats: MessageStats::new(parent, labels),

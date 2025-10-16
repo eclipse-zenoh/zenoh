@@ -54,7 +54,7 @@ impl StatsInterceptorFactory {
             parent_stats: Arc::new(
                 conf.filters()
                     .iter()
-                    .map(|filter| FilteredStats::new(filter.key.clone(), None))
+                    .map(|filter| FilteredStats::new(filter.key.clone(), None, []))
                     .collect(),
             ),
         }
@@ -67,7 +67,13 @@ impl StatsInterceptorFactory {
         stats.filtered().store(Arc::new(
             self.parent_stats
                 .iter()
-                .map(|s| FilteredStats::new(s.key_expr().clone(), Some(Arc::downgrade(s.stats()))))
+                .map(|s| {
+                    FilteredStats::new(
+                        s.key_expr().clone(),
+                        Some(Arc::downgrade(s.stats())),
+                        stats.labels().clone(),
+                    )
+                })
                 .collect(),
         ))
     }
