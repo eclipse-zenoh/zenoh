@@ -127,12 +127,12 @@ impl HatInterestTrait for HatCode {
                     if let Some(ires) = &i.res {
                         face_hat_mut!(face)
                             .local_subs
-                            .remove_aggregate_interest(ires, id);
+                            .remove_aggregated_resource_interest(ires, id);
                     }
                 } else {
                     face_hat_mut!(face)
                         .local_subs
-                        .remove_key_interest(&i.res, id);
+                        .remove_simple_resource_interest(&i.res, id);
                 }
             }
         }
