@@ -145,7 +145,7 @@ impl IConfig for Notifier<Config> {
         self.insert_json5(key, value)
     }
 
-    fn to_string(&self) -> String {
+    fn to_json(&self) -> String {
         self.lock().to_string()
     }
 }

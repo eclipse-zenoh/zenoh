@@ -1774,7 +1774,7 @@ pub trait IConfig: Send + Sync {
     fn get(&self, key: &str) -> ZResult<String>;
     fn queries_default_timeout_ms(&self) -> u64;
     fn insert_json5(&self, key: &str, value: &str) -> ZResult<()>;
-    fn to_string(&self) -> String;
+    fn to_json(&self) -> String;
 }
 
 pub struct GenericConfig(Arc<dyn IConfig>);
@@ -1801,5 +1801,11 @@ impl GenericConfig {
     pub fn get_plugin_config(&self, plugin_name: &str) -> ZResult<Value> {
         self.get(&("plugins/".to_owned() + plugin_name))
             .and_then(|v| serde_json::from_str(&v).map_err(|e| e.into()))
+    }
+}
+
+impl fmt::Display for GenericConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0.to_json())
     }
 }
