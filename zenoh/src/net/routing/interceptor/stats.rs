@@ -31,7 +31,7 @@ use zenoh_protocol::{
     zenoh::{ext::AttachmentType, reply::ReplyBody, PushBody, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::stats::{DiscriminatedStats, FilteredStats, TransportStats};
+use zenoh_transport::stats::{FilteredStats, MessageStats, TransportStats};
 
 use crate::net::routing::interceptor::*;
 
@@ -60,21 +60,26 @@ impl StatsInterceptorFactory {
         }
     }
 
+    fn register_filtered_stats(&self, stats: &TransportStats) {
+        if let Some(parent) = stats.parent().as_ref().and_then(Weak::upgrade) {
+            parent.filtered().store(self.parent_stats.clone())
+        }
+        stats.filtered().store(Arc::new(
+            self.parent_stats
+                .iter()
+                .map(|s| FilteredStats::new(s.key_expr().clone(), Some(Arc::downgrade(s.stats()))))
+                .collect(),
+        ))
+    }
+
     fn make_interceptor(&self, stats: &TransportStats, flow: InterceptorFlow) -> Interceptor {
         if let Some(parent) = stats.parent().as_ref().and_then(Weak::upgrade) {
             parent.filtered().store(self.parent_stats.clone())
         }
         let mut filters_tree = KeBoxTree::new();
-        let mut child_stats = Vec::new();
-        for parent_stats in self.parent_stats.iter() {
-            let filtered_stats = FilteredStats::new(
-                parent_stats.key_expr().clone(),
-                Some(Arc::downgrade(parent_stats.stats())),
-            );
-            filters_tree.insert(filtered_stats.key_expr(), filtered_stats.stats().clone());
-            child_stats.push(filtered_stats);
+        for s in stats.filtered().load().iter() {
+            filters_tree.insert(s.key_expr(), s.stats().clone());
         }
-        stats.filtered().store(Arc::new(child_stats));
         Box::new(StatsInterceptor { filters_tree, flow })
     }
 }
@@ -87,6 +92,7 @@ impl InterceptorFactoryTrait for StatsInterceptorFactory {
         let Ok(stats) = transport.get_stats() else {
             return (None, None);
         };
+        self.register_filtered_stats(&stats);
         (
             Some(self.make_interceptor(&stats, InterceptorFlow::Ingress)),
             Some(self.make_interceptor(&stats, InterceptorFlow::Egress)),
@@ -95,6 +101,7 @@ impl InterceptorFactoryTrait for StatsInterceptorFactory {
 
     fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor> {
         let stats = transport.get_stats().ok()?;
+        self.register_filtered_stats(&stats);
         Some(self.make_interceptor(&stats, InterceptorFlow::Egress))
     }
 
@@ -105,12 +112,12 @@ impl InterceptorFactoryTrait for StatsInterceptorFactory {
 }
 
 struct StatsInterceptor {
-    filters_tree: KeBoxTree<Arc<TransportStats>>,
+    filters_tree: KeBoxTree<Arc<MessageStats>>,
     flow: InterceptorFlow,
 }
 
 impl StatsInterceptor {
-    fn compute_filtered_stats(&self, key_expr: &keyexpr) -> Vec<Arc<TransportStats>> {
+    fn compute_filtered_stats(&self, key_expr: &keyexpr) -> Vec<Arc<MessageStats>> {
         self.filters_tree
             .intersecting_nodes(key_expr)
             .filter_map(|n| n.weight().cloned())
@@ -121,10 +128,10 @@ impl StatsInterceptor {
         &self,
         msg: &NetworkMessageMut,
         ctx: &'a dyn InterceptorContext,
-    ) -> Cow<'a, [Arc<TransportStats>]> {
+    ) -> Cow<'a, [Arc<MessageStats>]> {
         match ctx
             .get_cache(msg)
-            .and_then(|c| c.downcast_ref::<Vec<Arc<TransportStats>>>())
+            .and_then(|c| c.downcast_ref::<Vec<Arc<MessageStats>>>())
         {
             Some(v) => Cow::Borrowed(v),
             None => ctx.full_keyexpr(msg).map_or_else(Cow::default, |k| {
@@ -135,27 +142,30 @@ impl StatsInterceptor {
 
     fn incr_stats(
         &self,
-        filtered_stats: &[Arc<TransportStats>],
+        filtered_stats: &[Arc<MessageStats>],
         payload_bytes: usize,
-        ingress: impl Fn(&TransportStats) -> (&DiscriminatedStats, &DiscriminatedStats),
-        egress: impl Fn(&TransportStats) -> (&DiscriminatedStats, &DiscriminatedStats),
+        ingress: (IncMsgs, IncPlBytes),
+        egress: (IncMsgs, IncPlBytes),
     ) {
         for stats in filtered_stats {
             match self.flow {
                 InterceptorFlow::Ingress => {
-                    let (rx_msgs, rx_pl_bytes) = ingress(stats);
-                    rx_msgs.inc_user(1);
-                    rx_pl_bytes.inc_user(payload_bytes);
+                    let (rx_msgs, rx_pl_bytes) = ingress;
+                    rx_msgs(stats, 1);
+                    rx_pl_bytes(stats, payload_bytes);
                 }
                 InterceptorFlow::Egress => {
-                    let (tx_msgs, tx_pl_bytes) = egress(stats);
-                    tx_msgs.inc_user(1);
-                    tx_pl_bytes.inc_user(payload_bytes);
+                    let (tx_msgs, tx_pl_bytes) = egress;
+                    tx_msgs(stats, 1);
+                    tx_pl_bytes(stats, payload_bytes);
                 }
             }
         }
     }
 }
+
+type IncMsgs = fn(&MessageStats, usize);
+type IncPlBytes = fn(&MessageStats, usize);
 
 impl InterceptorTrait for StatsInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
@@ -172,14 +182,26 @@ impl InterceptorTrait for StatsInterceptor {
                 PushBody::Put(put) => self.incr_stats(
                     &filtered_stats(),
                     put.payload.len() + attachment_size(&put.ext_attachment),
-                    |s| (&s.rx_z_put_msgs, &s.rx_z_put_pl_bytes),
-                    |s| (&s.tx_z_put_msgs, &s.tx_z_put_pl_bytes),
+                    (
+                        MessageStats::inc_rx_z_put_msgs,
+                        MessageStats::inc_rx_z_put_pl_bytes,
+                    ),
+                    (
+                        MessageStats::inc_tx_z_put_msgs,
+                        MessageStats::inc_tx_z_put_pl_bytes,
+                    ),
                 ),
                 PushBody::Del(del) => self.incr_stats(
                     &filtered_stats(),
                     attachment_size(&del.ext_attachment),
-                    |s| (&s.rx_z_del_msgs, &s.rx_z_del_pl_bytes),
-                    |s| (&s.tx_z_del_msgs, &s.tx_z_del_pl_bytes),
+                    (
+                        MessageStats::inc_rx_z_del_msgs,
+                        MessageStats::inc_rx_z_del_pl_bytes,
+                    ),
+                    (
+                        MessageStats::inc_tx_z_del_msgs,
+                        MessageStats::inc_tx_z_del_pl_bytes,
+                    ),
                 ),
             },
 
@@ -187,8 +209,14 @@ impl InterceptorTrait for StatsInterceptor {
                 RequestBody::Query(query) => self.incr_stats(
                     &filtered_stats(),
                     attachment_size(&query.ext_attachment),
-                    |s| (&s.rx_z_query_msgs, &s.rx_z_query_pl_bytes),
-                    |s| (&s.tx_z_query_msgs, &s.tx_z_query_pl_bytes),
+                    (
+                        MessageStats::inc_rx_z_query_msgs,
+                        MessageStats::inc_rx_z_query_pl_bytes,
+                    ),
+                    (
+                        MessageStats::inc_tx_z_query_msgs,
+                        MessageStats::inc_tx_z_query_pl_bytes,
+                    ),
                 ),
             },
             NetworkBodyMut::Response(msg) => {
@@ -204,8 +232,14 @@ impl InterceptorTrait for StatsInterceptor {
                 self.incr_stats(
                     &filtered_stats(),
                     payload_bytes,
-                    |s| (&s.rx_z_reply_msgs, &s.rx_z_reply_pl_bytes),
-                    |s| (&s.tx_z_reply_msgs, &s.tx_z_reply_pl_bytes),
+                    (
+                        MessageStats::inc_rx_z_reply_msgs,
+                        MessageStats::inc_rx_z_reply_pl_bytes,
+                    ),
+                    (
+                        MessageStats::inc_tx_z_reply_msgs,
+                        MessageStats::inc_tx_z_reply_pl_bytes,
+                    ),
                 )
             }
             NetworkBodyMut::ResponseFinal(_)

@@ -110,18 +110,13 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 parent: Option<std::sync::Weak<$parent_type>>,
                 children: std::sync::Arc<std::sync::Mutex<std::vec::Vec<std::sync::Arc<$struct_name>>>>,
-                filtered: arc_swap::ArcSwap<Vec<FilteredStats<$struct_name>>>,
+                filtered: arc_swap::ArcSwap<Vec<FilteredStats>>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
                 )*
             }
 
-            $(#[$meta])*
-            $vis struct [<Filtered $struct_name Report>] {
-                key: OwnedKeyExpr,
-                stats: [<$struct_name Report>]
-            }
 
             $(#[$meta])*
             $vis struct [<$struct_name Report>] {
@@ -129,6 +124,8 @@ macro_rules! stats_struct {
                 labels: std::collections::HashMap<String, String>,
                 #[serde(skip)]
                 children: std::vec::Vec<[<$struct_name Report>]>,
+                #[serde(skip)]
+                filtered: Vec<FilteredStatsReport>,
                 $(
                 $(#[$field_meta])*
                 $field_vis $field_name: stats_struct!(@report_field_type $($field_type)?),
@@ -154,7 +151,11 @@ macro_rules! stats_struct {
                     a
                 }
 
-                $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<FilteredStats<$struct_name>>> {
+                $vis fn parent(&self) -> &Option<std::sync::Weak<$parent_type>> {
+                    &self.parent
+                }
+
+                $vis fn filtered(&self) -> &arc_swap::ArcSwap<Vec<FilteredStats>> {
                     &self.filtered
                 }
 
@@ -162,16 +163,13 @@ macro_rules! stats_struct {
                     let report = [<$struct_name Report>] {
                         labels: self.labels.clone(),
                         children: self.children.lock().unwrap().iter().map(|c| c.report()).collect(),
+                        filtered: self.filtered.load().iter().map(|f| FilteredStatsReport {key: f.key_expr.clone(), stats: f.stats.report()}).collect(),
                         $($field_name: self.[<get_ $field_name>](),)*
                     };
                     // remove already dropped children
                     self.children.lock().unwrap().retain(|c| std::sync::Arc::strong_count(c) > 1);
 
                     report
-                }
-
-                $vis fn filtered_report(&self) -> Vec<[<Filtered $struct_name Report>]> {
-                    self.filtered.load().iter().map(|f| [<Filtered $struct_name Report>] {key: f.key_expr.clone(), stats: f.stats.report()}).collect()
                 }
 
                 $(
@@ -204,6 +202,10 @@ macro_rules! stats_struct {
             }
 
             impl [<$struct_name Report>] {
+                $vis fn filtered(&self) -> &[FilteredStatsReport] {
+                    &self.filtered
+                }
+
                 #[allow(dead_code)]
                 fn discriminated_openmetrics_text(&self, prefix: &str, disc: &str) -> String {
                     let mut s = String::new();
@@ -268,6 +270,9 @@ macro_rules! stats_struct {
                             stats_struct!(@openmetrics_labels(c, s, c.labels) $field_name $($field_type)?)
                         }
                     )*
+                    for f in &self.filtered {
+                        s.push_str(&f.stats.openmetrics_text());
+                    }
                     s
                 }
             }
@@ -277,6 +282,7 @@ macro_rules! stats_struct {
                     Self {
                         labels: Default::default(),
                         children: Default::default(),
+                        filtered: Default::default(),
                         $($field_name: stats_struct!(@report_default $($field_type)?),)*
                     }
                 }
@@ -445,16 +451,42 @@ stats_struct! {
     }
 }
 
-pub struct FilteredStats<S = TransportStats> {
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct MessageStats {
+        # PARENT MessageStats
+        # RECURSIVE true
+
+        pub tx_z_put_msgs,
+        pub tx_z_put_pl_bytes,
+        pub tx_z_del_msgs,
+        pub tx_z_del_pl_bytes,
+        pub tx_z_query_msgs,
+        pub tx_z_query_pl_bytes,
+        pub tx_z_reply_msgs,
+        pub tx_z_reply_pl_bytes,
+        pub rx_z_put_msgs,
+        pub rx_z_put_pl_bytes,
+        pub rx_z_del_msgs,
+        pub rx_z_del_pl_bytes,
+        pub rx_z_query_msgs,
+        pub rx_z_query_pl_bytes,
+        pub rx_z_reply_msgs,
+        pub rx_z_reply_pl_bytes,
+    }
+}
+
+pub struct FilteredStats {
     key_expr: OwnedKeyExpr,
-    stats: std::sync::Arc<S>,
+    stats: std::sync::Arc<MessageStats>,
 }
 
 impl FilteredStats {
-    pub fn new(key_expr: OwnedKeyExpr, parent: Option<std::sync::Weak<TransportStats>>) -> Self {
+    pub fn new(key_expr: OwnedKeyExpr, parent: Option<std::sync::Weak<MessageStats>>) -> Self {
+        let labels = [("key_expr".to_string(), key_expr.to_string())].into();
         Self {
             key_expr,
-            stats: TransportStats::new(parent, Default::default()),
+            stats: MessageStats::new(parent, labels),
         }
     }
 
@@ -462,7 +494,13 @@ impl FilteredStats {
         &self.key_expr
     }
 
-    pub fn stats(&self) -> &std::sync::Arc<TransportStats> {
+    pub fn stats(&self) -> &std::sync::Arc<MessageStats> {
         &self.stats
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FilteredStatsReport {
+    key: OwnedKeyExpr,
+    stats: MessageStatsReport,
 }

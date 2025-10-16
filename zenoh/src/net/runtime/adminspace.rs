@@ -583,21 +583,22 @@ fn local_data(context: &AdminContext, query: Query) {
     let insert_transportstats =
         |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
             if export_stats {
-                json.as_object_mut()
-                    .unwrap()
-                    .insert("stats".into(), json!(stats.map(|s| s.report())));
+                let report = stats.map(|s| s.report());
+                let map = json.as_object_mut().unwrap();
+                map.insert("stats".into(), json!(report));
+                map.insert(
+                    "filtered_stats".into(),
+                    json!(report.as_ref().map(|r| r.filtered())),
+                );
             }
             json
         };
     #[cfg(feature = "stats")]
     let insert_linkstats = |mut json: serde_json::Value, stats: Option<&Arc<LinkStats>>| {
         if export_stats {
-            let map = json.as_object_mut().unwrap();
-            map.insert("stats".into(), json!(stats.map(|s| s.report())));
-            map.insert(
-                "filtered_stats".into(),
-                json!(stats.map(|s| s.filtered_report())),
-            );
+            json.as_object_mut()
+                .unwrap()
+                .insert("stats".into(), json!(stats.map(|s| s.report())));
         }
         json
     };
