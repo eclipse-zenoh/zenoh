@@ -145,9 +145,17 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         };
 
         if !VirtualLock(data_ptr.as_mut_ptr(), len) {
-            Err("VirtualLock failed: unable to lock SHM region in physical memory")
+            return Err("VirtualLock failed: unable to lock SHM region in physical memory");
         }
 
         Ok((data_ptr, len))
+    }
+}
+
+impl<ID: SegmentID> Drop for SegmentImpl<ID> {
+    fn drop(&mut self) {
+        if !VirtualUnlock(self.data_ptr.as_mut_ptr(), self.len) {
+            tracing::trace("VirtualUnlock failed");
+        }
     }
 }

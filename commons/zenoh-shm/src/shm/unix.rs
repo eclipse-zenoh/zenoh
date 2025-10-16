@@ -272,6 +272,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         let ptr = unsafe { mmap(None, len, prot, flags, fd, 0) }?;
 
         tracing::trace!("mlock(addr={:?}, length={})", ptr, len,);
+        // SAFETY: this is safe as ptr produced by shm_open/mmap is page-aligned
         unsafe { mlock(ptr, len.get()) }?;
 
         Ok(ptr)
