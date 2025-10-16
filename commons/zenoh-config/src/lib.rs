@@ -1770,10 +1770,11 @@ macro_rules! unwrap_or_default {
     };
 }
 
-pub trait IConfig {
+pub trait IConfig: Send + Sync {
     fn get(&self, key: &str) -> ZResult<String>;
     fn queries_default_timeout_ms(&self) -> u64;
     fn insert_json5(&self, key: &str, value: &str) -> ZResult<()>;
+    fn to_string(&self) -> String;
 }
 
 pub struct GenericConfig(Arc<dyn IConfig>);
