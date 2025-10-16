@@ -221,8 +221,8 @@ pub(crate) trait HatBaseTrait: Any {
     fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
         // REVIEW(regions): not sure
         !src.bound.is_north() ^ !dst.bound.is_north()
-            || src.whatami.is_client()
-            || dst.whatami.is_client()
+            || (src.whatami.is_client() && !src.bound.is_north())
+            || (dst.whatami.is_client() && !src.bound.is_north())
     }
 }
 

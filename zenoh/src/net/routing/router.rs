@@ -23,7 +23,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
-pub use super::dispatcher::{pubsub::*, queries::*, resource::*};
+pub use super::dispatcher::{pubsub::*, resource::*};
 use super::{
     dispatcher::{
         face::Face,

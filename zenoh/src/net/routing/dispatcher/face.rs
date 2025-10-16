@@ -44,6 +44,9 @@ use crate::net::{
         dispatcher::{
             gateway::{Bound, BoundMap},
             interests::{finalize_pending_interests, RemoteInterest},
+            queries::{
+                finalize_pending_queries, route_send_response, route_send_response_final, Query,
+            },
         },
         hat::BaseContext,
         interceptor::{

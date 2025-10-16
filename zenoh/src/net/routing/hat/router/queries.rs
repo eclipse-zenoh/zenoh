@@ -41,6 +41,7 @@ use crate::{
         routing::{
             dispatcher::{
                 face::FaceState,
+                queries::disable_matches_query_routes,
                 resource::{FaceContext, NodeId, Resource},
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
             },
@@ -48,7 +49,7 @@ use crate::{
                 BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, InterestProfile,
                 SendDeclare, Sources,
             },
-            router::{disable_matches_query_routes, Direction, DEFAULT_NODE_ID},
+            router::{Direction, DEFAULT_NODE_ID},
             RoutingContext,
         },
     },

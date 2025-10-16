@@ -44,10 +44,11 @@ use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
         gateway::{Bound, BoundMap},
+        queries::disable_matches_query_routes,
         tables::{RoutingExpr, Tables},
     },
     interceptor::{InterceptorTrait, InterceptorsChain},
-    router::{disable_matches_data_routes, disable_matches_query_routes},
+    router::disable_matches_data_routes,
     RoutingContext,
 };
 
