@@ -143,7 +143,6 @@ name = "zenoh"
 # NOTE: if you change this, also change it in .github/workflows/ci.yml in "doc" job.
 [package.metadata.docs.rs]
 features = ["shared-memory", "unstable"]
-rustdoc-args = ["--cfg", "doc_cfg"]
 
 [package.metadata.deb]
 assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
@@ -156,4 +155,3 @@ name = "zenoh"
 section = "net"
 
 [lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(doc_cfg)'] }

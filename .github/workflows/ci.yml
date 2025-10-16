@@ -347,7 +347,7 @@ jobs:
         run: |
           cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
             -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples \
-            --config build.rustdocflags='["--cfg", "docsrs", "--cfg", "doc_auto_cfg", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
+            --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
 
   coverage:
         name: Coverage
