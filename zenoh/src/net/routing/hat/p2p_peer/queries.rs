@@ -366,9 +366,8 @@ fn get_queryables_matching_resource<'a>(
     tables
         .faces
         .values()
-        .filter(move |f| f.id == face_id)
-        .map(|f| face_hat!(f).remote_qabls.values())
-        .flatten()
+        .filter(move |f| f.id != face_id)
+        .flat_map(|f| face_hat!(f).remote_qabls.values())
         .map(|(qabl, _)| qabl)
         .filter(move |qabl| qabl.context.is_some() && res.map(|r| qabl.matches(r)).unwrap_or(true))
 }

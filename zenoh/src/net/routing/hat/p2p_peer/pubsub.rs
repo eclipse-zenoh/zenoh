@@ -345,9 +345,8 @@ fn get_subscribers_matching_resource<'a>(
     tables
         .faces
         .values()
-        .filter(move |f| f.id == face_id)
-        .map(|f| face_hat!(f).remote_subs.values())
-        .flatten()
+        .filter(move |f| f.id != face_id)
+        .flat_map(|f| face_hat!(f).remote_subs.values())
         .filter(move |sub| sub.context.is_some() && res.map(|r| sub.matches(r)).unwrap_or(true))
 }
 
