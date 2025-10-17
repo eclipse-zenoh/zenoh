@@ -44,7 +44,7 @@ use crate::{
         routing::{
             dispatcher::{
                 face::FaceState,
-                local_resources::ResourceState,
+                local_resources::ILocalResourceState,
                 resource::{NodeId, Resource, SessionContext},
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },

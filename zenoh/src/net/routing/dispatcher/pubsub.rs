@@ -31,7 +31,7 @@ use crate::{
     key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
-            local_resources::{LocalResources, ResourceState},
+            local_resources::{ILocalResourceState, LocalResources},
             tables::RoutingExpr,
         },
         hat::{HatTrait, SendDeclare},
@@ -385,7 +385,7 @@ pub fn route_data(
     }
 }
 
-impl ResourceState for SubscriberInfo {
+impl ILocalResourceState<Arc<Resource>> for SubscriberInfo {
     fn merge(
         _self_val: Option<Self>,
         _self_res: &Arc<Resource>,
@@ -403,4 +403,4 @@ impl ResourceState for SubscriberInfo {
     }
 }
 
-pub(crate) type LocalSubscribers = LocalResources<SubscriberId, SubscriberInfo>;
+pub(crate) type LocalSubscribers = LocalResources<SubscriberId, Arc<Resource>, SubscriberInfo>;

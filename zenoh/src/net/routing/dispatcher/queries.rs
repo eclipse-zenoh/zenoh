@@ -42,7 +42,7 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::local_resources::{LocalResources, ResourceState},
+        dispatcher::local_resources::{ILocalResourceState, LocalResources},
         hat::{HatTrait, SendDeclare},
         router::{get_or_set_route, QueryRouteBuilder},
     },
@@ -730,7 +730,7 @@ pub(crate) fn update_queryable_info(
     }
 }
 
-impl ResourceState for QueryableInfoType {
+impl ILocalResourceState<Arc<Resource>> for QueryableInfoType {
     fn merge(
         self_val: Option<Self>,
         self_res: &Arc<Resource>,
@@ -764,4 +764,4 @@ impl ResourceState for QueryableInfoType {
     }
 }
 
-pub(crate) type LocalQueryables = LocalResources<QueryableId, QueryableInfoType>;
+pub(crate) type LocalQueryables = LocalResources<QueryableId, Arc<Resource>, QueryableInfoType>;
