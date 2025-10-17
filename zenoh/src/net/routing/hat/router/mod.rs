@@ -120,6 +120,11 @@ pub(crate) struct Hat {
     gateway_next_interest_id: InterestId,
     gateway_local_interests: HashMap<InterestId, InterestState>,
     gateway_pending_current_interests: HashMap<InterestId, GatewayPendingCurrentInterest>,
+    /// Interests declared by nodes in this router's subregions.
+    ///
+    /// Interest mode can only be one of:
+    /// - [`zenoh_protocol::network::interest::InterestMode::Future`]
+    /// - [`zenoh_protocol::network::interest::InterestMode::CurrentFuture`]
     router_remote_interests: HashMap<(ZenohIdProto, InterestId), RemoteInterest>,
     task_controller: TaskController,
     routers_net: Option<Network>, // TODO(regions): remove Option?
