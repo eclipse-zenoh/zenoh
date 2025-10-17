@@ -82,10 +82,6 @@ impl<'conf> RouterBuilder<'conf> {
             .get(mode)
             .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
 
-        if mode != gateway_config.north.mode {
-            bail!("Config options `mode` and `gateway.north.mode` don't match");
-        }
-
         // REVIEW(regions): impact of using three hats at minimum
         if self.hats.is_empty() {
             self.hats.extend([

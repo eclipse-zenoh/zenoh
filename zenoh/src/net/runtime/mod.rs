@@ -138,12 +138,14 @@ impl RuntimeBuilder {
 
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
-            config,
+            mut config,
             #[cfg(feature = "plugins")]
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
         } = self;
+
+        config.canonicalize()?;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
         let zid = (*config.id()).unwrap_or_default().into();
