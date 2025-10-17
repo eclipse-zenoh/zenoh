@@ -140,10 +140,9 @@ rustc_version = { workspace = true }
 name = "zenoh"
 
 # For doc generation on docs.rs, activate the "unstable" and "shared-memory" feature to generate their documentation
-# NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
+# NOTE: if you change this, also change it in .github/workflows/ci.yml in "doc" job.
 [package.metadata.docs.rs]
 features = ["shared-memory", "unstable"]
-rustdoc-args = ["--cfg", "doc_auto_cfg"]
 
 [package.metadata.deb]
 assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
@@ -156,4 +155,6 @@ name = "zenoh"
 section = "net"
 
 [lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(doc_auto_cfg)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(nolocal_thread_not_available)',
+] }
