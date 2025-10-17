@@ -62,7 +62,6 @@ use self::orchestrator::StartConditions;
 use super::{
     primitives::{DeMux, EPrimitives, Primitives},
     routing::{
-        self,
         namespace::{ENamespace, Namespace},
         router::Router,
     },
