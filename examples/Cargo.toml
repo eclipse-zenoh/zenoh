@@ -28,7 +28,7 @@ publish = false
 
 [features]
 default = ["zenoh-ext/default", "zenoh/default"]
-shared-memory = ["zenoh/shared-memory", "talc", "zenoh-shm", "zenoh-result"]
+shared-memory = ["talc", "zenoh-result", "zenoh-shm", "zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 
 [dependencies]
@@ -36,14 +36,14 @@ clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 prost = { workspace = true }
 serde_json = { workspace = true }
+talc = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["io-std", "rt-multi-thread", "time"] }
 zenoh = { workspace = true, default-features = false }
 zenoh-ext = { workspace = true, default-features = false, features = [
   "unstable",
 ] }
-talc = { workspace = true, optional = true }
-zenoh-shm = { workspace = true, optional = true }
 zenoh-result = { workspace = true, optional = true }
+zenoh-shm = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
