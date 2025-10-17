@@ -226,6 +226,23 @@ pub(crate) trait HatBaseTrait: Any {
     }
 }
 
+/// Hat interest protocol interface.
+///
+/// Below is the typical codepath for each message type.
+///
+/// # Interest (current and/or future)
+///   1. [`HatInterestTrait::propagate_declarations`] on south-bound hat.
+///   2. [`HatInterestTrait::propagate_interest`] on north-bound hat.
+///   3. [`HatInterestTrait::finalize_current_interest`]
+///      on south-bound hat, iff (2) returned `false` and mode is current.
+///
+/// # Interest (final)
+///   1. [`HatInterestTrait::unregister_interest`] on south-bound hat.
+///   2. [`HatInterestTrait::finalize_interest`] on north-bound hat.
+///
+/// # Declare (final)
+///   1. [`HatInterestTrait::unregister_current_interest`] on north-bound hat.
+///   2. [`HatInterestTrait::finalize_current_interest`] on south-bound hat.
 pub(crate) trait HatInterestTrait {
     /// Handles interest originating downstream where this hat is the subregion gateway
     /// so we should send all known declarations in the immediate upstream region
