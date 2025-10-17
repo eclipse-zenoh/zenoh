@@ -654,8 +654,7 @@ pub(super) fn undeclare_simple_subscription(
         }
 
         if simple_subs.len() == 1 && !router_subs && !linkstatepeer_subs {
-            let face = &mut simple_subs[0];
-            maybe_unregister_local_subscriber(face, res, false, send_declare);
+            maybe_unregister_local_subscriber(&mut simple_subs[0], res, false, send_declare);
         }
     }
 }
