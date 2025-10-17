@@ -223,7 +223,7 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
     }
 
     // Returns resources that were removed/changed state due to simple resource removal.
-    pub(crate) fn remove(
+    pub(crate) fn remove_simple_resource(
         &mut self,
         key: &Arc<Resource>,
     ) -> Vec<LocalResourceRemoveResult<Id, State>> {
@@ -256,30 +256,12 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
         updated_resources
     }
 
-    pub(crate) fn remove_simple_resource_interest(
-        &mut self,
-        key: &Option<Arc<Resource>>,
-        interest: InterestId,
-    ) {
-        let mut resources_to_remove = Vec::new();
-        for res in self.simple_resources.keys() {
-            if key.as_ref().map(|k| k.matches(res)).unwrap_or(true) {
-                resources_to_remove.push(res.clone());
-            }
-        }
-
-        for res in resources_to_remove {
-            if let std::collections::hash_map::Entry::Occupied(mut occupied_entry) =
-                self.simple_resources.entry(res)
-            {
-                if occupied_entry.get_mut().interest_ids.remove(&interest)
-                    && occupied_entry.get().interest_ids.is_empty()
-                    && occupied_entry.get().aggregated_to.is_empty()
-                {
-                    occupied_entry.remove();
-                }
-            }
-        }
+    pub(crate) fn remove_simple_resource_interest(&mut self, interest: InterestId) {
+        self.simple_resources.retain(|_, res_data| {
+            !(res_data.interest_ids.remove(&interest)
+                && res_data.interest_ids.is_empty()
+                && res_data.aggregated_to.is_empty())
+        });
     }
 
     pub(crate) fn remove_aggregated_resource_interest(

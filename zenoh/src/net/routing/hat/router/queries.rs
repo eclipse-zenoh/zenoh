@@ -302,7 +302,7 @@ fn maybe_unregister_local_queryable(
     send_ext_wire_expr: bool,
     send_declare: &mut SendDeclare,
 ) {
-    for update in face_hat_mut!(face).local_qabls.remove(res) {
+    for update in face_hat_mut!(face).local_qabls.remove_simple_resource(res) {
         let ext_wire_expr = if send_ext_wire_expr {
             WireExprType {
                 wire_expr: Resource::get_best_key(&update.resource, "", face.id),
