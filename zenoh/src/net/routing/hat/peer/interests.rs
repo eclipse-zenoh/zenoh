@@ -160,7 +160,7 @@ impl HatInterestTrait for Hat {
         res: Option<&mut Arc<Resource>>,
         zid: &ZenohIdProto,
     ) -> bool {
-        if ctx.src_face.whatami != WhatAmI::Client {
+        if ctx.src_face.bound.is_north() {
             return false;
         }
 
