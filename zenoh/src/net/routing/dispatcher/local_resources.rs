@@ -47,7 +47,7 @@ where
 struct ResourceData<Id: Copy, State: ResourceState> {
     id: Id,
     aggregated_to: HashSet<Arc<Resource>>,
-    interest_ids: HashSet<InterestId>,
+    interest_ids: HashSet<Option<InterestId>>, // TODO: could we use 0 interest id for a fake interest ?
     state: State,
 }
 
@@ -111,7 +111,7 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
         key: Arc<Resource>,
         state: State,
         f_id: F,
-        interests: HashSet<InterestId>,
+        interests: HashSet<Option<InterestId>>,
     ) -> (Id, Vec<LocalResourceInsertResult<Id, State>>)
     where
         F: FnOnce() -> Id,
@@ -256,7 +256,7 @@ impl<Id: Copy, State: ResourceState> LocalResources<Id, State> {
         updated_resources
     }
 
-    pub(crate) fn remove_simple_resource_interest(&mut self, interest: InterestId) {
+    pub(crate) fn remove_simple_resource_interest(&mut self, interest: Option<InterestId>) {
         self.simple_resources.retain(|_, res_data| {
             !(res_data.interest_ids.remove(&interest)
                 && res_data.interest_ids.is_empty()
