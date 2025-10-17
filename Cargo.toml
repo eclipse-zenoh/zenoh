@@ -199,7 +199,7 @@ validated_struct = "2.2.0"
 vec_map = "0.8.2"
 webpki-roots = "0.26.5"
 win-sys = "0.3"
-winapi = { version = "0.3.9", features = ["iphlpapi", "winerror"] }
+winapi = { version = "0.3.9", features = ["iphlpapi", "memoryapi", "winerror"] }
 windows-sys = { version = "0.61.0", features = [
   "Win32_Foundation",
   "Win32_Networking_WinSock",
