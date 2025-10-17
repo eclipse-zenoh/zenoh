@@ -121,7 +121,8 @@ impl HatInterestTrait for Hat {
                 src = %ctx.src_face,
                 "Finalizing current interest; it was not propagated upstream"
             );
-            self.finalize_current_interest(ctx, msg.id, &src_zid);
+            let src_face = ctx.src_face.clone();
+            self.finalize_current_interest(ctx, msg.id, &src_face, &src_zid);
         }
     }
 
@@ -236,6 +237,7 @@ impl HatInterestTrait for Hat {
                     hat.finalize_current_interest(
                         ctx.reborrow(),
                         id,
+                        &pending_interest.interest.src_face,
                         &pending_interest.interest.src_face.zid,
                     );
                 }
@@ -244,21 +246,23 @@ impl HatInterestTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
-    fn finalize_current_interest(&mut self, ctx: BaseContext, id: InterestId, zid: &ZenohIdProto) {
-        if let Some(face) = self.face(ctx.tables, zid) {
-            (ctx.send_declare)(
-                &face.primitives,
-                RoutingContext::new(Declare {
-                    interest_id: Some(id),
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
-            );
-        } else {
-            todo!()
-        }
+    fn finalize_current_interest(
+        &mut self,
+        ctx: BaseContext,
+        id: InterestId,
+        src_face: &FaceState,
+        _zid: &ZenohIdProto,
+    ) {
+        (ctx.send_declare)(
+            &src_face.primitives,
+            RoutingContext::new(Declare {
+                interest_id: Some(id),
+                ext_qos: ext::QoSType::DECLARE,
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareFinal(DeclareFinal),
+            }),
+        );
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]

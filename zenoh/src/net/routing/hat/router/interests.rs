@@ -27,6 +27,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
+        face::FaceState,
         gateway::{BoundMap, GatewayPendingCurrentInterest},
         interests::{finalize_pending_interest, CurrentInterest, RemoteInterest},
         resource::Resource,
@@ -70,7 +71,8 @@ impl HatInterestTrait for Hat {
                 src = %ctx.src_face,
                 "Finalizing current interest; it was not propagated upstream"
             );
-            self.finalize_current_interest(ctx, msg.id, &src_zid);
+            let src_face = ctx.src_face.clone();
+            self.finalize_current_interest(ctx, msg.id, &src_face, &src_zid);
         }
     }
 
@@ -136,8 +138,13 @@ impl HatInterestTrait for Hat {
         if let Some(pending_interest) = self.gateway_pending_current_interests.remove(&id) {
             pending_interest.cancellation_token.cancel();
             let hat = &mut downstream_hats[pending_interest.interest.src_face.bound];
-            hat.finalize_current_interest(ctx, id, &pending_interest.src_zid);
-        };
+            hat.finalize_current_interest(
+                ctx,
+                id,
+                &pending_interest.interest.src_face,
+                &pending_interest.src_zid,
+            );
+        }
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
@@ -145,6 +152,7 @@ impl HatInterestTrait for Hat {
         &mut self,
         mut ctx: BaseContext,
         id: InterestId,
+        src_face: &FaceState,
         zid: &ZenohIdProto,
     ) {
         if self.router_remote_interests.contains_key(&(*zid, id)) {
@@ -170,7 +178,7 @@ impl HatInterestTrait for Hat {
                     );
                 },
             );
-        } else if let Some(src_face) = self.face(ctx.tables, zid) {
+        } else {
             (ctx.send_declare)(
                 &src_face.primitives,
                 RoutingContext::new(Declare {
@@ -181,8 +189,6 @@ impl HatInterestTrait for Hat {
                     body: DeclareBody::DeclareFinal(DeclareFinal),
                 }),
             );
-        } else {
-            todo!()
         }
     }
 
@@ -414,6 +420,7 @@ impl Hat {
                         send_declare: &mut |p, m| m.with_mut(|m| p.send_declare(m)),
                     },
                     current_interest.interest.src_interest_id,
+                    &current_interest.interest.src_face,
                     &current_interest.src_zid,
                 );
             };

@@ -26,7 +26,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::{initial_interest, Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
-        face::InterestState,
+        face::{FaceState, InterestState},
         gateway::BoundMap,
         interests::{
             finalize_pending_interest, CurrentInterest, CurrentInterestCleanup,
@@ -148,7 +148,8 @@ impl HatInterestTrait for Hat {
                 src = %ctx.src_face,
                 "Finalizing current interest; it was not propagated upstream"
             );
-            self.finalize_current_interest(ctx, msg.id, &src_zid);
+            let src_face = ctx.src_face.clone();
+            self.finalize_current_interest(ctx, msg.id, &src_face, &src_zid);
         }
     }
 
@@ -278,6 +279,7 @@ impl HatInterestTrait for Hat {
                     hat.finalize_current_interest(
                         ctx.reborrow(),
                         id,
+                        &pending_interest.interest.src_face,
                         &pending_interest.interest.src_face.zid,
                     );
                 }
@@ -290,7 +292,8 @@ impl HatInterestTrait for Hat {
         &mut self,
         ctx: BaseContext,
         id: InterestId,
-        src_zid: &ZenohIdProto,
+        src_face: &FaceState,
+        _src_zid: &ZenohIdProto,
     ) {
         if id == INITIAL_INTEREST_ID {
             zenoh_runtime::ZRuntime::Net.block_in_place(async move {
@@ -303,9 +306,9 @@ impl HatInterestTrait for Hat {
                     }
                 }
             });
-        } else if let Some(face) = self.face(ctx.tables, src_zid) {
+        } else {
             (ctx.send_declare)(
-                &face.primitives,
+                &src_face.primitives,
                 RoutingContext::new(Declare {
                     interest_id: Some(id),
                     ext_qos: ext::QoSType::DECLARE,
@@ -314,8 +317,6 @@ impl HatInterestTrait for Hat {
                     body: DeclareBody::DeclareFinal(DeclareFinal),
                 }),
             );
-        } else {
-            todo!()
         }
     }
 

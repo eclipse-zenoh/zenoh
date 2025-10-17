@@ -273,8 +273,18 @@ pub(crate) trait HatInterestTrait {
         downstream_hats: BoundMap<&mut dyn HatTrait>,
     );
 
+    // FIXME(regions): `src_face`` is only relevant for simple interests while `zid` is only
+    // relevant for linkstate interests. There should be a better abstraction where bad state is
+    // unrepresentable:
+
     /// Informs the interest source that all declarations have been transmitted.
-    fn finalize_current_interest(&mut self, ctx: BaseContext, id: InterestId, zid: &ZenohIdProto);
+    fn finalize_current_interest(
+        &mut self,
+        ctx: BaseContext,
+        id: InterestId,
+        src_face: &FaceState,
+        zid: &ZenohIdProto,
+    );
 
     /// Handles interest finalization where this hat is the subregion gateway.
     ///

@@ -326,7 +326,7 @@ impl Face {
         // REVIEW(regions): peer initial interest
         if self.state.whatami == WhatAmI::Peer && id == 0 {
             let zid = ctx.src_face.zid;
-            tables.hats[self.state.bound].finalize_current_interest(ctx, id, &zid);
+            tables.hats[self.state.bound].finalize_current_interest(ctx, id, &self.state, &zid);
             return;
         }
 
