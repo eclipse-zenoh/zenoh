@@ -717,6 +717,8 @@ pub(crate) fn update_queryable_info(
         } else {
             false
         }
+    } else if new_qabl_info.is_none() {
+        true
     } else {
         tracing::warn!(
             "Request to update QueryableInfo for inexistent face id: {}, on resource: '{}'",
