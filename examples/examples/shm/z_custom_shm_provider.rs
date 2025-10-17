@@ -234,7 +234,7 @@ async fn publisher_session(key_expr: &'static str) {
         );
         publisher.put(buffer).await.unwrap();
 
-        idx = idx + 1;
+        idx += 1;
     }
 }
 
