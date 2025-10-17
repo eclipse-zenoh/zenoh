@@ -45,13 +45,16 @@ use crate::{
 
 #[test]
 fn test_client_to_client_query_route_computation() {
-    const BOUND: Bound = Bound::south(0);
+    zenoh_util::try_init_log_from_env();
+
+    const SUBREGION: Bound = Bound::south(0);
+
     for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
         let mut config = Config::default();
         config.set_mode(Some(mode)).unwrap();
 
         let mut router = RouterBuilder::new(&config)
-            .hat(BOUND, mode)
+            .hat(SUBREGION, mode)
             .build()
             .unwrap();
 
@@ -64,7 +67,7 @@ fn test_client_to_client_query_route_computation() {
             FaceStateBuilder::new(
                 tables.data.new_face_id(),
                 ZenohIdProto::rand(),
-                BOUND,
+                SUBREGION,
                 Arc::new(DummyPrimitives),
                 tables.hats.map(|hat| hat.new_face()),
             )
@@ -76,7 +79,7 @@ fn test_client_to_client_query_route_computation() {
             FaceStateBuilder::new(
                 tables.data.new_face_id(),
                 ZenohIdProto::rand(),
-                BOUND,
+                SUBREGION,
                 dst_buf.clone(),
                 tables.hats.map(|hat| hat.new_face()),
             )
@@ -103,6 +106,8 @@ fn test_client_to_client_query_route_computation() {
 
 #[test]
 fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
+    zenoh_util::try_init_log_from_env();
+
     let router = {
         let mut config = Config::default();
         config.set_mode(Some(WhatAmI::Peer)).unwrap();
@@ -260,6 +265,95 @@ fn test_peer_interest_propagation() {
 
     let client_buf_guard = client_buf.0.lock().unwrap();
     assert_eq!(&*client_buf_guard, &[]);
+
+    let peer_buf_guard = peer_buf.0.lock().unwrap();
+    assert_eq!(&*peer_buf_guard, &[]);
+
+    let gateway_buf_guard = gateway_buf.0.lock().unwrap();
+    assert_eq!(&*gateway_buf_guard, &[msg]);
+}
+
+#[test]
+fn test_peer_gateway_interest_propagation() {
+    zenoh_util::try_init_log_from_env();
+
+    const PEER_SUBREGION: Bound = Bound::south(0);
+
+    let router = {
+        let mut config = Config::default();
+        config.set_mode(Some(WhatAmI::Peer)).unwrap();
+
+        let mut router = RouterBuilder::new(&config)
+            .hat(Bound::north(), WhatAmI::Peer)
+            .hat(PEER_SUBREGION, WhatAmI::Peer)
+            .build()
+            .unwrap();
+
+        let runtime = ZRuntime::Application
+            .block_in_place(RuntimeBuilder::new(config).build())
+            .unwrap();
+        router.init_hats(runtime).unwrap();
+        router
+    };
+
+    let gateway_buf = Arc::new(InterestBuffer::default());
+    let gateway_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::north(),
+            gateway_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Peer)
+        .build()
+    });
+
+    {
+        let mut tables_guard = router.tables.tables.write().unwrap();
+        let tables = &mut *tables_guard;
+
+        tables.hats[Bound::north()]
+            .handle_oam(
+                &mut tables.data,
+                &router.tables,
+                &mut Oam {
+                    id: network::oam::id::OAM_IS_GATEWAY,
+                    body: ZExtBody::Unit,
+                    ext_qos: network::oam::ext::QoSType::DEFAULT,
+                    ext_tstamp: Some(network::oam::ext::TimestampType::rand()),
+                },
+                &gateway_face.state.zid,
+                gateway_face.state.whatami,
+                &mut default_send_declare(),
+            )
+            .unwrap();
+    }
+
+    let peer_buf = Arc::new(InterestBuffer::default());
+    let peer_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            PEER_SUBREGION,
+            peer_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Peer)
+        .build()
+    });
+
+    let mut msg = Interest {
+        id: 1,
+        mode: InterestMode::CurrentFuture,
+        options: InterestOptions::ALL,
+        wire_expr: None,
+        ext_qos: network::interest::ext::QoSType::INTEREST,
+        ext_tstamp: None,
+        ext_nodeid: network::interest::ext::NodeIdType::DEFAULT,
+    };
+
+    peer_face.send_interest(&mut msg);
 
     let peer_buf_guard = peer_buf.0.lock().unwrap();
     assert_eq!(&*peer_buf_guard, &[]);
