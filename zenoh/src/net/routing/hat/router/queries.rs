@@ -1073,14 +1073,10 @@ pub(crate) fn declare_qabl_interest(
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if !mode.future() && !mode.current() {
-        return;
-    }
-
     let res = res.map(|r| r.clone());
     let matching_qabls = get_queryables_matching_resource(tables, face, res.as_ref());
 
-    if aggregate {
+    if aggregate && (mode.current() || mode.future()) {
         if let Some(aggregated_res) = &res {
             let (resource_id, qabl_info) = if mode.future() {
                 for qabl in matching_qabls {
@@ -1134,7 +1130,7 @@ pub(crate) fn declare_qabl_interest(
                 );
             }
         }
-    } else {
+    } else if !aggregate && mode.current() {
         for qabl in matching_qabls {
             let qabl_info = local_qabl_info(tables, qabl, face);
             let resource_id = if mode.future() {
@@ -1151,27 +1147,24 @@ pub(crate) fn declare_qabl_interest(
             } else {
                 0
             };
-            if mode.current() {
-                let wire_expr =
-                    Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
-                send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: Some(interest_id),
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                id: resource_id,
-                                wire_expr,
-                                ext_info: qabl_info,
-                            }),
-                        },
-                        qabl.expr().to_string(),
-                    ),
-                );
-            }
+            let wire_expr = Resource::decl_key(qabl, face, push_declaration_profile(tables, face));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: Some(interest_id),
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                            id: resource_id,
+                            wire_expr,
+                            ext_info: qabl_info,
+                        }),
+                    },
+                    qabl.expr().to_string(),
+                ),
+            );
         }
     }
 }

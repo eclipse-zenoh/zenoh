@@ -848,14 +848,10 @@ pub(crate) fn declare_sub_interest(
     aggregate: bool,
     send_declare: &mut SendDeclare,
 ) {
-    if !mode.future() && !mode.current() {
-        return;
-    }
-
     let res = res.map(|r| r.clone());
     let mut matching_subs = get_subscribers_matching_resource(tables, face, res.as_ref());
 
-    if aggregate {
+    if aggregate && (mode.current() || mode.future()) {
         if let Some(aggregated_res) = &res {
             let (resource_id, sub_info) = if mode.future() {
                 let face_hat_mut = face_hat_mut!(face);
@@ -901,7 +897,7 @@ pub(crate) fn declare_sub_interest(
                 );
             }
         }
-    } else {
+    } else if !aggregate && mode.current() {
         for sub in matching_subs {
             let resource_id = if mode.future() {
                 let face_hat_mut = face_hat_mut!(face);
@@ -917,26 +913,23 @@ pub(crate) fn declare_sub_interest(
             } else {
                 0
             };
-            if mode.current() {
-                let wire_expr =
-                    Resource::decl_key(sub, face, push_declaration_profile(tables, face));
-                send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: Some(interest_id),
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: resource_id,
-                                wire_expr,
-                            }),
-                        },
-                        sub.expr().to_string(),
-                    ),
-                );
-            }
+            let wire_expr = Resource::decl_key(sub, face, push_declaration_profile(tables, face));
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: Some(interest_id),
+                        ext_qos: ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id: resource_id,
+                            wire_expr,
+                        }),
+                    },
+                    sub.expr().to_string(),
+                ),
+            );
         }
     }
 }
