@@ -224,7 +224,7 @@ pub(crate) trait HatBaseTrait: Any {
         // REVIEW(regions): not sure
         !src.bound.is_north() ^ !dst.bound.is_north()
             || (src.whatami.is_client() && !src.bound.is_north())
-            || (dst.whatami.is_client() && !src.bound.is_north())
+            || (dst.whatami.is_client() && !dst.bound.is_north())
     }
 }
 
