@@ -30,13 +30,16 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::tables::RoutingExpr,
+        dispatcher::{
+            local_resources::{ILocalResourceState, LocalResources},
+            tables::RoutingExpr,
+        },
         hat::{HatTrait, SendDeclare},
         router::get_or_set_route,
     },
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub(crate) struct SubscriberInfo;
 
 #[allow(clippy::too_many_arguments)]
@@ -381,3 +384,23 @@ pub fn route_data(
         }
     }
 }
+
+impl ILocalResourceState<Arc<Resource>> for SubscriberInfo {
+    fn merge(
+        _self_val: Option<Self>,
+        _self_res: &Arc<Resource>,
+        other_val: &Self,
+        _other_res: &Arc<Resource>,
+    ) -> Self {
+        *other_val
+    }
+
+    fn merge_many<'a>(
+        _self_res: &Arc<Resource>,
+        mut iter: impl Iterator<Item = (&'a Arc<Resource>, Self)>,
+    ) -> Option<Self> {
+        iter.next().map(|(_, val)| val)
+    }
+}
+
+pub(crate) type LocalSubscribers = LocalResources<SubscriberId, Arc<Resource>, SubscriberInfo>;
