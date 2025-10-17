@@ -18,18 +18,25 @@ use std::sync::{Arc, Mutex};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
-    core::WireExpr,
-    network::{self, declare::queryable::ext::QueryableInfoType, Request},
+    common::ZExtBody,
+    core::{WireExpr, ZenohIdProto},
+    network::{
+        self,
+        declare::queryable::ext::QueryableInfoType,
+        interest::{InterestMode, InterestOptions},
+        Declare, Interest, Oam, Request,
+    },
     zenoh::{ConsolidationMode, Query, RequestBody},
 };
 use zenoh_runtime::ZRuntime;
 
 use crate::{
     net::{
-        primitives::{DummyPrimitives, EPrimitives},
+        primitives::{DummyPrimitives, EPrimitives, Primitives},
         routing::{
-            dispatcher::gateway::Bound,
+            dispatcher::{face::FaceStateBuilder, gateway::Bound},
             router::{RouterBuilder, DEFAULT_NODE_ID},
+            RoutingContext,
         },
         runtime::RuntimeBuilder,
     },
@@ -53,10 +60,29 @@ fn test_client_to_client_query_route_computation() {
             .unwrap();
         router.init_hats(runtime).unwrap();
 
-        let src_face = router.new_face(Arc::new(DummyPrimitives), BOUND, WhatAmI::Client, false);
-
+        let src_face = router.new_face(|tables| {
+            FaceStateBuilder::new(
+                tables.data.new_face_id(),
+                ZenohIdProto::rand(),
+                BOUND,
+                Arc::new(DummyPrimitives),
+                tables.hats.map(|hat| hat.new_face()),
+            )
+            .whatami(WhatAmI::Client)
+            .build()
+        });
         let dst_buf = Arc::new(RequestBuffer::default());
-        let dst_face = router.new_face(dst_buf.clone(), BOUND, WhatAmI::Client, false);
+        let dst_face = router.new_face(|tables| {
+            FaceStateBuilder::new(
+                tables.data.new_face_id(),
+                ZenohIdProto::rand(),
+                BOUND,
+                dst_buf.clone(),
+                tables.hats.map(|hat| hat.new_face()),
+            )
+            .whatami(WhatAmI::Client)
+            .build()
+        });
 
         dst_face.declare_queryable(
             &router.tables,
@@ -67,15 +93,17 @@ fn test_client_to_client_query_route_computation() {
             &mut |p, m| m.with_mut(|m| p.send_declare(m)),
         );
 
-        src_face.route_query(&mut new_request(1, WireExpr::from("a/b/1")));
+        let mut msg = new_request(1, WireExpr::from("a/b/1"));
+
+        src_face.route_query(&mut msg);
         let buf_guard = dst_buf.0.lock().unwrap();
-        assert_eq!(&*buf_guard, &[new_request(1, WireExpr::from("a/b/1"))]);
+        assert_eq!(&*buf_guard, &[msg]);
     }
 }
 
 #[test]
 fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
-    let peer = {
+    let router = {
         let mut config = Config::default();
         config.set_mode(Some(WhatAmI::Peer)).unwrap();
 
@@ -89,27 +117,47 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
     };
 
     let client_buf = Arc::new(RequestBuffer::default());
-    let client_face = peer.new_face(client_buf.clone(), Bound::north(), WhatAmI::Client, false);
+    let client_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::north(),
+            client_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Client)
+        .build()
+    });
 
     let peer_buf = Arc::new(RequestBuffer::default());
-    let peer_face = peer.new_face(peer_buf.clone(), Bound::north(), WhatAmI::Peer, false);
+    let peer_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::north(),
+            client_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Peer)
+        .build()
+    });
 
     client_face.declare_queryable(
-        &peer.tables,
+        &router.tables,
         0,
         &WireExpr::from("a/b/**"),
         &QueryableInfoType::DEFAULT,
         DEFAULT_NODE_ID,
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut default_send_declare(),
     );
 
     peer_face.declare_queryable(
-        &peer.tables,
+        &router.tables,
         1,
         &WireExpr::from("a/b/**"),
         &QueryableInfoType::DEFAULT,
         DEFAULT_NODE_ID,
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut default_send_declare(),
     );
 
     client_face.route_query(&mut new_request(1, WireExpr::from("a/b/1")));
@@ -119,6 +167,105 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
 
     let peer_buf_guard = peer_buf.0.lock().unwrap();
     assert_eq!(&*peer_buf_guard, &[]);
+}
+
+#[test]
+fn test_peer_interest_propagation() {
+    zenoh_util::try_init_log_from_env();
+
+    let router = {
+        let mut config = Config::default();
+        config.set_mode(Some(WhatAmI::Peer)).unwrap();
+
+        let mut router = RouterBuilder::new(&config).build().unwrap();
+
+        let runtime = ZRuntime::Application
+            .block_in_place(RuntimeBuilder::new(config).build())
+            .unwrap();
+        router.init_hats(runtime).unwrap();
+        router
+    };
+
+    let gateway_buf = Arc::new(InterestBuffer::default());
+    let gateway_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::north(),
+            gateway_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Peer)
+        .build()
+    });
+
+    let peer_buf = Arc::new(InterestBuffer::default());
+    let _peer_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::north(),
+            peer_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Peer)
+        .build()
+    });
+
+    let client_buf = Arc::new(InterestBuffer::default());
+    let client_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::session(),
+            client_buf.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Client)
+        .build()
+    });
+
+    {
+        let mut tables_guard = router.tables.tables.write().unwrap();
+        let tables = &mut *tables_guard;
+
+        tables.hats[Bound::north()]
+            .handle_oam(
+                &mut tables.data,
+                &router.tables,
+                &mut Oam {
+                    id: network::oam::id::OAM_IS_GATEWAY,
+                    body: ZExtBody::Unit,
+                    ext_qos: network::oam::ext::QoSType::DEFAULT,
+                    ext_tstamp: Some(network::oam::ext::TimestampType::rand()),
+                },
+                &gateway_face.state.zid,
+                gateway_face.state.whatami,
+                &mut default_send_declare(),
+            )
+            .unwrap();
+    }
+
+    let mut msg = Interest {
+        id: 1,
+        mode: InterestMode::CurrentFuture,
+        options: InterestOptions::ALL,
+        wire_expr: None,
+        ext_qos: network::interest::ext::QoSType::INTEREST,
+        ext_tstamp: None,
+        ext_nodeid: network::interest::ext::NodeIdType::DEFAULT,
+    };
+
+    client_face.send_interest(&mut msg);
+
+    let client_buf_guard = client_buf.0.lock().unwrap();
+    assert_eq!(&*client_buf_guard, &[]);
+
+    let peer_buf_guard = peer_buf.0.lock().unwrap();
+    assert_eq!(&*peer_buf_guard, &[]);
+
+    let gateway_buf_guard = gateway_buf.0.lock().unwrap();
+    assert_eq!(&*gateway_buf_guard, &[msg]);
 }
 
 #[derive(Debug, Default)]
@@ -159,6 +306,43 @@ impl EPrimitives for RequestBuffer {
     fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
 }
 
+#[derive(Debug, Default)]
+/// [`EPrimitives`] impl that only stores [`Interest`]s.
+struct InterestBuffer(Mutex<Vec<Interest>>);
+
+impl EPrimitives for InterestBuffer {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn send_interest(
+        &self,
+        ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Interest>,
+    ) {
+        let mut buf = self.0.lock().unwrap();
+        buf.push(ctx.msg.clone());
+    }
+
+    fn send_declare(
+        &self,
+        _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Declare>,
+    ) {
+    }
+
+    fn send_push(
+        &self,
+        _msg: &mut zenoh_protocol::network::Push,
+        _reliability: zenoh_protocol::core::Reliability,
+    ) {
+    }
+
+    fn send_request(&self, _msg: &mut Request) {}
+
+    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+}
+
 fn new_request(id: u32, wire_expr: WireExpr<'static>) -> Request {
     Request {
         id,
@@ -178,4 +362,9 @@ fn new_request(id: u32, wire_expr: WireExpr<'static>) -> Request {
             ext_unknown: Vec::default(),
         }),
     }
+}
+
+fn default_send_declare() -> impl FnMut(&Arc<dyn EPrimitives + Send + Sync>, RoutingContext<Declare>)
+{
+    |p, m| m.with_mut(|m| p.send_declare(m))
 }

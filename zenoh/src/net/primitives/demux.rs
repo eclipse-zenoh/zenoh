@@ -174,7 +174,8 @@ impl TransportPeerEventHandler for DeMux {
                         &mut tables.data,
                         &self.face.tables,
                         m,
-                        transport,
+                        &transport.get_zid()?,
+                        transport.get_whatami()?,
                         &mut |p, m| declares.push((p.clone(), m)),
                     )?;
 

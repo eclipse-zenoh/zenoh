@@ -530,48 +530,45 @@ impl HatBaseTrait for Hat {
         tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
-        transport: &TransportUnicast,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
             if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
-                if let Ok(zid) = transport.get_zid() {
-                    use zenoh_buffers::reader::HasReader;
-                    use zenoh_codec::RCodec;
-                    let codec = Zenoh080Routing::new();
-                    let mut reader = buf.reader();
-                    let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
-                        bail!("failed to decode link state");
-                    };
+                use zenoh_buffers::reader::HasReader;
+                use zenoh_codec::RCodec;
+                let codec = Zenoh080Routing::new();
+                let mut reader = buf.reader();
+                let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
+                    bail!("failed to decode link state");
+                };
 
-                    let whatami = transport.get_whatami()?;
+                tracing::trace!(
+                    id = %"OAM_LINKSTATE",
+                    wai = %whatami.short(),
+                    linkstate = ?list
+                );
 
-                    tracing::trace!(
-                        id = %"OAM_LINKSTATE",
-                        wai = %transport.get_whatami()?.short(),
-                        linkstate = ?list
-                    );
-
-                    match whatami {
-                        WhatAmI::Router => {
-                            let changes = self
-                                .routers_net
-                                .as_mut()
-                                .unwrap()
-                                .link_states(list.link_states, zid);
-                            for (_, removed_node) in &changes.removed_nodes {
-                                self.pubsub_remove_node(tables, &removed_node.zid, send_declare);
-                                self.queries_remove_node(tables, &removed_node.zid, send_declare);
-                                self.token_remove_node(tables, &removed_node.zid, send_declare);
-                            }
-
-                            self.schedule_compute_trees(tables_ref.clone());
+                match whatami {
+                    WhatAmI::Router => {
+                        let changes = self
+                            .routers_net
+                            .as_mut()
+                            .unwrap()
+                            .link_states(list.link_states, *zid);
+                        for (_, removed_node) in &changes.removed_nodes {
+                            self.pubsub_remove_node(tables, &removed_node.zid, send_declare);
+                            self.queries_remove_node(tables, &removed_node.zid, send_declare);
+                            self.token_remove_node(tables, &removed_node.zid, send_declare);
                         }
-                        _ => tracing::error!(
-                            "ERROR: OAM(Linkstate) received from non router node in router bound."
-                        ),
-                    };
-                }
+
+                        self.schedule_compute_trees(tables_ref.clone());
+                    }
+                    _ => tracing::error!(
+                        "ERROR: OAM(Linkstate) received from non router node in router bound."
+                    ),
+                };
             }
         }
 

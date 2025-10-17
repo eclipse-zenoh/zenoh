@@ -90,9 +90,10 @@ impl InterestProfile {
         matches!(self, InterestProfile::Push)
     }
 
-    pub(crate) fn is_pull(&self) -> bool {
-        matches!(self, InterestProfile::Pull)
-    }
+    // REVIEW(regions): delete this?
+    // pub(crate) fn is_pull(&self) -> bool {
+    //     matches!(self, InterestProfile::Pull)
+    // }
 
     /// Computes [`InterestProfile`] from source and destination [`Bound`]s for a given entity.
     pub(crate) fn with_bound_flow((src, dst): (&Bound, &Bound)) -> Self {
@@ -160,7 +161,8 @@ pub(crate) trait HatBaseTrait: Any {
         tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
-        transport: &TransportUnicast,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 

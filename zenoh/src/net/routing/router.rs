@@ -37,7 +37,7 @@ use crate::net::{
     primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
     routing::{
         dispatcher::{
-            face::FaceStateBuilder,
+            face::{FaceState, FaceStateBuilder},
             gateway::Bound,
             tables::{self, Tables},
         },
@@ -148,39 +148,16 @@ impl Router {
         Ok(())
     }
 
-    pub(crate) fn new_face(
-        &self,
-        primitives: Arc<dyn EPrimitives + Send + Sync>,
-        bound: Bound,
-        whatami: WhatAmI,
-        is_local: bool,
-    ) -> Arc<Face> {
+    pub(crate) fn new_face<F>(&self, new_face_state: F) -> Arc<Face>
+    where
+        F: FnOnce(&mut Tables) -> FaceState,
+    {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let zid = tables.data.zid;
-        let fid = tables.data.face_counter;
-        tables.data.face_counter += 1;
-        let newface = tables
-            .data
-            .faces
-            .entry(fid)
-            .or_insert_with(|| {
-                Arc::new(
-                    FaceStateBuilder::new(
-                        fid,
-                        zid,
-                        bound,
-                        primitives.clone(),
-                        tables.hats.map(|hat| hat.new_face()),
-                    )
-                    .whatami(whatami)
-                    .local(is_local)
-                    .build(),
-                )
-            })
-            .clone();
+        let newface = Arc::new(new_face_state(tables));
+        tables.data.faces.insert(newface.id, newface.clone());
         tracing::debug!("New {}", newface);
 
         let mut face = Face {
@@ -188,7 +165,7 @@ impl Router {
             state: newface,
         };
         let mut declares = vec![];
-        tables.hats[bound]
+        tables.hats[face.state.bound]
             .new_local_face(
                 BaseContext {
                     tables_lock: &face.tables,
@@ -212,7 +189,18 @@ impl Router {
         primitives: Arc<dyn EPrimitives + Send + Sync>,
         bound: Bound,
     ) -> Arc<Face> {
-        self.new_face(primitives, bound, WhatAmI::Client, true)
+        self.new_face(|tables| {
+            FaceStateBuilder::new(
+                tables.data.new_face_id(),
+                tables.data.zid,
+                bound,
+                primitives.clone(),
+                tables.hats.map(|hat| hat.new_face()),
+            )
+            .whatami(WhatAmI::Client)
+            .local(true)
+            .build()
+        })
     }
 
     pub fn new_transport_unicast(

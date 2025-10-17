@@ -221,6 +221,12 @@ impl TablesData {
             hat.routes_version = hat.routes_version.saturating_add(1);
         }
     }
+
+    pub(crate) fn new_face_id(&mut self) -> FaceId {
+        let face_id = self.face_counter;
+        self.face_counter += 1;
+        face_id
+    }
 }
 
 pub struct TablesLock {

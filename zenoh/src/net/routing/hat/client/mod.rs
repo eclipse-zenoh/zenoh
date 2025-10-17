@@ -90,14 +90,6 @@ impl Hat {
         &mut tables.faces
     }
 
-    pub(crate) fn face<'t>(
-        &self,
-        tables: &'t TablesData,
-        zid: &ZenohIdProto,
-    ) -> Option<&'t Arc<FaceState>> {
-        tables.faces.values().find(|face| face.zid == *zid)
-    }
-
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
@@ -249,7 +241,8 @@ impl HatBaseTrait for Hat {
         _tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         _oam: &mut Oam,
-        _transport: &TransportUnicast,
+        _zid: &ZenohIdProto,
+        _whatami: WhatAmI,
         _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         Ok(())

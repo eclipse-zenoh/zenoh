@@ -350,33 +350,30 @@ impl HatBaseTrait for Hat {
         tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
-        transport: &TransportUnicast,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
         _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
             if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
-                if let Ok(zid) = transport.get_zid() {
-                    let whatami = transport.get_whatami()?;
-                    if whatami != WhatAmI::Client {
-                        if let Some(net) = self.gossip.as_mut() {
-                            use zenoh_buffers::reader::HasReader;
-                            use zenoh_codec::RCodec;
-                            let codec = Zenoh080Routing::new();
-                            let mut reader = buf.reader();
-                            let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
-                                bail!("failed to decode link state");
-                            };
+                if whatami != WhatAmI::Client {
+                    if let Some(net) = self.gossip.as_mut() {
+                        use zenoh_buffers::reader::HasReader;
+                        use zenoh_codec::RCodec;
+                        let codec = Zenoh080Routing::new();
+                        let mut reader = buf.reader();
+                        let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
+                            bail!("failed to decode link state");
+                        };
 
-                            tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
+                        tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
 
-                            net.link_states(list.link_states, zid, whatami);
-                        }
-                    };
-                }
+                        net.link_states(list.link_states, *zid, whatami);
+                    }
+                };
             }
         } else if oam.id == OAM_IS_GATEWAY {
-            let zid = transport.get_zid()?;
-            let Some(face) = self.face(tables, &zid) else {
+            let Some(face) = self.face(tables, zid) else {
                 bail!("Could not find transport face for ZID {zid}")
             };
 
