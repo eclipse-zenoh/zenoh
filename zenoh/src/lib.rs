@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg_attr(doc_auto_cfg, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest, and computations. It elegantly blends traditional pub/sub with geo-distributed
@@ -236,11 +236,19 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-pub const GIT_VERSION: &str = git_version::git_version!(
-    args = ["--always", "--dirty=-modified", "--abbrev=40"],
-    prefix = "v",
-    cargo_prefix = "v"
+const GIT_COMMIT: &str = git_version::git_version!(
+    args = [
+        "--always",
+        "--dirty=-modified",
+        "--abbrev=40",
+        "--exclude=*"
+    ],
+    fallback = "unknown"
 );
+
+pub const GIT_VERSION: &str =
+    const_format::concatcp!("v", env!("CARGO_PKG_VERSION"), "-", GIT_COMMIT);
+
 #[doc(hidden)]
 pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
     prefix = "zenoh",
