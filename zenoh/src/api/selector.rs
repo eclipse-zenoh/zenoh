@@ -30,7 +30,7 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters,
 /// - filtering by value,
 /// - filtering by metadata, such as the timestamp of a value,
-/// - specifying arguments to zenoh when using the REST API.
+/// - specifying arguments to zenoh when using the [REST API](https://zenoh.io/docs/apis/rest/).
 ///
 /// When in string form, selectors look a lot like a URI, with similar semantics:
 /// - the `key_expr` before the first `?` must be a valid key expression.
