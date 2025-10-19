@@ -1448,16 +1448,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "filepath"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7faa16fcec147281a1719947edb44af4f9124964bf7476bd5f5356a48e44dcc"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6198,7 +6188,6 @@ version = "1.6.1"
 dependencies = [
  "advisory-lock",
  "async-trait",
- "filepath",
  "nix 0.29.0",
  "rand 0.8.5",
  "tokio",
