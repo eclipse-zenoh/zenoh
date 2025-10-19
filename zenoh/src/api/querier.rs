@@ -145,6 +145,7 @@ impl<'a> Querier<'a> {
     /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether this querier accepts such disjoint replies.
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn accept_replies(&self) -> ReplyKeyExpr {

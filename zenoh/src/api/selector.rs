@@ -57,6 +57,8 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
 ///   whose key expression matches the query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
+///   This parameter is set by the `accept_replies` method on query builders, such as [`SessionGetBuilder::accept_replies`](crate::session::SessionGetBuilder::accept_replies)
+///   and [`QuerierBuilder::accept_replies`](crate::query::QuerierBuilder::accept_replies).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
