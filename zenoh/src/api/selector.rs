@@ -45,14 +45,13 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// Zenoh intends to standardize the usage of a set of parameter names. To avoid conflicting with RPC parameters,
 /// the Zenoh team has settled on reserving the set of parameter names that start with non-alphanumeric characters.
 ///
-/// The full specification for selectors is available [here](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors),
-/// It includes standardized parameters.
-///
-/// Queryable implementers are encouraged to prefer these standardized parameter names when implementing their
+/// [Queryable](crate::queryable::Queryable) implementers are encouraged to prefer these standardized parameter names when implementing their
 /// associated features, and to prefix their own parameter names to avoid having conflicting parameter names with other
 /// queryables.
 ///
-/// Here are the currently standardized parameters for Zenoh (check the specification page for the exhaustive list):
+/// Here are the currently standardized parameters for Zenoh (check the 
+/// [specification page](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) 
+/// for the exhaustive list):
 /// - **`[unstable]`** `_time`: used to express interest in only values dated within a certain time range; values for
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
