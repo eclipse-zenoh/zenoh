@@ -97,8 +97,12 @@ impl Drop for QueryInner {
 /// The important detail: the [`Query::key_expr`] is **not** the key expression
 /// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
 /// The [`Queryable`]'s key expression is the one that should be used.
-/// For example, the `Query` may contain the key expression `foo/*` and the reply
-/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier.
+/// 
+/// This parameter is not set automatically because [`Queryable`](crate::query::Queryable) itself
+/// may serve glob key expressions and send replies on different concrete key expressions
+/// matching this glob. For example, a `Queryable` serving `foo/*` may receive a `Query`
+/// with key expression `foo/bar` and another one with `foo/baz`, and it should reply
+/// respectively on `foo/bar` and `foo/baz`.
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
