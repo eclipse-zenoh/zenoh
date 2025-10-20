@@ -15,6 +15,7 @@ use std::{
     cell::UnsafeCell,
     convert::TryInto,
     fmt::{self, Debug},
+    io::IoSlice,
     net::SocketAddr,
     sync::Arc,
     time::Duration,
@@ -23,7 +24,7 @@ use std::{
 use async_trait::async_trait;
 use time::OffsetDateTime;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     sync::Mutex as AsyncMutex,
 };
@@ -34,6 +35,7 @@ use zenoh_core::{bail, zasynclock};
 use zenoh_link_commons::{
     get_ip_interface_names,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
+    utils::write_all_vectored,
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
@@ -187,20 +189,21 @@ impl LinkUnicastTrait for LinkUnicastTls {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let _guard = zasynclock!(self.write_mtx);
-        self.get_mut_socket().write(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on TLS link {}: {}", self, e);
-            zerror!(e).into()
-        })
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.get_mut_socket().is_write_vectored()
+    }
+
+    async fn write_vectored_all(&self, bufs: &mut [IoSlice<'_>]) -> ZResult<()> {
+        write_all_vectored(self.get_mut_socket(), bufs).await?;
+        Ok(())
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
