@@ -31,14 +31,21 @@ impl TransportUnicastLowlatency {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
 
-        let msg = TransportMessageLowLatencyRef {
+        let tmsg = TransportMessageLowLatencyRef {
             body: TransportBodyLowLatencyRef::Network(msg.as_ref()),
         };
-        let res = self.send(msg);
+        let res = self.send(tmsg);
 
         #[cfg(feature = "stats")]
         if res.is_ok() {
-            self.stats.inc_tx_n_msgs(1);
+            #[cfg(feature = "shared-memory")]
+            if msg.is_shm() {
+                self.stats.tx_n_msgs.inc_shm(1);
+            } else {
+                self.stats.tx_n_msgs.inc_net(1);
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.stats.tx_n_msgs.inc_net(1);
         } else {
             self.stats.inc_tx_n_dropped(1);
         }

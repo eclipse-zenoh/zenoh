@@ -81,7 +81,7 @@ where
                 }
                 Err(shm::SegmentCreateError::SegmentExists) => {}
                 Err(shm::SegmentCreateError::OsError(e)) => {
-                    bail!("Unable to create POSIX shm segment: {}", e)
+                    bail!("Unable to create POSIX shm segment: OS error {}", e)
                 }
             }
         }
@@ -97,7 +97,7 @@ where
                 bail!("Unable to open POSIX shm segment: segment is invalid!");
             }
             Err(shm::SegmentOpenError::OsError(e)) => {
-                bail!("Unable to create POSIX shm segment: {}", e);
+                bail!("Unable to open POSIX shm segment: OS error {}", e);
             }
         };
 

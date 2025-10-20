@@ -10,255 +10,128 @@
 
 # Eclipse Zenoh
 
-The Eclipse Zenoh: Zero Overhead Pub/sub, Store/Query and Compute.
+Eclipse Zenoh: Zero Overhead Pub/Sub, Store/Query and Compute.
 
-Zenoh (pronounce _/zeno/_) unifies data in motion, data at rest and computations. It carefully blends traditional pub/sub with geo-distributed storages, queries and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
+Zenoh (pronounced _/zeno/_) unifies data in motion, data at rest, and computations. It carefully blends traditional pub/sub with geo-distributed storage, queries, and computations, while retaining a level of time and space efficiency that is well beyond any of the mainstream stacks.
 
-Check the website [zenoh.io](http://zenoh.io) and the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detailed information.
+Check the website [zenoh.io](http://zenoh.io) for more information and [installation instructions](https://zenoh.io/docs/getting-started/installation/).
 
--------------------------------
+See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detailed technical information.
 
-## Getting Started
+# Structure of the Repository
 
-Zenoh is extremely easy to learn, the best place to master the fundamentals is our [getting started guide](https://zenoh.io/docs/getting-started/first-app/).
+This repository contains the following elements:
 
--------------------------------
+* [zenoh](zenoh) Rust crate
 
-## How to install it
+  This crate is the primary and reference implementation of the Zenoh protocol. The Zenoh libraries for other languages
+  are bindings to this Rust implementation, except for the pure-C
+  [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) (see the "Language Support" section below).
 
-To install the latest release of the Zenoh router (`zenohd`) and its default plugins (REST API plugin and Storages Manager plugin) you can do as follows:
+* [zenoh-ext](zenoh-ext) Rust crate
 
-### Manual installation (all platforms)
+  This crate contains extended components of Zenoh:
+  * `AdvancedPublisher` / `AdvancedSubscriber` - APIs for sending/receiving data with advanced delivery guarantees.
+  * Data serialization support. This serialization is lightweight and universal for all `zenoh` bindings, which simplifies interoperability.
 
-All release packages can be downloaded from [https://download.eclipse.org/zenoh/zenoh/latest/](https://download.eclipse.org/zenoh/zenoh/latest/).
+* [zenohd](zenohd) router binary
 
-Each subdirectory has the name of the Rust target. See the platforms each target corresponds to on [https://doc.rust-lang.org/stable/rustc/platform-support.html](https://doc.rust-lang.org/stable/rustc/platform-support.html).
+  The Zenoh router is a standalone daemon used to support Zenoh network infrastructure.
 
-Choose your platform and download the `.zip` file.
-Unzip it where you want, and run the extracted `zenohd` binary.
+* [plugins](plugins)
 
-### Linux Debian
+  The crates related to plugin support in `zenohd`.
 
-Add Eclipse Zenoh private repository to the sources list, and install the `zenoh` package:
+* [commons](commons)
 
-```bash
-curl -L https://download.eclipse.org/zenoh/debian-repo/zenoh-public-key | sudo gpg --dearmor --yes --output /etc/apt/keyrings/zenoh-public-key.gpg
-echo "deb [signed-by=/etc/apt/keyrings/zenoh-public-key.gpg] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee /etc/apt/sources.list.d/zenoh.list > /dev/null
-sudo apt update
-sudo apt install zenoh
-```
+  The internal crates used by `zenoh`. These crates are not intended to be imported directly, and their public APIs can be changed at any time.
+  Stable APIs are provided by `zenoh` and `zenoh-ext` only.
 
-Then you can start run `zenohd`.
+* [examples](examples)
 
-### MacOS
+  Zenoh usage examples. These examples have a double purpose: they not only demonstrate writing Zenoh applications in Rust but also serve as a set of tools for experimenting with and testing Zenoh functionality.
 
-Tap our brew package repository and install the `zenoh` formula:
-
-```bash
-brew tap eclipse-zenoh/homebrew-zenoh
-brew install zenoh
-```
-
-Then you can start run `zenohd`.
-
--------------------------------
-
-## Rust API
+# Documentation
 
 * [Docs.rs for Zenoh](https://docs.rs/zenoh/latest/zenoh/)
 
--------------------------------
+* [Docs.rs for Zenoh-ext](https://docs.rs/zenoh/latest/zenoh-ext/)
 
-## How to build it
+# Build and run
 
-Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be successfully compiled with Rust stable (>= 1.75.0), so no special configuration is required from your side. If you already have the Rust toolchain installed, make sure it is up-to-date with:
+Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html).
+If you already have the Rust toolchain installed, make sure it is up to date with:
 
 ```bash
 rustup update
 ```
 
-To build Zenoh, just type the following command after having followed the previous instructions:
+Zenoh can be successfully compiled with Rust stable (>= 1.75.0), but some of its dependencies may require
+newer Rust versions. The `zenoh` crate itself doesn't lock its dependencies with "=" to avoid conflicts.
+Instead, we provide the [zenoh-pinned-deps-1-75](commons/zenoh-pinned-deps-1-75) crate
+with `zenoh` dependencies locked to Rust 1.75-compatible versions.
+
+To build Zenoh, simply type the command below after having followed the previous instructions:
 
 ```bash
 cargo build --release --all-targets
 ```
 
-Building all targets may cause an out-of-memory error if memory is limited. Reducing the number of parallel build jobs can help, though it may increase build time. You can fine-tune the job count to balance performance and resource usage.
+There are multiple features in `zenoh`; see the full list and descriptions on [docs.rs](https://docs.rs/zenoh/latest/zenoh/). For example, to
+use shared memory, it must be explicitly enabled:
 
-```bash
-cargo build --release --all-targets --jobs=1
+```toml
+zenoh = {version = "1.5.1", features = ["shared-memory"]}
 ```
 
-Zenoh's router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.
+## Examples
 
--------------------------------
+[Examples](examples) can be executed with Cargo, or directly from `target/release/examples`. When running with Cargo, use `--` to pass command line arguments to the examples:
 
-## Quick tests of your build
+### Publish/Subscribe
 
-### Peer-to-peer tests
+```bash
+cargo run --example z_sub
+```
 
-* **pub/sub**
-  * run: `./target/release/examples/z_sub`
-  * in another shell run: `./target/release/examples/z_put`
-  * the subscriber should receive the publication.
+```bash
+cargo run --example z_pub
+```
 
-* **get/queryable**
-  * run: `./target/release/examples/z_queryable`
-  * in another shell run: `./target/release/examples/z_get`
-  * the queryable should display the log in its listener, and the get should receive the queryable result.
+### Query/Reply
 
-### Routed tests
+```bash
+cargo run --example z_queryable
+```
 
-> [!NOTE]
-> **Windows users**: to properly execute the commands below in PowerShell you need to escape `"` characters as `\"`.
+```bash
+cargo run --example z_get
+```
 
-* **put / store / get**
-  * run the Zenoh router with a memory storage:
+## Zenohd Router and Plugins
 
-    ```sh
-    ./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
-    ```
+The [zenohd](zenohd) router can be run with the command `cargo run` or from `target/release/zenohd`. When running with Cargo, use `--` to pass command line arguments to `zenohd`:
 
-  * in another shell run:
-  
-    ```sh
-    ./target/release/examples/z_put`
-    ```
+```bash
+cargo run -- --config DEFAULT_CONFIG.json5
+```
 
-  * then run
+The router's purpose is to support Zenoh network infrastructure and provide additional services using [plugins](plugins).
+See more details and a directory of available plugins in the [zenohd](zenohd) readme.
 
-    ```sh
-    ./target/release/examples/z_get
-    ```
+# Language Support
 
-  * the get should receive the stored publication.
+* **Rust** - this repository
+* **C** - there are two implementations with the same API:
+  * [zenoh-c](https://github.com/eclipse-zenoh/zenoh-c) - Rust library binding
+  * [zenoh-pico](https://github.com/eclipse-zenoh/zenoh-pico) - pure C implementation
+* **C++** - [zenoh-cpp](https://github.com/eclipse-zenoh/zenoh-cpp) - C++ wrapper over C libraries
+* **Python** - [zenoh-python](https://github.com/eclipse-zenoh/zenoh-python)
+* **Kotlin** - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
+* **Java** - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
+* **TypeScript** - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - WebSocket client for the plugin in [zenohd](zenohd)
 
-* **REST API using `curl` tool**
-  * run the Zenoh router with a memory storage:
+# Troubleshooting
 
-    ```sh
-    ./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
-    ```
-
-  * in another shell, do a publication via the REST API:
-
-    ```sh
-    curl -X PUT -d '"Hello World!"' http://localhost:8000/demo/example/test
-    ```
-
-  * get it back via the REST API:
-
-    ```sh
-    curl http://localhost:8000/demo/example/test
-    ```
-
-* **router admin space via the REST API**
-  * run the Zenoh router with permission to perform config changes via the admin space, and with a memory storage:
-
-    ```sh
-    ./target/release/zenohd --rest-http-port=8000 --adminspace-permissions=rw --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
-    ```
-
-  * in another shell, get info of the zenoh router via the zenoh admin space (you may use `jq` for pretty json formatting):
-
-    ```sh
-    curl -s http://localhost:8000/@/local/router | jq
-    ```
-
-  * get the volumes of the router (only memory by default):
-
-    ```sh
-    curl -s 'http://localhost:8000/@/local/router/**/volumes/*' | jq
-    ```
-
-  * get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):
-
-    ```sh
-    curl -s 'http://localhost:8000/@/local/router/**/storages/*' | jq
-    ```
-
-  * add another memory storage on `/demo/mystore/**`:
-
-    ```sh
-    curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/local/router/config/plugins/storage_manager/storages/mystore
-    ```
-
-  * check it has been created:
-  
-    ```sh
-    curl -s 'http://localhost:8000/@/local/router/**/storages/*' | jq
-    ```
-
-### Configuration options
-
-A Zenoh configuration file can be provided via CLI to all Zenoh examples and the Zenoh router.
-
-* `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file and the available options.
-
-See other examples of Zenoh usage in [examples/](examples)
-
-> [!NOTE]
-> **Zenoh Runtime Configuration**: Starting from version 0.11.0-rc, Zenoh allows for configuring the number of worker threads and other advanced options of the runtime. For guidance on utilizing it, please refer to the [doc](https://docs.rs/zenoh-runtime/latest/zenoh_runtime/enum.ZRuntime.html).
-
--------------------------------
-
-## Zenoh router command line arguments
-
-`zenohd` accepts the following arguments:
-
-* `--adminspace-permissions <[r|w|rw|none]>`: Configure the read and/or write permissions on the admin space. Default is read only.
-* `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
-* `--cfg <KEY>:<VALUE>`: allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array. `--cfg` passed values will always override any previously existing value for their key in the configuration.
-* `-l, --listen <ENDPOINT>...`: An endpoint on which this router will listen for incoming sessions.
-  Repeat this option to open several listeners. By default, `tcp/[::]:7447` is used. The following endpoints are currently supported:
-  * TCP: `tcp/<host_name_or_IPv4_or_IPv6>:<port>`
-  * UDP: `udp/<host_name_or_IPv4_or_IPv6>:<port>`
-  * [TCP+TLS](https://zenoh.io/docs/manual/tls/): `tls/<host_name>:<port>`
-  * [QUIC](https://zenoh.io/docs/manual/quic/): `quic/<host_name>:<port>`
-* `-e, --connect <ENDPOINT>...`: An endpoint this router will try to connect to. Repeat this option to connect to several peers or routers.
-* `--no-multicast-scouting`: By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
-  This option disables this feature.
-* `-i, --id <hex_string>`: The identifier (as an hexadecimal string - e.g.: A0B23...) that zenohd must use.
-   **WARNING**: this identifier must be unique in the system! If not set, a random unsigned 128bit integer will be used.
-* `--no-timestamp`: By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one.
-  This option disables this feature.
-* `-P, --plugin [<PLUGIN_NAME> | <PLUGIN_NAME>:<LIBRARY_PATH>]...`: A [plugin](https://zenoh.io/docs/manual/plugins/) that must be loaded. Accepted values:
-  * a plugin name; zenohd will search for a library named `libzenoh_plugin_<name>.so` on Unix, `libzenoh_plugin_<PLUGIN_NAME>.dylib` on MacOS or `zenoh_plugin_<PLUGIN_NAME>.dll` on Windows.
-  * `"<PLUGIN_NAME>:<LIBRARY_PATH>"`; the plugin will be loaded from library file at `<LIBRARY_PATH>`.
-
-  Repeat this option to load several plugins.
-* `--plugin-search-dir <DIRECTORY>...`: A directory where to search for [plugins](https://zenoh.io/docs/manual/plugins/) libraries to load.
-  Repeat this option to specify several search directories'. By default, the plugins libraries will be searched in:
-  `'/usr/local/lib:/usr/lib:~/.zenoh/lib:.'`
-* `--rest-http-port <rest-http-port>`: Configures the [REST plugin](https://zenoh.io/docs/manual/plugin-http/)'s HTTP port. Accepted values:
-  * a port number
-  * a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
-  * `"None"` to deactivate the REST plugin
-
-  If not specified, the REST plugin will be active on any interface (`[::]`) and port `8000`.
-
--------------------------------
-
-## Plugins
-
-> [!WARNING]
-> As Rust doesn't have a stable ABI, the plugins should be
-built with the exact same Rust version as `zenohd`, and using for `zenoh` dependency the same version (or commit number) as `zenohd` with the same
-set of features. A plugin compiled with different Rust version or with different set of `zenoh` crate features will be rejected when `zenohd` attempts to load it. Otherwise, incompatibilities in memory mapping of structures shared between `zenohd` and the library could lead to a `"SIGSEGV"` crash.
-
-By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
-
-**[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
-This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.
-
-Note that to activate the REST plugin on `zenohd` the CLI argument should be passed: `--rest-http-port=8000` (or any other port of your choice).
-
-**[Storages plugin](https://zenoh.io/docs/manual/plugin-storage-manager/)** (managing [backends and storages](https://zenoh.io/docs/manual/plugin-storage-manager/#backends-and-volumes))
-This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) for info on how to configure them.
-
--------------------------------
-
-## Troubleshooting
-
-In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.
-Otherwise, you can ask a question on the [zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
+In case of trouble, please first check [this page](https://zenoh.io/docs/getting-started/troubleshooting/) to see if the issue and its cause are already known.
+Otherwise, you can ask a question on the [Zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).

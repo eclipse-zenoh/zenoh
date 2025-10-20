@@ -23,9 +23,9 @@ pub use ring::*;
 
 use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 
-/// A type that can be converted into a [`Callback`]-Handler pair.
+/// A type that can be converted into a [`Callback`]-`Handler` pair.
 ///
-/// When Zenoh functions accept types that implement these, it intends to use the [`Callback`] as just that,
+/// When Zenoh functions accept types that implement this, they use the [`Callback`] as such,
 /// while granting you access to the handler through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
 ///
 /// Any closure that accepts `T` can be converted into a pair of itself and `()`.
@@ -35,7 +35,14 @@ pub trait IntoHandler<T: CallbackParameter> {
     fn into_handler(self) -> (Callback<T>, Self::Handler);
 }
 
-/// The default handler in Zenoh is a FIFO queue.
+/// The default handler type.
+///
+/// When no channel or callback is provided to [`Subscriber`](crate::pubsub::Subscriber) or [`Query`](crate::query::Query),
+/// Zenoh uses this type by default.
+///
+/// Currently, this type is an opaque wrapper over the [`FifoChannel`] with default settings. But the
+/// separate type was created to make it possible to change the default handler implementation
+/// without breaking API changes.
 #[repr(transparent)]
 #[derive(Default)]
 pub struct DefaultHandler(FifoChannel);

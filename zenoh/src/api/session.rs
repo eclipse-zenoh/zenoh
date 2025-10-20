@@ -16,10 +16,7 @@ use std::{
     convert::TryInto,
     fmt, mem,
     ops::Deref,
-    sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Mutex, RwLock, RwLockReadGuard,
-    },
+    sync::{atomic::Ordering, Arc, Mutex, RwLock, RwLockReadGuard},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -33,12 +30,12 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_collections::{IntHashMap, SingleOrVec};
-#[cfg(feature = "unstable")]
-use zenoh_config::GenericConfig;
 use zenoh_config::{
     qos::{PublisherQoSConfList, PublisherQoSConfig},
     wrappers::ZenohId,
 };
+#[cfg(feature = "unstable")]
+use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 use zenoh_protocol::{
@@ -126,7 +123,7 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) local_resources: IntHashMap<ExprId, Resource>,
+    pub(crate) local_resources: IntHashMap<ExprId, LocalResource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
@@ -187,13 +184,13 @@ impl SessionState {
 
     #[inline]
     fn get_local_res(&self, id: &ExprId) -> Option<&Resource> {
-        self.local_resources.get(id)
+        Some(&self.local_resources.get(id)?.resource)
     }
 
     #[inline]
     fn get_remote_res(&self, id: &ExprId, mapping: Mapping) -> Option<&Resource> {
         match mapping {
-            Mapping::Receiver => self.local_resources.get(id),
+            Mapping::Receiver => Some(&self.local_resources.get(id)?.resource),
             Mapping::Sender => self.remote_resources.get(id),
         }
     }
@@ -387,7 +384,7 @@ impl SessionState {
         for res in self
             .local_resources
             .values_mut()
-            .filter_map(Resource::as_node_mut)
+            .filter_map(LocalResource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
                 res.subscribers_mut(SubscriberKind::Subscriber)
@@ -483,6 +480,17 @@ impl Resource {
     }
 }
 
+pub(crate) struct LocalResource {
+    resource: Resource,
+    declared: bool,
+}
+
+impl LocalResource {
+    pub(crate) fn as_node_mut(&mut self) -> Option<&mut ResourceNode> {
+        self.resource.as_node_mut()
+    }
+}
+
 /// A trait implemented by types that can be undeclared.
 pub trait UndeclarableSealed<S> {
     type Undeclaration: Resolve<ZResult<()>> + Send;
@@ -513,7 +521,7 @@ pub(crate) struct SessionInner {
     weak_counter: Mutex<usize>,
     pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
-    pub(crate) id: u16,
+    pub(crate) id: EntityId,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
 }
@@ -524,22 +532,52 @@ impl fmt::Debug for SessionInner {
     }
 }
 
-/// The entrypoint of the zenoh API.
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object,
+/// which maintains the state of the connection of the node to the Zenoh network.
 ///
-/// Zenoh session is instantiated using [`zenoh::open`](crate::open) and it can be used to declare various
-/// entities like publishers, subscribers, or querybables, as well as issuing queries.
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc.
+/// and keeps them functioning. Closing the session will close all associated entities.
 ///
-/// Session is an `Arc`-like type, it can be cloned, and it is closed when the last instance
-/// is dropped (see [`Session::close`]).
+/// The session is cloneable so it's easy to share it between tasks and threads. Each clone of the
+/// session is an `Arc` to the internal session object, so cloning is cheap and fast.
+///
+/// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
+/// with parameters specified in the [`Config`] object.
+///
+/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher),
+/// [`Subscriber`](crate::pubsub::Subscriber), [`Querier`](crate::query::Querier), etc.),
+/// have lifetimes independent of the session, but they stop functioning if all clones of the session
+/// object are dropped or the session is closed with the [`close`](crate::session::Session::close) method.
+///
+/// ### Background entities
+///
+/// Sometimes it is inconvenient to keep a reference to an object (for example,
+/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to
+/// avoid keeping this reference and keep the object alive until the session is closed.
+/// To do this, call the [`background`](crate::query::QueryableBuilder::background) method on the
+/// corresponding builder. This causes the builder to return `()` instead of the object instance and
+/// keeps the instance alive while the session is alive.
+///
+/// ### Difference between session and runtime
+/// The session object holds all declared zenoh entities (publishers, subscribers, etc.) and
+/// a shared reference to the runtime object which maintains the state of the zenoh node.
+/// Closing the session will close all associated entities and drop the reference to the runtime.
+///
+/// Typically each session has its own runtime, but in some cases
+/// the session may share the runtime with other sessions. This is the case for the plugins
+/// where each plugin has its own session but all plugins share the same `zenohd` runtime
+/// for efficiency.
+/// In this case, all these sessions will have the same network identity
+/// [`Session::zid`](crate::session::Session::zid).
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
+/// ```
 #[derive(RefCastCustom)]
 #[repr(transparent)]
 pub struct Session(pub(crate) Arc<SessionInner>);
@@ -580,18 +618,19 @@ impl Drop for Session {
 }
 
 /// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
-/// It allows notably to establish reference cycles inside the session, for the primitive
+/// It provides weak-like semantics to the arc-like session, without using [`Weak`].
+/// Notably, it allows establishing reference cycles inside the session for the primitive
 /// implementation.
-/// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
+/// When all `Session` instances are dropped, [`Session::close`] is called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
 /// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
-/// to implement it, because atomic manipulations to achieve this semantic would not have been
+/// to implement, because atomic manipulations to achieve these semantics would not have been
 /// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
 /// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
 /// performance penalty when it comes to session entities cloning/dropping.
 ///
-/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+/// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
@@ -652,7 +691,6 @@ impl fmt::Display for SessionClosedError {
 
 impl std::error::Error for SessionClosedError {}
 
-static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
         runtime: GenericRuntime,
@@ -673,7 +711,7 @@ impl Session {
                 weak_counter: Mutex::new(0),
                 runtime: runtime.clone(),
                 state,
-                id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
+                id: runtime.next_id(),
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
             }));
@@ -696,6 +734,16 @@ impl Session {
         self.info().zid().wait()
     }
 
+    /// Returns the [`EntityGlobalId`] of this Session.
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        zenoh_protocol::core::EntityGlobalIdProto {
+            zid: self.zid().into(),
+            eid: self.0.id,
+        }
+        .into()
+    }
+
     #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
@@ -703,12 +751,12 @@ impl Session {
 
     /// Close the zenoh [`Session`](Session).
     ///
-    /// Every subscriber and queryable declared will stop receiving data, and further attempt to
+    /// Every subscriber and queryable declared will stop receiving data, and further attempts to
     /// publish or query with the session or publishers will result in an error. Undeclaring an
     /// entity after session closing is a no-op. Session state can be checked with
     /// [`Session::is_closed`].
     ///
-    /// Session are automatically closed when all its instances are dropped, same as `Arc`.
+    /// Sessions are automatically closed when all their instances are dropped, same as `Arc`.
     /// You may still want to use this function to handle errors or close the session
     /// asynchronously.
     /// <br>
@@ -733,7 +781,7 @@ impl Session {
     /// });
     /// session.close().await.unwrap();
     /// // subscriber task will end as `subscriber.recv_async()` will return `Err`
-    /// // subscriber undeclaration has not been sent on the wire
+    /// // subscriber undeclaration has not been sent over the wire
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
@@ -753,10 +801,27 @@ impl Session {
     /// session.close().await.unwrap();
     /// assert!(session.is_closed());
     /// # }
+    /// ```
     pub fn is_closed(&self) -> bool {
         zread!(self.0.state).primitives.is_none()
     }
 
+    /// Undeclare a zenoh entity declared by the session.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let keyexpr = session.declare_keyexpr("key/expression").await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber(&keyexpr)
+    ///     .await
+    ///     .unwrap();
+    /// session.undeclare(subscriber).await.unwrap();
+    /// session.undeclare(keyexpr).await.unwrap();
+    /// # }
+    /// ```
     pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
         T: Undeclarable<&'a Session> + 'a,
@@ -765,6 +830,11 @@ impl Session {
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
+    ///
+    /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
+    /// zenoh configuration through the `get` function or
+    /// modify the zenoh configuration through the `insert`
+    /// or `insert_json5` function.
     ///
     /// # Examples
     /// ```
@@ -785,6 +855,7 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
+    /// ### Get a new timestamp
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -797,8 +868,8 @@ impl Session {
         match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
-                // Called in the case that the runtime is not initialized with an hlc
-                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissible here
+                // Called when the runtime is not initialized with an HLC.
+                // UNIX_EPOCH returns a Timespec::zero(); unwrap should be permissible here.
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
                 Timestamp::new(now, self.0.zid().into())
             }
@@ -828,7 +899,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resourkey expression to subscribe to
+    /// * `key_expr` - The resource key expression to subscribe to
     ///
     /// # Examples
     /// ```no_run
@@ -1030,11 +1101,15 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        let sid = self.0.id;
+        let session_id = self.0.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
-            let expr_id = self.0.declare_prefix(key_expr.as_str()).wait()?;
+            let expr_id = self
+                .0
+                .declare_prefix(key_expr.as_str(), true)
+                .wait()?
+                .unwrap();
             let key_expr = match key_expr.0 {
                 KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                     KeyExpr(KeyExprInner::BorrowedWire {
@@ -1042,7 +1117,7 @@ impl Session {
                         expr_id,
                         mapping: Mapping::Sender,
                         prefix_len,
-                        session_id: sid,
+                        session_id,
                     })
                 }
                 KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
@@ -1051,7 +1126,7 @@ impl Session {
                         expr_id,
                         mapping: Mapping::Sender,
                         prefix_len,
-                        session_id: sid,
+                        session_id,
                     })
                 }
             };
@@ -1059,7 +1134,9 @@ impl Session {
         })
     }
 
-    /// Put data.
+    /// Publish [`SampleKind::Put`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`put`](crate::api::publisher::Publisher::put)
+    /// on it.
     ///
     /// # Arguments
     ///
@@ -1104,7 +1181,8 @@ impl Session {
         }
     }
 
-    /// Delete data.
+    /// Publish a [`SampleKind::Delete`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`delete`](crate::api::publisher::Publisher::delete) on it.
     ///
     /// # Arguments
     ///
@@ -1137,9 +1215,11 @@ impl Session {
             source_info: SourceInfo::empty(),
         }
     }
-    /// Query data from the matching queryables in the system.
+    /// Query data from the matching queryables in the system. This is a shortcut for declaring
+    /// a [`Querier`](crate::query::Querier) and calling [`get`](crate::api::querier::Querier::get) on it.
     ///
-    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies), replies are guaranteed to have
+    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies),
+    /// replies are guaranteed to have
     /// key expressions that match the requested `selector`.
     ///
     /// # Arguments
@@ -1225,7 +1305,8 @@ impl SessionInner {
     pub(crate) fn declare_prefix<'a>(
         &'a self,
         prefix: &'a str,
-    ) -> impl Resolve<ZResult<ExprId>> + 'a {
+        force: bool,
+    ) -> impl Resolve<ZResult<Option<ExprId>>> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -1233,9 +1314,10 @@ impl SessionInner {
             match state
                 .local_resources
                 .iter()
-                .find(|(_expr_id, res)| res.name() == prefix)
+                .find(|(_expr_id, res)| res.resource.name() == prefix)
             {
-                Some((expr_id, _res)) => Ok(*expr_id),
+                Some((expr_id, res)) if force || res.declared => Ok(Some(*expr_id)),
+                Some(_) => Ok(None),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
@@ -1251,7 +1333,13 @@ impl SessionInner {
                             }
                         }
                     }
-                    state.local_resources.insert(expr_id, res);
+                    state.local_resources.insert(
+                        expr_id,
+                        LocalResource {
+                            resource: res,
+                            declared: false,
+                        },
+                    );
                     drop(state);
                     primitives.send_declare(&mut Declare {
                         interest_id: None,
@@ -1267,7 +1355,11 @@ impl SessionInner {
                             },
                         }),
                     });
-                    Ok(expr_id)
+                    let mut state = zwrite!(self.state);
+                    if let Some(res) = state.local_resources.get_mut(&expr_id) {
+                        res.declared = true;
+                    }
+                    Ok(Some(expr_id))
                 }
             }
         })
@@ -1432,12 +1524,13 @@ impl SessionInner {
     pub(crate) fn optimize_nonwild_prefix(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
         let ke = key_expr.as_keyexpr();
         if let Some(prefix) = ke.get_nonwild_prefix() {
-            let expr_id = self.declare_prefix(prefix.as_str()).wait()?;
-            return Ok(WireExpr {
-                scope: expr_id,
-                suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
-                mapping: Mapping::Sender,
-            });
+            if let Some(expr_id) = self.declare_prefix(prefix.as_str(), false).wait()? {
+                return Ok(WireExpr {
+                    scope: expr_id,
+                    suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
+                    mapping: Mapping::Sender,
+                });
+            }
         }
         Ok(key_expr.to_wire(self).to_owned())
     }
@@ -1487,7 +1580,7 @@ impl SessionInner {
             for res in state
                 .local_resources
                 .values_mut()
-                .filter_map(Resource::as_node_mut)
+                .filter_map(LocalResource::as_node_mut)
             {
                 res.subscribers_mut(kind)
                     .retain(|sub| sub.id != sub_state.id);
@@ -1705,7 +1798,7 @@ impl SessionInner {
         for res in state
             .local_resources
             .values_mut()
-            .filter_map(Resource::as_node_mut)
+            .filter_map(LocalResource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
                 res.subscribers_mut(SubscriberKind::LivelinessSubscriber)
@@ -1827,7 +1920,7 @@ impl SessionInner {
                         .call(MatchingStatus { matching: true });
                 }
             }
-            Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
+            Err(e) => tracing::error!("Error trying to acquire MatchingListener lock: {}", e),
         }
         Ok(listener_state)
     }
@@ -1923,7 +2016,7 @@ impl SessionInner {
                                 }
                                 Err(e) => {
                                     tracing::error!(
-                                        "Error trying to acquire MathginListener lock: {}",
+                                        "Error trying to acquire MatchingListener lock: {}",
                                         e
                                     );
                                 }
@@ -2458,9 +2551,17 @@ impl Primitives for WeakSession {
                         .map(|e| e.into_owned())
                     {
                         Ok(expr) => {
-                            state
+                            let prev = state
                                 .remote_queryables
                                 .insert(m.id, (expr.clone(), m.ext_info.complete));
+                            if let Some((prev_expr, prev_complete)) = prev {
+                                self.update_matching_status(
+                                    &state,
+                                    &prev_expr,
+                                    MatchingStatusType::Queryables(prev_complete),
+                                    false,
+                                );
+                            }
                             self.update_matching_status(
                                 &state,
                                 &expr,
@@ -2709,7 +2810,7 @@ impl Primitives for WeakSession {
                             zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
                         if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
-                                "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
+                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
                                 query.selector()

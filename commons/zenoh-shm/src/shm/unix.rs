@@ -27,7 +27,7 @@ use nix::fcntl::open;
 use nix::{
     fcntl::OFlag,
     sys::{
-        mman::{mmap, munmap, shm_open, shm_unlink, MapFlags, ProtFlags},
+        mman::{mlock, mmap, munmap, shm_open, shm_unlink, MapFlags, ProtFlags},
         stat::{fstat, Mode},
     },
     unistd::ftruncate,
@@ -260,7 +260,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
     fn map(len: NonZeroUsize, fd: &OwnedFd) -> nix::Result<NonNull<c_void>> {
         let prot = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
-        let flags = MapFlags::MAP_SHARED;
+        let flags = MapFlags::MAP_SHARED | MapFlags::MAP_NORESERVE;
 
         tracing::trace!(
             "mmap(addr=NULL, length={}, prot={:X}, flags={:X}, f={}, offset=0)",
@@ -269,8 +269,14 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             flags,
             fd.as_raw_fd()
         );
+        // SAFETY: this is safe as we are not using any unsafe flags and FD is correct
+        let ptr = unsafe { mmap(None, len, prot, flags, fd, 0) }?;
 
-        unsafe { mmap(None, len, prot, flags, fd, 0) }
+        tracing::trace!("mlock(addr={:?}, length={})", ptr, len,);
+        // SAFETY: this is safe as ptr produced by shm_open/mmap is page-aligned
+        unsafe { mlock(ptr, len.get()) }?;
+
+        Ok(ptr)
     }
 
     fn cleanup_segment(id: ID) {

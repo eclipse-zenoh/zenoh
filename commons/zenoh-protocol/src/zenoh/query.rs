@@ -44,6 +44,7 @@ impl ConsolidationMode {
     pub const DEFAULT: Self = Self::Auto;
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
         let mut rng = rand::thread_rng();
@@ -110,6 +111,7 @@ pub mod ext {
 
 impl Query {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

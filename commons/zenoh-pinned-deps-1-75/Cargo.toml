@@ -30,6 +30,7 @@ maintenance = { status = "actively-developed" }
 axum = "=0.8.4"
 axum-core = "=0.5.2"
 base64ct = "=1.6.0"
+generic-array = "=0.14.7"
 home = "=0.5.9"
 icu_normalizer = "=1.5.0"
 librocksdb-sys = "=0.17.1"
@@ -56,6 +57,7 @@ ignored = [
   "axum",
   "axum-core",
   "base64ct",
+  "generic-array",
   "home",
   "icu_normalizer",
   "librocksdb-sys",

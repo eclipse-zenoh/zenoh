@@ -72,6 +72,7 @@ pub mod ext {
 
 impl Response {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -122,6 +123,7 @@ pub struct ResponseFinal {
 
 impl ResponseFinal {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

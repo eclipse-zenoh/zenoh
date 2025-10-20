@@ -105,6 +105,7 @@ pub enum DeclareBody {
 
 impl DeclareBody {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -127,6 +128,7 @@ impl DeclareBody {
 
 impl Declare {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -171,6 +173,7 @@ pub mod common {
 
     impl DeclareFinal {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             Self
         }
@@ -215,6 +218,7 @@ pub mod common {
             }
 
             #[cfg(feature = "test")]
+            #[doc(hidden)]
             pub fn rand() -> Self {
                 Self {
                     wire_expr: WireExpr::rand(),
@@ -260,6 +264,7 @@ pub mod keyexpr {
 
     impl DeclareKeyExpr {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -293,6 +298,7 @@ pub mod keyexpr {
 
     impl UndeclareKeyExpr {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -345,6 +351,7 @@ pub mod subscriber {
 
     impl DeclareSubscriber {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -379,6 +386,7 @@ pub mod subscriber {
 
     impl UndeclareSubscriber {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -466,6 +474,7 @@ pub mod queryable {
             };
 
             #[cfg(feature = "test")]
+            #[doc(hidden)]
             pub fn rand() -> Self {
                 use rand::Rng;
                 let mut rng = rand::thread_rng();
@@ -485,6 +494,7 @@ pub mod queryable {
 
     impl DeclareQueryable {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -524,6 +534,7 @@ pub mod queryable {
 
     impl UndeclareQueryable {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -575,6 +586,7 @@ pub mod token {
 
     impl DeclareToken {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -609,6 +621,7 @@ pub mod token {
 
     impl UndeclareToken {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();

@@ -69,11 +69,11 @@ macro_rules! stats_struct {
     };
 
     (@openmetrics($stats:expr, $string:expr) $field_name:ident $field_type:ident) => {
-        $string.push_str(&$stats.$field_name.sub_openmetrics_text(stringify!($field_name)));
+        $string.push_str(&$stats.$field_name.discriminated_openmetrics_text(stringify!($field_name), $field_type::DISCRIMINANT));
     };
     (@openmetrics_labels($stats:expr, $string:expr, $labels:expr) $field_name:ident $field_type:ident) => {
         if (!$stats.labels.is_empty()) {
-            $string.push_str(&$stats.$field_name.labelled_sub_openmetrics_text(stringify!($field_name), &$stats.labels));
+            $string.push_str(&$stats.$field_name.labelled_discriminated_openmetrics_text(stringify!($field_name), $field_type::DISCRIMINANT, &$stats.labels));
         }
     };
 
@@ -84,7 +84,7 @@ macro_rules! stats_struct {
     (
      $(#[$meta:meta])*
      $vis:vis struct $struct_name:ident {
-
+        $(# DISCRIMINANT $discriminant:literal)?
         $(
             $(# HELP $help:literal)?
             $(# TYPE $type:literal)?
@@ -117,6 +117,7 @@ macro_rules! stats_struct {
             }
 
             impl $struct_name {
+                $(const DISCRIMINANT: &str = $discriminant;)?
                 $vis fn new(parent: Option<std::sync::Weak<$struct_name>>, labels: std::collections::HashMap<String, String>) -> std::sync::Arc<Self> {
                     let s = $struct_name {
                         labels: labels.clone(),
@@ -167,11 +168,13 @@ macro_rules! stats_struct {
 
             impl [<$struct_name Report>] {
                 #[allow(dead_code)]
-                fn sub_openmetrics_text(&self, prefix: &str) -> String {
+                fn discriminated_openmetrics_text(&self, prefix: &str, disc: &str) -> String {
                     let mut s = String::new();
                     $(
                         s.push_str(prefix);
-                        s.push_str("{space=\"");
+                        s.push_str("{");
+                        s.push_str(disc);
+                        s.push_str("=\"");
                         s.push_str(stringify!($field_name));
                         s.push_str("\"} ");
                         s.push_str(
@@ -183,11 +186,13 @@ macro_rules! stats_struct {
                 }
 
                 #[allow(dead_code)]
-                fn labelled_sub_openmetrics_text(&self, prefix: &str, labels: &std::collections::HashMap<String, String>) -> String {
+                fn labelled_discriminated_openmetrics_text(&self, prefix: &str, disc: &str, labels: &std::collections::HashMap<String, String>) -> String {
                     let mut s = String::new();
                     $(
                         s.push_str(prefix);
-                        s.push_str("{space=\"");
+                        s.push_str("{");
+                        s.push_str(disc);
+                        s.push_str("=\"");
                         s.push_str(stringify!($field_name));
                         for (k, v) in labels {
                             s.push_str("\",");
@@ -248,9 +253,19 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct DiscriminatedStats {
+    pub struct AdminStats {
+        # DISCRIMINANT "space"
         pub user,
         pub admin,
+    }
+}
+
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct SHMStats {
+        # DISCRIMINANT "medium"
+        pub net,
+        pub shm,
     }
 }
 
@@ -267,7 +282,7 @@ stats_struct! {
 
         # HELP "Counter of sent network messages."
         # TYPE "counter"
-        pub tx_n_msgs,
+        pub tx_n_msgs SHMStats,
 
         # HELP "Counter of dropped network messages."
         # TYPE "counter"
@@ -275,35 +290,35 @@ stats_struct! {
 
         # HELP "Counter of sent zenoh put messages."
         # TYPE "counter"
-        pub tx_z_put_msgs DiscriminatedStats,
+        pub tx_z_put_msgs AdminStats,
 
         # HELP "Counter of sent bytes in zenoh put message payloads."
         # TYPE "counter"
-        pub tx_z_put_pl_bytes DiscriminatedStats,
+        pub tx_z_put_pl_bytes AdminStats,
 
         # HELP "Counter of sent zenoh del messages."
         # TYPE "counter"
-        pub tx_z_del_msgs DiscriminatedStats,
+        pub tx_z_del_msgs AdminStats,
 
          # HELP "Counter of received bytes in zenoh del message attachments."
         # TYPE "counter"
-        pub tx_z_del_pl_bytes DiscriminatedStats,
+        pub tx_z_del_pl_bytes AdminStats,
 
         # HELP "Counter of sent zenoh query messages."
         # TYPE "counter"
-        pub tx_z_query_msgs DiscriminatedStats,
+        pub tx_z_query_msgs AdminStats,
 
         # HELP "Counter of sent bytes in zenoh query message payloads."
         # TYPE "counter"
-        pub tx_z_query_pl_bytes DiscriminatedStats,
+        pub tx_z_query_pl_bytes AdminStats,
 
         # HELP "Counter of sent zenoh reply messages."
         # TYPE "counter"
-        pub tx_z_reply_msgs DiscriminatedStats,
+        pub tx_z_reply_msgs AdminStats,
 
         # HELP "Counter of sent bytes in zenoh reply message payloads."
         # TYPE "counter"
-        pub tx_z_reply_pl_bytes DiscriminatedStats,
+        pub tx_z_reply_pl_bytes AdminStats,
 
         # HELP "Counter of received bytes."
         # TYPE "counter"
@@ -315,43 +330,39 @@ stats_struct! {
 
         # HELP "Counter of received network messages."
         # TYPE "counter"
-        pub rx_n_msgs,
-
-        # HELP "Counter of dropped network messages."
-        # TYPE "counter"
-        pub rx_n_dropped,
+        pub rx_n_msgs SHMStats,
 
         # HELP "Counter of received zenoh put messages."
         # TYPE "counter"
-        pub rx_z_put_msgs DiscriminatedStats,
+        pub rx_z_put_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh put message payloads."
         # TYPE "counter"
-        pub rx_z_put_pl_bytes DiscriminatedStats,
+        pub rx_z_put_pl_bytes AdminStats,
 
         # HELP "Counter of received zenoh del messages."
         # TYPE "counter"
-        pub rx_z_del_msgs DiscriminatedStats,
+        pub rx_z_del_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh del message attachments."
         # TYPE "counter"
-        pub rx_z_del_pl_bytes DiscriminatedStats,
+        pub rx_z_del_pl_bytes AdminStats,
 
         # HELP "Counter of received zenoh query messages."
         # TYPE "counter"
-        pub rx_z_query_msgs DiscriminatedStats,
+        pub rx_z_query_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh query message payloads."
         # TYPE "counter"
-        pub rx_z_query_pl_bytes DiscriminatedStats,
+        pub rx_z_query_pl_bytes AdminStats,
 
         # HELP "Counter of received zenoh reply messages."
         # TYPE "counter"
-        pub rx_z_reply_msgs DiscriminatedStats,
+        pub rx_z_reply_msgs AdminStats,
 
         # HELP "Counter of received bytes in zenoh reply message payloads."
         # TYPE "counter"
-        pub rx_z_reply_pl_bytes DiscriminatedStats,
+        pub rx_z_reply_pl_bytes AdminStats,
 
         # HELP "Counter of messages dropped by ingress downsampling."
         # TYPE "counter"

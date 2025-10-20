@@ -56,6 +56,7 @@ impl Mapping {
     pub const DEFAULT: Self = Self::Receiver;
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -155,6 +156,33 @@ pub trait NetworkMessageExt {
             NetworkBodyRef::Interest(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::Declare(msg) => msg.ext_qos.get_congestion_control(),
             NetworkBodyRef::OAM(msg) => msg.ext_qos.get_congestion_control(),
+        }
+    }
+
+    #[inline]
+    #[cfg(feature = "shared-memory")]
+    fn is_shm(&self) -> bool {
+        use crate::zenoh::{PushBody, RequestBody, ResponseBody};
+
+        match self.body() {
+            NetworkBodyRef::Push(Push { payload, .. }) => match payload {
+                PushBody::Put(p) => p.ext_shm.is_some(),
+                PushBody::Del(_) => false,
+            },
+            NetworkBodyRef::Request(Request { payload, .. }) => match payload {
+                RequestBody::Query(b) => b.ext_body.as_ref().is_some_and(|b| b.ext_shm.is_some()),
+            },
+            NetworkBodyRef::Response(Response { payload, .. }) => match payload {
+                ResponseBody::Reply(b) => match &b.payload {
+                    PushBody::Put(p) => p.ext_shm.is_some(),
+                    PushBody::Del(_) => false,
+                },
+                ResponseBody::Err(e) => e.ext_shm.is_some(),
+            },
+            NetworkBodyRef::ResponseFinal(_)
+            | NetworkBodyRef::Interest(_)
+            | NetworkBodyRef::Declare(_)
+            | NetworkBodyRef::OAM(_) => false,
         }
     }
 
@@ -272,6 +300,7 @@ impl NetworkMessageExt for NetworkMessageMut<'_> {
 
 impl NetworkMessage {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -494,6 +523,7 @@ pub mod ext {
         }
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -548,6 +578,7 @@ pub mod ext {
 
     impl<const ID: u8> TimestampType<{ ID }> {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -577,6 +608,7 @@ pub mod ext {
         pub const DEFAULT: Self = Self { node_id: 0 };
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -623,6 +655,7 @@ pub mod ext {
 
     impl<const ID: u8> EntityGlobalIdType<{ ID }> {
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();

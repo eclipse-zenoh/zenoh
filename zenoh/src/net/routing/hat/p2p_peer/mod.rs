@@ -273,7 +273,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_id, mut res) in hat_face.remote_qabls.drain() {
+        for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
@@ -402,7 +402,7 @@ struct HatFace {
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
-    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
 }
 
 impl HatFace {

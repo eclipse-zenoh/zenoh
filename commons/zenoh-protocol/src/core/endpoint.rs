@@ -466,16 +466,16 @@ impl fmt::Debug for ConfigMut<'_> {
 ///   the Priority of the message in question.
 ///
 ///   For example, `tcp/localhost:7447?prio=1-3` assigns priorities
-///   [`crate::core::Priority::RealTime`], [`crate::core::Priority::InteractiveHigh`] and
-///   [`crate::core::Priority::InteractiveLow`] to the established link.
+///   [`Priority::RealTime`](crate::core::Priority::RealTime), [Priority::InteractiveHigh](crate::core::Priority::InteractiveHigh) and
+///   [`Priority::InteractiveLow`](crate::core::Priority::InteractiveLow) to the established link.
 ///
-/// - **`rel`**: either "0" for [`crate::core::Reliability::BestEffort`] or "1" for
-///   [`crate::core::Reliability::Reliable`]. This value is used to select the link used for
+/// - **`rel`**: either "0" for [`Reliability::BestEffort`](crate::core::Reliability::BestEffort) or "1" for
+///   [`Reliability::Reliable`](crate::core::Reliability::Reliable). This value is used to select the link used for
 ///   transmission based on the reliability of the message in question.
 ///
 ///   For example, `tcp/localhost:7447?prio=6-7;rel=0` assigns priorities
-///   [`crate::core::Priority::DataLow`] and [`crate::core::Priority::Background`], and
-///   [`crate::core::Reliability::BestEffort`] to the established link.
+///   [`Priority::DataLow`](crate::core::Priority::DataLow) and [Priority::Background](crate::core::Priority::Background), and
+///   [`Reliability::BestEffort`](crate::core::Reliability::BestEffort) to the established link.
 #[derive(Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
@@ -660,6 +660,7 @@ impl FromStr for EndPoint {
 
 impl EndPoint {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

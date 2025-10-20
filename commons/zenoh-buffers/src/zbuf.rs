@@ -588,6 +588,7 @@ impl io::Write for ZBufWriter<'_> {
 
 #[cfg(feature = "test")]
 impl ZBuf {
+    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         let mut zbuf = ZBuf::empty();
         zbuf.push_zslice(ZSlice::rand(len));

@@ -24,11 +24,11 @@ pub mod flag {
 /// # Frame message
 ///
 /// The [`Frame`] message is used to transmit one ore more complete serialized
-/// [`crate::network::NetworkMessage`]. I.e., the total length of the
-/// serialized [`crate::network::NetworkMessage`] (s) MUST be smaller
+/// [`NetworkMessage`]. I.e., the total length of the
+/// serialized [`NetworkMessage`] (s) MUST be smaller
 /// than the maximum batch size (i.e. 2^16-1) and the link MTU.
 /// The [`Frame`] message is used as means to aggregate multiple
-/// [`crate::network::NetworkMessage`] in a single atomic message that
+/// [`NetworkMessage`] in a single atomic message that
 /// goes on the wire. By doing so, many small messages can be batched together and
 /// share common information like the sequence number.
 ///
@@ -85,6 +85,7 @@ pub mod ext {
 
 impl Frame {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -119,6 +120,7 @@ pub struct FrameHeader {
 
 impl FrameHeader {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

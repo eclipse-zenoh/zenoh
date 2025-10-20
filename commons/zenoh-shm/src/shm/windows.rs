@@ -14,8 +14,11 @@
 
 use std::num::NonZeroUsize;
 
-use win_sys::*;
-use winapi::um::errhandlingapi::GetLastError;
+use win_sys::{Memory::SEC_COMMIT, *};
+use winapi::um::{
+    errhandlingapi::GetLastError,
+    //memoryapi::{VirtualLock, VirtualUnlock},
+};
 
 use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
@@ -36,7 +39,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             tracing::trace!(
                 "CreateFileMapping({:?}, NULL, {:X}, {}, {}, '{}')",
                 INVALID_HANDLE_VALUE,
-                PAGE_READWRITE.0,
+                PAGE_READWRITE.0 | SEC_COMMIT.0,
                 high_size,
                 low_size,
                 id,
@@ -47,7 +50,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             let fd = CreateFileMapping(
                 INVALID_HANDLE_VALUE,
                 None,
-                PAGE_READWRITE,
+                PAGE_READWRITE | SEC_COMMIT,
                 high_size,
                 low_size,
                 id.as_str(),
@@ -143,7 +146,32 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             VirtualQuery(data_ptr.as_mut_ptr(), &mut info)?;
             info.RegionSize
         };
-
+        // TODO: disabled for a while because we cannot test it on the CI due to this:
+        // https://github.com/orgs/community/discussions/177222
+        /*
+                // SAFETY: this is safe as data_ptr and length are correct
+                if unsafe { VirtualLock(data_ptr.as_mut_ptr() as *mut winapi::ctypes::c_void, len) }
+                    == winapi::shared::minwindef::FALSE
+                {
+                    return Err(Error::from_win32());
+                }
+        */
         Ok((data_ptr, len))
     }
 }
+/*
+impl<ID: SegmentID> Drop for SegmentImpl<ID> {
+    fn drop(&mut self) {
+        // SAFETY: this is safe as data_ptr and length are correct
+        if unsafe {
+            VirtualUnlock(
+                self.data_ptr.as_mut_ptr() as *mut winapi::ctypes::c_void,
+                self.len.get(),
+            )
+        } == winapi::shared::minwindef::FALSE
+        {
+            tracing::trace!("VirtualUnlock failed");
+        }
+    }
+}
+*/
