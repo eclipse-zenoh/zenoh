@@ -42,7 +42,7 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::local_resources::{ILocalResourceInfo, LocalResources},
+        dispatcher::local_resources::{LocalResourceInfoTrait, LocalResources},
         hat::{HatTrait, SendDeclare},
         router::{get_or_set_route, QueryRouteBuilder},
     },
@@ -730,7 +730,7 @@ pub(crate) fn update_queryable_info(
     }
 }
 
-impl ILocalResourceInfo<Arc<Resource>> for QueryableInfoType {
+impl LocalResourceInfoTrait<Arc<Resource>> for QueryableInfoType {
     fn aggregate(
         self_val: Option<Self>,
         self_res: &Arc<Resource>,

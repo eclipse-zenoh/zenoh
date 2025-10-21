@@ -23,11 +23,11 @@ use zenoh_protocol::network::interest::InterestId;
 
 use crate::net::routing::router::Resource;
 
-pub(crate) trait ILocalResource: Hash + Clone + Eq {
+pub(crate) trait LocalResourceTrait: Hash + Clone + Eq {
     fn matches(&self, other: &Self) -> bool;
 }
 
-pub(crate) trait ILocalResourceInfo<Res: ILocalResource>
+pub(crate) trait LocalResourceInfoTrait<Res: LocalResourceTrait>
 where
     Self: Sized + Eq + Clone + Copy,
 {
@@ -46,21 +46,22 @@ where
     }
 }
 
-struct ResourceData<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> {
+struct ResourceData<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>> {
     id: Id,
     aggregated_to: HashSet<Res>,
     interest_ids: HashSet<InterestId>,
     info: Info,
 }
 
-struct AggregatedResourceData<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> {
+struct AggregatedResourceData<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
+{
     id: Id,
     aggregates: HashSet<Res>,
     interest_ids: HashSet<InterestId>,
     info: Option<Info>,
 }
 
-impl<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>>
+impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
     AggregatedResourceData<Id, Res, Info>
 {
     fn recompute_info(
@@ -78,8 +79,8 @@ impl<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>>
 
 pub(crate) struct LocalResourceRemoveResult<
     Id: Copy,
-    Res: ILocalResource,
-    Info: ILocalResourceInfo<Res>,
+    Res: LocalResourceTrait,
+    Info: LocalResourceInfoTrait<Res>,
 > {
     pub(crate) id: Id,
     pub(crate) resource: Res,
@@ -88,20 +89,26 @@ pub(crate) struct LocalResourceRemoveResult<
 
 pub(crate) struct LocalResourceInsertResult<
     Id: Copy,
-    Res: ILocalResource,
-    Info: ILocalResourceInfo<Res>,
+    Res: LocalResourceTrait,
+    Info: LocalResourceInfoTrait<Res>,
 > {
     pub(crate) id: Id,
     pub(crate) resource: Res,
     pub(crate) info: Info,
 }
 
-pub(crate) struct LocalResources<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> {
+pub(crate) struct LocalResources<
+    Id: Copy,
+    Res: LocalResourceTrait,
+    Info: LocalResourceInfoTrait<Res>,
+> {
     simple_resources: HashMap<Res, ResourceData<Id, Res, Info>>,
     aggregated_resources: HashMap<Res, AggregatedResourceData<Id, Res, Info>>,
 }
 
-impl<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> LocalResources<Id, Res, Info> {
+impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
+    LocalResources<Id, Res, Info>
+{
     pub(crate) fn new() -> Self {
         Self {
             simple_resources: HashMap::new(),
@@ -316,7 +323,7 @@ impl<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> LocalResource
     }
 }
 
-impl ILocalResource for Arc<Resource> {
+impl LocalResourceTrait for Arc<Resource> {
     fn matches(&self, other: &Self) -> bool {
         self.deref().matches(other)
     }
@@ -330,7 +337,7 @@ mod tests {
 
     use super::*;
 
-    impl ILocalResource for OwnedKeyExpr {
+    impl LocalResourceTrait for OwnedKeyExpr {
         fn matches(&self, other: &Self) -> bool {
             self.intersects(other)
         }
@@ -341,7 +348,7 @@ mod tests {
         count: usize,
     }
 
-    impl ILocalResourceInfo<OwnedKeyExpr> for TestInfo {
+    impl LocalResourceInfoTrait<OwnedKeyExpr> for TestInfo {
         fn aggregate(
             self_val: Option<Self>,
             _self_res: &OwnedKeyExpr,
