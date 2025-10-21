@@ -44,7 +44,7 @@ use crate::{
         routing::{
             dispatcher::{
                 face::FaceState,
-                local_resources::ILocalResourceState,
+                local_resources::ILocalResourceInfo,
                 resource::{NodeId, Resource, SessionContext},
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },
@@ -174,7 +174,7 @@ fn maybe_register_local_queryable(
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id: update.id,
                         wire_expr: key_expr.clone(),
-                        ext_info: update.state,
+                        ext_info: update.info,
                     }),
                 },
                 update.resource.expr().to_string(),

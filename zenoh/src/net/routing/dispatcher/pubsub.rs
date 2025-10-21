@@ -31,7 +31,7 @@ use crate::{
     key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
-            local_resources::{ILocalResourceState, LocalResources},
+            local_resources::{ILocalResourceInfo, LocalResources},
             tables::RoutingExpr,
         },
         hat::{HatTrait, SendDeclare},
@@ -385,7 +385,7 @@ pub fn route_data(
     }
 }
 
-impl ILocalResourceState<Arc<Resource>> for SubscriberInfo {
+impl ILocalResourceInfo<Arc<Resource>> for SubscriberInfo {
     fn aggregate(
         _self_val: Option<Self>,
         _self_res: &Arc<Resource>,

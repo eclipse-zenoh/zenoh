@@ -27,7 +27,7 @@ pub(crate) trait ILocalResource: Hash + Clone + Eq {
     fn matches(&self, other: &Self) -> bool;
 }
 
-pub(crate) trait ILocalResourceState<Res: ILocalResource>
+pub(crate) trait ILocalResourceInfo<Res: ILocalResource>
 where
     Self: Sized + Eq + Clone + Copy,
 {
@@ -46,64 +46,62 @@ where
     }
 }
 
-struct ResourceData<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>> {
+struct ResourceData<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> {
     id: Id,
     aggregated_to: HashSet<Res>,
     interest_ids: HashSet<InterestId>,
-    state: State,
+    info: Info,
 }
 
-struct AggregatedResourceData<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>> {
+struct AggregatedResourceData<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> {
     id: Id,
     aggregates: HashSet<Res>,
     interest_ids: HashSet<InterestId>,
-    state: Option<State>,
+    info: Option<Info>,
 }
 
-impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
-    AggregatedResourceData<Id, Res, State>
+impl<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>>
+    AggregatedResourceData<Id, Res, Info>
 {
-    fn recompute_state(
+    fn recompute_info(
         &self,
         self_res: &Res,
-        subs: &HashMap<Res, ResourceData<Id, Res, State>>,
-    ) -> Option<State> {
+        subs: &HashMap<Res, ResourceData<Id, Res, Info>>,
+    ) -> Option<Info> {
         let iter = self
             .aggregates
             .iter()
-            .map(|r| (r, subs.get(r).unwrap().state));
-        State::aggregate_many(self_res, iter)
+            .map(|r| (r, subs.get(r).unwrap().info));
+        Info::aggregate_many(self_res, iter)
     }
 }
 
 pub(crate) struct LocalResourceRemoveResult<
     Id: Copy,
     Res: ILocalResource,
-    State: ILocalResourceState<Res>,
+    Info: ILocalResourceInfo<Res>,
 > {
     pub(crate) id: Id,
     pub(crate) resource: Res,
-    pub(crate) update: Option<State>,
+    pub(crate) update: Option<Info>,
 }
 
 pub(crate) struct LocalResourceInsertResult<
     Id: Copy,
     Res: ILocalResource,
-    State: ILocalResourceState<Res>,
+    Info: ILocalResourceInfo<Res>,
 > {
     pub(crate) id: Id,
     pub(crate) resource: Res,
-    pub(crate) state: State,
+    pub(crate) info: Info,
 }
 
-pub(crate) struct LocalResources<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>> {
-    simple_resources: HashMap<Res, ResourceData<Id, Res, State>>,
-    aggregated_resources: HashMap<Res, AggregatedResourceData<Id, Res, State>>,
+pub(crate) struct LocalResources<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> {
+    simple_resources: HashMap<Res, ResourceData<Id, Res, Info>>,
+    aggregated_resources: HashMap<Res, AggregatedResourceData<Id, Res, Info>>,
 }
 
-impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
-    LocalResources<Id, Res, State>
-{
+impl<Id: Copy, Res: ILocalResource, Info: ILocalResourceInfo<Res>> LocalResources<Id, Res, Info> {
     pub(crate) fn new() -> Self {
         Self {
             simple_resources: HashMap::new(),
@@ -119,14 +117,14 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
         self.simple_resources.keys()
     }
 
-    // Returns Id of newly inserted resource and the list of resources that were enabled/changed state by this operation
+    // Returns Id of newly inserted resource and the list of resources that were enabled/changed info by this operation
     pub(crate) fn insert_simple_resource<F>(
         &mut self,
         key: Res,
-        state: State,
+        info: Info,
         f_id: F,
         interests: HashSet<InterestId>,
-    ) -> (Id, Vec<LocalResourceInsertResult<Id, Res, State>>)
+    ) -> (Id, Vec<LocalResourceInsertResult<Id, Res, Info>>)
     where
         F: FnOnce() -> Id,
     {
@@ -136,26 +134,26 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
                 {
                     let s_res_data = occupied_entry.get_mut();
                     s_res_data.interest_ids.extend(interests);
-                    if !s_res_data.interest_ids.is_empty() && s_res_data.state != state {
+                    if !s_res_data.interest_ids.is_empty() && s_res_data.info != info {
                         updated_resources.push(LocalResourceInsertResult {
                             id: s_res_data.id,
                             resource: key.clone(),
-                            state,
+                            info,
                         });
                     }
-                    s_res_data.state = state;
+                    s_res_data.info = info;
                 };
                 let s_res_data = self.simple_resources.get(&key).unwrap(); // reborrow as shared ref
 
                 for a_res in &s_res_data.aggregated_to {
                     if let Some(a_res_data) = self.aggregated_resources.get_mut(a_res) {
-                        let new_state = a_res_data.recompute_state(a_res, &self.simple_resources);
-                        if new_state != a_res_data.state {
-                            a_res_data.state = new_state;
+                        let new_info = a_res_data.recompute_info(a_res, &self.simple_resources);
+                        if new_info != a_res_data.info {
+                            a_res_data.info = new_info;
                             updated_resources.push(LocalResourceInsertResult {
                                 id: a_res_data.id,
                                 resource: a_res.clone(),
-                                state: new_state.unwrap(), // aggregated resource contains at least one simple - so it is guaranteed to have an initialized state
+                                info: new_info.unwrap(), // aggregated resource contains at least one simple - so it is guaranteed to have an initialized info
                             });
                         }
                     }
@@ -171,13 +169,13 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
                 let mut aggregated_to = HashSet::new();
                 for (a_res, a_res_data) in &mut self.aggregated_resources {
                     if key.matches(a_res) {
-                        let new_state = State::aggregate(a_res_data.state, a_res, &state, &key);
-                        if Some(new_state) != a_res_data.state {
-                            a_res_data.state = Some(new_state);
+                        let new_info = Info::aggregate(a_res_data.info, a_res, &info, &key);
+                        if Some(new_info) != a_res_data.info {
+                            a_res_data.info = Some(new_info);
                             updated_resources.push(LocalResourceInsertResult {
                                 id: a_res_data.id,
                                 resource: a_res.clone(),
-                                state: new_state,
+                                info: new_info,
                             });
                         }
                         a_res_data.aggregates.insert(key.clone());
@@ -188,13 +186,13 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
                     id,
                     aggregated_to,
                     interest_ids: interests,
-                    state,
+                    info,
                 });
                 if !inserted_res.interest_ids.is_empty() {
                     updated_resources.push(LocalResourceInsertResult {
                         id,
                         resource: key,
-                        state,
+                        info,
                     });
                 }
                 (id, updated_resources)
@@ -207,14 +205,14 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
         key: Res,
         f_id: F,
         interests: HashSet<InterestId>,
-    ) -> (Id, Option<State>)
+    ) -> (Id, Option<Info>)
     where
         F: FnOnce() -> Id,
     {
         match self.aggregated_resources.entry(key.clone()) {
             std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
                 occupied_entry.get_mut().interest_ids.extend(interests);
-                (occupied_entry.get().id, occupied_entry.get().state)
+                (occupied_entry.get().id, occupied_entry.get().info)
             }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
                 let mut aggregates = HashSet::new();
@@ -228,19 +226,19 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
                     id: self.simple_resources.get(&key).map_or_else(f_id, |r| r.id),
                     aggregates,
                     interest_ids: interests,
-                    state: None,
+                    info: None,
                 });
-                inserted_res.state = inserted_res.recompute_state(&key, &self.simple_resources);
-                (inserted_res.id, inserted_res.state)
+                inserted_res.info = inserted_res.recompute_info(&key, &self.simple_resources);
+                (inserted_res.id, inserted_res.info)
             }
         }
     }
 
-    // Returns resources that were removed/changed state due to simple resource removal.
+    // Returns resources that were removed/changed info due to simple resource removal.
     pub(crate) fn remove_simple_resource(
         &mut self,
         key: &Res,
-    ) -> Vec<LocalResourceRemoveResult<Id, Res, State>> {
+    ) -> Vec<LocalResourceRemoveResult<Id, Res, Info>> {
         let mut updated_resources = Vec::new();
         if let Some(s_res_data) = self.simple_resources.remove(key) {
             if !s_res_data.interest_ids.is_empty() {
@@ -255,13 +253,13 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
                 for a_res in &s_res_data.aggregated_to {
                     let a_res_data = self.aggregated_resources.get_mut(a_res).unwrap();
                     a_res_data.aggregates.remove(key);
-                    let new_state = a_res_data.recompute_state(a_res, &self.simple_resources);
-                    if new_state != a_res_data.state {
-                        a_res_data.state = new_state;
+                    let new_info = a_res_data.recompute_info(a_res, &self.simple_resources);
+                    if new_info != a_res_data.info {
+                        a_res_data.info = new_info;
                         updated_resources.push(LocalResourceRemoveResult {
                             id: a_res_data.id,
                             resource: a_res.clone(),
-                            update: new_state,
+                            update: new_info,
                         })
                     }
                 }
@@ -339,11 +337,11 @@ mod tests {
     }
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-    struct TestState {
+    struct TestInfo {
         count: usize,
     }
 
-    impl ILocalResourceState<OwnedKeyExpr> for TestState {
+    impl ILocalResourceInfo<OwnedKeyExpr> for TestInfo {
         fn aggregate(
             self_val: Option<Self>,
             _self_res: &OwnedKeyExpr,
@@ -351,7 +349,7 @@ mod tests {
             _other_res: &OwnedKeyExpr,
         ) -> Self {
             match self_val {
-                Some(self_val) => TestState {
+                Some(self_val) => TestInfo {
                     count: self_val.count + other_val.count,
                 },
                 None => *other_val,
@@ -359,7 +357,7 @@ mod tests {
         }
     }
 
-    type LocalTestResources = LocalResources<usize, OwnedKeyExpr, TestState>;
+    type LocalTestResources = LocalResources<usize, OwnedKeyExpr, TestInfo>;
 
     fn ke(s: &str) -> OwnedKeyExpr {
         s.try_into().unwrap()
@@ -368,12 +366,12 @@ mod tests {
     #[test]
     fn test_simple() {
         let mut local_res = LocalTestResources::new();
-        let state0 = TestState { count: 0 };
-        let state1 = TestState { count: 1 };
+        let info0 = TestInfo { count: 0 };
+        let info1 = TestInfo { count: 1 };
         let counter = AtomicUsize::new(0);
         let out = local_res.insert_simple_resource(
             "test/simple/1".try_into().unwrap(),
-            state0,
+            info0,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([1u32]),
         );
@@ -381,19 +379,19 @@ mod tests {
         assert_eq!(out.0, 0);
         assert_eq!(out.1.len(), 1);
         assert_eq!(out.1[0].id, 0);
-        assert_eq!(out.1[0].state, state0);
+        assert_eq!(out.1[0].info, info0);
         assert_eq!(out.1[0].resource, ke("test/simple/1"));
 
         let _ = local_res.insert_simple_resource(
             ke("test/simple/2"),
-            state0,
+            info0,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([2u32]),
         );
 
         let out = local_res.insert_simple_resource(
             ke("test/simple/2"),
-            state0,
+            info0,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([2u32]),
         );
@@ -402,19 +400,19 @@ mod tests {
 
         let out = local_res.insert_simple_resource(
             ke("test/simple/2"),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([2u32]),
         );
         assert_eq!(out.0, 1);
         assert_eq!(out.1.len(), 1);
         assert_eq!(out.1[0].id, 1);
-        assert_eq!(out.1[0].state, state1);
+        assert_eq!(out.1[0].info, info1);
         assert_eq!(out.1[0].resource, ke("test/simple/2"));
 
         let _ = local_res.insert_simple_resource(
             ke("test/simple/*"),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([1u32, 2u32]),
         );
@@ -446,25 +444,25 @@ mod tests {
     #[test]
     fn test_aggregate() {
         fn hm(
-            v: Vec<LocalResourceInsertResult<usize, OwnedKeyExpr, TestState>>,
-        ) -> HashMap<usize, (OwnedKeyExpr, TestState)> {
+            v: Vec<LocalResourceInsertResult<usize, OwnedKeyExpr, TestInfo>>,
+        ) -> HashMap<usize, (OwnedKeyExpr, TestInfo)> {
             v.into_iter()
-                .map(|r| (r.id, (r.resource, r.state)))
+                .map(|r| (r.id, (r.resource, r.info)))
                 .collect::<HashMap<_, _>>()
         }
 
         let mut local_res = LocalTestResources::new();
-        let state1 = TestState { count: 1 };
+        let info1 = TestInfo { count: 1 };
         let counter = AtomicUsize::new(0);
         local_res.insert_simple_resource(
             ke("test/aggregate/1"),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([1u32]),
         );
         let _ = local_res.insert_simple_resource(
             ke("test/wrong/2"),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([10u32]),
         );
@@ -474,22 +472,22 @@ mod tests {
             HashSet::from([2u32]),
         );
         assert_eq!(out.0, 2);
-        assert_eq!(out.1, Some(TestState { count: 1 }));
+        assert_eq!(out.1, Some(TestInfo { count: 1 }));
         let out = local_res.insert_simple_resource(
             ke("test/aggregate/*"),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::new(),
         );
         assert_eq!(out.0, 2);
         assert_eq!(out.1.len(), 1);
         assert_eq!(out.1[0].id, 2);
-        assert_eq!(out.1[0].state, TestState { count: 2 });
+        assert_eq!(out.1[0].info, TestInfo { count: 2 });
         assert_eq!(out.1[0].resource, ke("test/aggregate/*"));
 
         let out = local_res.insert_simple_resource(
             ke("test/aggregate/2"),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::from([3u32]),
         );
@@ -498,30 +496,30 @@ mod tests {
         assert_eq!(hm.len(), 2);
         assert_eq!(
             hm.get(&3).unwrap(),
-            &(ke("test/aggregate/2"), TestState { count: 1 })
+            &(ke("test/aggregate/2"), TestInfo { count: 1 })
         );
         assert_eq!(
             hm.get(&2).unwrap(),
-            &(ke("test/aggregate/*"), TestState { count: 3 })
+            &(ke("test/aggregate/*"), TestInfo { count: 3 })
         );
 
         let out = local_res.insert_simple_resource(
             "test/aggregate/**".try_into().unwrap(),
-            state1,
+            info1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             HashSet::new(),
         );
         assert_eq!(out.0, 4);
         assert_eq!(out.1.len(), 1);
         assert_eq!(out.1[0].id, 2);
-        assert_eq!(out.1[0].state, TestState { count: 4 });
+        assert_eq!(out.1[0].info, TestInfo { count: 4 });
         assert_eq!(out.1[0].resource, ke("test/aggregate/*"));
 
         assert!(local_res.contains_simple_resource(&ke("test/aggregate/*")));
         let out = local_res.remove_simple_resource(&ke("test/aggregate/*"));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, 2);
-        assert_eq!(out[0].update, Some(TestState { count: 3 }));
+        assert_eq!(out[0].update, Some(TestInfo { count: 3 }));
         assert_eq!(out[0].resource, ke("test/aggregate/*"));
         assert!(!local_res.contains_simple_resource(&ke("test/aggregate/*")));
 
