@@ -11,7 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashSet, fmt::Debug, num::NonZeroUsize, sync::Mutex, thread::JoinHandle};
+use std::{
+    collections::HashSet,
+    fmt::Debug,
+    num::NonZeroUsize,
+    sync::{Arc, Mutex},
+    thread::JoinHandle,
+};
 
 use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, Zenoh080};
@@ -45,10 +51,10 @@ struct ProviderInitCfg {
 }
 
 enum ProviderInitState {
-    Disabled,
     Enabled(ProviderInitCfg),
     Initializing(Option<JoinHandle<Option<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(ShmProvider<PosixShmProviderBackend>),
+    Error,
 }
 
 pub struct LazyShmProvider {
@@ -66,14 +72,6 @@ impl LazyShmProvider {
         }
     }
 
-    pub fn new_disabled() -> Self {
-        let state = Mutex::new(ProviderInitState::Disabled);
-        Self {
-            message_size_threshold: 0,
-            state,
-        }
-    }
-
     fn wrap_in_place<const ID: u8>(&self, ext_shm: &mut Option<ShmType<ID>>, slice: &mut ZSlice) {
         if slice.len() < self.message_size_threshold {
             return;
@@ -87,7 +85,6 @@ impl LazyShmProvider {
         };
 
         match &mut *lock {
-            ProviderInitState::Disabled => {}
             ProviderInitState::Enabled(cfg) => {
                 let shm_size = cfg.shm_size.get();
                 let task = std::thread::spawn(move || {
@@ -110,13 +107,14 @@ impl LazyShmProvider {
                             Self::_wrap_in_place(&shm_provider, ext_shm, slice);
                             ProviderInitState::Ready(shm_provider)
                         }
-                        None => ProviderInitState::Disabled,
+                        None => ProviderInitState::Error,
                     };
                 }
             }
             ProviderInitState::Ready(shm_provider) => {
                 Self::_wrap_in_place(shm_provider, ext_shm, slice);
             }
+            ProviderInitState::Error => {}
         }
     }
 
@@ -170,7 +168,7 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
 pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
-    shm_provider: &LazyShmProvider,
+    shm_provider: &Option<Arc<LazyShmProvider>>,
 ) {
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
@@ -233,7 +231,7 @@ trait MapShm {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     );
 }
 
@@ -241,13 +239,15 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
     zbuf: &mut ZBuf,
     ext_shm: &mut Option<ShmType<ID>>,
     partner_shm_cfg: &ShmCfg,
-    shm_provider: &LazyShmProvider,
+    shm_provider: &Option<Arc<LazyShmProvider>>,
 ) {
     for zs in zbuf.zslices_mut() {
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
-                // Implicit SHM optimization: try to convert to SHM buffer
-                shm_provider.wrap_in_place(ext_shm, zs);
+                if let Some(shm_provider) = shm_provider {
+                    // Implicit SHM optimization: try to convert to SHM buffer
+                    shm_provider.wrap_in_place(ext_shm, zs);
+                }
             }
             Some(shmb) => {
                 if partner_shm_cfg.supports_protocol(shmb.protocol()) {
@@ -280,7 +280,7 @@ impl MapShm for Put {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         let Self {
             payload, ext_shm, ..
@@ -301,7 +301,7 @@ impl MapShm for Query {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         if let Self {
             ext_body: Some(QueryBodyType {
@@ -333,7 +333,7 @@ impl MapShm for Reply {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         if let PushBody::Put(Put {
             payload, ext_shm, ..
@@ -359,7 +359,7 @@ impl MapShm for Err {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         let Self {
             payload, ext_shm, ..
