@@ -31,6 +31,7 @@ base64ct = "=1.6.0"
 generic-array = "=0.14.7"
 home = "=0.5.9"
 icu_normalizer = "=1.5.0"
+indexmap = "=2.11.4"
 librocksdb-sys = "=0.17.1"
 litemap = "=0.7.4"
 lz4_flex = "=0.11.3"
@@ -56,6 +57,7 @@ ignored = [
   "generic-array",
   "home",
   "icu_normalizer",
+  "indexmap",
   "librocksdb-sys",
   "litemap",
   "lz4_flex",

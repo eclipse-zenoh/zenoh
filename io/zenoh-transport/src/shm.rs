@@ -91,7 +91,13 @@ impl LazyShmProvider {
             ProviderInitState::Enabled(cfg) => {
                 let shm_size = cfg.shm_size.get();
                 let task = std::thread::spawn(move || {
-                    ShmProviderBuilder::default_backend(shm_size).wait().ok()
+                    match ShmProviderBuilder::default_backend(shm_size).wait() {
+                        Ok(backend) => Some(backend),
+                        Result::Err(e) => {
+                            tracing::error!("Error creating lazy ShmProvider: {e}");
+                            None
+                        }
+                    }
                 });
                 *lock = ProviderInitState::Initializing(Some(task));
             }

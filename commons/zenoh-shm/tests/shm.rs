@@ -93,3 +93,10 @@ fn recreate_many_times() {
 
     assert!(Segment::open(id).is_err());
 }
+
+#[test]
+fn expect_no_overcommit() {
+    let id = (line!() as u64) + ((std::process::id() as u64) << 32);
+    let len = (1024 * 1024 * 1024 * 1024 * 1024).try_into().unwrap(); // 1 PB of memory
+    assert!(Segment::create(id, len).is_err());
+}
