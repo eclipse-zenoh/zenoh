@@ -731,7 +731,7 @@ pub(crate) fn update_queryable_info(
 }
 
 impl ILocalResourceState<Arc<Resource>> for QueryableInfoType {
-    fn merge(
+    fn aggregate(
         self_val: Option<Self>,
         self_res: &Arc<Resource>,
         other_val: &Self,

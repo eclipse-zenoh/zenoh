@@ -386,7 +386,7 @@ pub fn route_data(
 }
 
 impl ILocalResourceState<Arc<Resource>> for SubscriberInfo {
-    fn merge(
+    fn aggregate(
         _self_val: Option<Self>,
         _self_res: &Arc<Resource>,
         other_val: &Self,
@@ -395,7 +395,7 @@ impl ILocalResourceState<Arc<Resource>> for SubscriberInfo {
         *other_val
     }
 
-    fn merge_many<'a>(
+    fn aggregate_many<'a>(
         _self_res: &Arc<Resource>,
         mut iter: impl Iterator<Item = (&'a Arc<Resource>, Self)>,
     ) -> Option<Self> {

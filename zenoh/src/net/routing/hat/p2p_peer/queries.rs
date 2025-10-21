@@ -409,7 +409,7 @@ pub(super) fn declare_qabl_interest(
             } else {
                 (
                     0,
-                    QueryableInfoType::merge_many(
+                    QueryableInfoType::aggregate_many(
                         aggregated_res,
                         matching_qabls.map(|q| (q, local_qabl_info(tables, q, face))),
                     ),

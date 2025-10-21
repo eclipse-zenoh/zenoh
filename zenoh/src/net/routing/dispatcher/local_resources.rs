@@ -31,15 +31,16 @@ pub(crate) trait ILocalResourceState<Res: ILocalResource>
 where
     Self: Sized + Eq + Clone + Copy,
 {
-    fn merge(self_val: Option<Self>, self_res: &Res, other_val: &Self, other_res: &Res) -> Self;
+    fn aggregate(self_val: Option<Self>, self_res: &Res, other_val: &Self, other_res: &Res)
+        -> Self;
 
-    fn merge_many<'a>(
+    fn aggregate_many<'a>(
         self_res: &'a Res,
         iter: impl Iterator<Item = (&'a Res, Self)>,
     ) -> Option<Self> {
         let mut out = None;
         for (res, val) in iter {
-            out = Some(Self::merge(out, self_res, &val, res));
+            out = Some(Self::aggregate(out, self_res, &val, res));
         }
         out
     }
@@ -48,7 +49,7 @@ where
 struct ResourceData<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>> {
     id: Id,
     aggregated_to: HashSet<Res>,
-    interest_ids: HashSet<Option<InterestId>>, // TODO: could we use 0 interest id for a fake interest ?
+    interest_ids: HashSet<Option<InterestId>>, // TODO: could we use 0 interest id instead of None for an initial implicitly defined interest as it is currently done for p2p ?
     state: State,
 }
 
@@ -71,7 +72,7 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
             .aggregates
             .iter()
             .map(|r| (r, subs.get(r).unwrap().state));
-        State::merge_many(self_res, iter)
+        State::aggregate_many(self_res, iter)
     }
 }
 
@@ -170,7 +171,7 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
                 let mut aggregated_to = HashSet::new();
                 for (a_res, a_res_data) in &mut self.aggregated_resources {
                     if key.matches(a_res) {
-                        let new_state = State::merge(a_res_data.state, a_res, &state, &key);
+                        let new_state = State::aggregate(a_res_data.state, a_res, &state, &key);
                         if Some(new_state) != a_res_data.state {
                             a_res_data.state = Some(new_state);
                             updated_resources.push(LocalResourceInsertResult {
@@ -343,7 +344,7 @@ mod tests {
     }
 
     impl ILocalResourceState<OwnedKeyExpr> for TestState {
-        fn merge(
+        fn aggregate(
             self_val: Option<Self>,
             _self_res: &OwnedKeyExpr,
             other_val: &Self,
