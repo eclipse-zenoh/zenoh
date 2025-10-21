@@ -40,7 +40,8 @@ use crate::{
             tables::{Route, RoutingExpr, Tables},
         },
         hat::{
-            p2p_peer::initial_interest, CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
+            p2p_peer::{initial_interest, INITIAL_INTEREST_ID},
+            CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources,
         },
         router::RouteBuilder,
         RoutingContext,
@@ -51,16 +52,15 @@ use crate::{
 fn maybe_register_local_subscriber(
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    fake_interest: bool,
+    initial_interest: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     if face_hat!(dst_face).local_subs.contains_simple_resource(res) {
         return;
     }
-    let (should_notify, simple_interests) = if fake_interest {
-        (true, HashSet::from_iter([None]))
-    } else {
-        face_hat!(dst_face)
+    let (should_notify, simple_interests) = match initial_interest {
+        Some(interest) => (true, HashSet::from([interest])),
+        None => face_hat!(dst_face)
             .remote_interests
             .iter()
             .filter(|(_, i)| i.options.subscribers() && i.matches(res))
@@ -68,11 +68,11 @@ fn maybe_register_local_subscriber(
                 (false, HashSet::new()),
                 |(_, mut simple_interests), (id, i)| {
                     if !i.options.aggregate() {
-                        simple_interests.insert(Some(*id));
+                        simple_interests.insert(*id);
                     }
                     (true, simple_interests)
                 },
-            )
+            ),
     };
 
     if !should_notify {
@@ -151,9 +151,9 @@ fn propagate_simple_subscription_to(
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
         if dst_face.whatami != WhatAmI::Client {
-            maybe_register_local_subscriber(dst_face, res, true, send_declare);
+            maybe_register_local_subscriber(dst_face, res, Some(INITIAL_INTEREST_ID), send_declare);
         } else {
-            maybe_register_local_subscriber(dst_face, res, false, send_declare);
+            maybe_register_local_subscriber(dst_face, res, None, send_declare);
         }
     }
 }
@@ -419,7 +419,7 @@ pub(super) fn declare_sub_interest(
                         sub.clone(),
                         SubscriberInfo,
                         || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
-                        HashSet::from_iter([Some(interest_id)]),
+                        HashSet::from([interest_id]),
                     )
                     .0
             } else {

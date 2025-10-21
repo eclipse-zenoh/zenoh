@@ -48,7 +48,10 @@ use crate::{
                 resource::{NodeId, Resource, SessionContext},
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },
-            hat::{CurrentFutureTrait, HatQueriesTrait, SendDeclare, Sources},
+            hat::{
+                router::IMPLICIT_INTEREST_ID, CurrentFutureTrait, HatQueriesTrait, SendDeclare,
+                Sources,
+            },
             router::{
                 disable_matches_query_routes, get_remote_qabl_info, merge_qabl_infos,
                 update_queryable_info,
@@ -239,13 +242,12 @@ fn maybe_register_local_queryable(
     tables: &Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    fake_interest: bool,
+    initial_interest: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
-    let (should_notify, simple_interests) = if fake_interest {
-        (true, HashSet::from_iter([None]))
-    } else {
-        face_hat!(dst_face)
+    let (should_notify, simple_interests) = match initial_interest {
+        Some(interest) => (true, HashSet::from([interest])),
+        None => face_hat!(dst_face)
             .remote_interests
             .iter()
             .filter(|(_, i)| i.options.queryables() && i.matches(res))
@@ -253,11 +255,11 @@ fn maybe_register_local_queryable(
                 (false, HashSet::new()),
                 |(_, mut simple_interests), (id, i)| {
                     if !i.options.aggregate() {
-                        simple_interests.insert(Some(*id));
+                        simple_interests.insert(*id);
                     }
                     (true, simple_interests)
                 },
-            )
+            ),
     };
 
     if !should_notify {
@@ -387,7 +389,7 @@ fn propagate_simple_queryable(
                         .unwrap_or(true)
             }
         {
-            maybe_register_local_queryable(tables, &mut dst_face, res, false, send_declare);
+            maybe_register_local_queryable(tables, &mut dst_face, res, None, send_declare);
         }
     }
 }
@@ -948,7 +950,7 @@ pub(super) fn queries_linkstate_change(
                             tables,
                             &mut dst_face,
                             res,
-                            true,
+                            Some(IMPLICIT_INTEREST_ID),
                             send_declare,
                         );
                     }
@@ -1152,7 +1154,7 @@ pub(crate) fn declare_qabl_interest(
                         qabl.clone(),
                         qabl_info,
                         || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
-                        HashSet::from_iter([Some(interest_id)]),
+                        HashSet::from([interest_id]),
                     )
                     .0
             } else {

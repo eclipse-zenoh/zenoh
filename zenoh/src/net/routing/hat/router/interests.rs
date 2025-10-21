@@ -132,7 +132,7 @@ impl HatInterestTrait for HatCode {
                 } else {
                     face_hat_mut!(face)
                         .local_subs
-                        .remove_simple_resource_interest(Some(id));
+                        .remove_simple_resource_interest(id);
                 }
             }
             if i.options.queryables() {
@@ -145,7 +145,7 @@ impl HatInterestTrait for HatCode {
                 } else {
                     face_hat_mut!(face)
                         .local_qabls
-                        .remove_simple_resource_interest(Some(id));
+                        .remove_simple_resource_interest(id);
                 }
             }
         }

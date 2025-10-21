@@ -45,7 +45,10 @@ use crate::{
                 resource::{NodeId, Resource, SessionContext},
                 tables::{Route, RoutingExpr, Tables},
             },
-            hat::{CurrentFutureTrait, HatPubSubTrait, SendDeclare, Sources},
+            hat::{
+                router::IMPLICIT_INTEREST_ID, CurrentFutureTrait, HatPubSubTrait, SendDeclare,
+                Sources,
+            },
             router::{disable_matches_data_routes, RouteBuilder},
             RoutingContext,
         },
@@ -101,16 +104,15 @@ fn maybe_register_local_subscriber(
     tables: &Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    fake_interest: bool,
+    initial_interest: Option<InterestId>,
     send_declare: &mut SendDeclare,
 ) {
     if face_hat!(dst_face).local_subs.contains_simple_resource(res) {
         return;
     }
-    let (should_notify, simple_interests) = if fake_interest {
-        (true, HashSet::from_iter([None]))
-    } else {
-        face_hat!(dst_face)
+    let (should_notify, simple_interests) = match initial_interest {
+        Some(interest) => (true, HashSet::from([interest])),
+        None => face_hat!(dst_face)
             .remote_interests
             .iter()
             .filter(|(_, i)| i.options.subscribers() && i.matches(res))
@@ -118,11 +120,11 @@ fn maybe_register_local_subscriber(
                 (false, HashSet::new()),
                 |(_, mut simple_interests), (id, i)| {
                     if !i.options.aggregate() {
-                        simple_interests.insert(Some(*id));
+                        simple_interests.insert(*id);
                     }
                     (true, simple_interests)
                 },
-            )
+            ),
     };
 
     if !should_notify {
@@ -216,7 +218,7 @@ fn propagate_simple_subscription_to(
                     || hat!(tables).failover_brokering(src_face.zid, dst_face.zid))
         }
     {
-        maybe_register_local_subscriber(tables, dst_face, res, false, send_declare);
+        maybe_register_local_subscriber(tables, dst_face, res, None, send_declare);
     }
 }
 
@@ -811,7 +813,7 @@ pub(super) fn pubsub_linkstate_change(
                             tables,
                             &mut dst_face,
                             res,
-                            true,
+                            Some(IMPLICIT_INTEREST_ID),
                             send_declare,
                         );
                     }
@@ -917,7 +919,7 @@ pub(crate) fn declare_sub_interest(
                         sub.clone(),
                         SubscriberInfo,
                         || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
-                        HashSet::from_iter([Some(interest_id)]),
+                        HashSet::from([interest_id]),
                     )
                     .0
             } else {

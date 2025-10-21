@@ -49,7 +49,7 @@ where
 struct ResourceData<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>> {
     id: Id,
     aggregated_to: HashSet<Res>,
-    interest_ids: HashSet<Option<InterestId>>, // TODO: could we use 0 interest id instead of None for an initial implicitly defined interest as it is currently done for p2p ?
+    interest_ids: HashSet<InterestId>,
     state: State,
 }
 
@@ -125,7 +125,7 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
         key: Res,
         state: State,
         f_id: F,
-        interests: HashSet<Option<InterestId>>,
+        interests: HashSet<InterestId>,
     ) -> (Id, Vec<LocalResourceInsertResult<Id, Res, State>>)
     where
         F: FnOnce() -> Id,
@@ -270,7 +270,7 @@ impl<Id: Copy, Res: ILocalResource, State: ILocalResourceState<Res>>
         updated_resources
     }
 
-    pub(crate) fn remove_simple_resource_interest(&mut self, interest: Option<InterestId>) {
+    pub(crate) fn remove_simple_resource_interest(&mut self, interest: InterestId) {
         self.simple_resources.retain(|_, res_data| {
             !(res_data.interest_ids.remove(&interest)
                 && res_data.interest_ids.is_empty()
@@ -375,7 +375,7 @@ mod tests {
             "test/simple/1".try_into().unwrap(),
             state0,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(1u32)]),
+            HashSet::from([1u32]),
         );
 
         assert_eq!(out.0, 0);
@@ -388,14 +388,14 @@ mod tests {
             ke("test/simple/2"),
             state0,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(2u32)]),
+            HashSet::from([2u32]),
         );
 
         let out = local_res.insert_simple_resource(
             ke("test/simple/2"),
             state0,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(2u32)]),
+            HashSet::from([2u32]),
         );
         assert_eq!(out.0, 1);
         assert_eq!(out.1.len(), 0);
@@ -404,7 +404,7 @@ mod tests {
             ke("test/simple/2"),
             state1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(2u32)]),
+            HashSet::from([2u32]),
         );
         assert_eq!(out.0, 1);
         assert_eq!(out.1.len(), 1);
@@ -416,7 +416,7 @@ mod tests {
             ke("test/simple/*"),
             state1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(1u32), Some(2u32)]),
+            HashSet::from([1u32, 2u32]),
         );
 
         assert!(local_res.contains_simple_resource(&ke("test/simple/1")));
@@ -433,12 +433,12 @@ mod tests {
         assert!(!local_res.contains_simple_resource(&ke("test/simple/2")));
         assert!(local_res.contains_simple_resource(&ke("test/simple/*")));
 
-        local_res.remove_simple_resource_interest(Some(1));
+        local_res.remove_simple_resource_interest(1);
 
         assert!(!local_res.contains_simple_resource(&ke("test/simple/1")));
         assert!(local_res.contains_simple_resource(&ke("test/simple/*")));
 
-        local_res.remove_simple_resource_interest(Some(2));
+        local_res.remove_simple_resource_interest(2);
 
         assert!(!local_res.contains_simple_resource(&ke("test/simple/*")));
     }
@@ -460,13 +460,13 @@ mod tests {
             ke("test/aggregate/1"),
             state1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(1u32)]),
+            HashSet::from([1u32]),
         );
         let _ = local_res.insert_simple_resource(
             ke("test/wrong/2"),
             state1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(10u32)]),
+            HashSet::from([10u32]),
         );
         let out = local_res.insert_aggregated_resource(
             ke("test/aggregate/*"),
@@ -491,7 +491,7 @@ mod tests {
             ke("test/aggregate/2"),
             state1,
             || counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            HashSet::from([Some(3u32)]),
+            HashSet::from([3u32]),
         );
         assert_eq!(out.0, 3);
         let hm = hm(out.1);
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(out[0].resource, ke("test/aggregate/*"));
         assert!(!local_res.contains_simple_resource(&ke("test/aggregate/*")));
 
-        local_res.remove_simple_resource_interest(Some(1u32));
+        local_res.remove_simple_resource_interest(1u32);
         assert!(local_res.contains_simple_resource(&ke("test/aggregate/1")));
         assert!(local_res.contains_simple_resource(&ke("test/aggregate/**")));
 
