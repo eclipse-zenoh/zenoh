@@ -393,6 +393,7 @@ jobs:
 
           - name: Generate code coverage
             run: |
+              sudo prlimit --memlock=unlimited --pid=$$
               cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
               ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
               --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
