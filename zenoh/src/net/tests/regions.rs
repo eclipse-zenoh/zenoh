@@ -22,9 +22,9 @@ use zenoh_protocol::{
     core::{WireExpr, ZenohIdProto},
     network::{
         self,
-        declare::queryable::ext::QueryableInfoType,
+        declare::{self, queryable::ext::QueryableInfoType},
         interest::{InterestMode, InterestOptions},
-        Declare, Interest, Oam, Request,
+        Declare, DeclareBody, DeclareSubscriber, Interest, Oam, Request,
     },
     zenoh::{ConsolidationMode, Query, RequestBody},
 };
@@ -362,6 +362,83 @@ fn test_peer_gateway_interest_propagation() {
     assert_eq!(&*gateway_buf_guard, &[msg]);
 }
 
+#[test]
+fn test_declaration_propagation_to_late_faces() {
+    zenoh_util::try_init_log_from_env();
+
+    const PEER_SUBREGION: Bound = Bound::south(0);
+
+    let router = {
+        let mut config = Config::default();
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+
+        let mut router = RouterBuilder::new(&config)
+            .hat(Bound::north(), WhatAmI::Client)
+            .hat(PEER_SUBREGION, WhatAmI::Peer)
+            .build()
+            .unwrap();
+
+        let runtime = ZRuntime::Application
+            .block_in_place(RuntimeBuilder::new(config).build())
+            .unwrap();
+        router.init_hats(runtime).unwrap();
+        router
+    };
+
+    // 1. Client north hat receives declarations from some client face
+    // 2. New router face joins
+    // 3. Did the router receive said declaration?
+
+    // TODO: right now there are two limitations to this test:
+    // 1. We only handle a `R/? - C/P - P` scenario
+    // 2. The declaration is a subscriber only
+
+    let buf0 = Arc::new(DeclarationBuffer::default());
+    let face0 = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            PEER_SUBREGION,
+            buf0.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Peer)
+        .build()
+    });
+
+    let msg = Declare {
+        interest_id: None,
+        ext_qos: declare::ext::QoSType::INTEREST,
+        ext_tstamp: None,
+        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+            id: 0,
+            wire_expr: WireExpr::from("**/a/b"),
+        }),
+    };
+
+    face0.send_declare(&mut msg.clone());
+
+    let buf1 = Arc::new(DeclarationBuffer::default());
+    let _face1 = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            Bound::north(),
+            buf1.clone(),
+            tables.hats.map(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Router)
+        .build()
+    });
+
+    let buf0_guard = buf0.0.lock().unwrap();
+    assert_eq!(&*buf0_guard, &[]);
+
+    let buf1_guard = buf1.0.lock().unwrap();
+    assert_eq!(&*buf1_guard, &[msg]);
+}
+
 #[derive(Debug, Default)]
 /// [`EPrimitives`] impl that only stores [`Request`]s.
 struct RequestBuffer(Mutex<Vec<Request>>);
@@ -421,6 +498,43 @@ impl EPrimitives for InterestBuffer {
         &self,
         _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Declare>,
     ) {
+    }
+
+    fn send_push(
+        &self,
+        _msg: &mut zenoh_protocol::network::Push,
+        _reliability: zenoh_protocol::core::Reliability,
+    ) {
+    }
+
+    fn send_request(&self, _msg: &mut Request) {}
+
+    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+}
+
+#[derive(Debug, Default)]
+/// [`EPrimitives`] impl that only stores [`Interest`]s.
+struct DeclarationBuffer(Mutex<Vec<Declare>>);
+
+impl EPrimitives for DeclarationBuffer {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn send_interest(
+        &self,
+        _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Interest>,
+    ) {
+    }
+
+    fn send_declare(
+        &self,
+        ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Declare>,
+    ) {
+        let mut buf = self.0.lock().unwrap();
+        buf.push(ctx.msg.clone());
     }
 
     fn send_push(
