@@ -46,7 +46,7 @@ use crate::{
                 tables::{Route, RoutingExpr, Tables},
             },
             hat::{
-                router::IMPLICIT_INTEREST_ID, CurrentFutureTrait, HatPubSubTrait, SendDeclare,
+                router::INITIAL_INTEREST_ID, CurrentFutureTrait, HatPubSubTrait, SendDeclare,
                 Sources,
             },
             router::{disable_matches_data_routes, RouteBuilder},
@@ -813,7 +813,7 @@ pub(super) fn pubsub_linkstate_change(
                             tables,
                             &mut dst_face,
                             res,
-                            Some(IMPLICIT_INTEREST_ID),
+                            Some(INITIAL_INTEREST_ID),
                             send_declare,
                         );
                     }

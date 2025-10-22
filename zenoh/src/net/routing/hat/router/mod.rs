@@ -74,7 +74,7 @@ mod queries;
 mod token;
 
 // Interest id used for Pushed declarations without declare final to other routers/linkstate peers
-const IMPLICIT_INTEREST_ID: u32 = 0;
+const INITIAL_INTEREST_ID: u32 = 0;
 
 macro_rules! hat {
     ($t:expr) => {

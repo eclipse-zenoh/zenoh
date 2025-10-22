@@ -49,7 +49,7 @@ use crate::{
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, Tables},
             },
             hat::{
-                router::IMPLICIT_INTEREST_ID, CurrentFutureTrait, HatQueriesTrait, SendDeclare,
+                router::INITIAL_INTEREST_ID, CurrentFutureTrait, HatQueriesTrait, SendDeclare,
                 Sources,
             },
             router::{
@@ -950,7 +950,7 @@ pub(super) fn queries_linkstate_change(
                             tables,
                             &mut dst_face,
                             res,
-                            Some(IMPLICIT_INTEREST_ID),
+                            Some(INITIAL_INTEREST_ID),
                             send_declare,
                         );
                     }
