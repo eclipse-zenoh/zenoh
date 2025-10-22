@@ -447,6 +447,17 @@ fn test_declaration_propagation_to_late_faces_client_peer_client() {
     test_declaration_propagation_to_late_faces(WhatAmI::Client, WhatAmI::Peer, WhatAmI::Client);
 }
 
+// FIXME(regions): this fails because face0 is considered local
+#[ignore]
+fn test_declaration_propagation_to_late_faces_router_router_peer() {
+    test_declaration_propagation_to_late_faces(WhatAmI::Router, WhatAmI::Router, WhatAmI::Peer);
+}
+
+#[test]
+fn test_declaration_propagation_to_late_faces_router_peer_client() {
+    test_declaration_propagation_to_late_faces(WhatAmI::Router, WhatAmI::Peer, WhatAmI::Client);
+}
+
 #[derive(Debug, Default)]
 /// [`EPrimitives`] impl that only stores [`Request`]s.
 struct RequestBuffer(Mutex<Vec<Request>>);
