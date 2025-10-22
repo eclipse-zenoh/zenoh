@@ -162,6 +162,7 @@ impl Router {
         };
         let mut declares = vec![];
         tables.hats[face.state.bound]
+            // FIXME(regions): what if face.local is false?
             .new_local_face(
                 BaseContext {
                     tables_lock: &face.tables,

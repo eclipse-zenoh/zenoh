@@ -121,7 +121,7 @@ pub(crate) struct TablesData {
     pub(crate) next_interceptor_version: AtomicUsize,
     pub(crate) interceptors: Vec<InterceptorFactory>,
 
-    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>, // REVIEW(regions): move under TablesData?
+    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
 
     pub(crate) hats: BoundMap<HatTablesData>,
 }

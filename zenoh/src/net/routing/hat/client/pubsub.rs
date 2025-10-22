@@ -55,7 +55,7 @@ impl Hat {
     ) {
         if src_face.id != dst_face.id
             && !self.face_hat(dst_face).local_subs.contains_key(res)
-            && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+            && self.should_route_between(&src_face, &dst_face)
         {
             let id = self
                 .face_hat(dst_face)
