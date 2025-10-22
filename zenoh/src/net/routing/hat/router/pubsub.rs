@@ -1219,6 +1219,7 @@ impl HatPubSubTrait for Hat {
         }
 
         // FIXME(regions): track gateway current interest finalization
+        // FIXME(regions): add extension to request forwarding to the gateway
         if let Some(gwy_node_id) = self.subregion_gateway() {
             if let Some(next_hop) = self.point_to_point_hop(tables, gwy_node_id) {
                 route.insert(next_hop.id, || {

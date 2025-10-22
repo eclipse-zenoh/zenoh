@@ -697,8 +697,8 @@ impl HatPubSubTrait for Hat {
                             Direction {
                                 dst_face: face.clone(),
                                 wire_expr: wire_expr.to_owned(),
-                       node_id: DEFAULT_NODE_ID,
-                            dst_node_id: DEFAULT_NODE_ID,
+                                node_id: DEFAULT_NODE_ID,
+                                dst_node_id: DEFAULT_NODE_ID,
                             }
                         })
                     });
