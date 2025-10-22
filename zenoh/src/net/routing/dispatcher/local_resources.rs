@@ -49,7 +49,7 @@ where
 struct ResourceData<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>> {
     id: Id,
     aggregated_to: HashSet<Res>,
-    interest_ids: HashSet<InterestId>,
+    simple_interest_ids: HashSet<InterestId>,
     info: Info,
 }
 
@@ -57,7 +57,7 @@ struct AggregatedResourceData<Id: Copy, Res: LocalResourceTrait, Info: LocalReso
 {
     id: Id,
     aggregates: HashSet<Res>,
-    interest_ids: HashSet<InterestId>,
+    aggregated_interest_ids: HashSet<InterestId>,
     info: Option<Info>,
 }
 
@@ -130,7 +130,7 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         key: Res,
         info: Info,
         f_id: F,
-        interests: HashSet<InterestId>,
+        simple_interests: HashSet<InterestId>,
     ) -> (Id, Vec<LocalResourceInsertResult<Id, Res, Info>>)
     where
         F: FnOnce() -> Id,
@@ -140,8 +140,8 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
             std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
                 {
                     let s_res_data = occupied_entry.get_mut();
-                    s_res_data.interest_ids.extend(interests);
-                    if !s_res_data.interest_ids.is_empty() && s_res_data.info != info {
+                    s_res_data.simple_interest_ids.extend(simple_interests);
+                    if !s_res_data.simple_interest_ids.is_empty() && s_res_data.info != info {
                         updated_resources.push(LocalResourceInsertResult {
                             id: s_res_data.id,
                             resource: key.clone(),
@@ -192,10 +192,10 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
                 let inserted_res = vacant_entry.insert(ResourceData {
                     id,
                     aggregated_to,
-                    interest_ids: interests,
+                    simple_interest_ids: simple_interests,
                     info,
                 });
-                if !inserted_res.interest_ids.is_empty() {
+                if !inserted_res.simple_interest_ids.is_empty() {
                     updated_resources.push(LocalResourceInsertResult {
                         id,
                         resource: key,
@@ -211,14 +211,17 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         &mut self,
         key: Res,
         f_id: F,
-        interests: HashSet<InterestId>,
+        aggregated_interests: HashSet<InterestId>,
     ) -> (Id, Option<Info>)
     where
         F: FnOnce() -> Id,
     {
         match self.aggregated_resources.entry(key.clone()) {
             std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
-                occupied_entry.get_mut().interest_ids.extend(interests);
+                occupied_entry
+                    .get_mut()
+                    .aggregated_interest_ids
+                    .extend(aggregated_interests);
                 (occupied_entry.get().id, occupied_entry.get().info)
             }
             std::collections::hash_map::Entry::Vacant(vacant_entry) => {
@@ -232,7 +235,7 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
                 let inserted_res = vacant_entry.insert(AggregatedResourceData {
                     id: self.simple_resources.get(&key).map_or_else(f_id, |r| r.id),
                     aggregates,
-                    interest_ids: interests,
+                    aggregated_interest_ids: aggregated_interests,
                     info: None,
                 });
                 inserted_res.info = inserted_res.recompute_info(&key, &self.simple_resources);
@@ -248,7 +251,7 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
     ) -> Vec<LocalResourceRemoveResult<Id, Res, Info>> {
         let mut updated_resources = Vec::new();
         if let Some(s_res_data) = self.simple_resources.remove(key) {
-            if !s_res_data.interest_ids.is_empty() {
+            if !s_res_data.simple_interest_ids.is_empty() {
                 // there was an interest for this specific resource
                 updated_resources.push(LocalResourceRemoveResult {
                     id: s_res_data.id,
@@ -275,10 +278,10 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         updated_resources
     }
 
-    pub(crate) fn remove_simple_resource_interest(&mut self, interest: InterestId) {
+    pub(crate) fn remove_simple_resource_interest(&mut self, simple_interest: InterestId) {
         self.simple_resources.retain(|_, res_data| {
-            !(res_data.interest_ids.remove(&interest)
-                && res_data.interest_ids.is_empty()
+            !(res_data.simple_interest_ids.remove(&simple_interest)
+                && res_data.simple_interest_ids.is_empty()
                 && res_data.aggregated_to.is_empty())
         });
     }
@@ -286,12 +289,16 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
     pub(crate) fn remove_aggregated_resource_interest(
         &mut self,
         key: &Res,
-        interest: InterestId,
+        aggregated_interest: InterestId,
     ) -> bool {
         match self.aggregated_resources.entry(key.clone()) {
             std::collections::hash_map::Entry::Occupied(mut occupied_entry) => {
-                if occupied_entry.get_mut().interest_ids.remove(&interest) {
-                    if occupied_entry.get_mut().interest_ids.is_empty() {
+                if occupied_entry
+                    .get_mut()
+                    .aggregated_interest_ids
+                    .remove(&aggregated_interest)
+                {
+                    if occupied_entry.get_mut().aggregated_interest_ids.is_empty() {
                         // the aggregate can be removed if there is no other interest for it
                         let aggregates = occupied_entry.remove().aggregates;
                         for s_res in aggregates {
@@ -299,7 +306,7 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
                                 self.simple_resources.entry(s_res)
                             {
                                 e.get_mut().aggregated_to.remove(key);
-                                if e.get().interest_ids.is_empty()
+                                if e.get().simple_interest_ids.is_empty()
                                     && e.get().aggregated_to.is_empty()
                                 {
                                     // remove simple resource if there is no interest for it, nor it is aggregated into any other one
