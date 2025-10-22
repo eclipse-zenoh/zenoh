@@ -201,8 +201,13 @@ impl HatBaseTrait for Hat {
         _tables_ref: &Arc<TablesLock>,
     ) -> ZResult<()> {
         self.interests_new_face(ctx.reborrow());
-        // REVIEW(regions2): local faces should be south-bound to a broker hat
-        let profile = InterestProfile::Pull;
+
+        let profile = if ctx.src_face.bound.is_north() {
+            InterestProfile::Push
+        } else {
+            InterestProfile::Pull
+        };
+
         self.pubsub_new_face(ctx.reborrow(), profile);
         self.queries_new_face(ctx.reborrow(), profile);
         self.token_new_face(ctx.reborrow(), profile);
@@ -218,7 +223,11 @@ impl HatBaseTrait for Hat {
         transport: &TransportUnicast,
     ) -> ZResult<()> {
         // FIXME(regions): compute proper profile
-        let profile = InterestProfile::Push;
+        let profile = if ctx.src_face.bound.is_north() {
+            InterestProfile::Push
+        } else {
+            InterestProfile::Pull
+        };
 
         if ctx.src_face.whatami != WhatAmI::Client {
             if let Some(net) = self.gossip.as_mut() {

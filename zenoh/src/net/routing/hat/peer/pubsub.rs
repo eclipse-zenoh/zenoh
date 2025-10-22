@@ -64,7 +64,7 @@ impl Hat {
             && !self.face_hat(dst_face).local_subs.contains_key(res)
             && self.should_route_between(src_face, dst_face)
         {
-            if dst_face.whatami != WhatAmI::Client && profile.is_push() {
+            if profile.is_push() {
                 let id = self
                     .face_hat(dst_face)
                     .next_id
@@ -404,25 +404,23 @@ impl Hat {
     }
 
     pub(super) fn pubsub_new_face(&self, mut ctx: BaseContext, profile: InterestProfile) {
-        if ctx.src_face.whatami != WhatAmI::Client {
-            let sub_info = SubscriberInfo;
-            for mut face in self
-                .faces(ctx.tables)
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
-                for sub in self.face_hat(&face.clone()).remote_subs.values() {
-                    let dst_face = &mut ctx.src_face.clone();
-                    self.propagate_simple_subscription_to(
-                        ctx.reborrow(),
-                        &mut face, // src
-                        dst_face,  // dst
-                        sub,
-                        &sub_info,
-                        profile,
-                    );
-                }
+        let sub_info = SubscriberInfo;
+        for mut face in self
+            .faces(ctx.tables)
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            for sub in self.face_hat(&face.clone()).remote_subs.values() {
+                let dst_face = &mut ctx.src_face.clone();
+                self.propagate_simple_subscription_to(
+                    ctx.reborrow(),
+                    &mut face, // src
+                    dst_face,  // dst
+                    sub,
+                    &sub_info,
+                    profile,
+                );
             }
         }
     }

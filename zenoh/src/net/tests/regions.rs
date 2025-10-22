@@ -89,7 +89,7 @@ fn test_client_to_client_query_route_computation() {
 
         dst_face.declare_queryable(
             &router.tables,
-            0,
+            1,
             &WireExpr::from("a/b/**"),
             &QueryableInfoType::DEFAULT,
             DEFAULT_NODE_ID,
@@ -362,19 +362,17 @@ fn test_peer_gateway_interest_propagation() {
     assert_eq!(&*gateway_buf_guard, &[msg]);
 }
 
-#[test]
-fn test_declaration_propagation_to_late_faces() {
+fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mode2: WhatAmI) {
     zenoh_util::try_init_log_from_env();
 
-    const PEER_SUBREGION: Bound = Bound::south(0);
+    const SUBREGION2: Bound = Bound::south(0);
 
     let router = {
-        let mut config = Config::default();
-        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        let config = Config::default();
 
         let mut router = RouterBuilder::new(&config)
-            .hat(Bound::north(), WhatAmI::Client)
-            .hat(PEER_SUBREGION, WhatAmI::Peer)
+            .hat(Bound::north(), mode1)
+            .hat(SUBREGION2, mode2)
             .build()
             .unwrap();
 
@@ -393,16 +391,16 @@ fn test_declaration_propagation_to_late_faces() {
     // 1. We only handle a `R/? - C/P - P` scenario
     // 2. The declaration is a subscriber only
 
-    let buf0 = Arc::new(DeclarationBuffer::default());
-    let face0 = router.new_face(|tables| {
+    let buf2 = Arc::new(DeclarationBuffer::default());
+    let face2 = router.new_face(|tables| {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            PEER_SUBREGION,
-            buf0.clone(),
+            SUBREGION2,
+            buf2.clone(),
             tables.hats.map(|hat| hat.new_face()),
         )
-        .whatami(WhatAmI::Peer)
+        .whatami(mode2)
         .build()
     });
 
@@ -412,31 +410,41 @@ fn test_declaration_propagation_to_late_faces() {
         ext_tstamp: None,
         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-            id: 0,
+            id: 1,
             wire_expr: WireExpr::from("**/a/b"),
         }),
     };
 
-    face0.send_declare(&mut msg.clone());
+    face2.send_declare(&mut msg.clone());
 
-    let buf1 = Arc::new(DeclarationBuffer::default());
-    let _face1 = router.new_face(|tables| {
+    let buf0 = Arc::new(DeclarationBuffer::default());
+    let _face0 = router.new_face(|tables| {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             Bound::north(),
-            buf1.clone(),
+            buf0.clone(),
             tables.hats.map(|hat| hat.new_face()),
         )
-        .whatami(WhatAmI::Router)
+        .whatami(mode0)
         .build()
     });
 
-    let buf0_guard = buf0.0.lock().unwrap();
+    let buf0_guard = buf2.0.lock().unwrap();
     assert_eq!(&*buf0_guard, &[]);
 
-    let buf1_guard = buf1.0.lock().unwrap();
+    let buf1_guard = buf0.0.lock().unwrap();
     assert_eq!(&*buf1_guard, &[msg]);
+}
+
+#[test]
+fn test_declaration_propagation_to_late_faces_router_client_peer() {
+    test_declaration_propagation_to_late_faces(WhatAmI::Router, WhatAmI::Client, WhatAmI::Peer);
+}
+
+#[test]
+fn test_declaration_propagation_to_late_faces_client_peer_client() {
+    test_declaration_propagation_to_late_faces(WhatAmI::Client, WhatAmI::Peer, WhatAmI::Client);
 }
 
 #[derive(Debug, Default)]
