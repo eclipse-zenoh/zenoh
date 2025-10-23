@@ -46,6 +46,7 @@ serde_with_macros = "3.14.1"
 static_init = "=1.0.3"
 time = "=0.3.41"
 tinystr = "=0.8.0"
+toml = "=0.9.6"
 toml_datetime = "=0.7.1"
 toml_parser = "=1.0.2"
 twox-hash = "=1.6.3"
@@ -72,6 +73,7 @@ ignored = [
   "static_init",
   "time",
   "tinystr",
+  "toml",
   "toml_datetime",
   "toml_parser",
   "twox-hash",
