@@ -95,4 +95,8 @@ impl ShmContext {
             auth,
         }))
     }
+
+    pub fn shm_provider(&self) -> &Option<Arc<LazyShmProvider>> {
+        &self.shm_provider
+    }
 }

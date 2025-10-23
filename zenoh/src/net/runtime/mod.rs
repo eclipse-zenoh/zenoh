@@ -48,7 +48,11 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::client_storage::ShmClientStorage;
+use zenoh_shm::api::{
+    client_storage::ShmClientStorage,
+    protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+    provider::shm_provider::ShmProvider,
+};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::ShmReader;
 use zenoh_sync::get_mut_unchecked;
@@ -81,6 +85,26 @@ use crate::{
     GIT_VERSION, LONG_VERSION,
 };
 
+/// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+pub enum ShmProviderState {
+    Disabled,
+    Initializing,
+    Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl ShmProviderState {
+    pub fn into_option(self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+        match self {
+            ShmProviderState::Ready(provider) => Some(provider),
+            _ => None,
+        }
+    }
+}
+
 pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
@@ -110,6 +134,10 @@ pub trait IRuntime: Send + Sync {
     fn get_locators(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
+
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    fn get_shm_provider(&self) -> ShmProviderState;
 
     fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
     fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
@@ -283,6 +311,21 @@ impl IRuntime for RuntimeState {
 
     fn get_config(&self) -> GenericConfig {
         GenericConfig::new(Arc::new(self.config.clone()))
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    fn get_shm_provider(&self) -> ShmProviderState {
+        match &self.manager.get_shm_context() {
+            Some(ctx) => match ctx.shm_provider() {
+                Some(provider) => match provider.try_get_provider() {
+                    Some(provider) => ShmProviderState::Ready(provider),
+                    None => ShmProviderState::Initializing,
+                },
+                None => ShmProviderState::Disabled,
+            },
+            None => ShmProviderState::Disabled,
+        }
     }
 }
 
@@ -587,6 +630,13 @@ impl Runtime {
 
     pub fn get_cancellation_token(&self) -> CancellationToken {
         self.state.get_cancellation_token()
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    #[allow(dead_code)]
+    pub fn get_shm_provider(&self) -> ShmProviderState {
+        self.state.get_shm_provider()
     }
 
     pub(crate) fn start_conditions(&self) -> &Arc<StartConditions> {

@@ -16,12 +16,11 @@ use std::{
     fmt::Debug,
     num::NonZeroUsize,
     sync::{Arc, Mutex},
-    thread::JoinHandle,
 };
 
 use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, Zenoh080};
-use zenoh_core::{zerror, Wait};
+use zenoh_core::{zerror, zlock, Wait};
 use zenoh_protocol::{
     network::{
         NetworkBody, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push, Request, Response,
@@ -34,11 +33,14 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 use zenoh_shm::{
     api::{
         common::types::ProtocolID,
         protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
-        provider::shm_provider::{Defragment, GarbageCollect, ShmProvider, ShmProviderBuilder},
+        provider::shm_provider::{
+            ConstBool, Defragment, GarbageCollect, JustAlloc, ShmProvider, ShmProviderBuilder,
+        },
     },
     reader::ShmReader,
     ShmBufInfo, ShmBufInner,
@@ -52,8 +54,8 @@ struct ProviderInitCfg {
 
 enum ProviderInitState {
     Enabled(ProviderInitCfg),
-    Initializing(Option<JoinHandle<Option<ShmProvider<PosixShmProviderBackend>>>>),
-    Ready(ShmProvider<PosixShmProviderBackend>),
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
+    Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
     Error,
 }
 
@@ -72,49 +74,51 @@ impl LazyShmProvider {
         }
     }
 
+    pub fn try_get_provider(&self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+        let mut lock = zlock!(self.state);
+        match &mut *lock {
+            ProviderInitState::Enabled(cfg) => {
+                let shm_size = cfg.shm_size.get();
+                let (sender, receiver) = flume::bounded(1);
+
+                ZRuntime::Application.spawn_blocking(move || {
+                    let _ = sender.send(
+                        ShmProviderBuilder::default_backend(shm_size)
+                            .wait()
+                            .inspect_err(|err| {
+                                tracing::error!("Error creating lazy ShmProvider: {err}")
+                            })
+                            .map(Arc::new)
+                            .ok(),
+                    );
+                });
+
+                *lock = ProviderInitState::Initializing(receiver);
+                None
+            }
+            ProviderInitState::Initializing(join_handle) => match join_handle.try_recv() {
+                Ok(Some(shm_provider)) => {
+                    *lock = ProviderInitState::Ready(shm_provider.clone());
+                    Some(shm_provider)
+                }
+                Ok(None) => {
+                    *lock = ProviderInitState::Error;
+                    None
+                }
+                Err(_) => None,
+            },
+            ProviderInitState::Ready(shm_provider) => Some(shm_provider.clone()),
+            ProviderInitState::Error => None,
+        }
+    }
+
     fn wrap_in_place<const ID: u8>(&self, ext_shm: &mut Option<ShmType<ID>>, slice: &mut ZSlice) {
         if slice.len() < self.message_size_threshold {
             return;
         }
 
-        let mut lock = match self.state.try_lock() {
-            Ok(lock) => lock,
-            Result::Err(_) => {
-                return;
-            }
-        };
-
-        match &mut *lock {
-            ProviderInitState::Enabled(cfg) => {
-                let shm_size = cfg.shm_size.get();
-                let task = std::thread::spawn(move || {
-                    ShmProviderBuilder::default_backend(shm_size)
-                        .wait()
-                        .inspect_err(|err| {
-                            tracing::error!("Error creating lazy ShmProvider: {err}")
-                        })
-                        .ok()
-                });
-                *lock = ProviderInitState::Initializing(Some(task));
-            }
-            ProviderInitState::Initializing(join_handle) => {
-                if unsafe { join_handle.as_ref().unwrap_unchecked().is_finished() } {
-                    let handle = unsafe { join_handle.take().unwrap_unchecked() };
-                    let state = handle.join().unwrap();
-                    *lock = match state {
-                        Some(shm_provider) => {
-                            Self::_wrap_in_place(&shm_provider, ext_shm, slice);
-                            ProviderInitState::Ready(shm_provider)
-                        }
-                        None => ProviderInitState::Error,
-                    };
-                }
-            }
-            ProviderInitState::Ready(shm_provider) => {
-                Self::_wrap_in_place(shm_provider, ext_shm, slice);
-            }
-            ProviderInitState::Error => {}
-        }
+        self.try_get_provider()
+            .inspect(|provider| Self::_wrap_in_place(provider, ext_shm, slice));
     }
 
     fn _wrap_in_place<const ID: u8>(
@@ -122,11 +126,12 @@ impl LazyShmProvider {
         ext_shm: &mut Option<ShmType<ID>>,
         slice: &mut ZSlice,
     ) {
-        if let Ok(mut shmbuf) = shm_provider
+        if let Ok(mut shmbuf) = unsafe {
+            shm_provider
             .alloc(slice.len())
-            .with_policy::<Defragment<GarbageCollect>>()
+            .with_unsafe_policy::<Defragment<GarbageCollect<JustAlloc, JustAlloc, ConstBool<false>>>>()
             .wait()
-        {
+        } {
             shmbuf.as_mut().copy_from_slice(slice);
             *slice = shmbuf.into();
             slice.kind = ZSliceKind::ShmPtr;
