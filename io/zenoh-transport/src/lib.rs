@@ -26,7 +26,7 @@ pub mod unicast;
 pub use common::stats;
 
 #[cfg(feature = "shared-memory")]
-mod shm;
+pub mod shm;
 #[cfg(feature = "shared-memory")]
 mod shm_context;
 

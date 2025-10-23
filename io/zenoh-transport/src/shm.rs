@@ -52,7 +52,13 @@ struct ProviderInitCfg {
     shm_size: NonZeroUsize,
 }
 
-enum ProviderInitState {
+pub enum ProviderInitState {
+    Initializing,
+    Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
+    Error,
+}
+
+enum ProviderInitStateInner {
     Enabled(ProviderInitCfg),
     Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
@@ -61,23 +67,23 @@ enum ProviderInitState {
 
 pub struct LazyShmProvider {
     message_size_threshold: usize,
-    state: Mutex<ProviderInitState>,
+    state: Mutex<ProviderInitStateInner>,
 }
 
 impl LazyShmProvider {
     pub fn new(shm_size: NonZeroUsize, message_size_threshold: usize) -> Self {
         let cfg = ProviderInitCfg { shm_size };
-        let state = Mutex::new(ProviderInitState::Enabled(cfg));
+        let state = Mutex::new(ProviderInitStateInner::Enabled(cfg));
         Self {
             message_size_threshold,
             state,
         }
     }
 
-    pub fn try_get_provider(&self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+    pub fn try_get_provider(&self) -> ProviderInitState {
         let mut lock = zlock!(self.state);
         match &mut *lock {
-            ProviderInitState::Enabled(cfg) => {
+            ProviderInitStateInner::Enabled(cfg) => {
                 let shm_size = cfg.shm_size.get();
                 let (sender, receiver) = flume::bounded(1);
 
@@ -102,22 +108,24 @@ impl LazyShmProvider {
                         });
                 });
 
-                *lock = ProviderInitState::Initializing(receiver);
-                None
+                *lock = ProviderInitStateInner::Initializing(receiver);
+                ProviderInitState::Initializing
             }
-            ProviderInitState::Initializing(join_handle) => match join_handle.try_recv() {
+            ProviderInitStateInner::Initializing(join_handle) => match join_handle.try_recv() {
                 Ok(Some(shm_provider)) => {
-                    *lock = ProviderInitState::Ready(shm_provider.clone());
-                    Some(shm_provider)
+                    *lock = ProviderInitStateInner::Ready(shm_provider.clone());
+                    ProviderInitState::Ready(shm_provider)
                 }
                 Ok(None) => {
-                    *lock = ProviderInitState::Error;
-                    None
+                    *lock = ProviderInitStateInner::Error;
+                    ProviderInitState::Error
                 }
-                Err(_) => None,
+                Err(_) => ProviderInitState::Initializing,
             },
-            ProviderInitState::Ready(shm_provider) => Some(shm_provider.clone()),
-            ProviderInitState::Error => None,
+            ProviderInitStateInner::Ready(shm_provider) => {
+                ProviderInitState::Ready(shm_provider.clone())
+            }
+            ProviderInitStateInner::Error => ProviderInitState::Error,
         }
     }
 
@@ -126,10 +134,7 @@ impl LazyShmProvider {
             return;
         }
 
-        // todo: this is supported since 1.76
-        // self.try_get_provider()
-        //     .inspect(|provider| Self::_wrap_in_place(provider, ext_shm, slice));
-        if let Some(provider) = self.try_get_provider() {
+        if let ProviderInitState::Ready(provider) = self.try_get_provider() {
             Self::_wrap_in_place(&provider, ext_shm, slice)
         }
     }

@@ -92,6 +92,7 @@ pub enum ShmProviderState {
     Disabled,
     Initializing,
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
+    Error,
 }
 
 #[cfg(feature = "shared-memory")]
@@ -316,11 +317,14 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "shared-memory")]
     #[zenoh_macros::unstable]
     fn get_shm_provider(&self) -> ShmProviderState {
+        use zenoh_transport::shm::ProviderInitState;
+
         match &self.manager.get_shm_context() {
             Some(ctx) => match ctx.shm_provider() {
                 Some(provider) => match provider.try_get_provider() {
-                    Some(provider) => ShmProviderState::Ready(provider),
-                    None => ShmProviderState::Initializing,
+                    ProviderInitState::Initializing => ShmProviderState::Initializing,
+                    ProviderInitState::Ready(provider) => ShmProviderState::Ready(provider),
+                    ProviderInitState::Error => ShmProviderState::Error,
                 },
                 None => ShmProviderState::Disabled,
             },
