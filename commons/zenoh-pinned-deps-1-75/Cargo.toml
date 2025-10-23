@@ -50,6 +50,7 @@ tinystr = "=0.8.0"
 toml = "=0.9.6"
 toml_datetime = "=0.7.1"
 toml_parser = "=1.0.2"
+toml_writer = "=1.0.2"
 twox-hash = "=1.6.3"
 zerofrom = "=0.1.5"
 
@@ -78,6 +79,7 @@ ignored = [
   "toml",
   "toml_datetime",
   "toml_parser",
+  "toml_writer",
   "twox-hash",
   "zerofrom",
 ]
