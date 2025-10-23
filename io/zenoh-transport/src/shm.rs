@@ -82,15 +82,24 @@ impl LazyShmProvider {
                 let (sender, receiver) = flume::bounded(1);
 
                 ZRuntime::Application.spawn_blocking(move || {
-                    let _ = sender.send(
-                        ShmProviderBuilder::default_backend(shm_size)
-                            .wait()
-                            .inspect_err(|err| {
-                                tracing::error!("Error creating lazy ShmProvider: {err}")
-                            })
-                            .map(Arc::new)
-                            .ok(),
-                    );
+                    // todo: this is supported since 1.76
+                    // let _ = sender.send(
+                    //     ShmProviderBuilder::default_backend(shm_size)
+                    //         .wait()
+                    //         .inspect_err(|err| {
+                    //             tracing::error!("Error creating lazy ShmProvider: {err}")
+                    //         })
+                    //         .map(Arc::new)
+                    //         .ok(),
+                    // );
+                    let _ =
+                        sender.send(match ShmProviderBuilder::default_backend(shm_size).wait() {
+                            Ok(backend) => Some(Arc::new(backend)),
+                            Result::Err(err) => {
+                                tracing::error!("Error creating lazy ShmProvider: {err}");
+                                None
+                            }
+                        });
                 });
 
                 *lock = ProviderInitState::Initializing(receiver);
@@ -118,8 +127,8 @@ impl LazyShmProvider {
         }
 
         // todo: this is supported since 1.76
-        //self.try_get_provider()
-        //    .inspect(|provider| Self::_wrap_in_place(provider, ext_shm, slice));
+        // self.try_get_provider()
+        //     .inspect(|provider| Self::_wrap_in_place(provider, ext_shm, slice));
         if let Some(provider) = self.try_get_provider() {
             Self::_wrap_in_place(&provider, ext_shm, slice)
         }
