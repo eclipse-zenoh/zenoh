@@ -585,15 +585,12 @@ impl TransportManager {
             Some(shm_config) => self.state.shm_context.as_ref().map(|context| {
                 use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
 
-                use crate::{
-                    shm::{LazyShmProvider, PartnerShmConfig},
-                    shm_context::UnicastTransportShmContext,
-                };
+                use crate::{shm::PartnerShmConfig, shm_context::UnicastTransportShmContext};
 
                 let shm_provider = if shm_config.supports_protocol(POSIX_PROTOCOL_ID) {
                     context.shm_provider.clone()
                 } else {
-                    Arc::new(LazyShmProvider::new_disabled())
+                    None
                 };
 
                 UnicastTransportShmContext::new(

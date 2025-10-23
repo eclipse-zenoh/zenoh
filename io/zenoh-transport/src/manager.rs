@@ -490,6 +490,11 @@ impl TransportManager {
         self.stats.clone()
     }
 
+    #[cfg(feature = "shared-memory")]
+    pub fn get_shm_context(&self) -> &Option<ShmContext> {
+        &self.state.shm_context
+    }
+
     pub async fn close(&self) {
         self.close_unicast().await;
         self.close_multicast().await;

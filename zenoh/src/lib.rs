@@ -1099,6 +1099,8 @@ pub mod shm {
             },
         },
     };
+
+    pub use crate::net::runtime::ShmProviderState;
 }
 
 #[cfg(test)]
