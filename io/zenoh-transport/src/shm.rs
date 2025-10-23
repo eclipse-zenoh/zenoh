@@ -117,8 +117,12 @@ impl LazyShmProvider {
             return;
         }
 
-        self.try_get_provider()
-            .inspect(|provider| Self::_wrap_in_place(provider, ext_shm, slice));
+        // todo: this is supported since 1.76
+        //self.try_get_provider()
+        //    .inspect(|provider| Self::_wrap_in_place(provider, ext_shm, slice));
+        if let Some(provider) = self.try_get_provider() {
+            Self::_wrap_in_place(&provider, ext_shm, slice)
+        }
     }
 
     fn _wrap_in_place<const ID: u8>(
