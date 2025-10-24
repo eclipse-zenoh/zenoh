@@ -11,9 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{
+    array,
+    future::poll_fn,
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
+    task::Poll,
+    time::{Duration, Instant},
+};
 
-use futures::future::select_all;
+use crossbeam_utils::CachePadded;
+use futures::{
+    future::{select_all, OptionFuture},
+    task::AtomicWaker,
+    FutureExt,
+};
+use tokio::sync::Notify;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
@@ -22,12 +37,14 @@ use zenoh_protocol::{
     core::Priority,
     transport::{KeepAlive, TransportMessage},
 };
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::RecyclingObjectPool;
 
 use super::transport::TransportUnicastUniversal;
+#[cfg(feature = "stats")]
+use crate::common::stats::TransportStats;
 use crate::{
     common::{
         batch::{BatchConfig, RBatch},
@@ -226,9 +243,11 @@ async fn tx_task(
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     if link.inner.link.supports_priorities() {
+        let latest_message_tracker = LatestMessageTracker::new::<{ Priority::NUM }>(keep_alive);
         let (res, _, _) = select_all(pipeline.split().into_iter().map(|pipeline| {
             let mut link = link.clone();
             let token = token.clone();
+            let latest_message_tracker = latest_message_tracker.clone();
             #[cfg(feature = "stats")]
             let stats = stats.clone();
             zenoh_runtime::ZRuntime::TX.spawn(async move {
@@ -236,7 +255,7 @@ async fn tx_task(
                     pipeline.priority(),
                     pipeline,
                     &mut link,
-                    keep_alive,
+                    latest_message_tracker,
                     token,
                     #[cfg(feature = "stats")]
                     stats,
@@ -251,7 +270,7 @@ async fn tx_task(
             Priority::Control,
             pipeline,
             link,
-            keep_alive,
+            LatestMessageTracker::new::<1>(keep_alive),
             token,
             #[cfg(feature = "stats")]
             stats,
@@ -262,50 +281,47 @@ async fn tx_task(
 }
 
 async fn write_loop(
-    keep_alive_prio: Priority,
+    priority: Priority,
     mut pipeline: impl PipelineConsumer,
     link: &mut TransportLinkUnicastTx,
-    keep_alive: Duration,
+    latest_message_tracker: Arc<LatestMessageTracker>,
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     loop {
         tokio::select! {
-            res = tokio::time::timeout(keep_alive, pipeline.pull()) => {
-                match res {
-                    Ok(Some((mut batch, priority))) => {
-                        link.send_batch(&mut batch, priority).await?;
+            pull = pipeline.pull() => {
+                let Some((mut batch, priority)) = pull else {
+                    // The queue has been disabled: break the tx loop, drain the queue, and exit
+                    break
+                };
+                link.send_batch(&mut batch, priority).await?;
+                // inform the latest message tracker that a message has been sent
+                latest_message_tracker.set(priority);
 
-                        #[cfg(feature = "stats")]
-                        {
-                            stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
-                            stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
-                        }
-
-                        // Reinsert the batch into the queue
-                        pipeline.refill(batch, priority);
-                    },
-                    Ok(None) => {
-                        // The queue has been disabled: break the tx loop, drain the queue, and exit
-                        break;
-                    },
-                    Err(_) => {
-                        // A timeout occurred, no control/data messages have been sent during
-                        // the keep_alive period, we need to send a KeepAlive message
-                        let message: TransportMessage = KeepAlive.into();
-
-                        #[allow(unused_variables)] // Used when stats feature is enabled
-                        let n = link.send(&message, keep_alive_prio).await?;
-
-                        #[cfg(feature = "stats")]
-                        {
-                            stats.inc_bytes(zenoh_stats::Tx, n as u64);
-                            stats.inc_transport_message(zenoh_stats::Tx, 1);
-                        }
-                    }
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
+                    stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
                 }
-            },
 
+                // Reinsert the batch into the queue
+                pipeline.refill(batch, priority);
+            },
+            _ = latest_message_tracker.wait_timeout(priority) => {
+                // A timeout occurred, no control/data messages have been sent during
+                // the keep_alive period, we need to send a KeepAlive message
+                let message: TransportMessage = KeepAlive.into();
+
+                #[allow(unused_variables)] // Used when stats feature is enabled
+                let n = link.send(&message, Priority::Control).await?;
+
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_bytes(zenoh_stats::Tx, n as u64);
+                    stats.inc_transport_message(zenoh_stats::Tx, 1);
+                }
+            }
             _ = token.cancelled() => break
         }
     }
@@ -313,9 +329,17 @@ async fn write_loop(
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
     for (mut b, prio) in batches.drain(..) {
-        tokio::time::timeout(keep_alive, link.send_batch(&mut b, prio))
-            .await
-            .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
+        tokio::time::timeout(
+            latest_message_tracker.timeout(),
+            link.send_batch(&mut b, prio),
+        )
+        .await
+        .map_err(|_| {
+            zerror!(
+                "{link}: flush failed after {} ms",
+                latest_message_tracker.timeout().as_millis()
+            )
+        })??;
 
         #[cfg(feature = "stats")]
         {
@@ -345,10 +369,12 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
 
     if link.link.supports_priorities() {
+        let latest_message_tracker = LatestMessageTracker::new::<{ Priority::NUM }>(lease);
         let (res, _, _) = select_all((Priority::MAX as u8..Priority::MIN as u8).map(|prio| {
             let mut link = link.clone();
             let transport = transport.clone();
             let token = token.clone();
+            let latest_message_tracker = latest_message_tracker.clone();
             #[cfg(feature = "stats")]
             let stats = stats.clone();
             let pool = pool.clone();
@@ -357,7 +383,7 @@ async fn rx_task(
                     Priority::try_from(prio).unwrap(),
                     &mut link,
                     transport,
-                    lease,
+                    latest_message_tracker,
                     token,
                     #[cfg(feature = "stats")]
                     stats,
@@ -373,7 +399,7 @@ async fn rx_task(
             Priority::Control,
             link,
             transport,
-            lease,
+            LatestMessageTracker::new::<1>(lease),
             token,
             #[cfg(feature = "stats")]
             stats,
@@ -387,7 +413,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
     priority: Priority,
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
-    lease: Duration,
+    latest_message_tracker: Arc<LatestMessageTracker>,
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     pool: &RecyclingObjectPool<Box<[u8]>, F>,
@@ -410,8 +436,8 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
     );
     loop {
         tokio::select! {
-            batch = tokio::time::timeout(lease, read(link, priority, pool)) => {
-                let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
+            batch = read(link, priority, pool) => {
+                let batch = batch?;
                 #[cfg(feature = "stats")]
                 {
                     let header_bytes = if l.is_streamed { 2 } else { 0 };
@@ -419,8 +445,78 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
                 }
                 transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
             }
-
+            _ = latest_message_tracker.wait_timeout(priority) => {
+                bail!("{link}: expired after {} milliseconds", latest_message_tracker.timeout().as_millis());
+            }
             _ = token.cancelled() => return Ok(()),
         }
+    }
+}
+
+struct LatestMessageTracker<T: ?Sized = [CachePadded<Mutex<Instant>>]> {
+    timeout: Duration,
+    priority: CachePadded<AtomicUsize>,
+    waker: AtomicWaker,
+    has_timed_out: AtomicBool,
+    latest_message: T,
+}
+
+impl LatestMessageTracker {
+    fn new<const PRIORITIES: usize>(timeout: Duration) -> Arc<LatestMessageTracker> {
+        let now = Instant::now();
+        let this = Arc::new(LatestMessageTracker {
+            timeout,
+            priority: CachePadded::new(AtomicUsize::new(0)),
+            waker: AtomicWaker::new(),
+            has_timed_out: AtomicBool::new(false),
+            latest_message: array::from_fn::<_, PRIORITIES, _>(|_| {
+                CachePadded::new(Mutex::new(now))
+            }),
+        });
+        let tracker = this.clone();
+        tokio::spawn(async move {
+            let mut latest_message = now;
+            loop {
+                tokio::time::sleep_until((latest_message + tracker.timeout).into()).await;
+                let prev = latest_message;
+                let latest_priority = tracker.priority.load(Ordering::Acquire);
+                latest_message = *tracker.latest_message[latest_priority].lock().unwrap();
+                if latest_message <= prev {
+                    tracker.has_timed_out.store(true, Ordering::Release);
+                    tracker.waker.wake();
+                }
+            }
+        });
+        this
+    }
+
+    fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
+    fn set(&self, priority: Priority) {
+        *self.latest_message[priority as usize].lock().unwrap() = Instant::now();
+        self.priority.store(priority as usize, Ordering::Release);
+    }
+
+    async fn wait_timeout(&self, priority: Priority) {
+        poll_fn(|cx| {
+            if priority != Priority::Control {
+                return Poll::Pending;
+            }
+            self.waker.register(cx.waker());
+            if self.has_timed_out.load(Ordering::Acquire) {
+                self.has_timed_out.store(false, Ordering::Release);
+                return Poll::Ready(());
+            }
+            Poll::Pending
+        })
+        .await
+    }
+
+    fn get(&self) -> Instant {
+        *self.latest_message[self.priority.load(Ordering::Acquire)]
+            .lock()
+            .unwrap()
     }
 }
