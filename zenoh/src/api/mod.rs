@@ -17,6 +17,8 @@ pub(crate) type Id = u32;
 pub(crate) mod admin;
 pub(crate) mod builders;
 pub(crate) mod bytes;
+#[cfg(feature = "unstable")]
+pub(crate) mod cancellation;
 pub(crate) mod config;
 pub(crate) mod encoding;
 pub(crate) mod handlers;

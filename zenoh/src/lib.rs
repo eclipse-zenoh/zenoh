@@ -1101,5 +1101,9 @@ pub mod shm {
     };
 }
 
+#[zenoh_macros::unstable]
+pub mod cancellation {
+    pub use crate::api::cancellation::CancellationToken;
+}
 #[cfg(test)]
 mod tests;
