@@ -801,6 +801,15 @@ where
         #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
         let (mut callback, receiver) = self.handler.into_handler();
         #[cfg(feature = "unstable")]
+        if self
+            .cancellation_token
+            .as_ref()
+            .map(|ct| ct.is_cancelled())
+            .unwrap_or(false)
+        {
+            return Ok(receiver);
+        };
+        #[cfg(feature = "unstable")]
         let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
             let (notifier, receiver) =
                 crate::api::cancellation::create_sync_group_receiver_notifier_pair();
