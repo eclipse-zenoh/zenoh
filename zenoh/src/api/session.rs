@@ -1263,6 +1263,8 @@ impl Session {
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            cancellation_token: None,
         }
     }
 }
@@ -2224,7 +2226,7 @@ impl SessionInner {
         attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: SourceInfo,
         callback: Callback<Reply>,
-    ) -> ZResult<()> {
+    ) -> ZResult<Id> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
             Selector::borrowed(key_expr, parameters),
@@ -2336,7 +2338,17 @@ impl SessionInner {
                 attachment,
             );
         }
-        Ok(())
+        Ok(qid)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn cancel_query(self: &Arc<Self>, qid: Id) -> ZResult<()> {
+        tracing::debug!("Cancelling query: {qid}");
+        let mut state = zwrite!(self.state);
+        match state.queries.remove(&qid) {
+            Some(_) => bail!("Unable to find query {qid}"),
+            None => Ok(()),
+        }
     }
 
     pub(crate) fn liveliness_query(
@@ -2344,7 +2356,7 @@ impl SessionInner {
         key_expr: &KeyExpr<'_>,
         timeout: Duration,
         callback: Callback<Reply>,
-    ) -> ZResult<()> {
+    ) -> ZResult<Id> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.state);
         // Queries must use the same id generator as liveliness subscribers.
@@ -2393,7 +2405,17 @@ impl SessionInner {
             ext_nodeid: request::ext::NodeIdType::DEFAULT,
         });
 
-        Ok(())
+        Ok(id)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn cancel_liveliness_query(self: &Arc<Self>, qid: Id) -> ZResult<()> {
+        tracing::debug!("Cancelling liveliness query: {qid}");
+        let mut state = zwrite!(self.state);
+        match state.liveliness_queries.remove(&qid) {
+            Some(_) => bail!("Unable to find liveliness query {qid}"),
+            None => Ok(()),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

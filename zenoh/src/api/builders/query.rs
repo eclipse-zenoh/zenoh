@@ -21,6 +21,8 @@ use zenoh_protocol::{core::CongestionControl, network::request::ext::QueryTarget
 use zenoh_result::ZResult;
 
 #[cfg(feature = "unstable")]
+use crate::api::cancellation::CancellationTokenBuilderTrait;
+#[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
 use crate::api::{sample::SourceInfo, selector::ZenohParameters};
@@ -77,6 +79,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
 #[zenoh_macros::internal_trait]
@@ -99,7 +103,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
 }
 
 #[zenoh_macros::internal_trait]
-impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+impl<Handler> QoSBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
@@ -123,6 +127,20 @@ impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         value.1 = encoding.into();
         Self {
             value: Some(value),
+            ..self
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    fn with_cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
             ..self
         }
     }
@@ -215,6 +233,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler: _,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         } = self;
         SessionGetBuilder {
             session,
@@ -229,6 +249,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         }
     }
 }
@@ -329,11 +351,20 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_handler();
+        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
+        let (mut callback, receiver) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
+            let (notifier, receiver) =
+                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
+            callback.set_on_drop_notifier(notifier);
+            (ct, receiver)
+        });
         let Selector {
             key_expr,
             parameters,
         } = self.selector?;
+        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.session
             .0
             .query(
@@ -350,7 +381,19 @@ where
                 self.source_info,
                 callback,
             )
-            .map(|_| receiver)
+            .map(|qid| {
+                #[cfg(feature = "unstable")]
+                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
+                {
+                    let session_clone = self.session.clone();
+                    let on_cancel = move || {
+                        let _ = session_clone.0.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        Ok(())
+                    };
+                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
+                }
+                receiver
+            })
     }
 }
 
