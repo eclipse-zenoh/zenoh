@@ -44,17 +44,28 @@ impl Compatibility {
     }
 
     pub fn check(&self, other: &Self) -> ZResult<()> {
-        fn get_commit(version: &str) -> &str {
-            let s = match version.strip_suffix("-modified") {
-                Some(v) => v,
-                None => version,
-            };
-            if s.len() >= 40 {
-                // we expect full 40 digits git commit hash
-                &s[s.len() - 40..]
-            } else {
-                s
+        fn get_version_and_commit(version: &str) -> (&str, &str) {
+            let parts = version.split('-').collect::<Vec<_>>();
+            (
+                parts.first().cloned().unwrap_or("undefined"),
+                parts.get(1).cloned().unwrap_or("undefined"),
+            )
+        }
+
+        fn version_equals(left: &str, right: &str) -> bool {
+            const RELEASE_COMMIT: &str = "release";
+            let (left_version, left_commit) = get_version_and_commit(left);
+            let (right_version, right_commit) = get_version_and_commit(right);
+            if left_version != right_version {
+                return false;
             }
+            if left_commit != right_commit
+                && left_commit != RELEASE_COMMIT
+                && right_commit != RELEASE_COMMIT
+            {
+                return false;
+            }
+            true
         }
 
         if self.rust_version != other.rust_version {
@@ -63,7 +74,7 @@ impl Compatibility {
                 self.rust_version,
                 other.rust_version
             )
-        } else if get_commit(&self.zenoh_version) != get_commit(&other.zenoh_version) {
+        } else if !version_equals(&self.zenoh_version, &other.zenoh_version) {
             bail!(
                 "Incompatible Zenoh versions:\n host: {}\n plugin: {}",
                 self.zenoh_version,
