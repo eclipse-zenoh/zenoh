@@ -24,6 +24,7 @@ version = "0.1.0"
 [dependencies]
 tokio = { version = "1.35.1", features = ["io-std", "rt-multi-thread", "time"] }
 zenoh = { path = "../../zenoh/" }
+zenoh-pinned-deps-1-75 = { path = "../../commons/zenoh-pinned-deps-1-75/" }
 zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
 zenoh-util = { path = "../../commons/zenoh-util/", features = ["test"] }
 
@@ -36,4 +37,4 @@ name = "queryable_get"
 path = "src/queryable_get/bin/z_queryable_get.rs"
 
 [package.metadata.cargo-machete]
-ignored = ["base64ct", "litemap", "zerofrom"]
+ignored = ["base64ct", "litemap", "zenoh-pinned-deps-1-75", "zerofrom"]
