@@ -88,7 +88,7 @@ async fn test_cancellation_get() {
     .unwrap();
     tokio::time::sleep(Duration::from_secs(3)).await;
     cancellation_token.cancel().await.unwrap();
-    assert!(n.fetch_or(false, std::sync::atomic::Ordering::SeqCst));
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check that cancelled token cancels operation automatically
     assert!(cancellation_token.is_cancelled());
@@ -124,7 +124,7 @@ async fn test_cancellation_liveliness_get() {
     .unwrap();
     tokio::time::sleep(Duration::from_secs(3)).await;
     cancellation_token.cancel().await.unwrap();
-    assert!(n.fetch_or(false, std::sync::atomic::Ordering::SeqCst));
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -171,7 +171,7 @@ async fn test_cancellation_querier_get() {
     .unwrap();
     tokio::time::sleep(Duration::from_secs(3)).await;
     cancellation_token.cancel().await.unwrap();
-    assert!(n.fetch_or(false, std::sync::atomic::Ordering::SeqCst));
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check that cancelled token cancels operation automatically
     assert!(cancellation_token.is_cancelled());
