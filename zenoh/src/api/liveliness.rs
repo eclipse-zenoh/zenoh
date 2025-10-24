@@ -542,7 +542,7 @@ impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handle
     /// If set to true, the liveliness subscriber will receive liveliness tokens created before the subscriber was declared.
     /// Otherwise, only newly created liveliness tokens will be received.
     /// The default value is false.
-    /// 
+    ///
     /// # Examples
     /// ```
     /// # #[tokio::main]

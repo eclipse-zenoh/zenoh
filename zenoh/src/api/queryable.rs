@@ -97,7 +97,7 @@ impl Drop for QueryInner {
 /// The important detail: the [`Query::key_expr`] is **not** the key expression
 /// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
 /// The [`Queryable`]'s key expression is the one that should be used.
-/// 
+///
 /// This parameter is not set automatically because [`Queryable`](crate::query::Queryable) itself
 /// may serve glob key expressions and send replies on different concrete key expressions
 /// matching this glob. For example, a `Queryable` serving `foo/*` may receive a `Query`

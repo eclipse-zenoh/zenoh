@@ -49,8 +49,8 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// associated features, and to prefix their own parameter names to avoid having conflicting parameter names with other
 /// queryables.
 ///
-/// Here are the currently standardized parameters for Zenoh (check the 
-/// [specification page](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) 
+/// Here are the currently standardized parameters for Zenoh (check the
+/// [specification page](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors)
 /// for the exhaustive list):
 /// - **`[unstable]`** `_time`: used to express interest in only values dated within a certain time range; values for
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
