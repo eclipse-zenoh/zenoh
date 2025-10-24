@@ -11,14 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    array,
-    future::{poll_fn, Future},
-    pin::Pin,
-    task::Poll,
-    time::Duration,
-};
+use std::time::Duration;
 
+use futures::future::select_all;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
@@ -231,31 +226,26 @@ async fn tx_task(
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     if link.inner.link.supports_priorities() {
-        let tasks = pipeline
-            .split()
-            .into_iter()
-            .map(|pipeline| {
-                let mut link = link.clone();
-                let token = token.clone();
-                #[cfg(feature = "stats")]
-                let stats = stats.clone();
-                zenoh_runtime::ZRuntime::TX.spawn(async move {
-                    write_loop(
-                        pipeline.priority(),
-                        pipeline,
-                        &mut link,
-                        keep_alive,
-                        token,
-                        #[cfg(feature = "stats")]
-                        stats,
-                    )
-                    .await
-                })
+        let (res, _, _) = select_all(pipeline.split().into_iter().map(|pipeline| {
+            let mut link = link.clone();
+            let token = token.clone();
+            #[cfg(feature = "stats")]
+            let stats = stats.clone();
+            zenoh_runtime::ZRuntime::TX.spawn(async move {
+                write_loop(
+                    pipeline.priority(),
+                    pipeline,
+                    &mut link,
+                    keep_alive,
+                    token,
+                    #[cfg(feature = "stats")]
+                    stats,
+                )
+                .await
             })
-            .collect::<Vec<_>>();
-        for task in tasks {
-            task.await.unwrap()?;
-        }
+        }))
+        .await;
+        res.unwrap()?;
     } else {
         write_loop(
             Priority::Control,
@@ -355,7 +345,7 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
 
     if link.link.supports_priorities() {
-        let mut tasks: [_; Priority::NUM] = array::from_fn(|prio| {
+        let (res, _, _) = select_all((Priority::MAX as u8..Priority::MIN as u8).map(|prio| {
             let mut link = link.clone();
             let transport = transport.clone();
             let token = token.clone();
@@ -364,7 +354,7 @@ async fn rx_task(
             let pool = pool.clone();
             zenoh_runtime::ZRuntime::RX.spawn(async move {
                 read_loop(
-                    Priority::try_from(prio as u8).unwrap(),
+                    Priority::try_from(prio).unwrap(),
                     &mut link,
                     transport,
                     lease,
@@ -375,16 +365,9 @@ async fn rx_task(
                 )
                 .await
             })
-        });
-        poll_fn(|cx| {
-            for task in &mut tasks {
-                if let Poll::Ready(res) = Pin::new(task).poll(cx) {
-                    return Poll::Ready(res.unwrap());
-                }
-            }
-            Poll::Pending
-        })
-        .await
+        }))
+        .await;
+        res.unwrap()
     } else {
         read_loop(
             Priority::Control,
