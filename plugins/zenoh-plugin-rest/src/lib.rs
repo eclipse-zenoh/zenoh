@@ -437,7 +437,6 @@ async fn publish(
     ZBytesBody(bytes): ZBytesBody,
 ) -> Response {
     // @TODO: Define the right congestion control value
-    dbg!(&method);
     let res = if method == Method::DELETE {
         state.session.delete(key_expr).await
     } else {
