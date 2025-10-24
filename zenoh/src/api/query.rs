@@ -250,6 +250,7 @@ impl QueryState {
 /// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for
 /// [`Querier::get`](crate::query::Querier::get))
 /// then the reply with a disjoint key expression will be accepted for this query.
+/// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
 ///
 /// The [`Queryable`](crate::query::Queryable) may check this parameter with
 /// [`Query::accepts_replies`](crate::query::Query::accepts_replies).

@@ -97,8 +97,12 @@ impl Drop for QueryInner {
 /// The important detail: the [`Query::key_expr`] is **not** the key expression
 /// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
 /// The [`Queryable`]'s key expression is the one that should be used.
-/// For example, the `Query` may contain the key expression `foo/*` and the reply
-/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier.
+///
+/// This parameter is not set automatically because [`Queryable`](crate::query::Queryable) itself
+/// may serve glob key expressions and send replies on different concrete key expressions
+/// matching this glob. For example, a `Queryable` serving `foo/*` may receive a `Query`
+/// with key expression `foo/bar` and another one with `foo/baz`, and it should reply
+/// respectively on `foo/bar` and `foo/baz`.
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
@@ -216,6 +220,7 @@ impl Query {
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does so.
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
     #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
