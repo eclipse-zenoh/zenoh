@@ -18,23 +18,35 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
-    borrow::Cow,
-    convert::TryFrom,
+    convert::{Infallible, TryFrom},
+    fmt::Write,
     future::Future,
+    net::SocketAddr,
+    pin::Pin,
     str::FromStr,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicUsize, Ordering},
+    task::{Context, Poll},
     time::Duration,
 };
 
+use axum::{
+    extract::{FromRequest, FromRequestParts, Path, Request, State},
+    http::{header, request::Parts, HeaderValue, Method, StatusCode, Uri},
+    response::{sse::Event, Html, IntoResponse, Response, Sse},
+    routing::get,
+    Json, Router,
+};
 use base64::Engine;
-use futures::StreamExt;
-use http_types::Method;
-use serde::{Deserialize, Serialize};
-use tide::{http::Mime, sse::Sender, Request, Response, Server, StatusCode};
-use tokio::{task::JoinHandle, time::timeout};
+use futures::{FutureExt, Stream, StreamExt, TryFutureExt};
+use mime::Mime;
+use serde::Serialize;
+use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    set_header::SetResponseHeaderLayer,
+    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
+};
+use tracing::Level;
 use zenoh::{
     bytes::{Encoding, ZBytes},
     internal::{
@@ -44,8 +56,8 @@ use zenoh::{
         zerror,
     },
     key_expr::{keyexpr, KeyExpr},
-    query::{Parameters, QueryConsolidation, Reply, Selector, ZenohParameters},
-    sample::{Sample, SampleKind},
+    query::{Parameters, QueryConsolidation, Selector, ZenohParameters},
+    sample::Sample,
     session::Session,
     Result as ZResult,
 };
@@ -53,7 +65,11 @@ use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginCont
 
 mod config;
 pub use config::Config;
-use zenoh::query::ReplyError;
+use zenoh::{
+    handlers::{fifo::RecvStream, FifoChannelHandler},
+    pubsub::Subscriber,
+    time::Timestamp,
+};
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
@@ -106,7 +122,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 struct JSONSample {
     key: String,
     value: serde_json::Value,
@@ -114,148 +130,60 @@ struct JSONSample {
     timestamp: Option<String>,
 }
 
-pub fn base64_encode(data: &[u8]) -> String {
-    use base64::engine::general_purpose;
-    general_purpose::STANDARD.encode(data)
-}
-
-fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
-    if payload.is_empty() {
-        return serde_json::Value::Null;
-    }
-    match encoding {
-        // If it is a JSON try to deserialize as json, if it fails fallback to base64
-        &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
-            let bytes = payload.to_bytes();
-            serde_json::from_slice(&bytes).unwrap_or_else(|e| {
-                tracing::warn!(
-                    "Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}"
-                );
-                serde_json::Value::String(base64_encode(&bytes))
-            })
+impl JSONSample {
+    fn new(
+        key: impl Into<String>,
+        payload: &ZBytes,
+        encoding: &Encoding,
+        timestamp: Option<&Timestamp>,
+    ) -> Self {
+        JSONSample {
+            key: key.into(),
+            value: Self::payload_to_json(payload, encoding),
+            encoding: encoding.to_string(),
+            timestamp: timestamp.map(|ts| ts.to_string()),
         }
-        &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING => serde_json::Value::String(
-            String::from_utf8(payload.to_bytes().into_owned()).unwrap_or_else(|e| {
-                tracing::warn!(
+    }
+
+    fn payload_to_json(payload: &ZBytes, encoding: &Encoding) -> serde_json::Value {
+        if payload.is_empty() {
+            return serde_json::Value::Null;
+        }
+        let base64_encode = |data: &[u8]| base64::engine::general_purpose::STANDARD.encode(data);
+        match encoding {
+            // If it is a JSON try to deserialize as json, if it fails fallback to base64
+            &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
+                let bytes = payload.to_bytes();
+                serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+                    tracing::warn!(
+                        "Encoding is JSON but data is not JSON, converting to base64, Error: {e:?}"
+                    );
+                    serde_json::Value::String(base64_encode(&bytes))
+                })
+            }
+            &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING => serde_json::Value::String(
+                String::from_utf8(payload.to_bytes().into_owned()).unwrap_or_else(|e| {
+                    tracing::warn!(
                     "Encoding is String but data is not String, converting to base64, Error: {e:?}"
                 );
-                base64_encode(e.as_bytes())
-            }),
-        ),
-        // otherwise convert to JSON string
-        _ => serde_json::Value::String(base64_encode(&payload.to_bytes())),
-    }
-}
-
-fn sample_to_json(sample: &Sample) -> JSONSample {
-    JSONSample {
-        key: sample.key_expr().as_str().to_string(),
-        value: payload_to_json(sample.payload(), sample.encoding()),
-        encoding: sample.encoding().to_string(),
-        timestamp: sample.timestamp().map(|ts| ts.to_string()),
-    }
-}
-
-fn result_to_json(sample: Result<&Sample, &ReplyError>) -> JSONSample {
-    match sample {
-        Ok(sample) => sample_to_json(sample),
-        Err(err) => JSONSample {
-            key: "ERROR".into(),
-            value: payload_to_json(err.payload(), err.encoding()),
-            encoding: err.encoding().to_string(),
-            timestamp: None,
-        },
-    }
-}
-
-async fn to_json(results: flume::Receiver<Reply>) -> String {
-    let values = results
-        .stream()
-        .filter_map(move |reply| async move { Some(result_to_json(reply.result())) })
-        .collect::<Vec<JSONSample>>()
-        .await;
-
-    serde_json::to_string(&values).unwrap_or("[]".into())
-}
-
-async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
-    response(StatusCode::Ok, "application/json", &to_json(results).await)
-}
-
-fn sample_to_html(sample: &Sample) -> String {
-    format!(
-        "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.key_expr().as_str(),
-        sample.payload().try_to_string().unwrap_or_default()
-    )
-}
-
-fn result_to_html(sample: Result<&Sample, &ReplyError>) -> String {
-    match sample {
-        Ok(sample) => sample_to_html(sample),
-        Err(err) => {
-            format!(
-                "<dt>ERROR</dt>\n<dd>{}</dd>\n",
-                err.payload().try_to_string().unwrap_or_default()
-            )
+                    base64_encode(e.as_bytes())
+                }),
+            ),
+            // otherwise convert to JSON string
+            _ => serde_json::Value::String(base64_encode(&payload.to_bytes())),
         }
     }
 }
 
-async fn to_html(results: flume::Receiver<Reply>) -> String {
-    let values = results
-        .stream()
-        .filter_map(move |reply| async move { Some(result_to_html(reply.result())) })
-        .collect::<Vec<String>>()
-        .await
-        .join("\n");
-    format!("<dl>\n{values}\n</dl>\n")
-}
-
-async fn to_html_response(results: flume::Receiver<Reply>) -> Response {
-    response(StatusCode::Ok, "text/html", &to_html(results).await)
-}
-
-async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
-    match results.recv_async().await {
-        Ok(reply) => match reply.result() {
-            Ok(sample) => response(
-                StatusCode::Ok,
-                Cow::from(sample.encoding()).as_ref(),
-                &sample.payload().try_to_string().unwrap_or_default(),
-            ),
-            Err(value) => response(
-                StatusCode::Ok,
-                Cow::from(value.encoding()).as_ref(),
-                &value.payload().try_to_string().unwrap_or_default(),
-            ),
-        },
-        Err(_) => response(StatusCode::Ok, "", ""),
+impl From<&Sample> for JSONSample {
+    fn from(value: &Sample) -> Self {
+        Self::new(
+            value.key_expr().as_str(),
+            value.payload(),
+            value.encoding(),
+            value.timestamp(),
+        )
     }
-}
-
-fn method_to_kind(method: Method) -> SampleKind {
-    match method {
-        Method::Put => SampleKind::Put,
-        Method::Delete => SampleKind::Delete,
-        _ => SampleKind::default(),
-    }
-}
-
-fn response<'a, S: Into<&'a str> + std::fmt::Debug>(
-    status: StatusCode,
-    content_type: S,
-    body: &str,
-) -> Response {
-    tracing::trace!("Outgoing Response: {status} - {content_type:?} - body: {body}");
-    let mut builder = Response::builder(status)
-        .header("content-length", body.len().to_string())
-        .header("Access-Control-Allow-Origin", "*")
-        .body(body);
-    if let Ok(mime) = Mime::from_str(content_type.into()) {
-        builder = builder.content_type(mime);
-    }
-    builder.build()
 }
 
 #[cfg(feature = "dynamic_plugin")]
@@ -292,7 +220,7 @@ impl Plugin for RestPlugin {
         WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
         MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
 
-        let task = run(runtime.clone(), conf.clone());
+        let task = run(runtime.clone(), conf.addr);
         let task =
             blockon_runtime(async { timeout(Duration::from_millis(1), spawn_runtime(task)).await });
 
@@ -355,214 +283,463 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     result
 }
 
-async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    tracing::trace!("Incoming GET request: {:?}", req);
-
-    let first_accept = match req.header("accept") {
-        Some(accept) => accept[0]
-            .to_string()
-            .split(';')
-            .next()
-            .unwrap()
-            .split(',')
-            .next()
-            .unwrap()
-            .to_string(),
-        None => "application/json".to_string(),
-    };
-    if first_accept == "text/event-stream" {
-        Ok(tide::sse::upgrade(
-            req,
-            move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
-                    Ok(ke) => ke.into_owned(),
-                    Err(e) => {
-                        return Err(tide::Error::new(
-                            tide::StatusCode::BadRequest,
-                            anyhow::anyhow!("{}", e),
-                        ))
-                    }
-                };
-                spawn_runtime(async move {
-                    tracing::debug!("Subscribe to {} for SSE stream", key_expr);
-                    let sender = &sender;
-                    let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
-                    loop {
-                        let sample = sub.recv_async().await.unwrap();
-                        let json_sample =
-                            serde_json::to_string(&sample_to_json(&sample)).unwrap_or("{}".into());
-
-                        match timeout(
-                            std::time::Duration::new(10, 0),
-                            sender.send(&sample.kind().to_string(), json_sample, None),
-                        )
-                        .await
-                        {
-                            Ok(Ok(_)) => {}
-                            Ok(Err(e)) => {
-                                tracing::debug!("SSE error ({})! Unsubscribe and terminate", e);
-                                if let Err(e) = sub.undeclare().await {
-                                    tracing::error!("Error undeclaring subscriber: {}", e);
-                                }
-                                break;
-                            }
-                            Err(_) => {
-                                tracing::debug!("SSE timeout! Unsubscribe and terminate",);
-                                if let Err(e) = sub.undeclare().await {
-                                    tracing::error!("Error undeclaring subscriber: {}", e);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                });
-                Ok(())
-            },
+fn app(session: Session) -> Router {
+    Router::new()
+        .route(
+            "/{*key_expr}",
+            get(subscribe_or_query)
+                .post(subscribe_or_query)
+                .put(publish)
+                .patch(publish)
+                .delete(publish),
+        )
+        .with_state(AppState { session })
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().include_headers(true))
+                .on_request(DefaultOnRequest::new().level(Level::TRACE))
+                .on_response(
+                    DefaultOnResponse::new()
+                        .level(Level::TRACE)
+                        .include_headers(true),
+                ),
+        )
+        .layer(
+            CorsLayer::new()
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::DELETE,
+                ])
+                .allow_origin(Any)
+                .allow_credentials(false),
+        )
+        .layer(SetResponseHeaderLayer::overriding(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("*"),
         ))
+}
+
+#[derive(Clone)]
+struct AppState {
+    session: Session,
+}
+
+async fn subscribe(state: AppState, key_expr: KeyExpr<'static>) -> Response {
+    let subscriber = match state.session.declare_subscriber(&key_expr).await {
+        Ok(sub) => sub,
+        Err(err) => return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
+    };
+    struct SubscriberStream {
+        stream: RecvStream<'static, Sample>,
+        _subscriber: Subscriber<FifoChannelHandler<Sample>>,
+    }
+    impl Stream for SubscriberStream {
+        type Item = Sample;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            self.stream.poll_next_unpin(cx)
+        }
+    }
+    let stream = SubscriberStream {
+        stream: subscriber.handler().clone().into_stream(),
+        _subscriber: subscriber,
+    };
+    Sse::new(stream.map(|sample| Event::default().json_data(JSONSample::from(&sample))))
+        .into_response()
+}
+
+async fn query(
+    state: AppState,
+    accept: Accept,
+    key_expr: KeyExpr<'static>,
+    encoding: Encoding,
+    uri: Uri,
+    body: ZBytes,
+) -> Response {
+    let parameters = Parameters::from(uri.query().unwrap_or_default());
+    let consolidation = if parameters.time_range().is_some() {
+        QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
     } else {
-        let body = req.body_bytes().await.unwrap_or_default();
-        let url = req.url();
-        let key_expr = match path_to_key_expr(url.path(), &req.state().1) {
-            Ok(ke) => ke,
-            Err(e) => {
-                return Ok(response(
-                    StatusCode::BadRequest,
-                    "text/plain",
-                    &e.to_string(),
-                ))
-            }
-        };
-        let query_part = url.query();
-        let parameters = Parameters::from(query_part.unwrap_or_default());
-        let consolidation = if parameters.time_range().is_some() {
-            QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
-        } else {
-            QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
-        };
-        let raw = parameters.contains_key(RAW_KEY);
-        let mut query = req
-            .state()
-            .0
-            .get(Selector::borrowed(&key_expr, &parameters))
-            .consolidation(consolidation)
-            .with(flume::unbounded());
-        if !body.is_empty() {
-            let encoding: Encoding = req
-                .content_type()
-                .map(|m| Encoding::from(m.to_string()))
-                .unwrap_or_default();
-            query = query.payload(body).encoding(encoding);
-        }
-        match query.await {
-            Ok(receiver) => {
-                if raw {
-                    Ok(to_raw_response(receiver).await)
-                } else if first_accept == "text/html" {
-                    Ok(to_html_response(receiver).await)
-                } else {
-                    Ok(to_json_response(receiver).await)
+        QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
+    };
+    let mut query = state
+        .session
+        .get(Selector::borrowed(&key_expr, &parameters))
+        .consolidation(consolidation)
+        .with(flume::unbounded());
+    if !body.is_empty() {
+        query = query.payload(body).encoding(encoding);
+    }
+    match query.await {
+        Ok(receiver) => match accept {
+            Accept::Raw => match receiver.recv_async().await {
+                Ok(reply) => {
+                    let (encoding, payload) = match reply.result() {
+                        Ok(sample) => (sample.encoding(), sample.payload()),
+                        Err(err) => (err.encoding(), err.payload()),
+                    };
+                    let content_type = Some([(header::CONTENT_TYPE, encoding.to_string())])
+                        .filter(|[(_, e)]| Mime::from_str(e).is_ok());
+                    (content_type, payload.to_bytes().to_vec()).into_response()
                 }
+                Err(_) => StatusCode::OK.into_response(),
+            },
+            Accept::Html => {
+                let mut html = "<dl>\n".to_string();
+                while let Ok(reply) = receiver.recv_async().await {
+                    let (key, payload) = match reply.result() {
+                        Ok(sample) => (sample.key_expr().as_str(), sample.payload().to_bytes()),
+                        Err(err) => ("ERROR", err.payload().to_bytes()),
+                    };
+                    let payload = String::from_utf8_lossy(&payload);
+                    write!(&mut html, "<dt>{key}</dt>\n<dd>{payload}</dd>\n").unwrap();
+                }
+                Html(html + "</dl>\n").into_response()
             }
-            Err(e) => Ok(response(
-                StatusCode::InternalServerError,
-                "text/plain",
-                &e.to_string(),
-            )),
-        }
+            Accept::Json => receiver
+                .stream()
+                .map(|reply| match reply.into_result() {
+                    Ok(sample) => JSONSample::from(&sample),
+                    Err(err) => JSONSample::new("ERROR", err.payload(), err.encoding(), None),
+                })
+                .collect::<Vec<JSONSample>>()
+                .map(Json)
+                .await
+                .into_response(),
+            _ => unreachable!(),
+        },
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
     }
 }
 
-async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
-    tracing::trace!("Incoming PUT request: {:?}", req);
-    match req.body_bytes().await {
-        Ok(bytes) => {
-            let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
-                Ok(ke) => ke,
-                Err(e) => {
-                    return Ok(response(
-                        StatusCode::BadRequest,
-                        "text/plain",
-                        &e.to_string(),
-                    ))
-                }
-            };
-
-            let encoding: Encoding = req
-                .content_type()
-                .map(|m| Encoding::from(m.to_string()))
-                .unwrap_or_default();
-
-            // @TODO: Define the right congestion control value
-            let session = &req.state().0;
-            let res = match method_to_kind(req.method()) {
-                SampleKind::Put => session.put(&key_expr, bytes).encoding(encoding).await,
-                SampleKind::Delete => session.delete(&key_expr).await,
-            };
-            match res {
-                Ok(_) => Ok(Response::new(StatusCode::Ok)),
-                Err(e) => Ok(response(
-                    StatusCode::InternalServerError,
-                    "text/plain",
-                    &e.to_string(),
-                )),
-            }
-        }
-        Err(e) => Ok(response(
-            StatusCode::NoContent,
-            "text/plain",
-            &e.to_string(),
-        )),
+async fn subscribe_or_query(
+    State(state): State<AppState>,
+    accept: Accept,
+    KeyExprPath(key_expr): KeyExprPath,
+    EncodingHeader(encoding): EncodingHeader,
+    uri: Uri,
+    ZBytesBody(body): ZBytesBody,
+) -> Response {
+    match accept {
+        Accept::EventStream => subscribe(state, key_expr).await,
+        accept => query(state, accept, key_expr, encoding, uri, body).await,
     }
 }
 
-pub async fn run(runtime: DynamicRuntime, conf: Config) -> ZResult<()> {
+async fn publish(
+    State(state): State<AppState>,
+    method: Method,
+    KeyExprPath(key_expr): KeyExprPath,
+    EncodingHeader(encoding): EncodingHeader,
+    ZBytesBody(bytes): ZBytesBody,
+) -> Response {
+    // @TODO: Define the right congestion control value
+    let res = if method == Method::DELETE {
+        state.session.delete(key_expr).await
+    } else {
+        state.session.put(key_expr, bytes).encoding(encoding).await
+    };
+    match res {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
+    }
+}
+
+pub async fn run(runtime: DynamicRuntime, addr: SocketAddr) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
     zenoh::init_log_from_env_or("error");
 
-    let zid = runtime.zid().to_string();
-    let session = zenoh::session::init(runtime).await.unwrap();
-
-    let mut app = Server::with_state((Arc::new(session), zid));
-    app.with(
-        tide::security::CorsMiddleware::new()
-            .allow_methods(
-                "GET, POST, PUT, PATCH, DELETE"
-                    .parse::<http_types::headers::HeaderValue>()
-                    .unwrap(),
-            )
-            .allow_origin(tide::security::Origin::from("*"))
-            .allow_credentials(false),
-    );
-
-    app.at("/")
-        .get(query)
-        .post(query)
-        .put(write)
-        .patch(write)
-        .delete(write);
-    app.at("*")
-        .get(query)
-        .post(query)
-        .put(write)
-        .patch(write)
-        .delete(write);
-
-    if let Err(e) = app.listen(conf.http_port).await {
-        tracing::error!("Unable to start http server for REST: {:?}", e);
-        return Err(e.into());
+    match tokio::try_join!(
+        zenoh::session::init(runtime),
+        TcpListener::bind(addr).map_err(Into::into)
+    ) {
+        Ok((session, listener)) => axum::serve(listener, app(session)).await?,
+        Err(err) => {
+            tracing::error!("Unable to start http server for REST: {:?}", err);
+            return Err(err);
+        }
     }
     Ok(())
 }
 
-fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
-    let path = path.strip_prefix('/').unwrap_or(path);
-    if path == "@/local" {
-        KeyExpr::try_from(format!("@/{zid}"))
-    } else if let Some(suffix) = path.strip_prefix("@/local/") {
-        KeyExpr::try_from(format!("@/{zid}/{suffix}"))
-    } else {
-        KeyExpr::try_from(path)
+struct KeyExprPath(KeyExpr<'static>);
+
+impl FromRequestParts<AppState> for KeyExprPath {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let Path(mut key_expr): Path<String> = Path::from_request_parts(parts, state)
+            .await
+            .map_err(IntoResponse::into_response)?;
+        if let Some(suffix) = key_expr.strip_prefix("@/local") {
+            if suffix.is_empty() || suffix.starts_with('/') {
+                key_expr = format!("@/{zid}{suffix}", zid = state.session.zid());
+            }
+        }
+        match KeyExpr::try_from(key_expr) {
+            Ok(key_expr) => Ok(KeyExprPath(key_expr)),
+            Err(err) => Err((StatusCode::BAD_REQUEST, err.to_string()).into_response()),
+        }
+    }
+}
+
+struct EncodingHeader(Encoding);
+
+impl FromRequestParts<AppState> for EncodingHeader {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let encoding = match parts.headers.get(header::CONTENT_TYPE) {
+            Some(h) => Encoding::from(String::from_utf8_lossy(h.as_bytes()).as_ref()),
+            None => Encoding::default(),
+        };
+        Ok(EncodingHeader(encoding))
+    }
+}
+
+enum Accept {
+    EventStream,
+    Raw,
+    Html,
+    Json,
+}
+
+impl FromRequestParts<AppState> for Accept {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let accept = match parts
+            .headers
+            .get(header::ACCEPT)
+            .and_then(|h| h.to_str().ok()?.split(',').next()?.split(';').next())
+        {
+            Some("text/event-stream") => Accept::EventStream,
+            _ if Parameters::from(parts.uri.query().unwrap_or_default()).contains_key(RAW_KEY) => {
+                Accept::Raw
+            }
+            Some("text/html") => Accept::Html,
+            _ => Accept::Json,
+        };
+        Ok(accept)
+    }
+}
+
+struct ZBytesBody(ZBytes);
+
+impl FromRequest<AppState> for ZBytesBody {
+    type Rejection = (StatusCode, String);
+
+    async fn from_request(req: Request, _state: &AppState) -> Result<Self, Self::Rejection> {
+        let mut stream = req.into_body().into_data_stream();
+        let mut writer = ZBytes::writer();
+        while let Some(bytes) = stream.next().await {
+            match bytes {
+                Ok(bytes) => writer.append(bytes.into()),
+                Err(err) => return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string())),
+            }
+        }
+        Ok(ZBytesBody(writer.finish()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use axum::{
+        body::{Body, Bytes},
+        http::{header, Method, Request},
+    };
+    use futures::{FutureExt, StreamExt};
+    use tokio::time::timeout;
+    use tower::ServiceExt;
+    use zenoh::{bytes::Encoding, sample::SampleKind, Config, Session, Wait};
+
+    use crate::app;
+
+    const TEST_PORTS: [u16; 3] = [42000, 42001, 42002];
+
+    async fn setup(port: u16) -> (Session, Session) {
+        let mut config1 = Config::default();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config1
+            .listen
+            .endpoints
+            .set(vec![format!("tcp/127.0.0.1:{}", port).parse().unwrap()])
+            .unwrap();
+
+        let mut config2 = Config::default();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config2
+            .connect
+            .endpoints
+            .set(vec![format!("tcp/127.0.0.1:{}", port).parse().unwrap()])
+            .unwrap();
+        let (s1, s2) = tokio::try_join!(zenoh::open(config1), zenoh::open(config2)).unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        (s1, s2)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn publish() {
+        let (pub_session, sub_session) = setup(TEST_PORTS[0]).await;
+        let subscriber = sub_session.declare_subscriber("test/**").await.unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        for method in [Method::PUT, Method::PATCH] {
+            let response = app(pub_session.clone())
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/test/publish")
+                        .header(header::CONTENT_TYPE, "text/plain")
+                        .body(Body::from("payload"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(response.status().is_success());
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let sample = subscriber.try_recv().unwrap().unwrap();
+            assert_eq!(sample.kind(), SampleKind::Put);
+            assert_eq!(sample.key_expr().as_str(), "test/publish");
+            assert_eq!(sample.payload().try_to_string().unwrap(), "payload");
+            assert_eq!(sample.encoding(), &Encoding::TEXT_PLAIN);
+        }
+        let response = app(pub_session.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/test/publish")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let sample = subscriber.try_recv().unwrap().unwrap();
+        assert_eq!(sample.kind(), SampleKind::Delete);
+        assert_eq!(sample.key_expr().as_str(), "test/publish");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn subscribe() {
+        let (pub_session, sub_session) = setup(TEST_PORTS[1]).await;
+        let response = app(sub_session.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/test/subscribe")
+                    .header(header::ACCEPT, "text/event-stream")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        let mut stream = response.into_body().into_data_stream();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        for i in 0..2 {
+            pub_session
+                .put("test/subscribe", format!("payload {i}"))
+                .encoding(Encoding::TEXT_PLAIN)
+                .await
+                .unwrap();
+            let sample = timeout(Duration::from_secs(1), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(
+                    std::str::from_utf8(&sample)
+                        .unwrap()
+                        .strip_prefix("data: ")
+                        .unwrap()
+                )
+                .unwrap(),
+                serde_json::json!({
+                    "key": "test/subscribe",
+                    "value": format!("payload {i}"),
+                    "encoding": "text/plain",
+                    "timestamp": null,
+                }),
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn query() {
+        let (get_session, queryable_session) = setup(TEST_PORTS[2]).await;
+        let _queryable = queryable_session
+            .declare_queryable("test/**")
+            .callback(|q| {
+                q.reply(q.key_expr(), "reply")
+                    .encoding(Encoding::TEXT_PLAIN)
+                    .wait()
+                    .unwrap()
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let check_json: fn(Bytes) = |body| {
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+                serde_json::json!([{
+                    "key": "test/query",
+                    "value": "reply",
+                    "encoding": "text/plain",
+                    "timestamp": null,
+                }]),
+            )
+        };
+        let check_html: fn(Bytes) =
+            |body: Bytes| assert_eq!(body, "<dl>\n<dt>test/query</dt>\n<dd>reply</dd>\n</dl>\n");
+        let check_raw: fn(Bytes) = |body| assert_eq!(body, "reply");
+        for (query, accept, check) in [
+            ("", "application/json", check_json),
+            ("", "text/html; charset=utf-8", check_html),
+            ("?_raw=true", "text/plain", check_raw),
+        ] {
+            let response = app(get_session.clone())
+                .oneshot(
+                    Request::builder()
+                        .method(Method::GET)
+                        .uri(format!("/test/query{query}"))
+                        .header(header::ACCEPT, accept)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(response.status().is_success());
+            assert_eq!(
+                response.headers().get(header::CONTENT_TYPE).unwrap(),
+                accept
+            );
+            let body = response
+                .into_body()
+                .into_data_stream()
+                .next()
+                .now_or_never()
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            check(body);
+        }
     }
 }
