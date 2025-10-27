@@ -53,12 +53,18 @@ impl Compatibility {
         }
 
         fn version_equals(left: &str, right: &str) -> bool {
-            const RELEASE_COMMIT: &str = "release";
+            const RELEASE_COMMIT: &str = "release"; // fallback from `zenoh::GIT_COMMIT`
             let (left_version, left_commit) = get_version_and_commit(left);
             let (right_version, right_commit) = get_version_and_commit(right);
             if left_version != right_version {
                 return false;
             }
+            // We check equality of git hashes of zenoh crate used by plugin and host.
+            // This is mostly done for development purposes, to avoid crashes in case of
+            // internal API change during releases.
+            // If we receive "release" instead of commit hash, it means that
+            // zenoh crate is taken from crates.io (or is built in the environment without git ?).
+            // In this case we ignore the commit hash check.
             if left_commit != right_commit
                 && left_commit != RELEASE_COMMIT
                 && right_commit != RELEASE_COMMIT
