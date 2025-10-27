@@ -243,7 +243,7 @@ const GIT_COMMIT: &str = git_version::git_version!(
         "--abbrev=40",
         "--exclude=*"
     ],
-    fallback = "unknown"
+    fallback = "release"
 );
 
 pub const GIT_VERSION: &str =
