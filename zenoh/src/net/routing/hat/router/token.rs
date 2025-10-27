@@ -40,7 +40,7 @@ use crate::net::{
             BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait,
             InterestProfile, SendDeclare,
         },
-        router::{FaceContext, NodeId, Resource, DEFAULT_NODE_ID},
+        router::{FaceContext, NodeId, Resource},
         RoutingContext,
     },
 };
@@ -233,7 +233,7 @@ impl Hat {
         face: &mut Arc<FaceState>,
         res: &mut Arc<Resource>,
         router: ZenohIdProto,
-        interest_id: Option<InterestId>,
+        _interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
         profile: InterestProfile,
     ) {
@@ -857,29 +857,6 @@ impl Hat {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn declare_token_interest(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        aggregate: bool,
-        send_declare: &mut SendDeclare,
-    ) {
-        self.declare_token_interest_with_source(
-            tables,
-            face,
-            id,
-            res,
-            mode,
-            aggregate,
-            DEFAULT_NODE_ID,
-            send_declare,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_token_interest_with_source(
         &self,
         tables: &mut TablesData,
@@ -1101,11 +1078,11 @@ impl HatTokenTrait for Hat {
         debug_assert!(self.bound.is_north());
 
         if let Some(interest) = self
-            .gateway_pending_current_interests
+            .router_pending_current_interests
             .get(&interest_id)
             .map(|p| &p.interest)
         {
-            let hat = &mut downstream_hats[interest.src_face.bound];
+            let hat = &mut downstream_hats[interest.src_bound];
             hat.propagate_current_token(ctx, res, interest);
         } else {
             tracing::error!(

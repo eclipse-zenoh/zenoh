@@ -13,10 +13,10 @@
 //
 use std::sync::{atomic::Ordering, Arc};
 
+use itertools::Itertools;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::WhatAmI,
     network::{
-        declare::ext,
         interest::{self, InterestId, InterestMode},
         Declare, DeclareBody, DeclareFinal, Interest,
     },
@@ -26,15 +26,14 @@ use zenoh_sync::get_mut_unchecked;
 use super::{initial_interest, Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
-        face::{FaceState, InterestState},
+        face::InterestState,
         gateway::BoundMap,
         interests::{
-            finalize_pending_interest, CurrentInterest, CurrentInterestCleanup,
-            PendingCurrentInterest, RemoteInterest,
+            CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
         },
         resource::Resource,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait},
+    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
     RoutingContext,
 };
 
@@ -86,87 +85,41 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
-    fn propagate_declarations(
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn route_interest(
         &mut self,
         mut ctx: BaseContext,
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        upstream_hat: &mut dyn HatTrait,
+        mut south_hats: BoundMap<&mut dyn HatTrait>,
     ) {
-        if msg.options.subscribers() {
-            self.declare_sub_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                msg.options.aggregate(),
-                ctx.send_declare,
-            )
+        // I have received an interest with mode != FINAL.
+        // I should be the north hat.
+        // The face cannot be bound to me, so it must be south-bound. In which case the msg originates in a subregion (for which I am the gateway):
+        //   1. If I have a gateway, I should re-propagate the interest to it.
+        //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
+        //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
+
+        assert!(self.bound().is_north());
+        assert!(!ctx.src_face.bound.is_north());
+
+        let owner_hat = &mut *south_hats[ctx.src_face.bound];
+
+        if msg.mode.current() {
+            owner_hat.send_declarations(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
         }
-        if msg.options.queryables() {
-            self.declare_qabl_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                msg.options.aggregate(),
-                ctx.send_declare,
-            )
-        }
-        if msg.options.tokens() {
-            self.declare_token_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                msg.options.aggregate(),
-                ctx.send_declare,
-            )
-        }
+
         if msg.mode.future() {
-            self.face_hat_mut(ctx.src_face).remote_interests.insert(
-                msg.id,
-                RemoteInterest {
-                    res: res.as_deref().cloned(),
-                    options: msg.options,
-                    mode: msg.mode,
-                },
-            );
+            owner_hat.register_interest(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
         }
 
-        let src_zid = ctx.src_face.zid;
-
-        if !upstream_hat.propagate_interest(ctx.reborrow(), msg, res, &src_zid)
-            && msg.mode.current()
-        {
-            tracing::trace!(
-                id = msg.id,
-                src = %ctx.src_face,
-                "Finalizing current interest; it was not propagated upstream"
-            );
-            let src_face = ctx.src_face.clone();
-            self.finalize_current_interest(ctx, msg.id, &src_face, &src_zid);
-        }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
-    fn propagate_interest(
-        &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-        zid: &ZenohIdProto,
-    ) -> bool {
-        if ctx.src_face.bound.is_north() {
-            return false;
-        }
+        let Some(src) = owner_hat.new_remote(&ctx.src_face, msg.ext_nodeid.node_id) else {
+            return;
+        };
 
         let interest = Arc::new(CurrentInterest {
-            src_face: ctx.src_face.clone(),
+            src,
+            src_bound: ctx.src_face.bound,
             src_interest_id: msg.id,
             mode: msg.mode,
         });
@@ -235,7 +188,7 @@ impl HatInterestTrait for Hat {
                     mode: propagated_mode,
                     options: msg.options,
                     wire_expr,
-                    ext_qos: interest::ext::QoSType::DECLARE,
+                    ext_qos: interest::ext::QoSType::INTEREST,
                     ext_tstamp: None,
                     ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                 },
@@ -245,132 +198,62 @@ impl HatInterestTrait for Hat {
             ));
         }
 
-        Arc::strong_count(&interest) > 1
+        if msg.mode.current() {
+            if let Some(interest) = Arc::into_inner(interest) {
+                tracing::debug!(
+                    id = msg.id,
+                    src = %ctx.src_face,
+                    "Finalizing current interest. It was not propagated upstream"
+                );
+
+                owner_hat.send_final_declaration(ctx, interest.src_interest_id, &interest.src);
+            }
+        }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
-    fn unregister_current_interest(
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn route_interest_final(
         &mut self,
         mut ctx: BaseContext,
-        id: InterestId,
-        mut downstream_hats: BoundMap<&mut dyn HatTrait>,
-    ) {
-        if self.owns(ctx.src_face) {
-            if let Some(interest) = get_mut_unchecked(&mut ctx.src_face.clone())
-                .pending_current_interests
-                .remove(&id)
-            {
-                finalize_pending_interest(interest, ctx.send_declare);
-            }
-        } else {
-            // REVIEW(regions): not sure
-            if let Some(mut face) = self
-                .faces(ctx.tables)
-                .values()
-                .find(|f| self.face_hat(f).is_gateway)
-                .cloned()
-            {
-                if let Some(pending_interest) = get_mut_unchecked(&mut face)
-                    .pending_current_interests
-                    .remove(&id)
-                {
-                    pending_interest.cancellation_token.cancel();
-                    let hat = &mut downstream_hats[pending_interest.interest.src_face.bound];
-                    hat.finalize_current_interest(
-                        ctx.reborrow(),
-                        id,
-                        &pending_interest.interest.src_face,
-                        &pending_interest.interest.src_face.zid,
-                    );
-                }
-            }
-        }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
-    fn finalize_current_interest(
-        &mut self,
-        ctx: BaseContext,
-        id: InterestId,
-        src_face: &FaceState,
-        _src_zid: &ZenohIdProto,
-    ) {
-        if id == INITIAL_INTEREST_ID {
-            zenoh_runtime::ZRuntime::Net.block_in_place(async move {
-                if let Some(runtime) = &ctx.tables.runtime {
-                    if let Some(runtime) = runtime.upgrade() {
-                        runtime
-                            .start_conditions()
-                            .terminate_peer_connector_zid(ctx.src_face.zid)
-                            .await
-                    }
-                }
-            });
-        } else {
-            (ctx.send_declare)(
-                &src_face.primitives,
-                RoutingContext::new(Declare {
-                    interest_id: Some(id),
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
-            );
-        }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
-    fn unregister_interest(
-        &mut self,
-        ctx: BaseContext,
         msg: &Interest,
-        upstream_hat: &mut dyn HatTrait,
+        mut south_hats: BoundMap<&mut dyn HatTrait>,
     ) {
-        if let Some(inbound_interest) = self
-            .face_hat_mut(ctx.src_face)
-            .remote_interests
-            .remove(&msg.id)
-        {
-            if !self.faces(ctx.tables).values().any(|f| {
-                f.whatami == WhatAmI::Client
-                    && self
-                        .face_hat(f)
-                        .remote_interests
-                        .values()
-                        .any(|i| i == &inbound_interest)
-            }) {
-                upstream_hat.finalize_interest(ctx, msg, inbound_interest);
-            }
-        }
-    }
+        // I have received an interest with mode FINAL.
+        // I should be the north hat.
+        // The face cannot be bound to me, so it must be south-bound. In which case the msg originates in a subregion (for which I am the gateway):
+        //   1. I need to unregister it as a remote interest in the owner (south) hat.
+        //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound,))]
-    fn finalize_interest(
-        &mut self,
-        ctx: BaseContext,
-        _msg: &Interest,
-        inbound_interest: RemoteInterest,
-    ) {
+        assert!(self.bound().is_north());
+        assert!(!ctx.src_face.bound.is_north());
+
+        // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
+
+        let owner_hat = &mut *south_hats[ctx.src_face.bound];
+
+        let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
+            tracing::error!(id = msg.id, "Unknown remote interest");
+            return;
+        };
+
         if let Some(dst_face) = self
-            .faces_mut(ctx.tables)
-            .values_mut()
+            .owned_faces_mut(ctx.tables)
             .find(|f| self.face_hat(f).is_gateway)
             .map(get_mut_unchecked)
         {
             dst_face.local_interests.retain(|id, local_interest| {
-                if *local_interest == inbound_interest {
+                if *local_interest == remote_interest {
                     dst_face.primitives.send_interest(RoutingContext::with_expr(
                         &mut Interest {
                             id: *id,
                             mode: InterestMode::Final,
                             // NOTE: InterestMode::Final options are undefined in the current protocol specification,
                             // they are initialized here for internal use by local egress interceptors.
-                            options: inbound_interest.options,
+                            options: remote_interest.options,
                             wire_expr: None,
-                            ext_qos: ext::QoSType::DECLARE,
+                            ext_qos: interest::ext::QoSType::INTEREST,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
+                            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                         },
                         local_interest
                             .res
@@ -383,5 +266,168 @@ impl HatInterestTrait for Hat {
                 true
             });
         }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn route_final_declaration(
+        &mut self,
+        ctx: BaseContext,
+        interest_id: InterestId,
+        mut south_hats: BoundMap<&mut dyn HatTrait>,
+    ) {
+        // I have received a Declare Final.
+        // Either this is a peer initial interest finalizer, in which case I should own the (peer) face.
+        // Or, the source face is a gateway, in which case there should be a pending current interest and I should be the north hat.
+
+        if interest_id == INITIAL_INTEREST_ID {
+            self.assert_proper_ownership(&ctx);
+
+            zenoh_runtime::ZRuntime::Net.block_in_place(async move {
+                if let Some(runtime) = &ctx.tables.runtime {
+                    if let Some(runtime) = runtime.upgrade() {
+                        runtime
+                            .start_conditions()
+                            .terminate_peer_connector_zid(ctx.src_face.zid)
+                            .await
+                    }
+                }
+            });
+        } else {
+            assert!(self.bound().is_north());
+            assert!(ctx.src_face.bound.is_north());
+
+            if !self.face_hat(&ctx.src_face).is_gateway {
+                tracing::error!(
+                    id = interest_id,
+                    src = %ctx.src_face,
+                    "Received current interest finalization from non-gateway face"
+                );
+                return;
+            }
+
+            let Some(PendingCurrentInterest {
+                interest,
+                cancellation_token,
+                ..
+            }) = get_mut_unchecked(ctx.src_face)
+                .pending_current_interests
+                .remove(&interest_id)
+            else {
+                tracing::error!(
+                    id = interest_id,
+                    src = %ctx.src_face,
+                    "Unknown current interest"
+                );
+                return;
+            };
+
+            cancellation_token.cancel();
+            if let Some(interest) = Arc::into_inner(interest) {
+                let owner_hat = &mut *south_hats[interest.src_bound];
+                owner_hat.send_final_declaration(ctx, interest.src_interest_id, &interest.src);
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn send_declarations(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<&mut Arc<Resource>>,
+    ) {
+        if msg.options.subscribers() {
+            self.declare_sub_interest(
+                ctx.tables,
+                ctx.src_face,
+                msg.id,
+                res.as_deref().cloned().as_mut(),
+                msg.mode,
+                msg.options.aggregate(),
+                ctx.send_declare,
+            )
+        }
+        if msg.options.queryables() {
+            self.declare_qabl_interest(
+                ctx.tables,
+                ctx.src_face,
+                msg.id,
+                res.as_deref().cloned().as_mut(),
+                msg.mode,
+                msg.options.aggregate(),
+                ctx.send_declare,
+            )
+        }
+        if msg.options.tokens() {
+            self.declare_token_interest(
+                ctx.tables,
+                ctx.src_face,
+                msg.id,
+                res.as_deref().cloned().as_mut(),
+                msg.mode,
+                msg.options.aggregate(),
+                ctx.send_declare,
+            )
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn send_final_declaration(&mut self, ctx: BaseContext, id: InterestId, src: &Remote) {
+        // I should send a DeclareFinal to the source of the current interest identified by the given IID and FID
+
+        let src_face = self.hat_remote(src);
+
+        (ctx.send_declare)(
+            &src_face.primitives,
+            RoutingContext::new(Declare {
+                interest_id: Some(id),
+                ext_qos: interest::ext::QoSType::INTEREST,
+                ext_tstamp: None,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
+                body: DeclareBody::DeclareFinal(DeclareFinal),
+            }),
+        );
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn register_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<&mut Arc<Resource>>,
+    ) {
+        self.face_hat_mut(ctx.src_face).remote_interests.insert(
+            msg.id,
+            RemoteInterest {
+                res: res.as_deref().cloned(),
+                options: msg.options,
+                mode: msg.mode,
+            },
+        );
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
+        assert!(!self.bound().is_north());
+        self.assert_proper_ownership(&ctx);
+
+        let Some(remote_interest) = self
+            .face_hat_mut(ctx.src_face)
+            .remote_interests
+            .remove(&msg.id)
+        else {
+            tracing::error!(id = msg.id, "Unknown remote interest");
+            return None;
+        };
+
+        self.owned_faces(&ctx.tables)
+            .all(|face| {
+                !self
+                    .face_hat(face)
+                    .remote_interests
+                    .values()
+                    .contains(&remote_interest)
+            })
+            .then_some(remote_interest)
     }
 }

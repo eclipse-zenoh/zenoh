@@ -192,7 +192,7 @@ impl Router {
                 tables.data.zid,
                 bound,
                 primitives.clone(),
-                tables.hats.map(|hat| hat.new_face()),
+                tables.hats.map_ref(|hat| hat.new_face()),
             )
             .whatami(WhatAmI::Client)
             .local(true)
@@ -229,7 +229,7 @@ impl Router {
                     zid,
                     bound,
                     mux.clone(),
-                    tables.hats.map(|hat| hat.new_face()),
+                    tables.hats.map_ref(|hat| hat.new_face()),
                 )
                 .whatami(whatami)
                 .ingress_interceptors(ingress.clone());
@@ -291,7 +291,7 @@ impl Router {
                 ZenohIdProto::from_str("1").unwrap(),
                 bound,
                 mux.clone(),
-                tables.hats.map(|hat| hat.new_face()),
+                tables.hats.map_ref(|hat| hat.new_face()),
             )
             .multicast_groups(transport)
             .build(),
@@ -332,7 +332,7 @@ impl Router {
             peer.zid,
             bound,
             Arc::new(DummyPrimitives),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .multicast_groups(transport)
         .ingress_interceptors(interceptor.clone())

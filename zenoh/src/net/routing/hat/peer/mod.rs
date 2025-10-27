@@ -59,7 +59,7 @@ use crate::net::{
             gateway::Bound,
             interests::RemoteInterest,
         },
-        hat::{BaseContext, InterestProfile},
+        hat::{BaseContext, InterestProfile, Remote},
         router::FaceContext,
         RoutingContext,
     },
@@ -94,6 +94,10 @@ impl Hat {
         get_mut_unchecked(face_state).hats[self.bound]
             .downcast_mut()
             .unwrap()
+    }
+
+    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
+        remote.downcast_ref().unwrap()
     }
 
     pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
@@ -148,6 +152,16 @@ impl Hat {
     {
         tables.faces.values().filter(|face| self.owns(face))
     }
+
+    pub(crate) fn owned_faces_mut<'hat, 'tbl>(
+        &'hat self,
+        tables: &'tbl mut TablesData,
+    ) -> impl Iterator<Item = &'tbl mut Arc<FaceState>> + 'hat
+    where
+        'tbl: 'hat,
+    {
+        tables.faces.values_mut().filter(|face| self.owns(face))
+    }
 }
 
 impl HatBaseTrait for Hat {
@@ -193,6 +207,10 @@ impl HatBaseTrait for Hat {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync> {
         Box::new(HatContext::new())
+    }
+
+    fn new_remote(&self, face: &Arc<FaceState>, _nid: NodeId) -> Option<Remote> {
+        Some(Remote(Box::new(face.clone())))
     }
 
     fn new_local_face(
@@ -452,6 +470,10 @@ impl HatBaseTrait for Hat {
     fn whatami(&self) -> WhatAmI {
         WhatAmI::Peer
     }
+
+    fn bound(&self) -> Bound {
+        self.bound
+    }
 }
 
 struct HatContext {}
@@ -509,3 +531,5 @@ fn initial_interest(face: &FaceState) -> Option<&InterestState> {
 pub(super) fn push_declaration_profile(face: &FaceState) -> bool {
     face.whatami != WhatAmI::Client
 }
+
+type HatRemote = Arc<FaceState>;

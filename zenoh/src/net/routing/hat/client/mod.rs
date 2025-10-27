@@ -46,7 +46,7 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{face::FaceId, gateway::Bound, interests::RemoteInterest},
-        hat::BaseContext,
+        hat::{BaseContext, Remote},
         router::FaceContext,
     },
     runtime::Runtime,
@@ -90,6 +90,10 @@ impl Hat {
         &mut tables.faces
     }
 
+    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
+        remote.downcast_ref().unwrap()
+    }
+
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
@@ -116,6 +120,16 @@ impl Hat {
     {
         tables.faces.values().filter(|face| self.owns(face))
     }
+
+    pub(crate) fn owned_faces_mut<'hat, 'tbl>(
+        &'hat self,
+        tables: &'tbl mut TablesData,
+    ) -> impl Iterator<Item = &'tbl mut Arc<FaceState>> + 'hat
+    where
+        'tbl: 'hat,
+    {
+        tables.faces.values_mut().filter(|face| self.owns(face))
+    }
 }
 
 impl HatBaseTrait for Hat {
@@ -129,6 +143,10 @@ impl HatBaseTrait for Hat {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync> {
         Box::new(HatContext::new())
+    }
+
+    fn new_remote(&self, face: &Arc<FaceState>, _nid: NodeId) -> Option<Remote> {
+        Some(Remote(Box::new(face.clone())))
     }
 
     fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
@@ -291,6 +309,10 @@ impl HatBaseTrait for Hat {
     fn whatami(&self) -> WhatAmI {
         WhatAmI::Client
     }
+
+    fn bound(&self) -> Bound {
+        self.bound
+    }
 }
 
 struct HatContext {}
@@ -328,3 +350,5 @@ impl HatFace {
 }
 
 impl HatTrait for Hat {}
+
+type HatRemote = Arc<FaceState>;

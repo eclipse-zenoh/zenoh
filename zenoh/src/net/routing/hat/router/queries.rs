@@ -902,29 +902,6 @@ impl Hat {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn declare_qabl_interest(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        aggregate: bool,
-        send_declare: &mut SendDeclare,
-    ) {
-        self.declare_qabl_interest_with_source(
-            tables,
-            face,
-            id,
-            res,
-            mode,
-            aggregate,
-            DEFAULT_NODE_ID,
-            send_declare,
-        );
-    }
-
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_qabl_interest_with_source(
         &self,
         tables: &mut TablesData,

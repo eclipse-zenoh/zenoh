@@ -577,7 +577,7 @@ impl Resource {
         }
         let hat = tables
             .hats
-            .map(|d| HatResourceContext::new(d.new_resource()));
+            .map_ref(|d| HatResourceContext::new(d.new_resource()));
         Resource::upgrade_resource(&mut from, hat);
         from
     }

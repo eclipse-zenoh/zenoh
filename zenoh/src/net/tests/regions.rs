@@ -69,7 +69,7 @@ fn test_client_to_client_query_route_computation() {
                 ZenohIdProto::rand(),
                 SUBREGION,
                 Arc::new(DummyPrimitives),
-                tables.hats.map(|hat| hat.new_face()),
+                tables.hats.map_ref(|hat| hat.new_face()),
             )
             .whatami(WhatAmI::Client)
             .build()
@@ -81,7 +81,7 @@ fn test_client_to_client_query_route_computation() {
                 ZenohIdProto::rand(),
                 SUBREGION,
                 dst_buf.clone(),
-                tables.hats.map(|hat| hat.new_face()),
+                tables.hats.map_ref(|hat| hat.new_face()),
             )
             .whatami(WhatAmI::Client)
             .build()
@@ -128,7 +128,7 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
             ZenohIdProto::rand(),
             Bound::north(),
             client_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Client)
         .build()
@@ -141,7 +141,7 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
             ZenohIdProto::rand(),
             Bound::north(),
             client_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Peer)
         .build()
@@ -198,7 +198,7 @@ fn test_peer_interest_propagation() {
             ZenohIdProto::rand(),
             Bound::north(),
             gateway_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Peer)
         .build()
@@ -211,7 +211,7 @@ fn test_peer_interest_propagation() {
             ZenohIdProto::rand(),
             Bound::north(),
             peer_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Peer)
         .build()
@@ -224,7 +224,7 @@ fn test_peer_interest_propagation() {
             ZenohIdProto::rand(),
             Bound::session(),
             client_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Client)
         .build()
@@ -303,7 +303,7 @@ fn test_peer_gateway_interest_propagation() {
             ZenohIdProto::rand(),
             Bound::north(),
             gateway_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Peer)
         .build()
@@ -337,7 +337,7 @@ fn test_peer_gateway_interest_propagation() {
             ZenohIdProto::rand(),
             PEER_SUBREGION,
             peer_buf.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Peer)
         .build()
@@ -398,7 +398,7 @@ fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mo
             ZenohIdProto::rand(),
             SUBREGION2,
             buf2.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(mode2)
         .build()
@@ -424,7 +424,7 @@ fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mo
             ZenohIdProto::rand(),
             Bound::north(),
             buf0.clone(),
-            tables.hats.map(|hat| hat.new_face()),
+            tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(mode0)
         .build()

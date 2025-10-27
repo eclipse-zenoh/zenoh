@@ -17,7 +17,13 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, collections::HashMap, fmt::Display, sync::Arc};
+use std::{
+    any::Any,
+    collections::HashMap,
+    fmt::{Debug, Display},
+    ops::Deref,
+    sync::Arc,
+};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -140,12 +146,33 @@ impl BaseContext<'_> {
     }
 }
 
+/// A party with which a hat exchanges messages.
+///
+/// This type exists to generalize [`crate:::net::routing::dispatcher::face::Face`] ̦
+/// to nodes that don't have a face but still need to be identified in hat interfaces.
+///
+/// Named after Git remotes.
+pub(crate) struct Remote(Box<dyn Any + Send + Sync>);
+
+impl Deref for Remote {
+    type Target = dyn Any;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub(crate) trait HatBaseTrait: Any {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync>;
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
+
+    // REVIEW(regions): it would be betetr if this returned a Result instead
+    // Currently errors are logged in router::Hat::get_router.
+
+    fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
 
     fn new_local_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>) -> ZResult<()>;
 
@@ -173,11 +200,6 @@ pub(crate) trait HatBaseTrait: Any {
         routing_context: NodeId,
     ) -> NodeId;
 
-    fn node_id_to_zid(&self, face: &FaceState, _node_id: NodeId) -> Option<ZenohIdProto> {
-        // FIXME(regions): remove default impl
-        Some(face.zid)
-    }
-
     fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
 
     fn egress_filter(
@@ -204,10 +226,12 @@ pub(crate) trait HatBaseTrait: Any {
         HashMap::new()
     }
 
+    #[allow(dead_code)] // FIXME(regions)
     fn route_successor(&self, _src: ZenohIdProto, _dst: ZenohIdProto) -> Option<ZenohIdProto> {
         None
     }
 
+    #[allow(dead_code)] // FIXME(regions)
     fn route_successors(&self) -> Vec<SuccessorEntry> {
         Vec::new()
     }
@@ -218,6 +242,7 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
     fn whatami(&self) -> WhatAmI;
+    fn bound(&self) -> Bound;
 
     /// Returns `true` if the hat should route data or queries between `src` and `dst`.
     fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
@@ -226,115 +251,122 @@ pub(crate) trait HatBaseTrait: Any {
             || (src.whatami.is_client() && !src.bound.is_north())
             || (dst.whatami.is_client() && !dst.bound.is_north())
     }
+
+    fn assert_proper_ownership(&self, ctx: &BaseContext) {
+        // TODO(regions): remove this
+
+        if self.bound() != ctx.src_face.bound {
+            unreachable!(
+                "Hat doesn't own source face (bound={},face={})",
+                self.bound(),
+                ctx.src_face
+            )
+        }
+
+        if self.whatami() != ctx.src_face.whatami {
+            unreachable!(
+                "Hat owns source face but whatami's don't match (whatami={},face={})",
+                self.whatami(),
+                ctx.src_face
+            )
+        }
+    }
 }
+
+// REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
+// REVIEW(regions): use dispatcher calls instead of passing `south_hats`?
 
 /// Hat interest protocol interface.
 ///
-/// Below is the typical codepath for each message type.
+/// Below is the typical code-path for each message type.
 ///
 /// # Interest (current and/or future)
-///   1. [`HatInterestTrait::propagate_declarations`] on south-bound hat.
-///   2. [`HatInterestTrait::propagate_interest`] on north-bound hat.
-///   3. [`HatInterestTrait::finalize_current_interest`]
-///      on south-bound hat, iff (2) returned `false` and mode is current.
+///   1. [`HatInterestTrait::route_interest`] on the north hat.
+///   2. [`HatInterestTrait::register_interest`] on the owner south hat, iff it owns the src face.
+///   2. [`HatInterestTrait::send_declarations`] on the owner south hat, iff it owns the src face.
+///   3. [`HatInterestTrait::send_final_declaration`] on the owner south hat,
+///      iff it owns the src face and there is no gateway in the north region.
 ///
 /// # Interest (final)
-///   1. [`HatInterestTrait::unregister_interest`] on south-bound hat.
-///   2. [`HatInterestTrait::finalize_interest`] on north-bound hat.
+///   1. [`HatInterestTrait::route_interest_final`] on the north hat.
+///   2. [`HatInterestTrait::unregister_interest`] on the owner south hat, iff it owns the src face.
 ///
 /// # Declare (final)
-///   1. [`HatInterestTrait::unregister_current_interest`] on north-bound hat.
-///   2. [`HatInterestTrait::finalize_current_interest`] on south-bound hat.
+///   1. [`HatInterestTrait::route_final_declaration`] on the north hat.
+///   2. [`HatInterestTrait::send_final_declaration`] on the owner south hat, iff the msg is intended for it.
 pub(crate) trait HatInterestTrait {
-    /// Handles interest originating downstream where this hat is the subregion gateway
-    /// so we should send all known declarations in the immediate upstream region
-    /// to the source.
-    fn propagate_declarations(
-        &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-        upstream_hat: &mut dyn HatTrait,
-    );
-
-    /// Handles interest messages for north-bound hats.
+    /// Handles interest messages.
+    ///
+    /// This method is only called on the north-bound hat.
     ///
     /// Will use the dowstream hat reference to call
-    /// [`HatInterestTrait::finalize_current_interest`].
-    ///
-    /// There can be one of two behaviors depending on the bound of the source
-    /// face:
-    ///
-    /// # Relay
-    /// Interest originates upstream and we are not the subregion's gateway
-    /// so we should forward it point-to-point to the gateway; this is only
-    /// relevant for router hats.
-    ///
-    /// # Exit relay
-    /// Interest originates downstream and we are this gateway's exit point
-    /// so we should propagate it upstream to the next gateway.
-    fn propagate_interest(
+    /// [`HatInterestTrait::propagate_declarations`].
+    fn route_interest(
         &mut self,
         ctx: BaseContext,
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        zid: &ZenohIdProto,
-    ) -> bool;
-
-    /// Handles interest finalization where this hat is the exit relay.
-    ///
-    /// Will use the downstream hat references to call
-    /// [`HatInterestTrait::finalize_current_interest`].
-    fn unregister_current_interest(
-        &mut self,
-        ctx: BaseContext,
-        id: InterestId,
-        downstream_hats: BoundMap<&mut dyn HatTrait>,
+        south_hats: BoundMap<&mut dyn HatTrait>,
     );
 
-    // FIXME(regions): `src_face`` is only relevant for simple interests while `zid` is only
-    // relevant for linkstate interests. There should be a better abstraction where bad state is
-    // unrepresentable:
+    /// Handles interest finalization messages.
+    ///
+    /// This method is only called on the north-bound hat.
+    fn route_interest_final(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        south_hats: BoundMap<&mut dyn HatTrait>,
+    );
+
+    /// Handles declaration finalization messages.
+    ///
+    /// This method is only called on the north hat.
+    fn route_final_declaration(
+        &mut self,
+        ctx: BaseContext,
+        interest_id: InterestId,
+        south_hats: BoundMap<&mut dyn HatTrait>,
+    );
+
+    // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
+    // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
+    // should be reworked.
+
+    /// Propagates current declarations to the interested subregion.
+    ///
+    /// This method is only called on the owner south hat.
+    fn send_declarations(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<&mut Arc<Resource>>,
+    );
 
     /// Informs the interest source that all declarations have been transmitted.
-    fn finalize_current_interest(
+    ///
+    /// This method is only called on south hats.
+    fn send_final_declaration(
         &mut self,
         ctx: BaseContext,
-        id: InterestId,
-        src_face: &FaceState,
-        zid: &ZenohIdProto,
+        id: InterestId, // TODO(regions*): change to &Interest (?)
+        src: &Remote,
     );
 
-    /// Handles interest finalization where this hat is the subregion gateway.
+    /// Register remote interests.
     ///
-    /// Will use the upstream hat reference to call
-    /// [`HatInterestTrait::finalize_interest`].
-    fn unregister_interest(
+    /// This method is only called on the owner south hat.
+    fn register_interest(
         &mut self,
         ctx: BaseContext,
         msg: &Interest,
-        upstream_hat: &mut dyn HatTrait,
+        res: Option<&mut Arc<Resource>>,
     );
 
-    /// Handles interest finalization messages for north-bound hats.
+    /// Unregister remote interests.
     ///
-    /// There can be one of two behaviors depending on the bound of the source
-    /// face:
-    ///
-    /// # Relay
-    /// Interest originates upstream and we are not the subregion's gateway
-    /// so we should forward it point-to-point to the gateway; this is only
-    /// relevant for router hats.
-    ///
-    /// # Exit relay
-    /// Interest originates downstream and we are this gateway's exit point
-    /// so we should propagate it upstream to the next gateway.
-    fn finalize_interest(
-        &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        inbound_interest: RemoteInterest,
-    );
+    /// This method is only called on the owner south hat.
+    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest>;
 }
 
 pub(crate) trait HatPubSubTrait {

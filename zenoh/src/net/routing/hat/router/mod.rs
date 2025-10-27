@@ -58,10 +58,10 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::{FaceId, InterestState},
-            gateway::{Bound, GatewayPendingCurrentInterest},
-            interests::RemoteInterest,
+            gateway::Bound,
+            interests::{PendingCurrentInterest, RemoteInterest},
         },
-        hat::{BaseContext, InterestProfile, TREES_COMPUTATION_DELAY_MS},
+        hat::{BaseContext, InterestProfile, Remote, TREES_COMPUTATION_DELAY_MS},
         router::FaceContext,
     },
     runtime::Runtime,
@@ -117,9 +117,9 @@ pub(crate) struct Hat {
     router_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
-    gateway_next_interest_id: InterestId,
-    gateway_local_interests: HashMap<InterestId, InterestState>,
-    gateway_pending_current_interests: HashMap<InterestId, GatewayPendingCurrentInterest>,
+    next_interest_id: InterestId,
+    router_local_interests: HashMap<InterestId, InterestState>,
+    router_pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
     /// Interests declared by nodes in this router's subregions.
     ///
     /// Interest mode can only be one of:
@@ -152,10 +152,10 @@ impl Hat {
             router_tokens: HashSet::new(),
             routers_net: None,
             routers_trees_worker: TreesComputationWorker::new(bound),
-            gateway_local_interests: HashMap::new(),
-            gateway_pending_current_interests: HashMap::new(),
+            router_local_interests: HashMap::new(),
+            router_pending_current_interests: HashMap::new(),
             router_remote_interests: HashMap::new(),
-            gateway_next_interest_id: 0,
+            next_interest_id: 1,
             task_controller: TaskController::default(),
         }
     }
@@ -173,6 +173,10 @@ impl Hat {
             .ctx
             .downcast_mut()
             .unwrap()
+    }
+
+    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
+        remote.downcast_ref().unwrap()
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
@@ -274,14 +278,15 @@ impl Hat {
         Some(gwy.index() as NodeId)
     }
 
-    fn point_to_point_hop(
-        &self,
-        tables: &TablesData,
-        dst_node_id: NodeId,
-    ) -> Option<Arc<FaceState>> {
+    /// Find the next hop in the point-to-point route ending at `dst_nid`.
+    ///
+    /// This works by exploiting the following property of linkstate routing:
+    /// [`crate::net::protocol::network::Tree::directions`] contains routes
+    /// up the spanning tree root.
+    fn point_to_point_hop(&self, tables: &TablesData, dst_nid: NodeId) -> Option<Arc<FaceState>> {
         let net = self.net();
-        let tree = net.trees.get(dst_node_id as usize)?;
-        let next_hop_node_id = tree.directions.get(dst_node_id as usize)?.as_ref()?;
+        let tree = net.trees.get(dst_nid as usize)?;
+        let next_hop_node_id = tree.directions.get(dst_nid as usize)?.as_ref()?;
         let next_hop = net
             .graph
             .node_weight(*next_hop_node_id)
@@ -304,6 +309,8 @@ impl Hat {
     }
 
     /// Sends a declare message to the router identified by `dst_node_id`.
+    ///
+    /// See also: [`Self::point_to_point_hop`].
     pub(crate) fn send_declare_point_to_point(
         &self,
         ctx: BaseContext,
@@ -322,7 +329,7 @@ impl Hat {
         let _ = self.routers_trees_worker.tx.try_send(tables_ref);
     }
 
-    fn get_router(&self, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdProto> {
+    fn get_router(&self, face: &FaceState, nodeid: NodeId) -> Option<ZenohIdProto> {
         match self
             .routers_net
             .as_ref()
@@ -400,6 +407,10 @@ impl HatBaseTrait for Hat {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync> {
         Box::new(HatContext::new())
+    }
+
+    fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote> {
+        self.get_router(face, nid).map(|zid| Remote(Box::new(zid)))
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
@@ -592,18 +603,6 @@ impl HatBaseTrait for Hat {
         }
     }
 
-    fn node_id_to_zid(&self, face: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
-        if self.owns_router(face) {
-            let link_id = self.face_hat(face).link_id;
-            self.net()
-                .get_link(link_id)
-                .and_then(|link| link.get_zid(&(node_id as u64)))
-                .cloned()
-        } else {
-            Some(face.zid)
-        }
-    }
-
     #[inline]
     fn ingress_filter(&self, _tables: &TablesData, _face: &FaceState, _expr: &RoutingExpr) -> bool {
         // FIXME(regions): ensure that there is a south-bound peer that can
@@ -690,6 +689,10 @@ impl HatBaseTrait for Hat {
     fn whatami(&self) -> WhatAmI {
         WhatAmI::Router
     }
+
+    fn bound(&self) -> Bound {
+        self.bound
+    }
 }
 
 struct HatContext {
@@ -737,3 +740,5 @@ impl HatFace {
 }
 
 impl HatTrait for Hat {}
+
+type HatRemote = ZenohIdProto;

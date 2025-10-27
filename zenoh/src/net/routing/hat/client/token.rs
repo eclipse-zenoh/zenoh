@@ -136,10 +136,14 @@ impl Hat {
                 if interest.mode == InterestMode::CurrentFuture {
                     self.register_simple_token(tables, &mut face.clone(), id, res);
                 }
-                let id = self.make_token_id(res, &mut interest.src_face.clone(), interest.mode);
-                let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+
+                // FIXME(regions): router subregions don't support the interest protocol
+                let src_face = interest.src.downcast_ref::<Arc<FaceState>>().unwrap();
+
+                let id = self.make_token_id(res, &mut src_face.clone(), interest.mode);
+                let wire_expr = Resource::get_best_key(res, "", src_face.id);
                 send_declare(
-                    &interest.src_face.primitives,
+                    &src_face.primitives,
                     RoutingContext::with_expr(
                         Declare {
                             interest_id: Some(interest.src_interest_id),
@@ -151,6 +155,7 @@ impl Hat {
                         res.expr().to_string(),
                     ),
                 );
+
                 return;
             } else if !face.local_interests.contains_key(&interest_id) {
                 tracing::debug!(
@@ -479,7 +484,7 @@ impl HatTokenTrait for Hat {
             .get(&interest_id)
             .map(|p| &p.interest)
         {
-            let hat = &mut downstream_hats[interest.src_face.bound];
+            let hat = &mut downstream_hats[interest.src_bound];
             hat.propagate_current_token(ctx, res, interest);
         } else {
             tracing::error!(
@@ -509,10 +514,13 @@ impl HatTokenTrait for Hat {
             );
         }
 
-        let id = self.make_token_id(res, &mut interest.src_face.clone(), interest.mode);
-        let wire_expr = Resource::get_best_key(res, "", interest.src_face.id);
+        // FIXME(regions): router subregions don't support the interest protocol
+        let src_face = interest.src.downcast_ref::<Arc<FaceState>>().unwrap();
+
+        let id = self.make_token_id(res, &mut src_face.clone(), interest.mode);
+        let wire_expr = Resource::get_best_key(res, "", src_face.id);
         (ctx.send_declare)(
-            &interest.src_face.primitives,
+            &src_face.primitives,
             RoutingContext::with_expr(
                 Declare {
                     interest_id: Some(interest.src_interest_id),

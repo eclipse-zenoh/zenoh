@@ -504,7 +504,9 @@ impl Primitives for Face {
 
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
-                    self.declare_final(&mut wtables, id, &mut |p, m| declares.push((p.clone(), m)));
+                    self.declare_final(&mut wtables, id, msg.ext_nodeid.node_id, &mut |p, m| {
+                        declares.push((p.clone(), m))
+                    });
 
                     wtables.data.disable_all_routes();
 

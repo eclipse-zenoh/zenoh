@@ -3,11 +3,6 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use tokio_util::sync::CancellationToken;
-use zenoh_protocol::core::ZenohIdProto;
-
-use crate::net::routing::dispatcher::interests::CurrentInterest;
-
 /// Region identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum Bound {
@@ -69,6 +64,7 @@ impl Bound {
 pub(crate) struct BoundMap<D>(hashbrown::HashMap<Bound, D>);
 
 impl<D> BoundMap<D> {
+    #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn get_many_mut<const N: usize>(&mut self, ks: [&Bound; N]) -> [Option<&mut D>; N] {
         self.0.get_many_mut(ks)
     }
@@ -88,6 +84,7 @@ impl<D> BoundMap<D> {
         north
     }
 
+    #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn north_mut(&mut self) -> &mut D {
         let mut iter = self.iter_mut().filter(|(b, _)| b.is_north());
         let (_, north) = iter.next().unwrap();
@@ -121,11 +118,18 @@ impl<D> BoundMap<D> {
         self.0.values_mut()
     }
 
-    pub(crate) fn map<F, E>(&self, f: F) -> BoundMap<E>
+    pub(crate) fn map_ref<F, E>(&self, f: F) -> BoundMap<E>
     where
         F: Fn(&D) -> E,
     {
         BoundMap(self.iter().map(|(b, d)| (*b, f(d))).collect())
+    }
+
+    pub(crate) fn map<F, E>(self, f: F) -> BoundMap<E>
+    where
+        F: Fn(D) -> E,
+    {
+        BoundMap(self.into_iter().map(|(b, d)| (b, f(d))).collect())
     }
 
     pub(crate) fn into_iter(self) -> impl Iterator<Item = (Bound, D)> {
@@ -167,15 +171,4 @@ impl<D> IndexMut<Bound> for BoundMap<D> {
     fn index_mut(&mut self, bound: Bound) -> &mut Self::Output {
         self.index_mut(&bound)
     }
-}
-
-/// An interest of mode [`InterestMode::Current`] or [`InterestMode::CurrentFuture`]
-/// sent to the upstream region's gateway.
-pub(crate) struct GatewayPendingCurrentInterest {
-    pub(crate) interest: CurrentInterest,
-    /// Source of the interest in the downstream region.
-    /// Only necessary for router hats to enable point-to-point communication.
-    pub(crate) src_zid: ZenohIdProto,
-    pub(crate) cancellation_token: CancellationToken,
-    pub(crate) rejection_token: CancellationToken,
 }

@@ -158,7 +158,7 @@ impl Hat {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
+        _profile: InterestProfile,
     ) {
         self.register_simple_queryable(tables, face, id, res, qabl_info);
         self.propagate_simple_queryable(tables, res, Some(face), send_declare);
