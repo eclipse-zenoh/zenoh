@@ -136,6 +136,7 @@ impl LinkState {
         };
         let n = rng.gen_range(MIN..=MAX);
         let links = (0..n).map(|_| rng.gen()).collect::<Vec<u64>>();
+        let is_gateway = rng.gen_bool(0.5);
 
         Self {
             psid,
@@ -144,6 +145,7 @@ impl LinkState {
             whatami,
             locators,
             links,
+            is_gateway,
         }
     }
 }
