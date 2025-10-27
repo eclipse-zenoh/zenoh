@@ -230,6 +230,32 @@ impl HatInterestTrait for HatCode {
 
     fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
         if let Some(interest) = face_hat_mut!(face).remote_interests.remove(&id) {
+            if interest.options.subscribers() {
+                if interest.options.aggregate() {
+                    if let Some(ires) = &interest.res {
+                        face_hat_mut!(face)
+                            .local_subs
+                            .remove_aggregated_resource_interest(ires, id);
+                    }
+                } else {
+                    face_hat_mut!(face)
+                        .local_subs
+                        .remove_simple_resource_interest(id);
+                }
+            }
+            if interest.options.queryables() {
+                if interest.options.aggregate() {
+                    if let Some(ires) = &interest.res {
+                        face_hat_mut!(face)
+                            .local_qabls
+                            .remove_aggregated_resource_interest(ires, id);
+                    }
+                } else {
+                    face_hat_mut!(face)
+                        .local_qabls
+                        .remove_simple_resource_interest(id);
+                }
+            }
             if !tables.faces.values().any(|f| {
                 f.whatami == WhatAmI::Client
                     && face_hat!(f)
