@@ -71,6 +71,8 @@ use super::builders::close::{CloseBuilder, Closeable, Closee};
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+use crate::net::runtime::ShmProviderState;
 use crate::{
     api::{
         admin,
@@ -893,6 +895,37 @@ impl Session {
         SessionInfo {
             runtime: self.0.runtime.deref().clone(),
         }
+    }
+
+    /// Returns the [`ShmProviderState`](ShmProviderState) associated with the current [`Session`](Session)’s [`Runtime`](Runtime).
+    ///
+    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.  
+    /// This method exposes that provider so it can also be accessed at the application level.
+    ///
+    /// Note that the provider may not be immediately available or may be disabled via configuration.
+    /// Provider initialization is concurrent and triggered by access events (both transport-internal and through this API).
+    ///
+    /// To use this provider, both *shared_memory* and *transport_optimization* config sections
+    /// must be enabled.
+    ///
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let shm_provider = session.get_shm_provider();
+    /// assert!(shm_provider.into_option().is_none());
+    /// std::thread::sleep(std::time::Duration::from_millis(100));
+    /// let shm_provider = session.get_shm_provider();
+    /// assert!(shm_provider.into_option().is_some());
+    /// # }
+    /// ```
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    pub fn get_shm_provider(&self) -> ShmProviderState {
+        self.0.runtime.get_shm_provider()
     }
 
     /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
