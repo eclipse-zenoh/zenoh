@@ -33,7 +33,7 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
-use crate::stats::TransportStats;
+use crate::stats::{LinkStats, TransportStats};
 use crate::{
     unicast::{
         authentication::TransportAuthId,
@@ -231,10 +231,10 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
+    fn get_link_stats(&self) -> Vec<(Link, Arc<LinkStats>)> {
         self.get_links()
             .into_iter()
-            .map(|l| (l, self.stats.clone()))
+            .map(|l| (l, std::sync::Arc::new(LinkStats::from(&*self.stats))))
             .collect()
     }
 
