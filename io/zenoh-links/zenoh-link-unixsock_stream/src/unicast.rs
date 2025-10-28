@@ -30,7 +30,7 @@ use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -76,7 +76,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         res.map_err(|e| zerror!(e).into())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Priority) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -84,7 +84,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Priority) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -92,7 +92,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -100,7 +100,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<()> {
         self.get_mut_socket()
             .read_exact(buffer)
             .await
@@ -147,6 +147,11 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::UnixsockStream
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        false
     }
 }
 
