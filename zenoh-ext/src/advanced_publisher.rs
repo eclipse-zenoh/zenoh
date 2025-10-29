@@ -701,7 +701,7 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 #[zenoh_macros::unstable]
 impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     #[zenoh_macros::unstable]
-    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
+    /// Sets an optional [`SourceInfo`](zenoh::sample::SourceInfo) to be sent along with the publication.
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
