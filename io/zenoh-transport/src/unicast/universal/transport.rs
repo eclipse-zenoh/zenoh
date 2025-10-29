@@ -35,15 +35,9 @@ use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
-    common::priority::{TransportPriorityRx, TransportPriorityTx},
-    unicast::{
-        authentication::TransportAuthId,
-        link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
-        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
-        universal::link::TransportLinkUnicastUniversal,
-        TransportConfigUnicast,
-    },
-    TransportManager, TransportPeerEventHandler,
+    Bound, TransportManager, TransportPeerEventHandler, common::priority::{TransportPriorityRx, TransportPriorityTx}, unicast::{
+        TransportConfigUnicast, authentication::TransportAuthId, link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection}, transport_unicast_inner::{AddLinkResult, TransportUnicastTrait}, universal::link::TransportLinkUnicastUniversal
+    }
 };
 
 /*************************************/
@@ -359,6 +353,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn is_qos(&self) -> bool {
         self.config.is_qos
+    }
+
+    fn get_bound(&self) -> Bound {
+        self.config.bound
     }
 
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {

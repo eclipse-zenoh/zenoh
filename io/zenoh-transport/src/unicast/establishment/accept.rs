@@ -24,9 +24,7 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
-        batch_size,
-        close::{self, Close},
-        BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
+        BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn, batch_size, close::{self, Close}, open::ext::South
     },
 };
 use zenoh_result::ZResult;
@@ -38,16 +36,12 @@ use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 use crate::{
-    common::batch::BatchConfig,
-    unicast::{
-        establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
-        link::{
+    Bound, BoundCallback, TransportManager, TransportPeer, common::batch::BatchConfig, unicast::{
+        TransportConfigUnicast, establishment::{AcceptFsm, Cookie, Zenoh080Cookie, compute_sn, ext}, link::{
             LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
             TransportLinkUnicastDirection,
-        },
-        TransportConfigUnicast,
-    },
-    TransportManager,
+        }
+    }
 };
 
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
@@ -112,6 +106,7 @@ struct RecvOpenSynIn {
 struct RecvOpenSynOut {
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
+    other_bound: Bound,
     other_lease: Duration,
     other_initial_sn: TransportSn,
     #[cfg(feature = "auth_usrpwd")]
@@ -123,6 +118,7 @@ struct SendOpenAckIn {
     mine_zid: ZenohIdProto,
     mine_lease: Duration,
     other_zid: ZenohIdProto,
+    other_whatami: WhatAmI,
 }
 struct SendOpenAckOut {
     open_ack: OpenAck,
@@ -145,6 +141,7 @@ struct AcceptLink<'a> {
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
     ext_patch: ext::patch::PatchFsm<'a>,
+    ext_south: Option<BoundCallback>,
 }
 
 #[async_trait]
@@ -571,6 +568,9 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let output = RecvOpenSynOut {
             other_zid: cookie.zid,
             other_whatami: cookie.whatami,
+            other_bound: if open_syn.ext_south.is_none() {Bound::North} else {
+                Bound::South
+            },
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
             #[cfg(feature = "auth_usrpwd")]
@@ -641,6 +641,23 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             None
         );
 
+        // Extension South
+        let ext_south = self.ext_south.as_ref().and_then(|f| {
+            let p = TransportPeer {
+                zid: input.other_zid,
+                whatami: input.other_whatami,
+                links: vec![zenoh_link_commons::Link::new_unicast(
+                    &self.link.link,
+                    self.link.config.priorities.clone(),
+                    self.link.config.reliability,
+                )],
+                is_qos: ext_qos.is_some(),
+                #[cfg(feature = "shared-memory")]
+                is_shm: ext_shm.is_some(),
+            };
+            (f(p) == Bound::South).then_some(South {})
+        });
+
         // Build OpenAck message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
@@ -654,6 +671,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -704,6 +722,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
         ext_patch: ext::patch::PatchFsm::new(),
+        ext_south: manager.config.bound_callback.clone(),
     };
 
     // Init handshake
@@ -791,6 +810,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         mine_zid: manager.config.zid,
         mine_lease: manager.config.unicast.lease,
         other_zid: osyn_out.other_zid,
+        other_whatami: osyn_out.other_whatami,
     };
     let oack_out = step!(fsm.send_open_ack((&mut state, oack_in)).await);
 
@@ -798,6 +818,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     let config = TransportConfigUnicast {
         zid: osyn_out.other_zid,
         whatami: osyn_out.other_whatami,
+        bound: osyn_out.other_bound,
         sn_resolution: state.transport.resolution.get(Field::FrameSN),
         tx_initial_sn: oack_out.open_ack.initial_sn,
         is_qos: state.transport.ext_qos.is_qos(),

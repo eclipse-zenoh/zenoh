@@ -472,7 +472,11 @@ impl RuntimeBuilder {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .zid(zid);
+            .zid(zid)
+            .bound_callback({
+                let config = config.clone();
+                move |p| compute_bound(&p, &config).map(|b| b.into()).unwrap_or_default()
+            });
 
         #[cfg(feature = "shared-memory")]
         let transport_manager_builder =
@@ -953,7 +957,7 @@ impl Closeable for Runtime {
     }
 }
 
-fn compute_bound(peer: &TransportPeer, config: &Config) -> ZResult<Bound> {
+fn compute_bound(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult<Bound> {
     let gateway_config = config
         .gateway
         .get(zenoh_config::unwrap_or_default!(config.mode()))

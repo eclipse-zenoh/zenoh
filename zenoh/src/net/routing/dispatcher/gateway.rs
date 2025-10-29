@@ -59,6 +59,16 @@ impl Bound {
     }
 }
 
+impl Into<zenoh_transport::Bound> for Bound {
+    fn into(self) -> zenoh_transport::Bound {
+        match self {
+            Bound::North => zenoh_transport::Bound::North,
+            Bound::South { .. } => zenoh_transport::Bound::South,
+            Bound::Eastwest { .. } => zenoh_transport::Bound::South,
+        }
+    }
+}
+
 // TODO(regions): optimization
 #[derive(Debug, Default)]
 pub(crate) struct BoundMap<D>(hashbrown::HashMap<Bound, D>);
