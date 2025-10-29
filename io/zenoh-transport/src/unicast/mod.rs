@@ -44,7 +44,7 @@ use super::{TransportPeer, TransportPeerEventHandler};
 use crate::shm::TransportShmConfig;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::unicast::authentication::TransportAuthId;
+use crate::{Bound, unicast::authentication::TransportAuthId};
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
 
@@ -55,6 +55,7 @@ use crate::unicast::establishment::ext::auth::UsrPwdId;
 pub(crate) struct TransportConfigUnicast {
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) bound: Bound,
     pub(crate) sn_resolution: Bits,
     pub(crate) tx_initial_sn: TransportSn,
     pub(crate) is_qos: bool,
@@ -91,6 +92,12 @@ impl TransportUnicast {
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
         let transport = self.get_inner()?;
         Ok(transport.get_whatami())
+    }
+
+    #[inline(always)]
+    pub fn get_bound(&self) -> ZResult<Bound> {
+        let transport = self.get_inner()?;
+        Ok(transport.get_bound())
     }
 
     #[cfg(feature = "shared-memory")]

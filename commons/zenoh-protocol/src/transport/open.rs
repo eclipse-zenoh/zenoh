@@ -94,6 +94,7 @@ pub struct OpenSyn {
     pub ext_mlink: Option<ext::MultiLinkSyn>,
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
+    pub ext_south: Option<ext::South>,
 }
 
 // Extensions
@@ -132,6 +133,10 @@ pub mod ext {
     /// # Compression extension
     /// Used to negotiate the use of compression on the link
     pub type Compression = zextunit!(0x6, false);
+
+    /// # South extension
+    /// Used to indicate that the remote is on our south bound
+    pub type South = zextunit!(0x7, false);
 }
 
 impl OpenSyn {
@@ -163,6 +168,7 @@ impl OpenSyn {
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_south = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             lease,
@@ -175,6 +181,7 @@ impl OpenSyn {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         }
     }
 }
@@ -198,6 +205,7 @@ pub struct OpenAck {
     pub ext_mlink: Option<ext::MultiLinkAck>,
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
+    pub ext_south: Option<ext::South>,
 }
 
 impl OpenAck {
@@ -225,6 +233,7 @@ impl OpenAck {
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_south = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             lease,
@@ -236,6 +245,7 @@ impl OpenAck {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         }
     }
 }
