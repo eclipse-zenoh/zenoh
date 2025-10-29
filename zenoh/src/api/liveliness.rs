@@ -19,7 +19,6 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_config::unwrap_or_default;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
 use crate::{
@@ -39,7 +38,7 @@ use crate::{
 /// query existing [`LivelinessTokens`](LivelinessToken)
 /// and subscribe to liveliness changes.
 ///
-/// A [`LivelinessToken`](LivelinessToken) is a token which liveliness is tied
+/// A [`LivelinessToken`](LivelinessToken) is a token whose liveliness is tied
 /// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
 ///
 /// The `Liveliness` structure can be obtained with the
@@ -101,7 +100,7 @@ impl<'a> Liveliness<'a> {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression to create the lieliness token on
+    /// * `key_expr` - The key expression to create the liveliness token on
     ///
     /// # Examples
     /// ```
@@ -198,8 +197,13 @@ impl<'a> Liveliness<'a> {
     {
         let key_expr = key_expr.try_into().map_err(Into::into);
         let timeout = {
-            let conf = &self.session.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
+            Duration::from_millis(
+                self.session
+                    .0
+                    .runtime
+                    .get_config()
+                    .queries_default_timeout_ms(),
+            )
         };
         LivelinessGetBuilder {
             session: self.session,
@@ -210,7 +214,8 @@ impl<'a> Liveliness<'a> {
     }
 }
 
-/// A builder for initializing a [`LivelinessToken`](LivelinessToken).
+/// A builder for initializing a [`LivelinessToken`](LivelinessToken)
+/// returned by the [`Liveliness::declare_token`] method.
 ///
 /// # Examples
 /// ```
@@ -266,7 +271,7 @@ impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
 /// A declared liveliness token will be seen as alive by any other Zenoh
 /// application in the system that monitors it while the liveliness token
 /// is not undeclared or dropped, while the Zenoh application that declared
-/// it is alive (didn't stop or crashed) and while the Zenoh application
+/// it is alive (hasn't stopped or crashed) and while the Zenoh application
 /// that declared the token has Zenoh connectivity with the Zenoh application
 /// that monitors it.
 ///
@@ -293,7 +298,7 @@ pub struct LivelinessToken {
     undeclare_on_drop: bool,
 }
 
-/// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`].
+/// A [`Resolvable`] returned by [`LivelinessToken::undeclare`]
 ///
 /// # Examples
 /// ```
@@ -356,7 +361,7 @@ impl LivelinessToken {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.undeclare_on_drop = false;
         self.session.undeclare_liveliness(self.id)
     }
@@ -380,7 +385,10 @@ impl Drop for LivelinessToken {
     }
 }
 
-/// A builder for initializing a liveliness.
+/// A builder for initializing a liveliness subscription.
+///
+/// The builder is returned by the [`Liveliness::declare_subscriber`] method and
+/// resolves to the [`Subscriber`] receiving the liveliness samples.
 ///
 /// # Examples
 /// ```
@@ -500,9 +508,9 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make subscriber run in background until the session is closed.
     ///
-    /// Background builder doesn't return a `Subscriber` object anymore.
+    /// The background builder doesn't return a `Subscriber` object anymore.
     ///
     /// # Examples
     /// ```
@@ -616,7 +624,10 @@ impl IntoFuture for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> 
     }
 }
 
-/// A builder for initializing a liveliness `query`.
+/// Builder for initializing a liveliness query.
+///
+/// The builder is returned by the [`Liveliness::get`] method and
+/// resolves to a handler which returns the [`Reply`]s from the liveliness tokens.
 ///
 /// # Examples
 /// ```
@@ -675,7 +686,8 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// Receive the replies for this liveliness query with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`.
+    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback)
+    /// method, we suggest you use it instead of `callback_mut`.
     ///
     /// # Examples
     /// ```

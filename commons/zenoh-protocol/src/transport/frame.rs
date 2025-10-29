@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_buffers::ZSlice;
+use alloc::vec::Vec;
 
-use crate::{core::Reliability, transport::TransportSn};
+use crate::{core::Reliability, network::NetworkMessage, transport::TransportSn};
 
 pub mod flag {
     pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then the frame is reliable
@@ -24,11 +24,11 @@ pub mod flag {
 /// # Frame message
 ///
 /// The [`Frame`] message is used to transmit one ore more complete serialized
-/// [`crate::network::NetworkMessage`]. I.e., the total length of the
-/// serialized [`crate::network::NetworkMessage`] (s) MUST be smaller
+/// [`NetworkMessage`]. I.e., the total length of the
+/// serialized [`NetworkMessage`] (s) MUST be smaller
 /// than the maximum batch size (i.e. 2^16-1) and the link MTU.
 /// The [`Frame`] message is used as means to aggregate multiple
-/// [`crate::network::NetworkMessage`] in a single atomic message that
+/// [`NetworkMessage`] in a single atomic message that
 /// goes on the wire. By doing so, many small messages can be batched together and
 /// share common information like the sequence number.
 ///
@@ -72,7 +72,7 @@ pub struct Frame {
     pub reliability: Reliability,
     pub sn: TransportSn,
     pub ext_qos: ext::QoSType,
-    pub payload: ZSlice,
+    pub payload: Vec<NetworkMessage>,
 }
 
 // Extensions
@@ -85,6 +85,7 @@ pub mod ext {
 
 impl Frame {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -93,7 +94,12 @@ impl Frame {
         let reliability = Reliability::rand();
         let sn: TransportSn = rng.gen();
         let ext_qos = ext::QoSType::rand();
-        let payload = ZSlice::rand(rng.gen_range(8..128));
+        let mut payload = vec![];
+        for _ in 0..rng.gen_range(1..4) {
+            let mut m = NetworkMessage::rand();
+            m.reliability = reliability;
+            payload.push(m);
+        }
 
         Frame {
             reliability,
@@ -114,6 +120,7 @@ pub struct FrameHeader {
 
 impl FrameHeader {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

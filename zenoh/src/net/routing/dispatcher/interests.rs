@@ -311,7 +311,7 @@ impl Face {
             tracing::debug!(dst = %ctx.src_face, "Finalizing (peer-to-peer) initial interest");
 
             let peer_owner_hat = &mut tables.hats[self.state.bound];
-            let Some(src) = peer_owner_hat.new_remote(&ctx.src_face, node_id) else {
+            let Some(src) = peer_owner_hat.new_remote(ctx.src_face, node_id) else {
                 return;
             };
 

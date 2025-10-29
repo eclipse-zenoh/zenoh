@@ -37,11 +37,20 @@ use crate::api::{
 pub type SourceSn = u32;
 
 /// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
+///
+/// There are queryable's [`allowed_origin`](crate::query::QueryableBuilder::allowed_origin) and
+/// subscriber's [`allowed_origin`](crate::pubsub::SubscriberBuilder::allowed_origin) settings and
+/// publishers's [`allowed_destination`](crate::pubsub::PublisherBuilder::allowed_destination) and
+/// querier's [`allowed_destination`](crate::query::QuerierBuilder::allowed_destination) settings
+/// which allows to restrict the connection to only local or only remote entities.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Locality {
+    /// Request / serve data only to entities in the same session
     SessionLocal,
+    /// Request / serve data only to remote entities (not in the same session)
     Remote,
     #[default]
+    /// Request / serve data to both local and remote entities
     Any,
 }
 
@@ -85,7 +94,7 @@ impl SourceInfo {
     }
 
     #[zenoh_macros::unstable]
-    /// The [`EntityGlobalId`] of the zenoh entity that published the concerned [`Sample`].
+    /// The [`EntityGlobalId`] of the zenoh entity that published the [`Sample`] in question.
     pub fn source_id(&self) -> Option<&EntityGlobalId> {
         self.source_id.as_ref()
     }
@@ -186,7 +195,29 @@ impl TryFrom<u64> for SampleKind {
     }
 }
 
-/// Structure with public fields for sample. It's convenient if it's necessary to decompose a sample into its fields.
+/// Structure with public fields for a sample. It allows destructuring a [`Sample`] into
+/// variables without having to use `clone()` on the getter methods of the [`Sample`] struct.
+///
+/// # Example:
+/// ```rust
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::sample::{Sample, SampleFields, SampleBuilder, SampleKind};
+/// use zenoh::key_expr::KeyExpr;
+/// let sample: Sample = SampleBuilder::put(KeyExpr::try_from("example/key").unwrap(), "Hello, World!")
+///     .into();
+/// let fields: SampleFields = sample.into();
+/// let SampleFields {
+///    key_expr,
+///    payload,
+///    kind,
+///    ..
+/// } = fields;
+/// assert_eq!(key_expr.to_string(), "example/key");
+/// assert_eq!(payload.try_to_string().unwrap(), "Hello, World!");
+/// assert_eq!(kind, SampleKind::Put);
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SampleFields {
     pub key_expr: KeyExpr<'static>,
@@ -224,7 +255,10 @@ impl From<Sample> for SampleFields {
     }
 }
 
-/// A zenoh sample.
+/// The `Sample` structure is the data unit received
+/// by [`Subscriber`](crate::pubsub::Subscriber) or [`Querier`](crate::query::Querier)
+/// or [`Session::get`](crate::session::Session::get).
+/// It contains the payload and all metadata associated with the data.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Sample {
@@ -266,29 +300,29 @@ impl Sample {
         self.kind
     }
 
-    /// Gets the encoding of this sample
+    /// Gets the encoding of this sample.
     #[inline]
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
 
-    /// Gets the timestamp of this Sample
+    /// Gets the timestamp of this Sample.
     #[inline]
     pub fn timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
-    /// Gets the congetion control of this Sample
+    /// Gets the congestion control of this Sample.
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Gets the priority of this Sample
+    /// Gets the priority of this Sample.
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
 
-    /// Gets the reliability of this Sample
+    /// Gets the reliability of this Sample.
     #[zenoh_macros::unstable]
     pub fn reliability(&self) -> Reliability {
         self.reliability
@@ -299,20 +333,20 @@ impl Sample {
         self.qos.express()
     }
 
-    /// Gets infos on the source of this Sample.
+    /// Gets info on the source of this Sample.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> &SourceInfo {
         &self.source_info
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and value are byte-slices.
+    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
@@ -444,7 +478,7 @@ impl QoSBuilderTrait for QoSBuilder {
 }
 
 impl QoS {
-    /// Gets priority of the message.
+    /// Gets the priority of the message.
     pub fn priority(&self) -> Priority {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
@@ -458,12 +492,12 @@ impl QoS {
         }
     }
 
-    /// Gets congestion control of the message.
+    /// Gets the congestion control of the message.
     pub fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }
 
-    /// Gets express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
+    /// Gets the express flag value. If `true`, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
     }

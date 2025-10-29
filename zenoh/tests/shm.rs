@@ -18,7 +18,7 @@
 ))]
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
     time::Duration,
@@ -196,7 +196,7 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
         let shm_segment_size = shm01.available();
 
         // Prepare a layout for allocations
-        let layout = shm01.alloc(size).into_layout().unwrap();
+        let layout = shm01.alloc_layout(size).unwrap();
 
         // Put data
         println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
@@ -314,16 +314,23 @@ async fn zenoh_shm_unicast_implicit_optimization() {
 
     {
         let key = "warmup";
+        let shm_works = Arc::new(AtomicBool::new(false));
+        let c_shm_works = shm_works.clone();
         let _sub = peer01
-            .declare_subscriber("warmup")
-            .callback(|_| {})
+            .declare_subscriber(key)
+            .callback(move |sample| {
+                if sample.payload().as_shm().is_some() {
+                    c_shm_works.store(true, Ordering::Relaxed);
+                }
+            })
             .wait()
             .unwrap();
-        // Wait for the declaration to propagate
-        tokio::time::sleep(SLEEP).await;
-        peer02.put(key, "test").wait().unwrap();
-        // Wait for implicit SHM to init
-        tokio::time::sleep(SLEEP).await;
+
+        while !shm_works.load(Ordering::Relaxed) {
+            peer02.put(key, "test").wait().unwrap();
+            // Wait for implicit SHM to init
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
 
     test_session_pubsub::<false>(

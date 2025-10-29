@@ -107,7 +107,7 @@ impl HatInterestTrait for Hat {
             owner_hat.register_interest(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
         }
 
-        let Some(src) = owner_hat.new_remote(&ctx.src_face, msg.ext_nodeid.node_id) else {
+        let Some(src) = owner_hat.new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
             return;
         };
 
@@ -120,7 +120,7 @@ impl HatInterestTrait for Hat {
 
         let interests_timeout = ctx.tables.interests_timeout;
 
-        if let Some(mut dst_face) = self.owned_faces(&ctx.tables).next().cloned() {
+        if let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() {
             let id = self
                 .face_hat(&dst_face)
                 .next_id
@@ -296,13 +296,13 @@ impl HatInterestTrait for Hat {
         // FIXME(regions): send subscribers and queryables as well
 
         if msg.options.tokens() {
+            // Note: aggregation is forbidden for tokens. The flag is ignored.
             self.declare_token_interest(
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
                 res.as_deref().cloned().as_mut(),
                 msg.mode,
-                msg.options.aggregate(),
                 ctx.send_declare,
             )
         }
@@ -368,7 +368,7 @@ impl HatInterestTrait for Hat {
             return None;
         };
 
-        self.owned_faces(&ctx.tables)
+        self.owned_faces(ctx.tables)
             .all(|face| {
                 !self
                     .face_hat(face)

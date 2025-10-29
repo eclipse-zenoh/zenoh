@@ -113,7 +113,7 @@ impl HatInterestTrait for Hat {
             owner_hat.register_interest(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
         }
 
-        let Some(src) = owner_hat.new_remote(&ctx.src_face, msg.ext_nodeid.node_id) else {
+        let Some(src) = owner_hat.new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
             return;
         };
 
@@ -296,7 +296,7 @@ impl HatInterestTrait for Hat {
             assert!(self.bound().is_north());
             assert!(ctx.src_face.bound.is_north());
 
-            if !self.face_hat(&ctx.src_face).is_gateway {
+            if !self.face_hat(ctx.src_face).is_gateway {
                 tracing::error!(
                     id = interest_id,
                     src = %ctx.src_face,
@@ -359,13 +359,13 @@ impl HatInterestTrait for Hat {
             )
         }
         if msg.options.tokens() {
+            // Note: aggregation is forbidden for tokens. The flag is ignored.
             self.declare_token_interest(
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
                 res.as_deref().cloned().as_mut(),
                 msg.mode,
-                msg.options.aggregate(),
                 ctx.send_declare,
             )
         }
@@ -420,7 +420,34 @@ impl HatInterestTrait for Hat {
             return None;
         };
 
-        self.owned_faces(&ctx.tables)
+        if remote_interest.options.subscribers() {
+            if remote_interest.options.aggregate() {
+                if let Some(ires) = &remote_interest.res {
+                    self.face_hat_mut(ctx.src_face)
+                        .local_subs
+                        .remove_aggregated_resource_interest(ires, msg.id);
+                }
+            } else {
+                self.face_hat_mut(ctx.src_face)
+                    .local_subs
+                    .remove_simple_resource_interest(msg.id);
+            }
+        }
+        if remote_interest.options.queryables() {
+            if remote_interest.options.aggregate() {
+                if let Some(ires) = &remote_interest.res {
+                    self.face_hat_mut(ctx.src_face)
+                        .local_qabls
+                        .remove_aggregated_resource_interest(ires, msg.id);
+                }
+            } else {
+                self.face_hat_mut(ctx.src_face)
+                    .local_qabls
+                    .remove_simple_resource_interest(msg.id);
+            }
+        }
+
+        self.owned_faces(ctx.tables)
             .all(|face| {
                 !self
                     .face_hat(face)

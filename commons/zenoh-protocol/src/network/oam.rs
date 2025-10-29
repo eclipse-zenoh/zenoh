@@ -76,6 +76,7 @@ pub mod ext {
 
 impl Oam {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();

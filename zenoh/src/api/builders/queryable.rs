@@ -28,12 +28,13 @@ use crate::{
 };
 
 /// A builder for initializing a [`Queryable`].
+/// Returned by the
+/// [`Session::declare_queryable`](crate::Session::declare_queryable) method.
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
 /// # }
@@ -140,9 +141,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
-    /// Register the queryable callback to be run in background until the session is closed.
+    /// Make the queryable run in the background until the session is closed.
     ///
-    /// Background builder doesn't return a `Queryable` object anymore.
+    /// The background builder doesn't return a `Queryable` object anymore.
     ///
     /// # Examples
     /// ```
@@ -172,15 +173,34 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, Callback<Query>> {
 
 impl<Handler, const BACKGROUND: bool> QueryableBuilder<'_, '_, Handler, BACKGROUND> {
     /// Change queryable completeness.
+    /// When queryable is declared as "complete", it promises to have all the data
+    /// associated with its key expression, so it's not necessary to query other nodes
+    /// for data matching its key expression.
+    ///
+    /// E.g. a queryable serving key expression `foo/*` is "complete". The queryer
+    /// requests data matching `foo/bar` and gets data from this queryable
+    /// only even if there are other queryables matching `foo/bar`.
+    ///
+    /// But for "complete" queryable serving key expression `foo/bar` the request
+    /// for `foo/*` will be sent to other queryables as well as the data from this
+    /// queryable doesn't cover the whole key expression `foo/*`.
+    ///
+    /// This is default behavior which corresponds to
+    ///  [`QueryTarget::BestMatching`](crate::query::QueryTarget::BestMatching) parameter
+    /// of querier's [`target`](crate::query::QuerierBuilder::target).
+    ///
+    /// It's also possible to forcibly request all available queryables with
+    /// [`QueryTarget::All`](crate::query::QueryTarget::All) parameter,
+    /// or to request only "complete" ones with
+    /// [`QueryTarget::AllComplete`](crate::query::QueryTarget::AllComplete)
+    /// parameter.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
         self.complete = complete;
         self
     }
 
-    ///
-    ///
-    /// Restrict the matching queries that will be receive by this [`Queryable`]
+    /// Restrict the matching queries that will be received by this [`Queryable`]
     /// to the ones that have the given [`Locality`](Locality).
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {

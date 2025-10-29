@@ -60,9 +60,11 @@ use crate::net::{
             face::{FaceId, InterestState},
             gateway::Bound,
             interests::{PendingCurrentInterest, RemoteInterest},
+            pubsub::LocalSubscribers,
+            queries::LocalQueryables,
+            resource::FaceContext,
         },
         hat::{BaseContext, InterestProfile, Remote, TREES_COMPUTATION_DELAY_MS},
-        router::FaceContext,
     },
     runtime::Runtime,
 };
@@ -491,7 +493,7 @@ impl HatBaseTrait for Hat {
         }
 
         let mut qabls_matches = vec![];
-        for (_, mut res) in hat_face.remote_qabls.drain() {
+        for (_, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
             self.undeclare_simple_queryable(ctx.reborrow(), &mut res, profile);
 
@@ -715,10 +717,10 @@ struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
-    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_qabls: LocalQueryables,
+    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
 }
@@ -729,9 +731,9 @@ impl HatFace {
             link_id: 0,
             next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
-            local_qabls: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),

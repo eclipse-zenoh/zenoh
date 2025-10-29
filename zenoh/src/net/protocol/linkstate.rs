@@ -106,7 +106,9 @@ pub(crate) struct LocalLinkState {
 }
 
 impl LinkState {
-    #[cfg(feature = "test")]
+    #[cfg(test)]
+    #[doc(hidden)]
+    #[allow(dead_code)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -136,6 +138,13 @@ impl LinkState {
         };
         let n = rng.gen_range(MIN..=MAX);
         let links = (0..n).map(|_| rng.gen()).collect::<Vec<u64>>();
+        let link_weights = if rng.gen_bool(0.5) {
+            let n = rng.gen_range(MIN..=MAX);
+            let weights = (0..n).map(|_| rng.gen()).collect::<Vec<u16>>();
+            Some(weights)
+        } else {
+            None
+        };
         let is_gateway = rng.gen_bool(0.5);
 
         Self {
@@ -145,6 +154,7 @@ impl LinkState {
             whatami,
             locators,
             links,
+            link_weights,
             is_gateway,
         }
     }
@@ -162,7 +172,9 @@ pub(crate) struct LinkStateList {
 }
 
 impl LinkStateList {
-    #[cfg(feature = "test")]
+    #[cfg(test)]
+    #[doc(hidden)]
+    #[allow(dead_code)]
     pub fn rand() -> Self {
         use rand::Rng;
 

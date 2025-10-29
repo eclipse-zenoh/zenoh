@@ -37,9 +37,9 @@ use std::{
     io::Read,
     net::SocketAddr,
     num::{NonZeroU16, NonZeroUsize},
-    ops::{self, Bound, RangeBounds},
+    ops::{self, Bound, Deref, RangeBounds},
     path::Path,
-    sync::Weak,
+    sync::{Arc, Weak},
 };
 
 use include::recursive_include;
@@ -623,6 +623,9 @@ validated_struct::validator! {
                 /// Maximum number of unicast sessions (default: 1000)
                 max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
+                /// If set to a value greater than 1, multiple outgoing links are also allowed;
+                /// otherwise, only one outgoing link is allowed.
+                /// Issue https://github.com/eclipse-zenoh/zenoh/issues/1533
                 max_links: usize,
                 /// Enables the LowLatency transport (default `false`).
                 /// This option does not make LowLatency transport mandatory, the actual implementation of transport
@@ -1803,4 +1806,44 @@ macro_rules! unwrap_or_default {
     ($val:ident$(.$field:ident($($param:ident)?))*) => {
         $val$(.$field($($param)?))*.clone().unwrap_or(zenoh_config::defaults$(::$field$(($param))?)*.into())
     };
+}
+
+pub trait IConfig: Send + Sync {
+    fn get(&self, key: &str) -> ZResult<String>;
+    fn queries_default_timeout_ms(&self) -> u64;
+    fn insert_json5(&self, key: &str, value: &str) -> ZResult<()>;
+    fn to_json(&self) -> String;
+}
+
+pub struct GenericConfig(Arc<dyn IConfig>);
+
+impl Deref for GenericConfig {
+    type Target = Arc<dyn IConfig>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl GenericConfig {
+    pub fn new(value: Arc<dyn IConfig>) -> Self {
+        GenericConfig(value)
+    }
+
+    pub fn get_typed<T: for<'a> Deserialize<'a>>(&self, key: &str) -> ZResult<T> {
+        self.0
+            .get(key)
+            .and_then(|v| serde_json::from_str::<T>(&v).map_err(|e| e.into()))
+    }
+
+    pub fn get_plugin_config(&self, plugin_name: &str) -> ZResult<Value> {
+        self.get(&("plugins/".to_owned() + plugin_name))
+            .and_then(|v| serde_json::from_str(&v).map_err(|e| e.into()))
+    }
+}
+
+impl fmt::Display for GenericConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0.to_json())
+    }
 }

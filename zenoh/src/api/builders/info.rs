@@ -18,27 +18,26 @@ use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmI;
 
-use crate::net::runtime::Runtime;
+use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows
-/// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
+/// access to the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let zid = session.info().zid().await;
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct ZenohIdBuilder<'a> {
-    runtime: &'a Runtime,
+    runtime: &'a DynamicRuntime,
 }
 
 impl<'a> ZenohIdBuilder<'a> {
-    pub(crate) fn new(runtime: &'a Runtime) -> Self {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
     }
 }
@@ -63,7 +62,7 @@ impl IntoFuture for ZenohIdBuilder<'_> {
 }
 
 /// A builder returned by [`SessionInfo::routers_zid()`](crate::session::SessionInfo::routers_zid) that allows
-/// to access the [`ZenohId`] of the zenoh routers this process is currently connected to
+/// access to the [`ZenohId`] of the zenoh routers this process is currently connected to,
 /// or the [`ZenohId`] of the current router if this code is run from a router (plugin).
 ///
 /// # Examples
@@ -78,11 +77,11 @@ impl IntoFuture for ZenohIdBuilder<'_> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct RoutersZenohIdBuilder<'a> {
-    runtime: &'a Runtime,
+    runtime: &'a DynamicRuntime,
 }
 
 impl<'a> RoutersZenohIdBuilder<'a> {
-    pub(crate) fn new(runtime: &'a Runtime) -> Self {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
     }
 }
@@ -93,17 +92,7 @@ impl Resolvable for RoutersZenohIdBuilder<'_> {
 
 impl Wait for RoutersZenohIdBuilder<'_> {
     fn wait(self) -> Self::To {
-        Box::new(
-            zenoh_runtime::ZRuntime::Application
-                .block_in_place(self.runtime.manager().get_transports_unicast())
-                .into_iter()
-                .filter_map(|s| {
-                    s.get_whatami()
-                        .ok()
-                        .and_then(|what| (what == WhatAmI::Router).then_some(()))
-                        .and_then(|_| s.get_zid().map(Into::into).ok())
-                }),
-        )
+        self.runtime.get_zids(WhatAmI::Router)
     }
 }
 
@@ -117,7 +106,7 @@ impl IntoFuture for RoutersZenohIdBuilder<'_> {
 }
 
 /// A builder returned by [`SessionInfo::peers_zid()`](crate::session::SessionInfo::peers_zid) that allows
-/// to access the [`ZenohId`] of the zenoh peers this process is currently connected to.
+/// access to the [`ZenohId`] of the zenoh peers this process is currently connected to.
 ///
 /// # Examples
 /// ```
@@ -132,11 +121,11 @@ impl IntoFuture for RoutersZenohIdBuilder<'_> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PeersZenohIdBuilder<'a> {
-    runtime: &'a Runtime,
+    runtime: &'a DynamicRuntime,
 }
 
 impl<'a> PeersZenohIdBuilder<'a> {
-    pub(crate) fn new(runtime: &'a Runtime) -> Self {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
     }
 }
@@ -147,17 +136,7 @@ impl Resolvable for PeersZenohIdBuilder<'_> {
 
 impl Wait for PeersZenohIdBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        Box::new(
-            zenoh_runtime::ZRuntime::Application
-                .block_in_place(self.runtime.manager().get_transports_unicast())
-                .into_iter()
-                .filter_map(|s| {
-                    s.get_whatami()
-                        .ok()
-                        .and_then(|what| (what == WhatAmI::Peer).then_some(()))
-                        .and_then(|_| s.get_zid().map(Into::into).ok())
-                }),
-        )
+        self.runtime.get_zids(WhatAmI::Peer)
     }
 }
 

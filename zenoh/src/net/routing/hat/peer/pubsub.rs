@@ -13,7 +13,7 @@
 //
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
@@ -34,13 +34,12 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::FaceState,
-            interests::RemoteInterest,
             pubsub::SubscriberInfo,
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
         hat::{
-            peer::{initial_interest, Hat},
+            peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
             BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, InterestProfile,
             SendDeclare, Sources,
         },
@@ -50,6 +49,123 @@ use crate::{
 };
 
 impl Hat {
+    #[inline]
+    fn maybe_register_local_subscriber(
+        &self,
+        dst_face: &mut Arc<FaceState>,
+        res: &Arc<Resource>,
+        initial_interest: Option<InterestId>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if self
+            .face_hat(dst_face)
+            .local_subs
+            .contains_simple_resource(res)
+        {
+            return;
+        }
+        let (should_notify, simple_interests) = match initial_interest {
+            Some(interest) => (true, HashSet::from([interest])),
+            None => self
+                .face_hat(dst_face)
+                .remote_interests
+                .iter()
+                .filter(|(_, i)| i.options.subscribers() && i.matches(res))
+                .fold(
+                    (false, HashSet::new()),
+                    |(_, mut simple_interests), (id, i)| {
+                        if !i.options.aggregate() {
+                            simple_interests.insert(*id);
+                        }
+                        (true, simple_interests)
+                    },
+                ),
+        };
+
+        if !should_notify {
+            return;
+        }
+        let face_hat_mut = self.face_hat_mut(dst_face);
+        let (_, subs_to_notify) = face_hat_mut.local_subs.insert_simple_resource(
+            res.clone(),
+            SubscriberInfo,
+            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+            simple_interests,
+        );
+
+        for update in subs_to_notify {
+            let key_expr = Resource::decl_key(
+                &update.resource,
+                dst_face,
+                super::push_declaration_profile(dst_face),
+            );
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id: update.id,
+                            wire_expr: key_expr.clone(),
+                        }),
+                    },
+                    update.resource.expr().to_string(),
+                ),
+            );
+        }
+    }
+
+    #[inline]
+    fn maybe_unregister_local_subscriber(
+        &self,
+        face: &mut Arc<FaceState>,
+        res: &Arc<Resource>,
+        send_declare: &mut SendDeclare,
+    ) {
+        for update in self
+            .face_hat_mut(face)
+            .local_subs
+            .remove_simple_resource(res)
+        {
+            send_declare(
+                &face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id: update.id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    update.resource.expr().to_string(),
+                ),
+            );
+        }
+    }
+
+    fn get_subscribers_matching_resource<'a>(
+        &self,
+        tables: &'a TablesData,
+        face: &Arc<FaceState>,
+        res: Option<&'a Arc<Resource>>,
+    ) -> Vec<&'a Arc<Resource>> {
+        let face_id = face.id;
+
+        tables
+            .faces
+            .values()
+            .filter(move |f| f.id != face_id)
+            .flat_map(|f| self.face_hat(f).remote_subs.values())
+            .filter(move |sub| sub.ctx.is_some() && res.map(|r| sub.matches(r)).unwrap_or(true))
+            .collect()
+    }
+
     #[inline]
     fn propagate_simple_subscription_to(
         &self,
@@ -61,86 +177,21 @@ impl Hat {
         profile: InterestProfile,
     ) {
         if (src_face.id != dst_face.id)
-            && !self.face_hat(dst_face).local_subs.contains_key(res)
+            && !self
+                .face_hat(dst_face)
+                .local_subs
+                .contains_simple_resource(res)
             && self.should_route_between(src_face, dst_face)
         {
             if profile.is_push() {
-                let id = self
-                    .face_hat(dst_face)
-                    .next_id
-                    .fetch_add(1, Ordering::SeqCst);
-                self.face_hat_mut(dst_face)
-                    .local_subs
-                    .insert(res.clone(), id);
-                let key_expr =
-                    Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
-                (ctx.send_declare)(
-                    &dst_face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: declare::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id,
-                                wire_expr: key_expr,
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
+                self.maybe_register_local_subscriber(
+                    dst_face,
+                    res,
+                    Some(INITIAL_INTEREST_ID),
+                    ctx.send_declare,
                 );
             } else {
-                let matching_interests = self
-                    .face_hat(dst_face)
-                    .remote_interests
-                    .values()
-                    .filter(|i| i.options.subscribers() && i.matches(res))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                for RemoteInterest {
-                    res: int_res,
-                    options,
-                    ..
-                } in matching_interests
-                {
-                    let res = if options.aggregate() {
-                        int_res.as_ref().unwrap_or(res)
-                    } else {
-                        res
-                    };
-                    if !self.face_hat(dst_face).local_subs.contains_key(res) {
-                        let id = self
-                            .face_hat(dst_face)
-                            .next_id
-                            .fetch_add(1, Ordering::SeqCst);
-                        self.face_hat_mut(dst_face)
-                            .local_subs
-                            .insert(res.clone(), id);
-                        let key_expr = Resource::decl_key(
-                            res,
-                            dst_face,
-                            super::push_declaration_profile(dst_face),
-                        );
-                        (ctx.send_declare)(
-                            &dst_face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: declare::ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id,
-                                        wire_expr: key_expr,
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ),
-                        );
-                    }
-                }
+                self.maybe_register_local_subscriber(dst_face, res, None, ctx.send_declare);
             }
         }
     }
@@ -251,13 +302,6 @@ impl Hat {
             .collect()
     }
 
-    #[inline]
-    fn remote_simple_subs(&self, res: &Arc<Resource>, face: &Arc<FaceState>) -> bool {
-        res.face_ctxs
-            .values()
-            .any(|ctx| ctx.face.id != face.id && ctx.subs.is_some())
-    }
-
     fn propagate_forget_simple_subscription(
         &self,
         tables: &mut TablesData,
@@ -265,55 +309,7 @@ impl Hat {
         send_declare: &mut SendDeclare,
     ) {
         for mut face in self.faces(tables).values().cloned() {
-            if let Some(id) = self.face_hat_mut(&mut face).local_subs.remove(res) {
-                send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: declare::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
-                );
-            }
-            for res in self
-                .face_hat(&face)
-                .local_subs
-                .keys()
-                .cloned()
-                .collect::<Vec<Arc<Resource>>>()
-            {
-                if !res.context().matches.iter().any(|m| {
-                    m.upgrade()
-                        .is_some_and(|m| m.ctx.is_some() && self.remote_simple_subs(&m, &face))
-                }) {
-                    if let Some(id) = self.face_hat_mut(&mut face).local_subs.remove(&res) {
-                        send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id: None,
-                                    ext_qos: declare::ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id,
-                                        ext_wire_expr: WireExprType::null(),
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ),
-                        );
-                    }
-                }
-            }
+            self.maybe_unregister_local_subscriber(&mut face, res, send_declare);
         }
     }
 
@@ -335,57 +331,7 @@ impl Hat {
 
             if simple_subs.len() == 1 {
                 let face = &mut simple_subs[0];
-                if let Some(id) = self.face_hat_mut(face).local_subs.remove(res) {
-                    (ctx.send_declare)(
-                        &face.primitives,
-                        RoutingContext::with_expr(
-                            Declare {
-                                interest_id: None,
-                                ext_qos: declare::ext::QoSType::DECLARE,
-                                ext_tstamp: None,
-                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id,
-                                    ext_wire_expr: WireExprType::null(),
-                                }),
-                            },
-                            res.expr().to_string(),
-                        ),
-                    );
-                }
-                for res in self
-                    .face_hat(face)
-                    .local_subs
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<Arc<Resource>>>()
-                {
-                    if !res.context().matches.iter().any(|m| {
-                        m.upgrade()
-                            .is_some_and(|m| m.ctx.is_some() && self.remote_simple_subs(&m, face))
-                    }) {
-                        if let Some(id) = self.face_hat_mut(face).local_subs.remove(&res) {
-                            (ctx.send_declare)(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id: None,
-                                        ext_qos: declare::ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::UndeclareSubscriber(
-                                            UndeclareSubscriber {
-                                                id,
-                                                ext_wire_expr: WireExprType::null(),
-                                            },
-                                        ),
-                                    },
-                                    res.expr().to_string(),
-                                ),
-                            );
-                        }
-                    }
-                }
+                self.maybe_unregister_local_subscriber(face, res, ctx.send_declare);
             }
         }
     }
@@ -425,138 +371,106 @@ impl Hat {
         }
     }
 
-    #[inline]
-    fn make_sub_id(
-        &self,
-        res: &Arc<Resource>,
-        face: &mut Arc<FaceState>,
-        mode: InterestMode,
-    ) -> u32 {
-        if mode.future() {
-            if let Some(id) = self.face_hat(face).local_subs.get(res) {
-                *id
-            } else {
-                let id = self.face_hat(face).next_id.fetch_add(1, Ordering::SeqCst);
-                self.face_hat_mut(face).local_subs.insert(res.clone(), id);
-                id
-            }
-        } else {
-            0
-        }
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(super) fn declare_sub_interest(
         &self,
         tables: &mut TablesData,
         face: &mut Arc<FaceState>,
-        id: InterestId,
+        interest_id: InterestId,
         res: Option<&mut Arc<Resource>>,
         mode: InterestMode,
         aggregate: bool,
         send_declare: &mut SendDeclare,
     ) {
-        if mode.current() && face.whatami == WhatAmI::Client {
-            let interest_id = Some(id);
-            if let Some(res) = res.as_ref() {
-                if aggregate {
-                    if self.faces(tables).values().any(|src_face| {
-                        src_face.id != face.id
-                            && self
-                                .face_hat(src_face)
-                                .remote_subs
-                                .values()
-                                .any(|sub| sub.ctx.is_some() && sub.matches(res))
-                    }) {
-                        let id = self.make_sub_id(res, face, mode);
-                        let wire_expr =
-                            Resource::decl_key(res, face, super::push_declaration_profile(face));
-                        send_declare(
-                            &face.primitives,
-                            RoutingContext::with_expr(
-                                Declare {
-                                    interest_id,
-                                    ext_qos: declare::ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id,
-                                        wire_expr,
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ),
+        if face.whatami != WhatAmI::Client {
+            return;
+        }
+
+        let res = res.map(|r| r.clone());
+        let mut matching_subs = self
+            .get_subscribers_matching_resource(tables, face, res.as_ref())
+            .into_iter();
+
+        if aggregate && (mode.current() || mode.future()) {
+            if let Some(aggregated_res) = &res {
+                let (resource_id, sub_info) = if mode.future() {
+                    let face_hat_mut = self.face_hat_mut(face);
+                    for sub in matching_subs {
+                        face_hat_mut.local_subs.insert_simple_resource(
+                            sub.clone(),
+                            SubscriberInfo,
+                            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                            HashSet::new(),
                         );
                     }
+                    let face_hat_mut = self.face_hat_mut(face);
+                    face_hat_mut.local_subs.insert_aggregated_resource(
+                        aggregated_res.clone(),
+                        || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                        HashSet::from_iter([interest_id]),
+                    )
                 } else {
-                    for src_face in self
-                        .faces(tables)
-                        .values()
-                        .filter(|f| f.id != face.id)
-                        .cloned()
-                        .collect::<Vec<Arc<FaceState>>>()
-                    {
-                        for sub in self.face_hat(&src_face).remote_subs.values() {
-                            if sub.ctx.is_some() && sub.matches(res) {
-                                let id = self.make_sub_id(sub, face, mode);
-                                let wire_expr = Resource::decl_key(
-                                    sub,
-                                    face,
-                                    super::push_declaration_profile(face),
-                                );
-                                send_declare(
-                                    &face.primitives,
-                                    RoutingContext::with_expr(
-                                        Declare {
-                                            interest_id,
-                                            ext_qos: declare::ext::QoSType::DECLARE,
-                                            ext_tstamp: None,
-                                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                            body: DeclareBody::DeclareSubscriber(
-                                                DeclareSubscriber { id, wire_expr },
-                                            ),
-                                        },
-                                        sub.expr().to_string(),
-                                    ),
-                                );
-                            }
-                        }
-                    }
+                    (0, matching_subs.next().map(|_| SubscriberInfo))
+                };
+                if mode.current() && sub_info.is_some() {
+                    // send declare only if there is at least one resource matching the aggregate
+                    let wire_expr = Resource::decl_key(
+                        aggregated_res,
+                        face,
+                        super::push_declaration_profile(face),
+                    );
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: Some(interest_id),
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id: resource_id,
+                                    wire_expr,
+                                }),
+                            },
+                            aggregated_res.expr().to_string(),
+                        ),
+                    );
                 }
-            } else {
-                for src_face in self
-                    .faces(tables)
-                    .values()
-                    .cloned()
-                    .collect::<Vec<Arc<FaceState>>>()
-                {
-                    if src_face.id != face.id {
-                        for sub in self.face_hat(&src_face).remote_subs.values() {
-                            let id = self.make_sub_id(sub, face, mode);
-                            let wire_expr = Resource::decl_key(
-                                sub,
-                                face,
-                                super::push_declaration_profile(face),
-                            );
-                            send_declare(
-                                &face.primitives,
-                                RoutingContext::with_expr(
-                                    Declare {
-                                        interest_id,
-                                        ext_qos: declare::ext::QoSType::DECLARE,
-                                        ext_tstamp: None,
-                                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                            id,
-                                            wire_expr,
-                                        }),
-                                    },
-                                    sub.expr().to_string(),
-                                ),
-                            );
-                        }
-                    }
-                }
+            }
+        } else if !aggregate && mode.current() {
+            for sub in matching_subs {
+                let resource_id = if mode.future() {
+                    let face_hat_mut = self.face_hat_mut(face);
+                    face_hat_mut
+                        .local_subs
+                        .insert_simple_resource(
+                            sub.clone(),
+                            SubscriberInfo,
+                            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                            HashSet::from([interest_id]),
+                        )
+                        .0
+                } else {
+                    0
+                };
+                let wire_expr =
+                    Resource::decl_key(sub, face, super::push_declaration_profile(face));
+                send_declare(
+                    &face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(interest_id),
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: resource_id,
+                                wire_expr,
+                            }),
+                        },
+                        sub.expr().to_string(),
+                    ),
+                );
             }
         }
     }
@@ -588,13 +502,13 @@ impl HatPubSubTrait for Hat {
     }
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        // Compute the list of known suscriptions (keys)
+        // Compute the list of known subscriptions (keys)
         let mut subs = HashMap::new();
         for src_face in self.faces(tables).values() {
             for sub in self.face_hat(src_face).remote_subs.values() {
-                // Insert the key in the list of known suscriptions
+                // Insert the key in the list of known subscriptions
                 let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
-                // Append src_face as a suscription source in the proper list
+                // Append src_face as a subscriptions source in the proper list
                 let whatami = if src_face.is_local {
                     tables.hats.north().whatami // REVIEW(fuzzypixelz)
                 } else {

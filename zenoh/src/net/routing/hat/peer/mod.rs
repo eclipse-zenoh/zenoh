@@ -58,9 +58,10 @@ use crate::net::{
             face::{FaceId, InterestState},
             gateway::Bound,
             interests::RemoteInterest,
+            queries::LocalQueryables,
         },
         hat::{BaseContext, InterestProfile, Remote},
-        router::FaceContext,
+        router::{FaceContext, LocalSubscribers},
         RoutingContext,
     },
     runtime::Runtime,
@@ -331,7 +332,7 @@ impl HatBaseTrait for Hat {
         }
 
         let mut qabls_matches = vec![];
-        for (_id, mut res) in hat_face.remote_qabls.drain() {
+        for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
             self.undeclare_simple_queryable(ctx.reborrow(), &mut res, profile);
 
@@ -487,12 +488,12 @@ impl HatContext {
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
-    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_qabls: LocalQueryables,
+    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
     is_gateway: bool,
 }
 
@@ -501,11 +502,11 @@ impl HatFace {
         Self {
             next_id: AtomicU32::new(1), // In p2p, id 0 is erserved for initial interest
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),
-            local_qabls: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
             is_gateway: false,
         }

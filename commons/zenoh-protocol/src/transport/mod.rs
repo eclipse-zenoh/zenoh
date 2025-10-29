@@ -111,6 +111,7 @@ impl PrioritySn {
     };
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -144,6 +145,7 @@ pub struct TransportMessage {
 
 impl TransportMessage {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -286,6 +288,7 @@ pub mod ext {
         }
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
@@ -335,6 +338,7 @@ pub mod ext {
         }
 
         #[cfg(feature = "test")]
+        #[doc(hidden)]
         pub fn rand() -> Self {
             use rand::Rng;
             Self(rand::thread_rng().gen())

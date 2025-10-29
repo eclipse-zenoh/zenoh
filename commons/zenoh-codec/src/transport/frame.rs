@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::vec::Vec;
+
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -18,13 +20,14 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{iext, imsg},
     core::Reliability,
+    network::NetworkMessage,
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
         id, TransportSn,
     },
 };
 
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
 
 // FrameHeader
 impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080
@@ -143,7 +146,9 @@ where
         self.write(&mut *writer, &header)?;
 
         // Body
-        writer.write_zslice(payload)?;
+        for m in payload.iter() {
+            self.write(&mut *writer, m)?;
+        }
 
         Ok(())
     }
@@ -170,7 +175,20 @@ where
 
     fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
         let header: FrameHeader = self.read(&mut *reader)?;
-        let payload = reader.read_zslice(reader.remaining())?;
+
+        let rcode = Zenoh080Reliability::new(header.reliability);
+        let mut payload = Vec::new();
+        while reader.can_read() {
+            let mark = reader.mark();
+            let res: Result<NetworkMessage, DidntRead> = rcode.read(&mut *reader);
+            match res {
+                Ok(m) => payload.push(m),
+                Err(_) => {
+                    reader.rewind(mark);
+                    break;
+                }
+            }
+        }
 
         Ok(Frame {
             reliability: header.reliability,
@@ -178,5 +196,50 @@ where
             ext_qos: header.ext_qos,
             payload,
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct FrameReader<'a, R: BacktrackableReader> {
+    pub reliability: Reliability,
+    pub sn: TransportSn,
+    pub ext_qos: ext::QoSType,
+    reader: &'a mut R,
+}
+
+impl<'a, R: BacktrackableReader> RCodec<FrameReader<'a, R>, &'a mut R> for Zenoh080 {
+    type Error = DidntRead;
+
+    fn read(self, reader: &'a mut R) -> Result<FrameReader<'a, R>, Self::Error> {
+        let mark = reader.mark();
+        let Ok(header): Result<FrameHeader, _> = self.read(&mut *reader) else {
+            reader.rewind(mark);
+            return Err(DidntRead);
+        };
+        Ok(FrameReader {
+            reliability: header.reliability,
+            sn: header.sn,
+            ext_qos: header.ext_qos,
+            reader,
+        })
+    }
+}
+
+impl<R: BacktrackableReader> Iterator for FrameReader<'_, R> {
+    type Item = NetworkMessage;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mark = self.reader.mark();
+        let msg = Zenoh080Reliability::new(self.reliability).read(self.reader);
+        if msg.is_err() {
+            self.reader.rewind(mark);
+        }
+        msg.ok()
+    }
+}
+
+impl<R: BacktrackableReader> Drop for FrameReader<'_, R> {
+    fn drop(&mut self) {
+        for _ in self {}
     }
 }

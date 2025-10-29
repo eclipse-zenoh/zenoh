@@ -55,7 +55,7 @@ impl Hat {
     ) {
         if src_face.id != dst_face.id
             && !self.face_hat(dst_face).local_subs.contains_key(res)
-            && self.should_route_between(&src_face, &dst_face)
+            && self.should_route_between(src_face, dst_face)
         {
             let id = self
                 .face_hat(dst_face)
@@ -306,13 +306,13 @@ impl HatPubSubTrait for Hat {
     }
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        // Compute the list of known suscriptions (keys)
+        // Compute the list of known subscriptions (keys)
         let mut subs = HashMap::new();
         for src_face in self.faces(tables).values() {
             for sub in self.face_hat(src_face).remote_subs.values() {
-                // Insert the key in the list of known suscriptions
+                // Insert the key in the list of known subscriptions
                 let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
-                // Append src_face as a suscription source in the proper list
+                // Append src_face as a subscription source in the proper list
                 match src_face.whatami {
                     WhatAmI::Router => srcs.routers.push(src_face.zid),
                     WhatAmI::Peer => srcs.peers.push(src_face.zid),

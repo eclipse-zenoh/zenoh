@@ -13,14 +13,14 @@
 //
 use std::sync::MutexGuard;
 
-use zenoh_codec::network::NetworkMessageIter;
+use zenoh_buffers::ZSlice;
+use zenoh_codec::transport::frame::FrameReader;
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
     network::NetworkMessage,
     transport::{
-        BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportMessage,
-        TransportSn,
+        BatchSize, Close, Fragment, Join, KeepAlive, TransportBody, TransportMessage, TransportSn,
     },
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -42,6 +42,20 @@ impl TransportMulticastInner {
         mut msg: NetworkMessage,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        {
+            #[cfg(feature = "shared-memory")]
+            {
+                use zenoh_protocol::network::NetworkMessageExt;
+                if msg.is_shm() {
+                    self.stats.rx_n_msgs.inc_shm(1);
+                } else {
+                    self.stats.rx_n_msgs.inc_net(1);
+                }
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.stats.rx_n_msgs.inc_net(1);
+        }
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
@@ -51,7 +65,6 @@ impl TransportMulticastInner {
                 }
             }
         }
-
         peer.handler.handle_message(msg.as_mut())
     }
 
@@ -140,15 +153,12 @@ impl TransportMulticastInner {
         self.new_peer(locator, join)
     }
 
-    fn handle_frame(&self, frame: Frame, peer: &TransportMulticastPeer) -> ZResult<()> {
-        let Frame {
-            reliability,
-            sn,
-            ext_qos,
-            mut payload,
-        } = frame;
-
-        let priority = ext_qos.priority();
+    fn handle_frame(
+        &self,
+        frame: FrameReader<ZSlice>,
+        peer: &TransportMulticastPeer,
+    ) -> ZResult<()> {
+        let priority = frame.ext_qos.priority();
         let c = if self.is_qos() {
             &peer.priority_rx[priority as usize]
         } else if priority == Priority::DEFAULT {
@@ -162,16 +172,16 @@ impl TransportMulticastInner {
             );
         };
 
-        let mut guard = match reliability {
+        let mut guard = match frame.reliability {
             Reliability::Reliable => zlock!(c.reliable),
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if !self.verify_sn("Frame", sn, &mut guard)? {
+        if !self.verify_sn("Frame", frame.sn, &mut guard)? {
             // Drop invalid message and continue
             return Ok(());
         }
-        for msg in NetworkMessageIter::new(reliability, &mut payload) {
+        for msg in frame {
             self.trigger_callback(msg, peer)?;
         }
 
@@ -285,6 +295,18 @@ impl TransportMulticastInner {
         #[cfg(feature = "stats")] transport: &TransportMulticastInner,
     ) -> ZResult<()> {
         while !batch.is_empty() {
+            if let Ok(frame) = batch.decode() {
+                tracing::trace!("Received: {:?}", frame);
+                #[cfg(feature = "stats")]
+                {
+                    transport.stats.inc_rx_t_msgs(1);
+                }
+                if let Some(peer) = zread!(self.peers).get(&locator) {
+                    peer.set_active();
+                    self.handle_frame(frame, peer)?;
+                }
+                continue;
+            }
             let msg: TransportMessage = batch
                 .decode()
                 .map_err(|_| zerror!("{}: decoding error", locator))?;
@@ -301,7 +323,7 @@ impl TransportMulticastInner {
                 Some(peer) => {
                     peer.set_active();
                     match msg.body {
-                        TransportBody::Frame(msg) => self.handle_frame(msg, peer)?,
+                        TransportBody::Frame(_) => unreachable!(),
                         TransportBody::Fragment(fragment) => {
                             self.handle_fragment(fragment, peer)?
                         }

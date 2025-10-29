@@ -28,8 +28,11 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 base64ct = "=1.6.0"
+generic-array = "=0.14.7"
 home = "=0.5.9"
 icu_normalizer = "=1.5.0"
+indexmap = "=2.11.4"
+librocksdb-sys = "=0.17.1"
 litemap = "=0.7.4"
 lz4_flex = "=0.11.3"
 pest = "=2.8.0"
@@ -37,17 +40,28 @@ pest_derive = "=2.8.0"
 pest_generator = "=2.8.0"
 pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
+rocksdb = "=0.23.0"
+serde_spanned = "=1.0.1"
+serde_with = "=3.14.1"
+serde_with_macros = "3.14.1"
 static_init = "=1.0.3"
 time = "=0.3.41"
 tinystr = "=0.8.0"
+toml = "=0.9.6"
+toml_datetime = "=0.7.1"
+toml_parser = "=1.0.2"
+toml_writer = "=1.0.2"
 twox-hash = "=1.6.3"
 zerofrom = "=0.1.5"
 
 [package.metadata.cargo-machete]
 ignored = [
   "base64ct",
+  "generic-array",
   "home",
   "icu_normalizer",
+  "indexmap",
+  "librocksdb-sys",
   "litemap",
   "lz4_flex",
   "pest",
@@ -55,9 +69,17 @@ ignored = [
   "pest_generator",
   "pest_meta",
   "potential_utf",
+  "rocksdb",
+  "serde_spanned",
+  "serde_with",
+  "serde_with_macros",
   "static_init",
   "time",
   "tinystr",
+  "toml",
+  "toml_datetime",
+  "toml_parser",
+  "toml_writer",
   "twox-hash",
   "zerofrom",
 ]

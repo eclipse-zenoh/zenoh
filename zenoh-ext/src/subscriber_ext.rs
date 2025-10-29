@@ -153,7 +153,7 @@ pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
     #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
-    /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    /// Turn this [`Subscriber`](zenoh::subscriber::Subscriber) into an [`AdvancedSubscriber`](crate::AdvancedSubscriber).
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
@@ -294,7 +294,7 @@ impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
         AdvancedSubscriberBuilder::new(self).subscriber_detection()
     }
 
-    /// Turn this `Subscriber`into an `AdvancedSubscriber`.
+    /// Turn this [`Subscriber`](zenoh::subscriber::Subscriber) into an [`AdvancedSubscriber`](crate::AdvancedSubscriber).
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self)
@@ -316,7 +316,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// through the callback function. Those samples will be merged with the received publications and made available in the receiver.
     /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
     ///
-    /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while susbcribing to
+    /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while subscribing to
     /// new liveness changes.
     ///
     /// # Examples
@@ -375,7 +375,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     /// The results of the query will be merged with the received publications and made available in the receiver.
     /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
     ///
-    /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while susbcribing to
+    /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while subscribing to
     /// new liveness changes.
     ///
     /// # Examples

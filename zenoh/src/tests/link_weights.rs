@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "internal_config")]
+#![cfg(feature = "internal")]
 
 use std::{
     any::Any,
@@ -193,7 +194,8 @@ impl Net {
 
             self.routers[i]
                 .0
-                .runtime
+                .static_runtime()
+                .unwrap()
                 .config()
                 .lock()
                 .routing
@@ -201,7 +203,12 @@ impl Net {
                 .linkstate
                 .set_transport_weights(weights)
                 .unwrap();
-            self.routers[i].0.runtime.update_network().unwrap();
+            self.routers[i]
+                .0
+                .static_runtime()
+                .unwrap()
+                .update_network()
+                .unwrap();
         }
     }
 }
@@ -658,7 +665,7 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16) {
     )
     .await;
 
-    let info = net.routers[0].0.runtime.get_links_info();
+    let info = net.routers[0].0.static_runtime().unwrap().get_links_info();
 
     let expected = HashMap::from([
         (

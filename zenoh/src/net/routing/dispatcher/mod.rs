@@ -20,6 +20,7 @@
 pub mod face;
 pub mod gateway;
 pub mod interests;
+pub mod local_resources;
 pub mod pubsub;
 pub mod queries;
 pub mod resource;

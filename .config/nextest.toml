@@ -19,7 +19,8 @@ test(=three_node_combination) |
 test(=watchdog_alloc_concurrent) |
 test(=header_check_memory_concurrent) |
 test(=header_link_concurrent) |
-test(=header_link_failure_concurrent)
+test(=header_link_failure_concurrent) |
+test(=zenoh_querier_matching_status)
 """
 slow-timeout = { period = "60s", terminate-after = 6 }
 threads-required = 'num-cpus'

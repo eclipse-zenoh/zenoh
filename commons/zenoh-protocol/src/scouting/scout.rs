@@ -80,6 +80,7 @@ pub struct Scout {
 
 impl Scout {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

@@ -51,6 +51,7 @@ zenoh = { workspace = true, default-features = false, features = [
   "unstable",
 ] }
 zenoh-plugin-trait = { workspace = true }
+zenoh-util = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
@@ -67,7 +68,7 @@ uhlc = { workspace = true }
 
 [package.metadata.deb]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.5.1)"
+depends = "zenohd (=1.6.2)"
 license-file = ["../../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 name = "zenoh-plugin-storage-manager"

@@ -43,7 +43,12 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::{face::Face, gateway::Bound, tables::Tables},
+        dispatcher::{
+            face::Face,
+            gateway::Bound,
+            local_resources::{LocalResourceInfoTrait, LocalResources},
+            tables::Tables,
+        },
         hat::{BaseContext, InterestProfile, SendDeclare},
         router::{get_or_set_route, QueryDirection, RouteBuilder},
     },
@@ -121,7 +126,7 @@ pub(crate) struct Query {
 }
 
 #[inline]
-pub(crate) fn get_session_matching_queryables(
+pub(crate) fn get_matching_queryables(
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
     complete: bool,
@@ -735,3 +740,94 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
             });
     }
 }
+
+pub(crate) fn merge_qabl_infos(
+    mut this: QueryableInfoType,
+    info: &QueryableInfoType,
+) -> QueryableInfoType {
+    this.distance = match (this.complete, info.complete) {
+        (true, true) | (false, false) => std::cmp::min(this.distance, info.distance),
+        (true, false) => this.distance,
+        (false, true) => info.distance,
+    };
+    this.complete = this.complete || info.complete;
+    this
+}
+
+pub(crate) fn get_remote_qabl_info(
+    queryables: &HashMap<u32, (Arc<Resource>, QueryableInfoType)>,
+    res: &Arc<Resource>,
+) -> Option<QueryableInfoType> {
+    queryables
+        .values()
+        .fold(None, |accu, (ref r, ref qabl_info)| {
+            if *r == *res {
+                match accu {
+                    Some(qi) => Some(merge_qabl_infos(qi, qabl_info)),
+                    None => Some(*qabl_info),
+                }
+            } else {
+                accu
+            }
+        })
+}
+
+pub(crate) fn update_queryable_info(
+    res: &mut Arc<Resource>,
+    face_id: usize,
+    new_qabl_info: &Option<QueryableInfoType>,
+) -> bool {
+    if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face_id) {
+        if ctx.qabl != *new_qabl_info {
+            get_mut_unchecked(ctx).qabl = *new_qabl_info;
+            true
+        } else {
+            false
+        }
+    } else if new_qabl_info.is_none() {
+        true
+    } else {
+        tracing::warn!(
+            "Request to update QueryableInfo for inexistent face id: {}, on resource: '{}'",
+            face_id,
+            res.expr()
+        );
+        false
+    }
+}
+
+impl LocalResourceInfoTrait<Arc<Resource>> for QueryableInfoType {
+    fn aggregate(
+        self_val: Option<Self>,
+        self_res: &Arc<Resource>,
+        other_val: &Self,
+        other_res: &Arc<Resource>,
+    ) -> Self {
+        // shortcut to avoid checking inclusion of ke, since we only care about completeness in aggregates and can ignore distance
+        if let Some(val) = self_val {
+            if val.complete == other_val.complete {
+                return val;
+            }
+        }
+
+        let other_complete = if other_val.complete {
+            if let (Some(self_ke), Some(other_ke)) = (self_res.keyexpr(), other_res.keyexpr()) {
+                other_ke.includes(self_ke)
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        let mut other_val = *other_val;
+        other_val.complete = other_complete;
+
+        if let Some(val) = self_val {
+            merge_qabl_infos(val, &other_val)
+        } else {
+            other_val
+        }
+    }
+}
+
+pub(crate) type LocalQueryables = LocalResources<QueryableId, Arc<Resource>, QueryableInfoType>;

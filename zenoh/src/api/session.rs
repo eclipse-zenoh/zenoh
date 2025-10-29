@@ -16,10 +16,7 @@ use std::{
     convert::TryInto,
     fmt, mem,
     ops::Deref,
-    sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Mutex, RwLock, RwLockReadGuard,
-    },
+    sync::{atomic::Ordering, Arc, Mutex, RwLock, RwLockReadGuard},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -33,9 +30,14 @@ use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
 use zenoh_collections::{IntHashMap, SingleOrVec};
-use zenoh_config::{qos::PublisherQoSConfig, unwrap_or_default, wrappers::ZenohId};
+use zenoh_config::{
+    qos::{PublisherQoSConfList, PublisherQoSConfig},
+    wrappers::ZenohId,
+};
+#[cfg(feature = "unstable")]
+use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::{keyexpr_tree::KeBoxTree, OwnedNonWildKeyExpr};
+use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -67,6 +69,10 @@ use zenoh_task::TaskController;
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
+#[cfg(feature = "internal")]
+use crate::net::runtime::Runtime;
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+use crate::net::runtime::ShmProviderState;
 use crate::{
     api::{
         admin,
@@ -102,11 +108,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        routing::{
-            dispatcher::{face::Face, gateway::Bound},
-            namespace::{ENamespace, Namespace},
-        },
-        runtime::{Runtime, RuntimeBuilder},
+        runtime::{GenericRuntime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,
@@ -123,8 +125,7 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) liveliness_qid_counter: AtomicRequestId,
-    pub(crate) local_resources: IntHashMap<ExprId, Resource>,
+    pub(crate) local_resources: IntHashMap<ExprId, LocalResource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
     pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     pub(crate) publishers: HashMap<Id, PublisherState>,
@@ -153,7 +154,6 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            liveliness_qid_counter: AtomicRequestId::new(0),
             local_resources: IntHashMap::new(),
             remote_resources: IntHashMap::new(),
             remote_subscribers: HashMap::new(),
@@ -186,13 +186,13 @@ impl SessionState {
 
     #[inline]
     fn get_local_res(&self, id: &ExprId) -> Option<&Resource> {
-        self.local_resources.get(id)
+        Some(&self.local_resources.get(id)?.resource)
     }
 
     #[inline]
     fn get_remote_res(&self, id: &ExprId, mapping: Mapping) -> Option<&Resource> {
         match mapping {
-            Mapping::Receiver => self.local_resources.get(id),
+            Mapping::Receiver => Some(&self.local_resources.get(id)?.resource),
             Mapping::Sender => self.remote_resources.get(id),
         }
     }
@@ -337,6 +337,7 @@ impl SessionState {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback,
+            history: false,
         };
 
         let declared_sub = origin != Locality::SessionLocal;
@@ -385,7 +386,7 @@ impl SessionState {
         for res in self
             .local_resources
             .values_mut()
-            .filter_map(Resource::as_node_mut)
+            .filter_map(LocalResource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
                 res.subscribers_mut(SubscriberKind::Subscriber)
@@ -481,6 +482,17 @@ impl Resource {
     }
 }
 
+pub(crate) struct LocalResource {
+    resource: Resource,
+    declared: bool,
+}
+
+impl LocalResource {
+    pub(crate) fn as_node_mut(&mut self) -> Option<&mut ResourceNode> {
+        self.resource.as_node_mut()
+    }
+}
+
 /// A trait implemented by types that can be undeclared.
 pub trait UndeclarableSealed<S> {
     type Undeclaration: Resolve<ZResult<()>> + Send;
@@ -509,12 +521,10 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
     weak_counter: Mutex<usize>,
-    pub(crate) runtime: Runtime,
+    pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
-    pub(crate) id: u16,
-    owns_runtime: bool,
+    pub(crate) id: EntityId,
     task_controller: TaskController,
-    namespace: Option<OwnedNonWildKeyExpr>,
     face_id: OnceCell<usize>,
 }
 
@@ -524,22 +534,52 @@ impl fmt::Debug for SessionInner {
     }
 }
 
-/// The entrypoint of the zenoh API.
+/// The [`Session`] is the main component of Zenoh. It holds the zenoh runtime object,
+/// which maintains the state of the connection of the node to the Zenoh network.
 ///
-/// Zenoh session is instantiated using [`zenoh::open`](crate::open) and it can be used to declare various
-/// entities like publishers, subscribers, or querybables, as well as issuing queries.
+/// The session allows declaring other zenoh entities like publishers, subscribers, queriers, queryables, etc.
+/// and keeps them functioning. Closing the session will close all associated entities.
 ///
-/// Session is an `Arc`-like type, it can be cloned, and it is closed when the last instance
-/// is dropped (see [`Session::close`]).
+/// The session is cloneable so it's easy to share it between tasks and threads. Each clone of the
+/// session is an `Arc` to the internal session object, so cloning is cheap and fast.
+///
+/// A Zenoh session is instantiated using [`zenoh::open`](crate::open)
+/// with parameters specified in the [`Config`] object.
+///
+/// Objects created by the session ([`Publisher`](crate::pubsub::Publisher),
+/// [`Subscriber`](crate::pubsub::Subscriber), [`Querier`](crate::query::Querier), etc.),
+/// have lifetimes independent of the session, but they stop functioning if all clones of the session
+/// object are dropped or the session is closed with the [`close`](crate::session::Session::close) method.
+///
+/// ### Background entities
+///
+/// Sometimes it is inconvenient to keep a reference to an object (for example,
+/// a [`Queryable`](crate::query::Queryable)) solely to keep it alive. There is a way to
+/// avoid keeping this reference and keep the object alive until the session is closed.
+/// To do this, call the [`background`](crate::query::QueryableBuilder::background) method on the
+/// corresponding builder. This causes the builder to return `()` instead of the object instance and
+/// keeps the instance alive while the session is alive.
+///
+/// ### Difference between session and runtime
+/// The session object holds all declared zenoh entities (publishers, subscribers, etc.) and
+/// a shared reference to the runtime object which maintains the state of the zenoh node.
+/// Closing the session will close all associated entities and drop the reference to the runtime.
+///
+/// Typically each session has its own runtime, but in some cases
+/// the session may share the runtime with other sessions. This is the case for the plugins
+/// where each plugin has its own session but all plugins share the same `zenohd` runtime
+/// for efficiency.
+/// In this case, all these sessions will have the same network identity
+/// [`Session::zid`](crate::session::Session::zid).
 ///
 /// # Examples
 /// ```
 /// # #[tokio::main]
 /// # async fn main() {
-///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
+/// ```
 #[derive(RefCastCustom)]
 #[repr(transparent)]
 pub struct Session(pub(crate) Arc<SessionInner>);
@@ -580,18 +620,19 @@ impl Drop for Session {
 }
 
 /// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
-/// It allows notably to establish reference cycles inside the session, for the primitive
+/// It provides weak-like semantics to the arc-like session, without using [`Weak`].
+/// Notably, it allows establishing reference cycles inside the session for the primitive
 /// implementation.
-/// When all `Session` instance are dropped, [`Session::close`] is be called and cleans
+/// When all `Session` instances are dropped, [`Session::close`] is called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
 /// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
-/// to implement it, because atomic manipulations to achieve this semantic would not have been
+/// to implement, because atomic manipulations to achieve these semantics would not have been
 /// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
 /// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
 /// performance penalty when it comes to session entities cloning/dropping.
 ///
-/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+/// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
@@ -652,20 +693,17 @@ impl fmt::Display for SessionClosedError {
 
 impl std::error::Error for SessionClosedError {}
 
-static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
-        runtime: Runtime,
+        runtime: GenericRuntime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-        owns_runtime: bool,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
-            let router = runtime.router();
-            let config = runtime.config().lock();
-            let publisher_qos = config.0.qos().publication().clone();
-            let namespace = config.0.namespace().clone();
-            drop(config);
+            let publisher_qos = runtime
+                .get_config()
+                .get_typed::<PublisherQoSConfList>("qos/publication")
+                .unwrap();
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
@@ -675,32 +713,16 @@ impl Session {
                 weak_counter: Mutex::new(0),
                 runtime: runtime.clone(),
                 state,
-                id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
-                owns_runtime,
+                id: runtime.next_id(),
                 task_controller: TaskController::default(),
-                namespace: namespace.clone(),
                 face_id: OnceCell::new(),
             }));
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
-
-            let primitives: Arc<dyn Primitives> = match namespace {
-                Some(ns) => {
-                    let face = router.new_session(
-                        Arc::new(ENamespace::new(ns.clone(), Arc::new(session.downgrade()))),
-                        Bound::session(),
-                    );
-                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
-                    Arc::new(Namespace::new(ns, face))
-                }
-                None => {
-                    let face = router.new_session(Arc::new(session.downgrade()), Bound::session());
-                    session.0.face_id.set(face.state.id).unwrap(); // this is the only attempt to set value
-                    face
-                }
-            };
+            let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
+            session.0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
 
             admin::init(session.downgrade());
 
@@ -714,6 +736,16 @@ impl Session {
         self.info().zid().wait()
     }
 
+    /// Returns the [`EntityGlobalId`] of this Session.
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        zenoh_protocol::core::EntityGlobalIdProto {
+            zid: self.zid().into(),
+            eid: self.0.id,
+        }
+        .into()
+    }
+
     #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
         self.0.runtime.hlc()
@@ -721,12 +753,12 @@ impl Session {
 
     /// Close the zenoh [`Session`](Session).
     ///
-    /// Every subscriber and queryable declared will stop receiving data, and further attempt to
+    /// Every subscriber and queryable declared will stop receiving data, and further attempts to
     /// publish or query with the session or publishers will result in an error. Undeclaring an
     /// entity after session closing is a no-op. Session state can be checked with
     /// [`Session::is_closed`].
     ///
-    /// Session are automatically closed when all its instances are dropped, same as `Arc`.
+    /// Sessions are automatically closed when all their instances are dropped, same as `Arc`.
     /// You may still want to use this function to handle errors or close the session
     /// asynchronously.
     /// <br>
@@ -751,7 +783,7 @@ impl Session {
     /// });
     /// session.close().await.unwrap();
     /// // subscriber task will end as `subscriber.recv_async()` will return `Err`
-    /// // subscriber undeclaration has not been sent on the wire
+    /// // subscriber undeclaration has not been sent over the wire
     /// subscriber_task.await.unwrap();
     /// # }
     /// ```
@@ -771,10 +803,27 @@ impl Session {
     /// session.close().await.unwrap();
     /// assert!(session.is_closed());
     /// # }
+    /// ```
     pub fn is_closed(&self) -> bool {
         zread!(self.0.state).primitives.is_none()
     }
 
+    /// Undeclare a zenoh entity declared by the session.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let keyexpr = session.declare_keyexpr("key/expression").await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber(&keyexpr)
+    ///     .await
+    ///     .unwrap();
+    /// session.undeclare(subscriber).await.unwrap();
+    /// session.undeclare(keyexpr).await.unwrap();
+    /// # }
+    /// ```
     pub fn undeclare<'a, T>(&'a self, decl: T) -> impl Resolve<ZResult<()>> + 'a
     where
         T: Undeclarable<&'a Session> + 'a,
@@ -786,11 +835,10 @@ impl Session {
     ///
     /// The returned configuration [`Notifier`](crate::config::Notifier) can be used to read the current
     /// zenoh configuration through the `get` function or
-    /// modify the zenoh configuration through the `insert`,
+    /// modify the zenoh configuration through the `insert`
     /// or `insert_json5` function.
     ///
     /// # Examples
-    /// ### Read current zenoh configuration
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -799,19 +847,9 @@ impl Session {
     /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # }
     /// ```
-    ///
-    /// ### Modify current zenoh configuration
-    /// ```
-    /// # #[tokio::main]
-    /// # async fn main() {
-    ///
-    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
-    /// # }
-    /// ```
     #[zenoh_macros::unstable]
-    pub fn config(&self) -> &crate::config::Notifier<Config> {
-        self.0.runtime.config()
+    pub fn config(&self) -> GenericConfig {
+        self.0.runtime.get_config()
     }
 
     /// Get a new Timestamp from a Zenoh [`Session`].
@@ -819,7 +857,7 @@ impl Session {
     /// The returned timestamp has the current time, with the Session's runtime [`ZenohId`].
     ///
     /// # Examples
-    /// ### Read current zenoh configuration
+    /// ### Get a new timestamp
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
@@ -832,8 +870,8 @@ impl Session {
         match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
-                // Called in the case that the runtime is not initialized with an hlc
-                // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                // Called when the runtime is not initialized with an HLC.
+                // UNIX_EPOCH returns a Timespec::zero(); unwrap should be permissible here.
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
                 Timestamp::new(now, self.0.zid().into())
             }
@@ -855,15 +893,46 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            runtime: self.0.runtime.clone(),
+            runtime: self.0.runtime.deref().clone(),
         }
+    }
+
+    /// Returns the [`ShmProviderState`](ShmProviderState) associated with the current [`Session`](Session)’s [`Runtime`](Runtime).
+    ///
+    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.
+    /// This method exposes that provider so it can also be accessed at the application level.
+    ///
+    /// Note that the provider may not be immediately available or may be disabled via configuration.
+    /// Provider initialization is concurrent and triggered by access events (both transport-internal and through this API).
+    ///
+    /// To use this provider, both *shared_memory* and *transport_optimization* config sections
+    /// must be enabled.
+    ///
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let shm_provider = session.get_shm_provider();
+    /// assert!(shm_provider.into_option().is_none());
+    /// std::thread::sleep(std::time::Duration::from_millis(100));
+    /// let shm_provider = session.get_shm_provider();
+    /// assert!(shm_provider.into_option().is_some());
+    /// # }
+    /// ```
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    pub fn get_shm_provider(&self) -> ShmProviderState {
+        self.0.runtime.get_shm_provider()
     }
 
     /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resourkey expression to subscribe to
+    /// * `key_expr` - The resource key expression to subscribe to
     ///
     /// # Examples
     /// ```no_run
@@ -1005,10 +1074,8 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        let timeout = {
-            let conf = &self.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
-        };
+        let timeout =
+            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         QuerierBuilder {
             session: self,
@@ -1067,11 +1134,15 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        let sid = self.0.id;
+        let session_id = self.0.id;
         ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
-            let expr_id = self.0.declare_prefix(key_expr.as_str()).wait()?;
+            let expr_id = self
+                .0
+                .declare_prefix(key_expr.as_str(), true)
+                .wait()?
+                .unwrap();
             let key_expr = match key_expr.0 {
                 KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                     KeyExpr(KeyExprInner::BorrowedWire {
@@ -1079,7 +1150,7 @@ impl Session {
                         expr_id,
                         mapping: Mapping::Sender,
                         prefix_len,
-                        session_id: sid,
+                        session_id,
                     })
                 }
                 KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
@@ -1088,7 +1159,7 @@ impl Session {
                         expr_id,
                         mapping: Mapping::Sender,
                         prefix_len,
-                        session_id: sid,
+                        session_id,
                     })
                 }
             };
@@ -1096,7 +1167,9 @@ impl Session {
         })
     }
 
-    /// Put data.
+    /// Publish [`SampleKind::Put`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`put`](crate::api::publisher::Publisher::put)
+    /// on it.
     ///
     /// # Arguments
     ///
@@ -1141,7 +1214,8 @@ impl Session {
         }
     }
 
-    /// Delete data.
+    /// Publish a [`SampleKind::Delete`] sample directly from the session. This is a shortcut for declaring
+    /// a [`Publisher`](crate::pubsub::Publisher) and calling [`delete`](crate::api::publisher::Publisher::delete) on it.
     ///
     /// # Arguments
     ///
@@ -1174,9 +1248,11 @@ impl Session {
             source_info: SourceInfo::empty(),
         }
     }
-    /// Query data from the matching queryables in the system.
+    /// Query data from the matching queryables in the system. This is a shortcut for declaring
+    /// a [`Querier`](crate::query::Querier) and calling [`get`](crate::api::querier::Querier::get) on it.
     ///
-    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies), replies are guaranteed to have
+    /// Unless explicitly requested via [`accept_replies`](crate::session::SessionGetBuilder::accept_replies),
+    /// replies are guaranteed to have
     /// key expressions that match the requested `selector`.
     ///
     /// # Arguments
@@ -1204,10 +1280,8 @@ impl Session {
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
-        let timeout = {
-            let conf = &self.0.runtime.config().lock().0;
-            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
-        };
+        let timeout =
+            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         SessionGetBuilder {
             session: self,
@@ -1245,10 +1319,9 @@ impl Session {
             let mut runtime = runtime.build().await?;
 
             let session = Self::init(
-                runtime.clone(),
+                runtime.clone().into(),
                 aggregated_subscribers,
                 aggregated_publishers,
-                true,
             )
             .await;
             runtime.start().await?;
@@ -1265,7 +1338,8 @@ impl SessionInner {
     pub(crate) fn declare_prefix<'a>(
         &'a self,
         prefix: &'a str,
-    ) -> impl Resolve<ZResult<ExprId>> + 'a {
+        force: bool,
+    ) -> impl Resolve<ZResult<Option<ExprId>>> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -1273,9 +1347,10 @@ impl SessionInner {
             match state
                 .local_resources
                 .iter()
-                .find(|(_expr_id, res)| res.name() == prefix)
+                .find(|(_expr_id, res)| res.resource.name() == prefix)
             {
-                Some((expr_id, _res)) => Ok(*expr_id),
+                Some((expr_id, res)) if force || res.declared => Ok(Some(*expr_id)),
+                Some(_) => Ok(None),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
@@ -1291,7 +1366,13 @@ impl SessionInner {
                             }
                         }
                     }
-                    state.local_resources.insert(expr_id, res);
+                    state.local_resources.insert(
+                        expr_id,
+                        LocalResource {
+                            resource: res,
+                            declared: false,
+                        },
+                    );
                     drop(state);
                     primitives.send_declare(&mut Declare {
                         interest_id: None,
@@ -1307,7 +1388,11 @@ impl SessionInner {
                             },
                         }),
                     });
-                    Ok(expr_id)
+                    let mut state = zwrite!(self.state);
+                    if let Some(res) = state.local_resources.get_mut(&expr_id) {
+                        res.declared = true;
+                    }
+                    Ok(Some(expr_id))
                 }
             }
         })
@@ -1472,12 +1557,13 @@ impl SessionInner {
     pub(crate) fn optimize_nonwild_prefix(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
         let ke = key_expr.as_keyexpr();
         if let Some(prefix) = ke.get_nonwild_prefix() {
-            let expr_id = self.declare_prefix(prefix.as_str()).wait()?;
-            return Ok(WireExpr {
-                scope: expr_id,
-                suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
-                mapping: Mapping::Sender,
-            });
+            if let Some(expr_id) = self.declare_prefix(prefix.as_str(), false).wait()? {
+                return Ok(WireExpr {
+                    scope: expr_id,
+                    suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
+                    mapping: Mapping::Sender,
+                });
+            }
         }
         Ok(key_expr.to_wire(self).to_owned())
     }
@@ -1527,7 +1613,7 @@ impl SessionInner {
             for res in state
                 .local_resources
                 .values_mut()
-                .filter_map(Resource::as_node_mut)
+                .filter_map(LocalResource::as_node_mut)
             {
                 res.subscribers_mut(kind)
                     .retain(|sub| sub.id != sub_state.id);
@@ -1733,6 +1819,7 @@ impl SessionInner {
             key_expr: key_expr.clone().into_owned(),
             origin,
             callback: callback.clone(),
+            history,
         };
 
         let sub_state = Arc::new(sub_state);
@@ -1744,7 +1831,7 @@ impl SessionInner {
         for res in state
             .local_resources
             .values_mut()
-            .filter_map(Resource::as_node_mut)
+            .filter_map(LocalResource::as_node_mut)
         {
             if key_expr.intersects(&res.key_expr) {
                 res.subscribers_mut(SubscriberKind::LivelinessSubscriber)
@@ -1866,7 +1953,7 @@ impl SessionInner {
                         .call(MatchingStatus { matching: true });
                 }
             }
-            Err(e) => tracing::error!("Error trying to acquire MathginListener lock: {}", e),
+            Err(e) => tracing::error!("Error trying to acquire MatchingListener lock: {}", e),
         }
         Ok(listener_state)
     }
@@ -1900,51 +1987,12 @@ impl SessionInner {
         destination: Locality,
         matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
-        if let Some(ns) = &self.namespace {
-            self.matching_status_remote_inner(
-                &(ns / key_expr.deref()).into(),
-                destination,
-                matching_type,
-            )
-        } else {
-            self.matching_status_remote_inner(key_expr, destination, matching_type)
-        }
-    }
-
-    fn matching_status_remote_inner(
-        &self,
-        key_expr: &KeyExpr,
-        destination: Locality,
-        matching_type: MatchingStatusType,
-    ) -> ZResult<MatchingStatus> {
-        let router = self.runtime.router();
-        let rtables = zread!(router.tables.tables);
-        let tables = &*rtables;
-
-        let matches = match matching_type {
-            MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_session_matching_subscriptions(
-                    tables, key_expr,
-                )
-            }
-            MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_session_matching_queryables(
-                    tables, key_expr, complete,
-                )
-            }
-        };
-
-        drop(rtables);
-        let matching = match destination {
-            Locality::Any => !matches.is_empty(),
-            Locality::Remote => matches
-                .values()
-                .any(|dir| dir.id != *self.face_id.get().unwrap()),
-            Locality::SessionLocal => matches
-                .values()
-                .any(|dir| dir.id == *self.face_id.get().unwrap()),
-        };
-        Ok(MatchingStatus { matching })
+        Ok(self.runtime.matching_status_remote(
+            key_expr,
+            destination,
+            matching_type,
+            *self.face_id.get().unwrap(),
+        ))
     }
 
     pub(crate) fn matching_status(
@@ -2001,7 +2049,7 @@ impl SessionInner {
                                 }
                                 Err(e) => {
                                     tracing::error!(
-                                        "Error trying to acquire MathginListener lock: {}",
+                                        "Error trying to acquire MatchingListener lock: {}",
                                         e
                                     );
                                 }
@@ -2038,6 +2086,7 @@ impl SessionInner {
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
         msg: impl FnOnce() -> &'a mut PushBody,
+        historical: bool,
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
@@ -2048,9 +2097,10 @@ impl SessionInner {
         if wire_expr.suffix.is_empty() {
             match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind) {
-                        if sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal))
+                    for sub in res.subscribers(kind).iter() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                         {
                             callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
                         }
@@ -2074,6 +2124,7 @@ impl SessionInner {
                     for sub in state.subscribers(kind).values() {
                         if (sub.origin == Locality::Any
                             || (local == (sub.origin == Locality::SessionLocal)))
+                            && (sub.history || (!historical))
                             && key_expr.intersects(&sub.key_expr)
                         {
                             callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
@@ -2157,28 +2208,13 @@ impl SessionInner {
             ..Push::from(make_body())
         };
         if destination != Locality::SessionLocal {
-            match &self.namespace {
-                Some(_) => {
-                    let face = primitives.as_any().downcast_ref::<Namespace>().unwrap();
-                    face.send_push(
-                        &mut push,
-                        #[cfg(feature = "unstable")]
-                        reliability,
-                        #[cfg(not(feature = "unstable"))]
-                        Reliability::DEFAULT,
-                    );
-                }
-                None => {
-                    let face = primitives.as_any().downcast_ref::<Face>().unwrap();
-                    face.send_push(
-                        &mut push,
-                        #[cfg(feature = "unstable")]
-                        reliability,
-                        #[cfg(not(feature = "unstable"))]
-                        Reliability::DEFAULT,
-                    );
-                }
-            }
+            primitives.send_push(
+                &mut push,
+                #[cfg(feature = "unstable")]
+                reliability,
+                #[cfg(not(feature = "unstable"))]
+                Reliability::DEFAULT,
+            );
         }
         if destination != Locality::Remote {
             self.execute_subscriber_callbacks(
@@ -2193,11 +2229,18 @@ impl SessionInner {
                     }
                     &mut push.payload
                 },
+                false,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
         }
         Ok(())
+    }
+
+    #[cfg(feature = "internal")]
+    #[allow(dead_code)]
+    pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
+        self.runtime.static_runtime()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2337,7 +2380,10 @@ impl SessionInner {
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.state);
-        let id = state.liveliness_qid_counter.fetch_add(1, Ordering::SeqCst);
+        // Queries must use the same id generator as liveliness subscribers.
+        // This is because both query's id and subscriber's id are used as interest id,
+        // so both must not overlap.
+        let id = self.runtime.next_id();
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
@@ -2538,9 +2584,17 @@ impl Primitives for WeakSession {
                         .map(|e| e.into_owned())
                     {
                         Ok(expr) => {
-                            state
+                            let prev = state
                                 .remote_queryables
                                 .insert(m.id, (expr.clone(), m.ext_info.complete));
+                            if let Some((prev_expr, prev_complete)) = prev {
+                                self.update_matching_status(
+                                    &state,
+                                    &prev_expr,
+                                    MatchingStatusType::Queryables(prev_complete),
+                                    false,
+                                );
+                            }
                             self.update_matching_status(
                                 &state,
                                 &expr,
@@ -2619,6 +2673,9 @@ impl Primitives for WeakSession {
                                 &m.wire_expr,
                                 Default::default(),
                                 || body.insert(Put::default().into()),
+                                // interest_id is set if the Token is an Interest::Current.
+                                // This is used to decide if subs with history=false should be called or not
+                                msg.interest_id.is_some(),
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
                             );
@@ -2636,6 +2693,10 @@ impl Primitives for WeakSession {
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
+                    // interest_id is set if the Token is an Interest::Current.
+                    // This is used to decide if liveliness subs with history=false should be called or not
+                    // NOTE: an UndeclareToken is most likely not an Interest::Current
+                    let interest_current = msg.interest_id.is_some();
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
                         let mut body = None;
@@ -2645,6 +2706,7 @@ impl Primitives for WeakSession {
                             &key_expr.to_wire(self),
                             Default::default(),
                             || body.insert(Del::default().into()),
+                            interest_current,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
                         );
@@ -2662,6 +2724,7 @@ impl Primitives for WeakSession {
                                     &key_expr.to_wire(self),
                                     Default::default(),
                                     || body.insert(Del::default().into()),
+                                    interest_current,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
                                 );
@@ -2694,6 +2757,7 @@ impl Primitives for WeakSession {
             &msg.wire_expr,
             msg.ext_qos,
             || &mut msg.payload,
+            false,
             #[cfg(feature = "unstable")]
             _reliability,
         );
@@ -2779,7 +2843,7 @@ impl Primitives for WeakSession {
                             zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
                         if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
-                                "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
+                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
                                 query.selector()
@@ -3010,10 +3074,12 @@ impl Closee for Arc<SessionInner> {
             return;
         };
 
-        if self.owns_runtime {
+        if let Some(r) = self.runtime.static_runtime() {
+            // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
             info!(zid = %self.zid(), "close session");
             self.task_controller.terminate_all_async().await;
-            self.runtime.get_closee().close_inner().await;
+            let closee = r.get_closee();
+            closee.close_inner().await;
         } else {
             self.task_controller.terminate_all_async().await;
             primitives.send_close();

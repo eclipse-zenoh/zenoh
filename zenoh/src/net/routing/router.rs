@@ -181,7 +181,7 @@ impl Router {
         Arc::new(face)
     }
 
-    pub(crate) fn new_session(
+    pub(crate) fn new_primitives(
         &self,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
         bound: Bound,

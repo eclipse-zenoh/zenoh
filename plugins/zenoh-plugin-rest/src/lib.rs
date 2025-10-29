@@ -40,7 +40,7 @@ use zenoh::{
     internal::{
         bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
-        runtime::Runtime,
+        runtime::DynamicRuntime,
         zerror,
     },
     key_expr::{keyexpr, KeyExpr},
@@ -266,7 +266,7 @@ pub struct RestPlugin {}
 impl ZenohPlugin for RestPlugin {}
 
 impl Plugin for RestPlugin {
-    type StartArgs = Runtime;
+    type StartArgs = DynamicRuntime;
     type Instance = zenoh::internal::plugins::RunningPlugin;
     const DEFAULT_NAME: &'static str = "rest";
     const PLUGIN_VERSION: &'static str = plugin_version!();
@@ -282,12 +282,12 @@ impl Plugin for RestPlugin {
         zenoh::init_log_from_env_or("error");
         tracing::debug!("REST plugin {}", LONG_VERSION.as_str());
 
-        let runtime_conf = runtime.config().lock();
-        let plugin_conf = runtime_conf
-            .plugin(name)
-            .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
+        let plugin_conf = runtime
+            .get_config()
+            .get_plugin_config(name)
+            .map_err(|_| zerror!("Plugin `{}`: missing config", name))?;
 
-        let conf: Config = serde_json::from_value(plugin_conf.clone())
+        let conf: Config = serde_json::from_value(plugin_conf)
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
         WORKER_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
         MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
@@ -515,7 +515,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     }
 }
 
-pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
+pub async fn run(runtime: DynamicRuntime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.

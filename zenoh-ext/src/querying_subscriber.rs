@@ -166,7 +166,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
 impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, Callback<Sample>> {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber to run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
     #[zenoh_macros::unstable]
@@ -405,24 +405,24 @@ where
 // and are considered as older than any sample with Timestamp.
 struct MergeQueue {
     untimestamped: VecDeque<Sample>,
-    timstamped: BTreeMap<Timestamp, Sample>,
+    timestamped: BTreeMap<Timestamp, Sample>,
 }
 
 impl MergeQueue {
     fn new() -> Self {
         MergeQueue {
             untimestamped: VecDeque::new(),
-            timstamped: BTreeMap::new(),
+            timestamped: BTreeMap::new(),
         }
     }
 
     fn len(&self) -> usize {
-        self.untimestamped.len() + self.timstamped.len()
+        self.untimestamped.len() + self.timestamped.len()
     }
 
     fn push(&mut self, sample: Sample) {
         if let Some(ts) = sample.timestamp() {
-            self.timstamped.entry(*ts).or_insert(sample);
+            self.timestamped.entry(*ts).or_insert(sample);
         } else {
             self.untimestamped.push_back(sample);
         }
@@ -432,17 +432,17 @@ impl MergeQueue {
         let mut vec = VecDeque::new();
         let mut queue = BTreeMap::new();
         swap(&mut self.untimestamped, &mut vec);
-        swap(&mut self.timstamped, &mut queue);
+        swap(&mut self.timestamped, &mut queue);
         MergeQueueValues {
             untimestamped: vec,
-            timstamped: queue.into_values(),
+            timestamped: queue.into_values(),
         }
     }
 }
 
 struct MergeQueueValues {
     untimestamped: VecDeque<Sample>,
-    timstamped: btree_map::IntoValues<Timestamp, Sample>,
+    timestamped: btree_map::IntoValues<Timestamp, Sample>,
 }
 
 impl Iterator for MergeQueueValues {
@@ -450,7 +450,7 @@ impl Iterator for MergeQueueValues {
     fn next(&mut self) -> Option<Self::Item> {
         self.untimestamped
             .pop_front()
-            .or_else(|| self.timstamped.next())
+            .or_else(|| self.timestamped.next())
     }
 }
 
@@ -606,7 +606,7 @@ impl<
 where
     TryIntoSample: ExtractSample,
 {
-    /// Register the subscriber callback to be run in background until the session is closed.
+    /// Make the subscriber to run in background until the session is closed.
     ///
     /// Background builder doesn't return a `FetchingSubscriber` object anymore.
     #[zenoh_macros::unstable]
@@ -864,7 +864,7 @@ impl<Handler> FetchingSubscriber<Handler> {
 
                     // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
                     // after any timestamped Sample possibly coming from a fetch reply.
-                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissable here
+                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissible here
                     let timestamp = s
                         .timestamp()
                         .cloned()

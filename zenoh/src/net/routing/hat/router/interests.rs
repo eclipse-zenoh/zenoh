@@ -16,7 +16,7 @@ use std::sync::Arc;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare,
-    interest::{self, InterestId, InterestMode},
+    interest::{self, InterestId, InterestMode, InterestOptions},
     Declare, DeclareBody, DeclareFinal, Interest,
 };
 use zenoh_runtime::ZRuntime;
@@ -54,6 +54,15 @@ impl HatInterestTrait for Hat {
 
         // REVIEW(regions): mainline zenoh has a failure mode for aggregate interests from peers to routers.
         // See: https://github.com/eclipse-zenoh/zenoh/blob/1bd82eeef7d9b2df0d96dbbaf947ac75c90571aa/zenoh/src/net/routing/hat/router/interests.rs#L53-L59
+
+        let mut msg = msg.clone();
+
+        if msg.options.aggregate() && res.is_none() {
+            tracing::warn!(
+                "Received Interest with aggregate=true with empty key expression. Not supported!"
+            );
+            msg.options -= InterestOptions::AGGREGATE;
+        }
 
         if self.owns(ctx.src_face) {
             let src_nid =
@@ -94,11 +103,11 @@ impl HatInterestTrait for Hat {
             let owner_hat = &mut *south_hats[ctx.src_face.bound];
 
             if msg.mode.current() {
-                owner_hat.send_declarations(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
+                owner_hat.send_declarations(ctx.reborrow(), &msg, res.as_deref().cloned().as_mut());
             }
 
             if msg.mode.future() {
-                owner_hat.register_interest(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
+                owner_hat.register_interest(ctx.reborrow(), &msg, res.as_deref().cloned().as_mut());
             }
 
             if let Some(gwy_node_id) = self.subregion_gateway() {
@@ -148,7 +157,7 @@ impl HatInterestTrait for Hat {
                         "Finalizing current interest. It was not propagated upstream"
                     );
 
-                    let Some(dst) = owner_hat.new_remote(&ctx.src_face, msg.ext_nodeid.node_id)
+                    let Some(dst) = owner_hat.new_remote(ctx.src_face, msg.ext_nodeid.node_id)
                     else {
                         return;
                     };
@@ -289,7 +298,7 @@ impl HatInterestTrait for Hat {
         // FIXME(regions): send to the proper next-hop face in the tree centered at the source
 
         if msg.options.subscribers() {
-            self.declare_sub_interest_with_source(
+            self.declare_sub_interest(
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
@@ -301,7 +310,7 @@ impl HatInterestTrait for Hat {
             )
         }
         if msg.options.queryables() {
-            self.declare_qabl_interest_with_source(
+            self.declare_qabl_interest(
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
@@ -313,13 +322,13 @@ impl HatInterestTrait for Hat {
             )
         }
         if msg.options.tokens() {
-            self.declare_token_interest_with_source(
+            // Note: aggregation is forbidden for tokens. The flag is ignored.
+            self.declare_token_interest(
                 ctx.tables,
                 ctx.src_face,
                 msg.id,
                 res.as_deref().cloned().as_mut(),
                 msg.mode,
-                msg.options.aggregate(),
                 src_node_id,
                 ctx.send_declare,
             )
@@ -332,7 +341,7 @@ impl HatInterestTrait for Hat {
 
         let zid = self.hat_remote(src);
 
-        let Some(dst_node_id) = self.net().get_idx(&zid).map(|idx| idx.index() as NodeId) else {
+        let Some(dst_node_id) = self.net().get_idx(zid).map(|idx| idx.index() as NodeId) else {
             tracing::error!(zid = zid.short(), "ZID not found in router network");
             return;
         };
@@ -363,7 +372,7 @@ impl HatInterestTrait for Hat {
         assert!(!self.bound().is_north());
         self.assert_proper_ownership(&ctx);
 
-        let Some(zid) = self.get_router(&ctx.src_face, msg.ext_nodeid.node_id) else {
+        let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
             tracing::error!(
                 face = %ctx.src_face,
                 nid = msg.ext_nodeid.node_id,
@@ -387,7 +396,7 @@ impl HatInterestTrait for Hat {
         assert!(!self.bound().is_north());
         self.assert_proper_ownership(&ctx);
 
-        let Some(zid) = self.get_router(&ctx.src_face, msg.ext_nodeid.node_id) else {
+        let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
             tracing::error!(
                 face = %ctx.src_face,
                 nid = msg.ext_nodeid.node_id,
@@ -395,6 +404,8 @@ impl HatInterestTrait for Hat {
             );
             return None;
         };
+
+        // TODO(regions): how should the simple/aggregated resource distinction apply to router regions? (see 20a95fb)
 
         self.router_remote_interests.remove(&(zid, msg.id))
     }
@@ -408,7 +419,7 @@ impl Hat {
         owner_hat: &mut dyn HatTrait,
         id: InterestId,
     ) {
-        let Some(src) = owner_hat.new_remote(&ctx.src_face, msg.ext_nodeid.node_id) else {
+        let Some(src) = owner_hat.new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
             return;
         };
 

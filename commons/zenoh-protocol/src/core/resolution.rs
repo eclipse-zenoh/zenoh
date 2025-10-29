@@ -140,6 +140,7 @@ impl Resolution {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 

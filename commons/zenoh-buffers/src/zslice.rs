@@ -351,7 +351,7 @@ impl HasReader for &mut ZSlice {
     }
 }
 
-impl Reader for &mut ZSlice {
+impl Reader for ZSlice {
     fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let mut reader = self.as_slice().reader();
         let len = reader.read(into)?;
@@ -368,12 +368,8 @@ impl Reader for &mut ZSlice {
         Ok(())
     }
 
-    fn read_u8(&mut self) -> Result<u8, DidntRead> {
-        let mut reader = self.as_slice().reader();
-        let res = reader.read_u8()?;
-        // we trust `Reader` impl for `&[u8]` to not overflow the size of the slice
-        self.start += 1;
-        Ok(res)
+    fn remaining(&self) -> usize {
+        self.len()
     }
 
     fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
@@ -388,8 +384,12 @@ impl Reader for &mut ZSlice {
         Ok(res)
     }
 
-    fn remaining(&self) -> usize {
-        self.len()
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
+        let mut reader = self.as_slice().reader();
+        let res = reader.read_u8()?;
+        // we trust `Reader` impl for `&[u8]` to not overflow the size of the slice
+        self.start += 1;
+        Ok(res)
     }
 
     fn can_read(&self) -> bool {
@@ -397,7 +397,7 @@ impl Reader for &mut ZSlice {
     }
 }
 
-impl BacktrackableReader for &mut ZSlice {
+impl BacktrackableReader for ZSlice {
     type Mark = usize;
 
     fn mark(&mut self) -> Self::Mark {
@@ -426,6 +426,7 @@ impl std::io::Read for &mut ZSlice {
 
 #[cfg(feature = "test")]
 impl ZSlice {
+    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         use rand::Rng;
 

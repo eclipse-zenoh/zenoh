@@ -30,7 +30,11 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::{face::Face, gateway::Bound},
+        dispatcher::{
+            face::Face,
+            gateway::Bound,
+            local_resources::{LocalResourceInfoTrait, LocalResources},
+        },
         hat::{BaseContext, InterestProfile, SendDeclare},
         router::{get_or_set_route, Direction, RouteBuilder},
     },
@@ -38,7 +42,7 @@ use crate::{
 
 // FIXME(fuzzypixelz): this was added in e7f885ef due to sub reliability
 // removal. It's a ZST and should not be passed in parameters.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) struct SubscriberInfo;
 
 impl Face {
@@ -280,7 +284,7 @@ fn get_data_route(
 }
 
 #[inline]
-pub(crate) fn get_session_matching_subscriptions(
+pub(crate) fn get_matching_subscriptions(
     tables: &Tables,
     key_expr: &KeyExpr<'_>,
 ) -> HashMap<usize, Arc<FaceState>> {
@@ -428,3 +432,23 @@ pub fn route_data(
         send_push(&dir.dst_face, msg, reliability);
     }
 }
+
+impl LocalResourceInfoTrait<Arc<Resource>> for SubscriberInfo {
+    fn aggregate(
+        _self_val: Option<Self>,
+        _self_res: &Arc<Resource>,
+        other_val: &Self,
+        _other_res: &Arc<Resource>,
+    ) -> Self {
+        *other_val
+    }
+
+    fn aggregate_many<'a>(
+        _self_res: &Arc<Resource>,
+        mut iter: impl Iterator<Item = (&'a Arc<Resource>, Self)>,
+    ) -> Option<Self> {
+        iter.next().map(|(_, val)| val)
+    }
+}
+
+pub(crate) type LocalSubscribers = LocalResources<SubscriberId, Arc<Resource>, SubscriberInfo>;

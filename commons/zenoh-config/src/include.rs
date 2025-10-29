@@ -165,7 +165,7 @@ where
         }
     }
 
-    // if external file was incluided, add it's content to values
+    // if external file was included, add it's content to values
     if let Some(mut include_values) = include_object {
         values.append(include_values.as_object_mut().unwrap());
     }
