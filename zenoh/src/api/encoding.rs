@@ -82,6 +82,7 @@ pub struct Encoding(zenoh_protocol::core::Encoding);
 
 impl Encoding {
     const SCHEMA_SEP: char = ';';
+    const CUSTOM_ENCODING_ID: u16 = 0xFFFFu16;
 
     // For compatibility purposes, Zenoh reserves any prefix value from `0` to `1023`, inclusive.
 
@@ -598,7 +599,26 @@ impl Encoding {
         S: Into<String>,
     {
         let s: String = s.into();
-        self.0.schema = Some(s.into_boxed_str().into_boxed_bytes().into());
+        let schema_str = match self.0.id {
+            Self::CUSTOM_ENCODING_ID => {
+                let schema_str = self
+                    .0
+                    .schema
+                    .as_ref()
+                    .map(|schema| std::str::from_utf8(schema).unwrap_or(""))
+                    .unwrap_or("");
+                let (encoding, _) = schema_str
+                    .split_once(Self::SCHEMA_SEP)
+                    .unwrap_or((schema_str, ""));
+                match (encoding.is_empty(), s.is_empty()) {
+                    (true, _) => s,
+                    (false, true) => encoding.to_string(),
+                    (false, false) => format!("{encoding}{}{s}", Self::SCHEMA_SEP),
+                }
+            }
+            _ => s,
+        };
+        self.0.schema = Some(schema_str.into_boxed_str().into_boxed_bytes().into());
         self
     }
 }
@@ -623,9 +643,9 @@ impl From<&str> for Encoding {
         if let Some(id) = Encoding::STR_TO_ID.get(id).copied() {
             inner.id = id;
         // if id is not recognized, e.g. `t == "my_encoding"`, put it in the schema
-        // and set the id to 0xFFFF
+        // and set the id to CUSTOM_ENCODING_ID (0xFFFF)
         } else {
-            inner.id = 0xFFFF;
+            inner.id = Self::CUSTOM_ENCODING_ID;
             schema = t;
         }
         if !schema.is_empty() {
@@ -796,5 +816,7 @@ mod tests {
         // Unknown encoding with schema
         let unknown_with_schema = Encoding::from("custom/format;v1.0");
         assert_eq!(unknown_with_schema.to_string(), "custom/format;v1.0");
+        let unknown_with_schema = unknown_with_schema.with_schema("v2.0");
+        assert_eq!(unknown_with_schema.to_string(), "custom/format;v2.0");
     }
 }
