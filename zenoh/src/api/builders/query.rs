@@ -82,6 +82,7 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
@@ -89,6 +90,8 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
+    /// Sets an optional attachment to be sent along with the publication.
+    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -100,16 +103,22 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
 
 #[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the request.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
     }
 
+    /// Changes the [`Priority`](crate::qos::Priority) of the request.
     fn priority(self, priority: Priority) -> Self {
         let qos = self.qos.priority(priority);
         Self { qos, ..self }
     }
 
+    /// Changes the Express policy to apply when routing the request.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
         Self { qos, ..self }
@@ -118,6 +127,7 @@ impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
 
 #[zenoh_macros::internal_trait]
 impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
         value.1 = encoding.into();
