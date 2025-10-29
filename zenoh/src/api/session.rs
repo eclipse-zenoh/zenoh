@@ -760,11 +760,7 @@ impl Session {
     ///
     /// Sessions are automatically closed when all their instances are dropped, same as `Arc`.
     /// You may still want to use this function to handle errors or close the session
-    /// asynchronously.
-    /// <br>
-    /// Closing the session can also save bandwidth, as it avoids propagating the undeclaration
-    /// of the remaining entities.
-    ///
+    /// explicitly.
     ///
     /// # Examples
     /// ```no_run
