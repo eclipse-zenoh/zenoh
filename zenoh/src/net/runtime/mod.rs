@@ -46,9 +46,8 @@ use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    common::ZExtBody,
-    core::{Locator, Reliability, WhatAmI, ZenohIdProto},
-    network::{oam, NetworkBodyMut, NetworkMessageMut, Oam},
+    core::{Locator, WhatAmI, ZenohIdProto},
+    network::NetworkMessageMut,
 };
 use zenoh_result::{bail, ZResult};
 use zenoh_runtime::ZRuntime;
@@ -751,18 +750,6 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                     && north_bound_transport_peer_count(runtime, &peer) > 0
                 {
                     bail!("Client runtimes only accept one north-bound transport");
-                }
-
-                if !bound.is_north() && peer.whatami == WhatAmI::Peer {
-                    transport.schedule(NetworkMessageMut {
-                        body: NetworkBodyMut::OAM(&mut Oam {
-                            id: oam::id::OAM_IS_GATEWAY,
-                            body: ZExtBody::Unit,
-                            ext_qos: oam::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                        }),
-                        reliability: Reliability::Reliable,
-                    })?;
                 }
 
                 Ok(Arc::new(RuntimeSession {

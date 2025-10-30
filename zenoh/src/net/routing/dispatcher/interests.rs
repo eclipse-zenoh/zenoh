@@ -310,7 +310,7 @@ impl Face {
         if self.state.whatami == WhatAmI::Peer && interest_id == 0 {
             tracing::debug!(dst = %ctx.src_face, "Finalizing (peer-to-peer) initial interest");
 
-            let peer_owner_hat = &mut tables.hats[self.state.bound];
+            let peer_owner_hat = &mut tables.hats[self.state.local_bound];
             let Some(src) = peer_owner_hat.new_remote(ctx.src_face, node_id) else {
                 return;
             };
@@ -319,7 +319,7 @@ impl Face {
             return;
         }
 
-        if !self.state.bound.is_north() {
+        if !self.state.local_bound.is_north() {
             tracing::error!(
                 interest_id,
                 "Received current interest finalization from south/eastwest-bound face. \

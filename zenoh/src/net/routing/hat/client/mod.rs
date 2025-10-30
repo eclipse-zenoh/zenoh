@@ -97,7 +97,7 @@ impl Hat {
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.bound
+        self.bound == face.local_bound
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].

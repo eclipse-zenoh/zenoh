@@ -161,7 +161,7 @@ impl Router {
             state: newface,
         };
         let mut declares = vec![];
-        tables.hats[face.state.bound]
+        tables.hats[face.state.local_bound]
             // FIXME(regions): what if face.local is false?
             .new_local_face(
                 BaseContext {
@@ -191,6 +191,7 @@ impl Router {
                 tables.data.new_face_id(),
                 tables.data.zid,
                 bound,
+                Bound::North,
                 primitives.clone(),
                 tables.hats.map_ref(|hat| hat.new_face()),
             )
@@ -228,6 +229,7 @@ impl Router {
                     fid,
                     zid,
                     bound,
+                    transport.get_bound().unwrap_or_default().into(),
                     mux.clone(),
                     tables.hats.map_ref(|hat| hat.new_face()),
                 )
@@ -240,6 +242,22 @@ impl Router {
                 Arc::new(builder.build())
             })
             .clone();
+
+        let gwy_count = tables
+            .data
+            .faces
+            .iter()
+            .filter(|(_, f)| !f.remote_bound.is_north())
+            .count();
+
+        if gwy_count > 1 {
+            tracing::error!(
+                total = gwy_count,
+                "Multiple gateways found in peer subregion. \
+                Only one gateway per subregion is supported."
+            );
+        }
+
         newface.set_interceptors_from_factories(
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
@@ -290,6 +308,7 @@ impl Router {
                 fid,
                 ZenohIdProto::from_str("1").unwrap(),
                 bound,
+                Bound::North, // TODO
                 mux.clone(),
                 tables.hats.map_ref(|hat| hat.new_face()),
             )
@@ -331,6 +350,7 @@ impl Router {
             fid,
             peer.zid,
             bound,
+            Bound::North, // TODO
             Arc::new(DummyPrimitives),
             tables.hats.map_ref(|hat| hat.new_face()),
         )

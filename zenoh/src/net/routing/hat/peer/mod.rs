@@ -35,7 +35,7 @@ use zenoh_protocol::{
             QueryableId, SubscriberId, TokenId,
         },
         interest::{InterestId, InterestOptions},
-        oam::id::{OAM_IS_GATEWAY, OAM_LINKSTATE},
+        oam::id::OAM_LINKSTATE,
         Declare, DeclareBody, DeclareFinal, Oam,
     },
 };
@@ -119,18 +119,10 @@ impl Hat {
         tables.hats[self.bound].mcast_groups.iter()
     }
 
-    pub(crate) fn face<'t>(
-        &self,
-        tables: &'t TablesData,
-        zid: &ZenohIdProto,
-    ) -> Option<&'t Arc<FaceState>> {
-        tables.faces.values().find(|face| face.zid == *zid)
-    }
-
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.bound
+        self.bound == face.local_bound
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -221,7 +213,7 @@ impl HatBaseTrait for Hat {
     ) -> ZResult<()> {
         self.interests_new_face(ctx.reborrow());
 
-        let profile = if ctx.src_face.bound.is_north() {
+        let profile = if ctx.src_face.local_bound.is_north() {
             InterestProfile::Push
         } else {
             InterestProfile::Pull
@@ -242,7 +234,7 @@ impl HatBaseTrait for Hat {
         transport: &TransportUnicast,
     ) -> ZResult<()> {
         // FIXME(regions): compute proper profile
-        let profile = if ctx.src_face.bound.is_north() {
+        let profile = if ctx.src_face.local_bound.is_north() {
             InterestProfile::Push
         } else {
             InterestProfile::Pull
@@ -375,7 +367,7 @@ impl HatBaseTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
-        tables: &mut TablesData,
+        _tables: &mut TablesData,
         _tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
         zid: &ZenohIdProto,
@@ -400,29 +392,29 @@ impl HatBaseTrait for Hat {
                     }
                 };
             }
-        } else if oam.id == OAM_IS_GATEWAY {
-            let Some(face) = self.face(tables, zid) else {
-                bail!("Could not find transport face for ZID {zid}")
-            };
+        // } else if oam.id == OAM_IS_GATEWAY {
+        //     let Some(face) = self.face(tables, zid) else {
+        //         bail!("Could not find transport face for ZID {zid}")
+        //     };
 
-            tracing::trace!(id = %"OAM_IS_GATEWAY");
+        //     tracing::trace!(id = %"OAM_IS_GATEWAY");
 
-            self.face_hat_mut(&mut face.clone()).is_gateway = true;
+        //     self.face_hat_mut(&mut face.clone()).is_gateway = true;
 
-            let gwy_count = self
-                .faces(tables)
-                .iter()
-                .filter(|(_, f)| self.face_hat(f).is_gateway)
-                .count();
+        //     let gwy_count = self
+        //         .faces(tables)
+        //         .iter()
+        //         .filter(|(_, f)| self.face_hat(f).is_gateway)
+        //         .count();
 
-            if gwy_count > 1 {
-                tracing::error!(
-                    bound = ?self.bound,
-                    total = gwy_count,
-                    "Multiple gateways found in peer subregion. \
-                    Only one gateway per subregion is supported."
-                );
-            }
+        //     if gwy_count > 1 {
+        //         tracing::error!(
+        //             bound = ?self.bound,
+        //             total = gwy_count,
+        //             "Multiple gateways found in peer subregion. \
+        //             Only one gateway per subregion is supported."
+        //         );
+        //     }
         }
 
         Ok(())
@@ -494,7 +486,6 @@ struct HatFace {
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
     local_qabls: LocalQueryables,
     remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
-    is_gateway: bool,
 }
 
 impl HatFace {
@@ -508,7 +499,6 @@ impl HatFace {
             remote_tokens: HashMap::new(),
             local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
-            is_gateway: false,
         }
     }
 }

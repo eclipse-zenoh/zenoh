@@ -69,6 +69,15 @@ impl From<Bound> for zenoh_transport::Bound {
     }
 }
 
+impl From<zenoh_transport::Bound> for Bound {
+    fn from(value: zenoh_transport::Bound) -> Self {
+        match value {
+            zenoh_transport::Bound::North => Self::North,
+            zenoh_transport::Bound::South => Self::South { index: 0 },
+        }
+    }
+}
+
 // TODO(regions): optimization
 #[derive(Debug, Default)]
 pub(crate) struct BoundMap<D>(hashbrown::HashMap<Bound, D>);

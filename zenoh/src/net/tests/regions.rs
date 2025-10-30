@@ -18,13 +18,12 @@ use std::sync::{Arc, Mutex};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
-    common::ZExtBody,
     core::{WireExpr, ZenohIdProto},
     network::{
         self,
         declare::{self, queryable::ext::QueryableInfoType},
         interest::{InterestMode, InterestOptions},
-        Declare, DeclareBody, DeclareSubscriber, Interest, Oam, Request,
+        Declare, DeclareBody, DeclareSubscriber, Interest, Request,
     },
     zenoh::{ConsolidationMode, Query, RequestBody},
 };
@@ -68,6 +67,7 @@ fn test_client_to_client_query_route_computation() {
                 tables.data.new_face_id(),
                 ZenohIdProto::rand(),
                 SUBREGION,
+                Bound::north(),
                 Arc::new(DummyPrimitives),
                 tables.hats.map_ref(|hat| hat.new_face()),
             )
@@ -80,6 +80,7 @@ fn test_client_to_client_query_route_computation() {
                 tables.data.new_face_id(),
                 ZenohIdProto::rand(),
                 SUBREGION,
+                Bound::north(),
                 dst_buf.clone(),
                 tables.hats.map_ref(|hat| hat.new_face()),
             )
@@ -127,6 +128,7 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             Bound::north(),
+            Bound::south(0),
             client_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -139,6 +141,7 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
+            Bound::north(),
             Bound::north(),
             client_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
@@ -192,11 +195,12 @@ fn test_peer_interest_propagation() {
     };
 
     let gateway_buf = Arc::new(InterestBuffer::default());
-    let gateway_face = router.new_face(|tables| {
+    let _gateway_face = router.new_face(|tables| {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             Bound::north(),
+            Bound::south(0),
             gateway_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -209,6 +213,7 @@ fn test_peer_interest_propagation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
+            Bound::north(),
             Bound::north(),
             peer_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
@@ -223,33 +228,13 @@ fn test_peer_interest_propagation() {
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             Bound::session(),
+            Bound::north(),
             client_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
         .whatami(WhatAmI::Client)
         .build()
     });
-
-    {
-        let mut tables_guard = router.tables.tables.write().unwrap();
-        let tables = &mut *tables_guard;
-
-        tables.hats[Bound::north()]
-            .handle_oam(
-                &mut tables.data,
-                &router.tables,
-                &mut Oam {
-                    id: network::oam::id::OAM_IS_GATEWAY,
-                    body: ZExtBody::Unit,
-                    ext_qos: network::oam::ext::QoSType::DEFAULT,
-                    ext_tstamp: Some(network::oam::ext::TimestampType::rand()),
-                },
-                &gateway_face.state.zid,
-                gateway_face.state.whatami,
-                &mut default_send_declare(),
-            )
-            .unwrap();
-    }
 
     let mut msg = Interest {
         id: 1,
@@ -297,11 +282,12 @@ fn test_peer_gateway_interest_propagation() {
     };
 
     let gateway_buf = Arc::new(InterestBuffer::default());
-    let gateway_face = router.new_face(|tables| {
+    let _gateway_face = router.new_face(|tables| {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             Bound::north(),
+            Bound::south(0),
             gateway_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -309,33 +295,13 @@ fn test_peer_gateway_interest_propagation() {
         .build()
     });
 
-    {
-        let mut tables_guard = router.tables.tables.write().unwrap();
-        let tables = &mut *tables_guard;
-
-        tables.hats[Bound::north()]
-            .handle_oam(
-                &mut tables.data,
-                &router.tables,
-                &mut Oam {
-                    id: network::oam::id::OAM_IS_GATEWAY,
-                    body: ZExtBody::Unit,
-                    ext_qos: network::oam::ext::QoSType::DEFAULT,
-                    ext_tstamp: Some(network::oam::ext::TimestampType::rand()),
-                },
-                &gateway_face.state.zid,
-                gateway_face.state.whatami,
-                &mut default_send_declare(),
-            )
-            .unwrap();
-    }
-
     let peer_buf = Arc::new(InterestBuffer::default());
     let peer_face = router.new_face(|tables| {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             PEER_SUBREGION,
+            Bound::north(),
             peer_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -397,6 +363,7 @@ fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mo
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             SUBREGION2,
+            Bound::north(),
             buf2.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -422,6 +389,7 @@ fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mo
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
+            Bound::north(),
             Bound::north(),
             buf0.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),

@@ -41,7 +41,7 @@ impl Hat {
     pub(super) fn interests_new_face(&self, ctx: BaseContext) {
         if ctx.src_face.whatami != WhatAmI::Client {
             for mut face in self.faces(ctx.tables).values().cloned().collect::<Vec<_>>() {
-                if self.face_hat(&face).is_gateway {
+                if !face.remote_bound.is_north() {
                     for RemoteInterest { res, options, .. } in
                         self.face_hat_mut(&mut face).remote_interests.values()
                     {
@@ -101,9 +101,9 @@ impl HatInterestTrait for Hat {
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
         assert!(self.bound().is_north());
-        assert!(!ctx.src_face.bound.is_north());
+        assert!(!ctx.src_face.local_bound.is_north());
 
-        let owner_hat = &mut *south_hats[ctx.src_face.bound];
+        let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
 
         if msg.mode.current() {
             owner_hat.send_declarations(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
@@ -119,7 +119,7 @@ impl HatInterestTrait for Hat {
 
         let interest = Arc::new(CurrentInterest {
             src,
-            src_bound: ctx.src_face.bound,
+            src_bound: ctx.src_face.local_bound,
             src_interest_id: msg.id,
             mode: msg.mode,
         });
@@ -136,7 +136,7 @@ impl HatInterestTrait for Hat {
             .faces_mut(ctx.tables)
             .values()
             .filter(|f| {
-                self.face_hat(f).is_gateway
+                (!f.remote_bound.is_north())
                     || (f.whatami == WhatAmI::Peer
                         && msg.options.tokens()
                         && msg.mode == InterestMode::Current
@@ -225,11 +225,11 @@ impl HatInterestTrait for Hat {
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
         assert!(self.bound().is_north());
-        assert!(!ctx.src_face.bound.is_north());
+        assert!(!ctx.src_face.local_bound.is_north());
 
         // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
 
-        let owner_hat = &mut *south_hats[ctx.src_face.bound];
+        let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
 
         let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
             tracing::error!(id = msg.id, "Unknown remote interest");
@@ -238,7 +238,7 @@ impl HatInterestTrait for Hat {
 
         if let Some(dst_face) = self
             .owned_faces_mut(ctx.tables)
-            .find(|f| self.face_hat(f).is_gateway)
+            .find(|f| !f.remote_bound.is_north())
             .map(get_mut_unchecked)
         {
             dst_face.local_interests.retain(|id, local_interest| {
@@ -294,9 +294,9 @@ impl HatInterestTrait for Hat {
             });
         } else {
             assert!(self.bound().is_north());
-            assert!(ctx.src_face.bound.is_north());
+            assert!(ctx.src_face.local_bound.is_north());
 
-            if !self.face_hat(ctx.src_face).is_gateway {
+            if ctx.src_face.remote_bound.is_north() {
                 tracing::error!(
                     id = interest_id,
                     src = %ctx.src_face,

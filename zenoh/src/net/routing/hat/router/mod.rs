@@ -221,13 +221,13 @@ impl Hat {
     pub(crate) fn owns_router(&self, face: &FaceState) -> bool {
         // TODO(regions): move `face.whatami == WhatAmI::Router` out of here
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.bound && face.whatami == WhatAmI::Router
+        self.bound == face.local_bound && face.whatami == WhatAmI::Router
     }
 
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.bound
+        self.bound == face.local_bound
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -445,7 +445,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn close_face(&mut self, mut ctx: BaseContext, tables_ref: &Arc<TablesLock>) {
-        let profile = InterestProfile::with_bound_flow((&ctx.src_face.bound, &self.bound));
+        let profile = InterestProfile::with_bound_flow((&ctx.src_face.local_bound, &self.bound));
 
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);

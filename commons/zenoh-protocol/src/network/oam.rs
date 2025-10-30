@@ -27,7 +27,6 @@ pub mod id {
     pub const OAM_LINKSTATE: OamId = 0x0001;
     pub const OAM_RESERVED_0: OamId = 0x0002;
     pub const OAM_RESERVED_1: OamId = 0x0003;
-    pub const OAM_IS_GATEWAY: OamId = 0x0004;
 }
 
 /// ```text

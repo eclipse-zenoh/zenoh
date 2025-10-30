@@ -93,7 +93,7 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.bound);
+                tracing::trace!(?self.state.local_bound);
 
                 for (bound, hat) in tables.hats.iter_mut() {
                     hat.declare_subscription(
@@ -107,7 +107,7 @@ impl Face {
                         &mut res,
                         node_id,
                         sub_info,
-                        InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                        InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
                     );
 
                     disable_matches_data_routes(&mut res, bound);
@@ -176,7 +176,7 @@ impl Face {
                 id,
                 res.clone(),
                 node_id,
-                InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
             );
 
             match res {

@@ -628,10 +628,10 @@ impl HatQueriesTrait for Hat {
             }
         }
 
-        if !src_face.bound.is_north() {
+        if !src_face.local_bound.is_north() {
             // TODO: BestMatching: What if there is a local compete ?
             for face in self.faces(tables).values() {
-                if self.face_hat(face).is_gateway {
+                if !face.remote_bound.is_north() {
                     let has_interest_finalized = expr
                         .resource()
                         .and_then(|res| res.face_ctxs.get(&face.id))
@@ -651,7 +651,7 @@ impl HatQueriesTrait for Hat {
                         });
                     }
                 } else if face.whatami == WhatAmI::Peer
-                    && face.bound.is_north() // REVIEW(regions): not sure
+                    && face.local_bound.is_north() // REVIEW(regions): not sure
                     && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
                     tracing::trace!(dst = %face, reason = "unfinalized initial interest");

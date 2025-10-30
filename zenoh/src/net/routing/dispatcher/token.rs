@@ -80,7 +80,7 @@ impl Face {
                 let tables = &mut *wtables;
 
                 if let Some(interest_id) = interest_id {
-                    if !self.state.bound.is_north() {
+                    if !self.state.local_bound.is_north() {
                         tracing::error!(
                             id,
                             "Received current token from south/eastwest-bound face. \
@@ -118,7 +118,7 @@ impl Face {
                             &mut res,
                             node_id,
                             interest_id,
-                            InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                            InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
                         );
                     }
                 }
@@ -190,7 +190,7 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        tracing::trace!(?self.state.bound);
+        tracing::trace!(?self.state.local_bound);
 
         let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
             let res = hat.undeclare_token(
@@ -203,7 +203,7 @@ impl Face {
                 id,
                 res.clone(),
                 node_id,
-                InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
             );
 
             match res {

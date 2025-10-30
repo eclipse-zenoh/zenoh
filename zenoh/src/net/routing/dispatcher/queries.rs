@@ -185,7 +185,7 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.bound);
+                tracing::trace!(?self.state.local_bound);
 
                 for (bound, hat) in tables.hats.iter_mut() {
                     hat.declare_queryable(
@@ -199,7 +199,7 @@ impl Face {
                         &mut res,
                         node_id,
                         qabl_info,
-                        InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                        InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
                     );
                 }
 
@@ -264,7 +264,7 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        tracing::trace!(?self.state.bound);
+        tracing::trace!(?self.state.local_bound);
 
         let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
             let res = hat.undeclare_queryable(
@@ -277,7 +277,7 @@ impl Face {
                 id,
                 res.clone(),
                 node_id,
-                InterestProfile::with_bound_flow((&self.state.bound, bound)),
+                InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
             );
 
             match res {

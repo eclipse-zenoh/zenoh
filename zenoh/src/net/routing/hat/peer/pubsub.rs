@@ -595,9 +595,9 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if !src_face.bound.is_north() {
+        if !src_face.local_bound.is_north() {
             for face in self.faces(tables).values() {
-                if self.face_hat(face).is_gateway {
+                if !face.remote_bound.is_north() {
                     route.try_insert(face.id, || {
                         let has_interest_finalized = expr
                             .resource()
@@ -615,7 +615,7 @@ impl HatPubSubTrait for Hat {
                         })
                     });
                 } else if face.whatami == WhatAmI::Peer
-                    && face.bound.is_north() // REVIEW(regions): not sure
+                    && face.local_bound.is_north() // REVIEW(regions): not sure
                     && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
                     tracing::trace!(dst = %face, reason = "unfinalized initial interest");

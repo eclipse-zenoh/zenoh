@@ -111,7 +111,8 @@ pub struct FaceState {
     pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
-    pub(crate) bound: Bound,
+    pub(crate) local_bound: Bound,
+    pub(crate) remote_bound: Bound,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -136,7 +137,8 @@ impl FaceStateBuilder {
     pub(crate) fn new(
         id: usize,
         zid: ZenohIdProto,
-        bound: Bound,
+        local_bound: Bound,
+        remote_bound: Bound,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
         hats: BoundMap<Box<dyn Any + Send + Sync>>,
     ) -> Self {
@@ -144,7 +146,8 @@ impl FaceStateBuilder {
             id,
             zid,
             whatami: WhatAmI::default(),
-            bound,
+            local_bound,
+            remote_bound,
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
@@ -320,7 +323,7 @@ impl FaceState {
 
 impl fmt::Display for FaceState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}:{}", self.id, self.zid.short(), self.bound)
+        write!(f, "{}:{}:{}", self.id, self.zid.short(), self.local_bound)
     }
 }
 
@@ -329,7 +332,7 @@ impl fmt::Debug for FaceState {
         f.debug_struct("FaceState")
             .field("id", &self.id)
             .field("zid", &self.zid)
-            .field("bound", &self.bound)
+            .field("bound", &self.local_bound)
             .finish()
     }
 }
@@ -558,7 +561,7 @@ impl Primitives for Face {
         });
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
-        tables.hats[self.state.bound].close_face(
+        tables.hats[self.state.local_bound].close_face(
             BaseContext {
                 tables_lock: &self.tables,
                 tables: &mut tables.data,

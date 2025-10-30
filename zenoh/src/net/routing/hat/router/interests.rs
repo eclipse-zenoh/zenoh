@@ -101,7 +101,7 @@ impl HatInterestTrait for Hat {
                 );
             }
         } else {
-            let owner_hat = &mut *south_hats[ctx.src_face.bound];
+            let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
 
             if msg.mode.current() {
                 owner_hat.send_declarations(ctx.reborrow(), &msg, res.as_deref().cloned().as_mut());
@@ -219,7 +219,7 @@ impl HatInterestTrait for Hat {
                 );
             }
         } else {
-            let owner_hat = &mut *south_hats[ctx.src_face.bound];
+            let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
 
             let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
                 tracing::error!(id = msg.id, "Unknown remote interest");
@@ -517,7 +517,7 @@ impl Hat {
                 interest: Arc::new(CurrentInterest {
                     src,
                     src_interest_id: id,
-                    src_bound: ctx.src_face.bound,
+                    src_bound: ctx.src_face.local_bound,
                     mode: msg.mode,
                 }),
                 cancellation_token,
