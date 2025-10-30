@@ -449,7 +449,7 @@ fn test_declaration_propagation_to_late_faces_client_peer_client() {
 
 // FIXME(regions): this fails because face0 is considered local
 #[ignore]
-fn test_declaration_propagation_to_late_faces_router_router_peer() {
+fn _test_declaration_propagation_to_late_faces_router_router_peer() {
     test_declaration_propagation_to_late_faces(WhatAmI::Router, WhatAmI::Router, WhatAmI::Peer);
 }
 

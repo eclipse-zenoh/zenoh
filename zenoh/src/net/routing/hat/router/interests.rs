@@ -13,6 +13,7 @@
 //
 use std::sync::Arc;
 
+use itertools::Itertools;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
     declare,
@@ -228,28 +229,26 @@ impl HatInterestTrait for Hat {
             if let Some(gwy_node_id) = self.subregion_gateway() {
                 let src_nid = self.net().idx.index() as NodeId;
 
-                let local_interests = self
-                    .router_local_interests
-                    .extract_if(|_, local_interest| local_interest == &remote_interest)
-                    .collect::<Vec<_>>();
-
-                for (id, _local_interest) in local_interests {
-                    self.send_point_to_point(ctx.reborrow(), gwy_node_id, |next_hop| {
-                        next_hop.primitives.send_interest(RoutingContext::with_expr(
-                            &mut Interest {
-                                id,
-                                mode: InterestMode::Final,
-                                // NOTE: InterestMode::Final options are undefined in the current protocol specification,
-                                // they are initialized here for internal use by local egress interceptors.
-                                options: msg.options,
-                                wire_expr: None,
-                                ext_qos: msg.ext_qos,
-                                ext_tstamp: msg.ext_tstamp,
-                                ext_nodeid: interest::ext::NodeIdType { node_id: src_nid },
-                            },
-                            "".to_string(),
-                        ));
-                    });
+                for id in self.router_local_interests.keys().cloned().collect_vec() {
+                    if self.router_local_interests.get(&id).is_some_and(|local_interest| local_interest == &remote_interest) {
+                        self.router_local_interests.remove(&id);
+                        self.send_point_to_point(ctx.reborrow(), gwy_node_id, |next_hop| {
+                            next_hop.primitives.send_interest(RoutingContext::with_expr(
+                                &mut Interest {
+                                    id,
+                                    mode: InterestMode::Final,
+                                    // NOTE: InterestMode::Final options are undefined in the current protocol specification,
+                                    // they are initialized here for internal use by local egress interceptors.
+                                    options: msg.options,
+                                    wire_expr: None,
+                                    ext_qos: msg.ext_qos,
+                                    ext_tstamp: msg.ext_tstamp,
+                                    ext_nodeid: interest::ext::NodeIdType { node_id: src_nid },
+                                },
+                                "".to_string(),
+                            ));
+                        });
+                    }
                 }
             } else {
                 tracing::debug!(
