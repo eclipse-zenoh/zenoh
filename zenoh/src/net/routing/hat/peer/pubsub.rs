@@ -40,8 +40,7 @@ use crate::{
         },
         hat::{
             peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
-            BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, InterestProfile,
-            SendDeclare, Sources,
+            BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources,
         },
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
@@ -174,7 +173,6 @@ impl Hat {
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
         _sub_info: &SubscriberInfo,
-        profile: InterestProfile,
     ) {
         if (src_face.id != dst_face.id)
             && !self
@@ -183,7 +181,7 @@ impl Hat {
                 .contains_simple_resource(res)
             && self.should_route_between(src_face, dst_face)
         {
-            if profile.is_push() {
+            if dst_face.whatami != WhatAmI::Client {
                 self.maybe_register_local_subscriber(
                     dst_face,
                     res,
@@ -201,7 +199,6 @@ impl Hat {
         mut ctx: BaseContext,
         res: &Arc<Resource>,
         sub_info: &SubscriberInfo,
-        profile: InterestProfile,
     ) {
         for mut dst_face in self
             .faces(ctx.tables)
@@ -216,7 +213,6 @@ impl Hat {
                 &mut dst_face,
                 res,
                 sub_info,
-                profile,
             );
         }
     }
@@ -257,11 +253,10 @@ impl Hat {
         id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
-        profile: InterestProfile,
     ) {
         self.register_simple_subscription(ctx.reborrow(), id, res, sub_info);
 
-        self.propagate_simple_subscription(ctx.reborrow(), res, sub_info, profile);
+        self.propagate_simple_subscription(ctx.reborrow(), res, sub_info);
         // This introduced a buffer overflow on windows
         // TODO: Let's deactivate this on windows until Fixed
         #[cfg(not(windows))]
@@ -349,7 +344,7 @@ impl Hat {
         }
     }
 
-    pub(super) fn pubsub_new_face(&self, mut ctx: BaseContext, profile: InterestProfile) {
+    pub(super) fn pubsub_new_face(&self, mut ctx: BaseContext) {
         let sub_info = SubscriberInfo;
         for mut face in self
             .faces(ctx.tables)
@@ -365,7 +360,6 @@ impl Hat {
                     dst_face,  // dst
                     sub,
                     &sub_info,
-                    profile,
                 );
             }
         }
@@ -484,10 +478,9 @@ impl HatPubSubTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         sub_info: &SubscriberInfo,
-        profile: InterestProfile,
     ) {
         // TODO(regions2): clients of this peer are handled as if they were bound to a future broker south hat
-        self.declare_simple_subscription(ctx, id, res, sub_info, profile);
+        self.declare_simple_subscription(ctx, id, res, sub_info);
     }
 
     fn undeclare_subscription(
@@ -496,7 +489,6 @@ impl HatPubSubTrait for Hat {
         id: SubscriberId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_subscription(ctx, id)
     }

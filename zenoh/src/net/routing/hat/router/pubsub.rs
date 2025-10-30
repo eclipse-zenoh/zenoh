@@ -43,8 +43,7 @@ use crate::{
                 tables::{Route, RoutingExpr, TablesData},
             },
             hat::{
-                BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, InterestProfile,
-                SendDeclare, Sources,
+                BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources,
             },
             router::{disable_matches_data_routes, Direction, RouteBuilder, DEFAULT_NODE_ID},
             RoutingContext,
@@ -53,6 +52,54 @@ use crate::{
 };
 
 impl Hat {
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    fn send_sourced_subscription_to_net_children(
+        &self,
+        tables: &TablesData,
+        net: &Network,
+        children: &[NodeIndex],
+        res: &Arc<Resource>,
+        src_face: Option<&Arc<FaceState>>,
+        _sub_info: &SubscriberInfo,
+        routing_context: NodeId,
+    ) {
+        for child in children {
+            if net.graph.contains_node(*child) {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
+                    Some(mut someface) => {
+                        if src_face
+                            .map(|src_face| someface.id != src_face.id)
+                            .unwrap_or(true)
+                        {
+                            let push_declaration = self.push_declaration_profile(&someface);
+                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+
+                            someface.primitives.send_declare(RoutingContext::with_expr(
+                                &mut Declare {
+                                    interest_id: None,
+                                    ext_qos: ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType {
+                                        node_id: routing_context,
+                                    },
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id: 0, // Sourced subscriptions do not use ids
+                                        wire_expr: key_expr,
+                                    }),
+                                },
+                                res.expr().to_string(),
+                            ));
+                        }
+                    }
+                    None => {
+                        tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid)
+                    }
+                }
+            }
+        }
+    }
+
     #[inline]
     fn maybe_register_local_subscriber(
         &self,
@@ -161,84 +208,6 @@ impl Hat {
         }
     }
 
-    fn get_subscribers_matching_resource(
-        &self,
-        tables: &TablesData,
-        face: &Arc<FaceState>,
-        res: Option<&Arc<Resource>>,
-    ) -> Vec<Arc<Resource>> {
-        let face_id = face.id;
-        let face_what_am_i = face.whatami;
-
-        self.router_subs
-            .iter()
-            .filter(move |sub| {
-                sub.ctx.is_some()
-                    && res.as_ref().map(|r| sub.matches(r)).unwrap_or(true)
-                    && (self
-                        .res_hat(sub)
-                        .router_subs
-                        .iter()
-                        .any(|r| *r != tables.zid)
-                        || sub.face_ctxs.values().any(|s| {
-                            s.face.id != face_id
-                                && s.subs.is_some()
-                                && (s.face.whatami == WhatAmI::Client
-                                    || face_what_am_i == WhatAmI::Client)
-                        }))
-            })
-            .cloned()
-            .collect()
-    }
-
-    #[inline]
-    #[allow(clippy::too_many_arguments)]
-    fn send_sourced_subscription_to_net_children(
-        &self,
-        tables: &TablesData,
-        net: &Network,
-        children: &[NodeIndex],
-        res: &Arc<Resource>,
-        src_face: Option<&Arc<FaceState>>,
-        _sub_info: &SubscriberInfo,
-        routing_context: NodeId,
-    ) {
-        for child in children {
-            if net.graph.contains_node(*child) {
-                match self.face(tables, &net.graph[*child].zid).cloned() {
-                    Some(mut someface) => {
-                        if src_face
-                            .map(|src_face| someface.id != src_face.id)
-                            .unwrap_or(true)
-                        {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
-
-                            someface.primitives.send_declare(RoutingContext::with_expr(
-                                &mut Declare {
-                                    interest_id: None,
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType {
-                                        node_id: routing_context,
-                                    },
-                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id: 0, // Sourced subscriptions do not use ids
-                                        wire_expr: key_expr,
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ));
-                        }
-                    }
-                    None => {
-                        tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid)
-                    }
-                }
-            }
-        }
-    }
-
     #[inline]
     fn propagate_simple_subscription_to(
         &self,
@@ -331,7 +300,6 @@ impl Hat {
         sub_info: &SubscriberInfo,
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         if !self.res_hat(res).router_subs.contains(&router) {
             // Register router subscription
@@ -340,21 +308,8 @@ impl Hat {
                 self.router_subs.insert(res.clone());
             }
 
-            // REVIEW(regions): not sure
-            if profile.is_push()
-                || self.router_remote_interests.values().any(|interest| {
-                    interest.options.subscribers()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|r| r.matches(res))
-                            .unwrap_or(true)
-                })
-                || router != tables.zid
-            {
-                // Propagate subscription to routers
-                self.propagate_sourced_subscription(tables, res, sub_info, Some(face), &router);
-            }
+            // Propagate subscription to routers
+            self.propagate_sourced_subscription(tables, res, sub_info, Some(face), &router);
         }
 
         // Propagate subscription to clients
@@ -370,17 +325,8 @@ impl Hat {
         sub_info: &SubscriberInfo,
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
-        self.register_router_subscription(
-            tables,
-            face,
-            res,
-            sub_info,
-            router,
-            send_declare,
-            profile,
-        );
+        self.register_router_subscription(tables, face, res, sub_info, router, send_declare);
     }
 
     fn register_simple_subscription(
@@ -423,15 +369,7 @@ impl Hat {
     ) {
         self.register_simple_subscription(tables, face, id, res, sub_info);
         let zid = tables.zid;
-        self.register_router_subscription(
-            tables,
-            face,
-            res,
-            sub_info,
-            zid,
-            send_declare,
-            InterestProfile::Push,
-        );
+        self.register_router_subscription(tables, face, res, sub_info, zid, send_declare);
     }
 
     #[inline]
@@ -611,24 +549,10 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         if self.res_hat(res).router_subs.contains(router) {
             self.unregister_router_subscription(tables, res, router, send_declare);
-            // REVIEW(regions): not sure
-            if profile.is_push()
-                || self.router_remote_interests.values().any(|interest| {
-                    interest.options.subscribers()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|r| r.matches(res))
-                            .unwrap_or(true)
-                })
-                || router == &tables.zid
-            {
-                self.propagate_forget_sourced_subscription(tables, res, face, router);
-            }
+            self.propagate_forget_sourced_subscription(tables, res, face, router);
         }
     }
 
@@ -639,16 +563,14 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
-        self.undeclare_router_subscription(tables, Some(face), res, router, send_declare, profile);
+        self.undeclare_router_subscription(tables, Some(face), res, router, send_declare);
     }
 
     pub(super) fn undeclare_simple_subscription(
         &mut self,
         ctx: BaseContext,
         res: &mut Arc<Resource>,
-        profile: InterestProfile,
     ) {
         if !self
             .face_hat_mut(ctx.src_face)
@@ -669,7 +591,6 @@ impl Hat {
                     res,
                     &ctx.tables.zid.clone(),
                     ctx.send_declare,
-                    profile,
                 );
             } else {
                 self.propagate_forget_simple_subscription_to_peers(
@@ -694,10 +615,9 @@ impl Hat {
         &mut self,
         ctx: BaseContext,
         id: SubscriberId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         if let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) {
-            self.undeclare_simple_subscription(ctx, &mut res, profile);
+            self.undeclare_simple_subscription(ctx, &mut res);
             Some(res)
         } else {
             None
@@ -759,6 +679,36 @@ impl Hat {
                 }
             }
         }
+    }
+
+    fn get_subscribers_matching_resource(
+        &self,
+        tables: &TablesData,
+        face: &Arc<FaceState>,
+        res: Option<&Arc<Resource>>,
+    ) -> Vec<Arc<Resource>> {
+        let face_id = face.id;
+        let face_what_am_i = face.whatami;
+
+        self.router_subs
+            .iter()
+            .filter(move |sub| {
+                sub.ctx.is_some()
+                    && res.as_ref().map(|r| sub.matches(r)).unwrap_or(true)
+                    && (self
+                        .res_hat(sub)
+                        .router_subs
+                        .iter()
+                        .any(|r| *r != tables.zid)
+                        || sub.face_ctxs.values().any(|s| {
+                            s.face.id != face_id
+                                && s.subs.is_some()
+                                && (s.face.whatami == WhatAmI::Client
+                                    || face_what_am_i == WhatAmI::Client)
+                        }))
+            })
+            .cloned()
+            .collect()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -869,7 +819,6 @@ impl HatPubSubTrait for Hat {
         res: &mut Arc<Resource>,
         node_id: NodeId,
         sub_info: &SubscriberInfo,
-        profile: InterestProfile,
     ) {
         let router = if self.owns_router(ctx.src_face) {
             let Some(router) = self.get_router(ctx.src_face, node_id) else {
@@ -891,7 +840,6 @@ impl HatPubSubTrait for Hat {
                     sub_info,
                     router,
                     ctx.send_declare,
-                    profile,
                 );
             }
             WhatAmI::Peer | WhatAmI::Client => {
@@ -915,7 +863,6 @@ impl HatPubSubTrait for Hat {
         id: SubscriberId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         let router = if self.owns_router(ctx.src_face) {
             let Some(router) = self.get_router(ctx.src_face, node_id) else {
@@ -938,11 +885,10 @@ impl HatPubSubTrait for Hat {
                     &mut res,
                     &router,
                     ctx.send_declare,
-                    profile,
                 );
                 Some(res)
             }
-            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_subscription(ctx, id, profile),
+            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_subscription(ctx, id),
         }
     }
 

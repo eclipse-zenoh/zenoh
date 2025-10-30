@@ -17,13 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{
-    any::Any,
-    collections::HashMap,
-    fmt::{Debug, Display},
-    ops::Deref,
-    sync::Arc,
-};
+use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -81,41 +75,6 @@ impl Sources {
             routers: vec![],
             peers: vec![],
             clients: vec![],
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum InterestProfile {
-    Push,
-    Pull,
-}
-
-impl InterestProfile {
-    pub(crate) fn is_push(&self) -> bool {
-        matches!(self, InterestProfile::Push)
-    }
-
-    // REVIEW(regions): delete this?
-    // pub(crate) fn is_pull(&self) -> bool {
-    //     matches!(self, InterestProfile::Pull)
-    // }
-
-    /// Computes [`InterestProfile`] from source and destination [`Bound`]s for a given entity.
-    pub(crate) fn with_bound_flow((src, dst): (&Bound, &Bound)) -> Self {
-        if src.is_north() && !dst.is_north() {
-            Self::Pull
-        } else {
-            Self::Push
-        }
-    }
-}
-
-impl Display for InterestProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InterestProfile::Push => f.write_str("push"),
-            InterestProfile::Pull => f.write_str("pull"),
         }
     }
 }
@@ -371,9 +330,6 @@ pub(crate) trait HatInterestTrait {
 
 pub(crate) trait HatPubSubTrait {
     /// Handles subscriber declaration.
-    ///
-    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_subscription(
         &mut self,
         ctx: BaseContext,
@@ -381,20 +337,15 @@ pub(crate) trait HatPubSubTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
         sub_info: &SubscriberInfo,
-        profile: InterestProfile,
     );
 
     /// Handles subscriber undeclaration.
-    ///
-    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_subscription(
         &mut self,
         ctx: BaseContext,
         id: SubscriberId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
@@ -419,9 +370,6 @@ pub(crate) trait HatPubSubTrait {
 
 pub(crate) trait HatQueriesTrait {
     /// Handles queryable declaration.
-    ///
-    /// The declaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_queryable(
         &mut self,
         ctx: BaseContext,
@@ -429,20 +377,15 @@ pub(crate) trait HatQueriesTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
         qabl_info: &QueryableInfoType,
-        profile: InterestProfile,
     );
 
     /// Handles queryable undeclaration.
-    ///
-    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_queryable(
         &mut self,
         ctx: BaseContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
@@ -475,9 +418,6 @@ pub(crate) fn new_hat(whatami: WhatAmI, bound: Bound) -> Box<dyn HatTrait + Send
 
 pub(crate) trait HatTokenTrait {
     /// Handles token declaration.
-    ///
-    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -485,13 +425,9 @@ pub(crate) trait HatTokenTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
         interest_id: Option<InterestId>,
-        profile: InterestProfile,
     );
 
     /// Handles token declaration.
-    ///
-    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
@@ -508,16 +444,12 @@ pub(crate) trait HatTokenTrait {
     );
 
     /// Handles token undeclaration.
-    ///
-    /// The undeclaration is pushed this hat's subregion if `ctx.is_owned` is `true`
-    /// or if `profile` is [`InterestProfile::Push`].
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>>;
 }
 

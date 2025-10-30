@@ -26,7 +26,7 @@ use zenoh_protocol::{
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
     dispatcher::face::Face,
-    hat::{BaseContext, HatTrait, InterestProfile, SendDeclare},
+    hat::{BaseContext, HatTrait, SendDeclare},
     router::Resource,
 };
 
@@ -106,7 +106,7 @@ impl Face {
                             .collect(),
                     );
                 } else {
-                    for (bound, hat) in tables.hats.iter_mut() {
+                    for hat in tables.hats.values_mut() {
                         hat.declare_token(
                             BaseContext {
                                 tables_lock: &self.tables,
@@ -118,7 +118,6 @@ impl Face {
                             &mut res,
                             node_id,
                             interest_id,
-                            InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
                         );
                     }
                 }
@@ -192,7 +191,7 @@ impl Face {
 
         tracing::trace!(?self.state.local_bound);
 
-        let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
+        let res_cleanup = tables.hats.iter_mut().filter_map(|(_, hat)| {
             let res = hat.undeclare_token(
                 BaseContext {
                     tables_lock: &self.tables,
@@ -203,7 +202,6 @@ impl Face {
                 id,
                 res.clone(),
                 node_id,
-                InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
             );
 
             match res {

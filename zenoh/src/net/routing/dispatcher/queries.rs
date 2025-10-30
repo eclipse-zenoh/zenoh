@@ -49,7 +49,7 @@ use crate::{
             local_resources::{LocalResourceInfoTrait, LocalResources},
             tables::Tables,
         },
-        hat::{BaseContext, InterestProfile, SendDeclare},
+        hat::{BaseContext, SendDeclare},
         router::{get_or_set_route, QueryDirection, RouteBuilder},
     },
 };
@@ -187,7 +187,7 @@ impl Face {
 
                 tracing::trace!(?self.state.local_bound);
 
-                for (bound, hat) in tables.hats.iter_mut() {
+                for hat in tables.hats.values_mut() {
                     hat.declare_queryable(
                         BaseContext {
                             tables_lock: &self.tables,
@@ -199,7 +199,6 @@ impl Face {
                         &mut res,
                         node_id,
                         qabl_info,
-                        InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
                     );
                 }
 
@@ -277,7 +276,6 @@ impl Face {
                 id,
                 res.clone(),
                 node_id,
-                InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
             );
 
             match res {

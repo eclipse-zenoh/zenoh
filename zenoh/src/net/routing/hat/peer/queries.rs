@@ -45,8 +45,7 @@ use crate::{
         },
         hat::{
             peer::{initial_interest, INITIAL_INTEREST_ID},
-            BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, InterestProfile,
-            SendDeclare, Sources,
+            BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, SendDeclare, Sources,
         },
         RoutingContext,
     },
@@ -226,7 +225,6 @@ impl Hat {
         src_face: Option<&Arc<FaceState>>,
         dst_face: &mut Arc<FaceState>,
         res: &Arc<Resource>,
-        _profile: InterestProfile,
     ) {
         if src_face
             .as_ref()
@@ -261,7 +259,6 @@ impl Hat {
         mut ctx: BaseContext,
         src_face: Option<&Arc<FaceState>>,
         res: &Arc<Resource>,
-        profile: InterestProfile,
     ) {
         let faces = self
             .faces(ctx.tables)
@@ -269,13 +266,7 @@ impl Hat {
             .cloned()
             .collect::<Vec<Arc<FaceState>>>();
         for mut dst_face in faces {
-            self.propagate_simple_queryable_to(
-                ctx.reborrow(),
-                src_face,
-                &mut dst_face,
-                res,
-                profile,
-            );
+            self.propagate_simple_queryable_to(ctx.reborrow(), src_face, &mut dst_face, res);
         }
     }
 
@@ -307,11 +298,10 @@ impl Hat {
         id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
-        profile: InterestProfile,
     ) {
         self.register_simple_queryable(ctx.reborrow(), id, res, qabl_info);
         let src_face = ctx.src_face.clone();
-        self.propagate_simple_queryable(ctx, Some(&src_face), res, profile);
+        self.propagate_simple_queryable(ctx, Some(&src_face), res);
     }
 
     #[inline]
@@ -339,12 +329,7 @@ impl Hat {
         }
     }
 
-    pub(super) fn undeclare_simple_queryable(
-        &self,
-        mut ctx: BaseContext,
-        res: &mut Arc<Resource>,
-        profile: InterestProfile,
-    ) {
+    pub(super) fn undeclare_simple_queryable(&self, mut ctx: BaseContext, res: &mut Arc<Resource>) {
         let remote_qabl_info =
             get_remote_qabl_info(&self.face_hat_mut(ctx.src_face).remote_qabls, res);
 
@@ -353,7 +338,7 @@ impl Hat {
             if simple_qabls.is_empty() {
                 self.propagate_forget_simple_queryable(ctx.tables, res, ctx.send_declare);
             } else {
-                self.propagate_simple_queryable(ctx.reborrow(), None, res, profile);
+                self.propagate_simple_queryable(ctx.reborrow(), None, res);
             }
             if simple_qabls.len() == 1 {
                 self.maybe_unregister_local_queryable(&mut simple_qabls[0], res, ctx.send_declare);
@@ -361,21 +346,16 @@ impl Hat {
         }
     }
 
-    fn forget_simple_queryable(
-        &self,
-        ctx: BaseContext,
-        id: QueryableId,
-        profile: InterestProfile,
-    ) -> Option<Arc<Resource>> {
+    fn forget_simple_queryable(&self, ctx: BaseContext, id: QueryableId) -> Option<Arc<Resource>> {
         if let Some((mut res, _)) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) {
-            self.undeclare_simple_queryable(ctx, &mut res, profile);
+            self.undeclare_simple_queryable(ctx, &mut res);
             Some(res)
         } else {
             None
         }
     }
 
-    pub(super) fn queries_new_face(&self, mut ctx: BaseContext, profile: InterestProfile) {
+    pub(super) fn queries_new_face(&self, mut ctx: BaseContext) {
         if ctx.src_face.whatami != WhatAmI::Client {
             for face in self
                 .faces(ctx.tables)
@@ -390,7 +370,6 @@ impl Hat {
                         Some(&face.clone()), // src
                         dst_face,            // dst
                         qabl,
-                        profile,
                     );
                 }
             }
@@ -519,10 +498,9 @@ impl HatQueriesTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         qabl_info: &QueryableInfoType,
-        profile: InterestProfile,
     ) {
         // TODO(regions2): clients of this peer are handled as if they were bound to a future broker south hat
-        self.declare_simple_queryable(ctx, id, res, qabl_info, profile);
+        self.declare_simple_queryable(ctx, id, res, qabl_info);
     }
 
     fn undeclare_queryable(
@@ -531,9 +509,8 @@ impl HatQueriesTrait for Hat {
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
-        self.forget_simple_queryable(ctx, id, profile)
+        self.forget_simple_queryable(ctx, id)
     }
 
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {

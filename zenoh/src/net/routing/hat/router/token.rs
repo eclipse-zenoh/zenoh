@@ -34,8 +34,7 @@ use crate::net::{
             face::FaceState, gateway::BoundMap, interests::CurrentInterest, tables::TablesData,
         },
         hat::{
-            BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait,
-            InterestProfile, SendDeclare,
+            BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare,
         },
         router::{FaceContext, NodeId, Resource},
         RoutingContext,
@@ -217,7 +216,6 @@ impl Hat {
         router: ZenohIdProto,
         _interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         if !self.res_hat(res).router_tokens.contains(&router) {
             // Register router liveliness
@@ -226,20 +224,8 @@ impl Hat {
                 self.router_tokens.insert(res.clone());
             }
 
-            if profile.is_push()
-                || self.router_remote_interests.values().any(|interest| {
-                    interest.options.tokens()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|r| r.matches(res))
-                            .unwrap_or(true)
-                })
-                || router != tables.zid
-            {
-                // Propagate liveliness to routers
-                self.propagate_sourced_token(tables, res, Some(face), &router, None);
-            }
+            // Propagate liveliness to routers
+            self.propagate_sourced_token(tables, res, Some(face), &router, None);
         }
 
         // Propagate liveliness to clients
@@ -255,17 +241,8 @@ impl Hat {
         router: ZenohIdProto,
         interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
-        self.register_router_token(
-            tables,
-            face,
-            res,
-            router,
-            interest_id,
-            send_declare,
-            profile,
-        );
+        self.register_router_token(tables, face, res, router, interest_id, send_declare);
     }
 
     fn register_simple_token(
@@ -307,11 +284,10 @@ impl Hat {
         res: &mut Arc<Resource>,
         interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         self.register_simple_token(tables, face, id, res);
         let zid = tables.zid;
-        self.register_router_token(tables, face, res, zid, interest_id, send_declare, profile);
+        self.register_router_token(tables, face, res, zid, interest_id, send_declare);
     }
 
     #[inline]
@@ -628,24 +604,10 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         if self.res_hat(res).router_tokens.contains(router) {
             self.unregister_router_token(tables, face, res, router, send_declare);
-
-            if profile.is_push()
-                || self.router_remote_interests.values().any(|interest| {
-                    interest.options.tokens()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|r| r.matches(res))
-                            .unwrap_or(true)
-                })
-                || router != &tables.zid
-            {
-                self.propagate_forget_sourced_token(tables, res, face, router);
-            }
+            self.propagate_forget_sourced_token(tables, res, face, router);
         }
     }
 
@@ -656,17 +618,11 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
-        self.undeclare_router_token(tables, Some(face), res, router, send_declare, profile);
+        self.undeclare_router_token(tables, Some(face), res, router, send_declare);
     }
 
-    pub(super) fn undeclare_simple_token(
-        &mut self,
-        ctx: BaseContext,
-        res: &mut Arc<Resource>,
-        profile: InterestProfile,
-    ) {
+    pub(super) fn undeclare_simple_token(&mut self, ctx: BaseContext, res: &mut Arc<Resource>) {
         if !self
             .face_hat_mut(ctx.src_face)
             .remote_tokens
@@ -686,7 +642,6 @@ impl Hat {
                     res,
                     &ctx.tables.zid.clone(),
                     ctx.send_declare,
-                    profile,
                 );
             } else {
                 self.propagate_forget_simple_token_to_peers(ctx.tables, res, ctx.send_declare);
@@ -752,14 +707,9 @@ impl Hat {
         }
     }
 
-    fn forget_simple_token(
-        &mut self,
-        ctx: BaseContext,
-        id: TokenId,
-        profile: InterestProfile,
-    ) -> Option<Arc<Resource>> {
+    fn forget_simple_token(&mut self, ctx: BaseContext, id: TokenId) -> Option<Arc<Resource>> {
         if let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_tokens.remove(&id) {
-            self.undeclare_simple_token(ctx, &mut res, profile);
+            self.undeclare_simple_token(ctx, &mut res);
             Some(res)
         } else {
             None
@@ -925,7 +875,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -933,7 +883,6 @@ impl HatTokenTrait for Hat {
         res: &mut Arc<Resource>,
         node_id: NodeId,
         interest_id: Option<InterestId>,
-        profile: InterestProfile,
     ) {
         let router = if self.owns_router(ctx.src_face) {
             let Some(router) = self.get_router(ctx.src_face, node_id) else {
@@ -955,7 +904,6 @@ impl HatTokenTrait for Hat {
                     router,
                     interest_id,
                     ctx.send_declare,
-                    profile,
                 );
             }
             WhatAmI::Peer | WhatAmI::Client => {
@@ -968,20 +916,18 @@ impl HatTokenTrait for Hat {
                     res,
                     interest_id,
                     ctx.send_declare,
-                    profile,
                 );
             }
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         let router = if self.owns_router(ctx.src_face) {
             let Some(router) = self.get_router(ctx.src_face, node_id) else {
@@ -1004,11 +950,10 @@ impl HatTokenTrait for Hat {
                     &mut res,
                     &router,
                     ctx.send_declare,
-                    profile,
                 );
                 Some(res)
             }
-            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_token(ctx, id, profile),
+            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_token(ctx, id),
         }
     }
 

@@ -35,7 +35,7 @@ use crate::{
             gateway::Bound,
             local_resources::{LocalResourceInfoTrait, LocalResources},
         },
-        hat::{BaseContext, InterestProfile, SendDeclare},
+        hat::{BaseContext, SendDeclare},
         router::{get_or_set_route, Direction, RouteBuilder},
     },
 };
@@ -107,7 +107,6 @@ impl Face {
                         &mut res,
                         node_id,
                         sub_info,
-                        InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
                     );
 
                     disable_matches_data_routes(&mut res, bound);
@@ -176,7 +175,6 @@ impl Face {
                 id,
                 res.clone(),
                 node_id,
-                InterestProfile::with_bound_flow((&self.state.local_bound, bound)),
             );
 
             match res {

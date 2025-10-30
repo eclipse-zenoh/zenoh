@@ -50,8 +50,8 @@ use crate::{
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
             },
             hat::{
-                BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, InterestProfile,
-                SendDeclare, Sources,
+                BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, SendDeclare,
+                Sources,
             },
             router::{Direction, DEFAULT_NODE_ID},
             RoutingContext,
@@ -60,6 +60,120 @@ use crate::{
 };
 
 impl Hat {
+    fn local_router_qabl_info(
+        &self,
+        _tables: &TablesData,
+        res: &Arc<Resource>,
+    ) -> QueryableInfoType {
+        res.face_ctxs
+            .values()
+            .fold(None, |accu, ctx| {
+                if let Some(info) = ctx.qabl.as_ref() {
+                    Some(match accu {
+                        Some(accu) => merge_qabl_infos(accu, info),
+                        None => *info,
+                    })
+                } else {
+                    accu
+                }
+            })
+            .unwrap_or(QueryableInfoType::DEFAULT)
+    }
+
+    fn local_qabl_info(
+        &self,
+        tables: &TablesData,
+        res: &Arc<Resource>,
+        face: &Arc<FaceState>,
+    ) -> QueryableInfoType {
+        let info = if res.ctx.is_some() {
+            self.res_hat(res)
+                .router_qabls
+                .iter()
+                .fold(None, |accu, (zid, info)| {
+                    if *zid != tables.zid {
+                        Some(match accu {
+                            Some(accu) => merge_qabl_infos(accu, info),
+                            None => *info,
+                        })
+                    } else {
+                        accu
+                    }
+                })
+        } else {
+            None
+        };
+        res.face_ctxs
+            .values()
+            .fold(info, |accu, ctx| {
+                if (ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer)
+                    || face.whatami != WhatAmI::Peer
+                {
+                    if let Some(info) = ctx.qabl.as_ref() {
+                        Some(match accu {
+                            Some(accu) => merge_qabl_infos(accu, info),
+                            None => *info,
+                        })
+                    } else {
+                        accu
+                    }
+                } else {
+                    accu
+                }
+            })
+            .unwrap_or(QueryableInfoType::DEFAULT)
+    }
+
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    fn send_sourced_queryable_to_net_children(
+        &self,
+        tables: &TablesData,
+        net: &Network,
+        children: &[NodeIndex],
+        res: &Arc<Resource>,
+        qabl_info: &QueryableInfoType,
+        src_face: Option<&mut Arc<FaceState>>,
+        routing_context: NodeId,
+    ) {
+        for child in children {
+            if net.graph.contains_node(*child) {
+                match self.face(tables, &net.graph[*child].zid).cloned() {
+                    Some(mut someface) => {
+                        if src_face
+                            .as_ref()
+                            .map(|src_face| someface.id != src_face.id)
+                            .unwrap_or(true)
+                        {
+                            let push_declaration = self.push_declaration_profile(&someface);
+                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+
+                            someface.primitives.send_declare(RoutingContext::with_expr(
+                                &mut Declare {
+                                    interest_id: None,
+                                    ext_qos: declare::ext::QoSType::DECLARE,
+                                    ext_tstamp: None,
+                                    ext_nodeid: declare::ext::NodeIdType {
+                                        node_id: routing_context,
+                                    },
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id: 0, // Sourced queryables do not use ids
+                                        wire_expr: key_expr,
+                                        ext_info: *qabl_info,
+                                    }),
+                                },
+                                res.expr().to_string(),
+                            ));
+                        }
+                    }
+                    None => {
+                        tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid)
+                    }
+                }
+            }
+        }
+    }
+
     #[inline]
     fn maybe_register_local_queryable(
         &self,
@@ -192,150 +306,6 @@ impl Hat {
         }
     }
 
-    fn get_queryables_matching_resource(
-        &self,
-        tables: &TablesData,
-        face: &Arc<FaceState>,
-        res: Option<&Arc<Resource>>,
-    ) -> Vec<Arc<Resource>> {
-        let face_id = face.id;
-        let face_what_am_i = face.whatami;
-
-        self.router_qabls
-            .iter()
-            .filter(move |qabl| {
-                qabl.ctx.is_some()
-                    && res.as_ref().map(|r| qabl.matches(r)).unwrap_or(true)
-                    && (self
-                        .res_hat(qabl)
-                        .router_qabls
-                        .keys()
-                        .any(|r| *r != tables.zid)
-                        || qabl.face_ctxs.values().any(|s| {
-                            s.face.id != face_id
-                                && s.qabl.is_some()
-                                && (s.face.whatami == WhatAmI::Client
-                                    || face_what_am_i == WhatAmI::Client)
-                        }))
-            })
-            .cloned()
-            .collect()
-    }
-
-    fn local_router_qabl_info(
-        &self,
-        _tables: &TablesData,
-        res: &Arc<Resource>,
-    ) -> QueryableInfoType {
-        res.face_ctxs
-            .values()
-            .fold(None, |accu, ctx| {
-                if let Some(info) = ctx.qabl.as_ref() {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => *info,
-                    })
-                } else {
-                    accu
-                }
-            })
-            .unwrap_or(QueryableInfoType::DEFAULT)
-    }
-
-    fn local_qabl_info(
-        &self,
-        tables: &TablesData,
-        res: &Arc<Resource>,
-        face: &Arc<FaceState>,
-    ) -> QueryableInfoType {
-        let info = if res.ctx.is_some() {
-            self.res_hat(res)
-                .router_qabls
-                .iter()
-                .fold(None, |accu, (zid, info)| {
-                    if *zid != tables.zid {
-                        Some(match accu {
-                            Some(accu) => merge_qabl_infos(accu, info),
-                            None => *info,
-                        })
-                    } else {
-                        accu
-                    }
-                })
-        } else {
-            None
-        };
-        res.face_ctxs
-            .values()
-            .fold(info, |accu, ctx| {
-                if (ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer)
-                    || face.whatami != WhatAmI::Peer
-                {
-                    if let Some(info) = ctx.qabl.as_ref() {
-                        Some(match accu {
-                            Some(accu) => merge_qabl_infos(accu, info),
-                            None => *info,
-                        })
-                    } else {
-                        accu
-                    }
-                } else {
-                    accu
-                }
-            })
-            .unwrap_or(QueryableInfoType::DEFAULT)
-    }
-
-    #[inline]
-    #[allow(clippy::too_many_arguments)]
-    fn send_sourced_queryable_to_net_children(
-        &self,
-        tables: &TablesData,
-        net: &Network,
-        children: &[NodeIndex],
-        res: &Arc<Resource>,
-        qabl_info: &QueryableInfoType,
-        src_face: Option<&mut Arc<FaceState>>,
-        routing_context: NodeId,
-    ) {
-        for child in children {
-            if net.graph.contains_node(*child) {
-                match self.face(tables, &net.graph[*child].zid).cloned() {
-                    Some(mut someface) => {
-                        if src_face
-                            .as_ref()
-                            .map(|src_face| someface.id != src_face.id)
-                            .unwrap_or(true)
-                        {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
-
-                            someface.primitives.send_declare(RoutingContext::with_expr(
-                                &mut Declare {
-                                    interest_id: None,
-                                    ext_qos: declare::ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType {
-                                        node_id: routing_context,
-                                    },
-                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // Sourced queryables do not use ids
-                                        wire_expr: key_expr,
-                                        ext_info: *qabl_info,
-                                    }),
-                                },
-                                res.expr().to_string(),
-                            ));
-                        }
-                    }
-                    None => {
-                        tracing::trace!("Unable to find face for zid {}", net.graph[*child].zid)
-                    }
-                }
-            }
-        }
-    }
-
     fn propagate_simple_queryable(
         &self,
         tables: &mut TablesData,
@@ -409,7 +379,6 @@ impl Hat {
         qabl_info: &QueryableInfoType,
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         let current_info = self.res_hat(res).router_qabls.get(&router);
         if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -421,26 +390,8 @@ impl Hat {
                 self.router_qabls.insert(res.clone());
             }
 
-            if profile.is_push()
-                || self.router_remote_interests.values().any(|interest| {
-                    interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|r| r.matches(res))
-                            .unwrap_or(true)
-                })
-                || router != tables.zid
-            {
-                // Propagate queryable to routers
-                self.propagate_sourced_queryable(
-                    tables,
-                    res,
-                    qabl_info,
-                    face.as_deref_mut(),
-                    &router,
-                );
-            }
+            // Propagate queryable to routers
+            self.propagate_sourced_queryable(tables, res, qabl_info, face.as_deref_mut(), &router);
         }
 
         // Propagate queryable to clients
@@ -456,17 +407,8 @@ impl Hat {
         qabl_info: &QueryableInfoType,
         router: ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
-        self.register_router_queryable(
-            tables,
-            Some(face),
-            res,
-            qabl_info,
-            router,
-            send_declare,
-            profile,
-        );
+        self.register_router_queryable(tables, Some(face), res, qabl_info, router, send_declare);
     }
 
     fn register_simple_queryable(
@@ -501,20 +443,11 @@ impl Hat {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         self.register_simple_queryable(tables, face, id, res, qabl_info);
         let local_details = self.local_router_qabl_info(tables, res);
         let zid = tables.zid;
-        self.register_router_queryable(
-            tables,
-            Some(face),
-            res,
-            &local_details,
-            zid,
-            send_declare,
-            profile,
-        );
+        self.register_router_queryable(tables, Some(face), res, &local_details, zid, send_declare);
     }
 
     #[inline]
@@ -698,23 +631,10 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
         if self.res_hat(res).router_qabls.contains_key(router) {
             self.unregister_router_queryable(tables, res, router, send_declare);
-            if profile.is_push()
-                || self.router_remote_interests.values().any(|interest| {
-                    interest.options.queryables()
-                        && interest
-                            .res
-                            .as_ref()
-                            .map(|r| r.matches(res))
-                            .unwrap_or(true)
-                })
-                || router != &tables.zid
-            {
-                self.propagate_forget_sourced_queryable(tables, res, face, router);
-            }
+            self.propagate_forget_sourced_queryable(tables, res, face, router);
         }
     }
 
@@ -725,17 +645,11 @@ impl Hat {
         res: &mut Arc<Resource>,
         router: &ZenohIdProto,
         send_declare: &mut SendDeclare,
-        profile: InterestProfile,
     ) {
-        self.undeclare_router_queryable(tables, Some(face), res, router, send_declare, profile);
+        self.undeclare_router_queryable(tables, Some(face), res, router, send_declare);
     }
 
-    pub(super) fn undeclare_simple_queryable(
-        &mut self,
-        ctx: BaseContext,
-        res: &mut Arc<Resource>,
-        profile: InterestProfile,
-    ) {
+    pub(super) fn undeclare_simple_queryable(&mut self, ctx: BaseContext, res: &mut Arc<Resource>) {
         let remote_qabl_info =
             get_remote_qabl_info(&self.face_hat_mut(ctx.src_face).remote_qabls, res);
 
@@ -750,7 +664,6 @@ impl Hat {
                     res,
                     &ctx.tables.zid.clone(),
                     ctx.send_declare,
-                    profile,
                 );
             } else {
                 let local_info = self.local_router_qabl_info(ctx.tables, res);
@@ -761,7 +674,6 @@ impl Hat {
                     &local_info,
                     ctx.tables.zid,
                     ctx.send_declare,
-                    profile,
                 );
                 self.propagate_forget_simple_queryable_to_peers(ctx.tables, res, ctx.send_declare);
             }
@@ -783,10 +695,9 @@ impl Hat {
         &mut self,
         ctx: BaseContext,
         id: QueryableId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         if let Some((mut res, _)) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) {
-            self.undeclare_simple_queryable(ctx, &mut res, profile);
+            self.undeclare_simple_queryable(ctx, &mut res);
             Some(res)
         } else {
             None
@@ -898,6 +809,36 @@ impl Hat {
         }
     }
 
+    fn get_queryables_matching_resource(
+        &self,
+        tables: &TablesData,
+        face: &Arc<FaceState>,
+        res: Option<&Arc<Resource>>,
+    ) -> Vec<Arc<Resource>> {
+        let face_id = face.id;
+        let face_what_am_i = face.whatami;
+
+        self.router_qabls
+            .iter()
+            .filter(move |qabl| {
+                qabl.ctx.is_some()
+                    && res.as_ref().map(|r| qabl.matches(r)).unwrap_or(true)
+                    && (self
+                        .res_hat(qabl)
+                        .router_qabls
+                        .keys()
+                        .any(|r| *r != tables.zid)
+                        || qabl.face_ctxs.values().any(|s| {
+                            s.face.id != face_id
+                                && s.qabl.is_some()
+                                && (s.face.whatami == WhatAmI::Client
+                                    || face_what_am_i == WhatAmI::Client)
+                        }))
+            })
+            .cloned()
+            .collect()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_qabl_interest(
         &self,
@@ -1006,38 +947,6 @@ impl Hat {
             }
         }
     }
-
-    #[inline]
-    fn insert_faces_for_qbls(
-        &self,
-        route: &mut HashMap<usize, Arc<FaceState>>,
-        tables: &TablesData,
-        net: &Network,
-        qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
-        complete: bool,
-    ) {
-        let source = net.idx.index();
-        if net.trees.len() > source {
-            for qbl in qbls {
-                if complete && !qbl.1.complete {
-                    continue;
-                }
-                if let Some(qbl_idx) = net.get_idx(qbl.0) {
-                    if net.trees[source].directions.len() > qbl_idx.index() {
-                        if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
-                            if net.graph.contains_node(direction) {
-                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
-                                    route.entry(face.id).or_insert_with(|| face.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            tracing::trace!("Tree for node sid:{} not yet ready", source);
-        }
-    }
 }
 
 impl HatQueriesTrait for Hat {
@@ -1049,7 +958,6 @@ impl HatQueriesTrait for Hat {
         node_id: NodeId,
 
         qabl_info: &QueryableInfoType,
-        profile: InterestProfile,
     ) {
         let router = if self.owns_router(ctx.src_face) {
             let Some(router) = self.get_router(ctx.src_face, node_id) else {
@@ -1071,7 +979,6 @@ impl HatQueriesTrait for Hat {
                     qabl_info,
                     router,
                     ctx.send_declare,
-                    profile,
                 );
             }
             WhatAmI::Peer | WhatAmI::Client => {
@@ -1084,7 +991,6 @@ impl HatQueriesTrait for Hat {
                     res,
                     qabl_info,
                     ctx.send_declare,
-                    profile,
                 );
             }
         }
@@ -1096,8 +1002,6 @@ impl HatQueriesTrait for Hat {
         id: QueryableId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         let router = if self.owns_router(ctx.src_face) {
             let Some(router) = self.get_router(ctx.src_face, node_id) else {
@@ -1120,11 +1024,10 @@ impl HatQueriesTrait for Hat {
                     &mut res,
                     &router,
                     ctx.send_declare,
-                    profile,
                 );
                 Some(res)
             }
-            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_queryable(ctx, id, profile),
+            WhatAmI::Peer | WhatAmI::Client => self.forget_simple_queryable(ctx, id),
         }
     }
 
@@ -1301,5 +1204,39 @@ impl HatQueriesTrait for Hat {
             }
         }
         matching_queryables
+    }
+}
+
+impl Hat {
+    #[inline]
+    fn insert_faces_for_qbls(
+        &self,
+        route: &mut HashMap<usize, Arc<FaceState>>,
+        tables: &TablesData,
+        net: &Network,
+        qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
+        complete: bool,
+    ) {
+        let source = net.idx.index();
+        if net.trees.len() > source {
+            for qbl in qbls {
+                if complete && !qbl.1.complete {
+                    continue;
+                }
+                if let Some(qbl_idx) = net.get_idx(qbl.0) {
+                    if net.trees[source].directions.len() > qbl_idx.index() {
+                        if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
+                            if net.graph.contains_node(direction) {
+                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
+                                    route.entry(face.id).or_insert_with(|| face.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            tracing::trace!("Tree for node sid:{} not yet ready", source);
+        }
     }
 }

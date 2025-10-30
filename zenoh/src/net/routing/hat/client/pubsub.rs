@@ -36,7 +36,7 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, InterestProfile, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources},
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
     },
@@ -281,9 +281,7 @@ impl HatPubSubTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         sub_info: &SubscriberInfo,
-        _profile: InterestProfile,
     ) {
-        // FIXME(regions): InterestProfile is ignored
         self.declare_simple_subscription(
             ctx.tables,
             ctx.src_face,
@@ -300,7 +298,6 @@ impl HatPubSubTrait for Hat {
         id: SubscriberId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_subscription(ctx, id)
     }

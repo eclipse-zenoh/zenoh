@@ -60,7 +60,7 @@ use crate::net::{
             interests::RemoteInterest,
             queries::LocalQueryables,
         },
-        hat::{BaseContext, InterestProfile, Remote},
+        hat::{BaseContext, Remote},
         router::{FaceContext, LocalSubscribers},
         RoutingContext,
     },
@@ -213,15 +213,9 @@ impl HatBaseTrait for Hat {
     ) -> ZResult<()> {
         self.interests_new_face(ctx.reborrow());
 
-        let profile = if ctx.src_face.local_bound.is_north() {
-            InterestProfile::Push
-        } else {
-            InterestProfile::Pull
-        };
-
-        self.pubsub_new_face(ctx.reborrow(), profile);
-        self.queries_new_face(ctx.reborrow(), profile);
-        self.token_new_face(ctx.reborrow(), profile);
+        self.pubsub_new_face(ctx.reborrow());
+        self.queries_new_face(ctx.reborrow());
+        self.token_new_face(ctx.reborrow());
         ctx.tables.disable_all_routes();
         Ok(())
     }
@@ -233,13 +227,6 @@ impl HatBaseTrait for Hat {
         _tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {
-        // FIXME(regions): compute proper profile
-        let profile = if ctx.src_face.local_bound.is_north() {
-            InterestProfile::Push
-        } else {
-            InterestProfile::Pull
-        };
-
         if ctx.src_face.whatami != WhatAmI::Client {
             if let Some(net) = self.gossip.as_mut() {
                 net.add_link(transport.clone());
@@ -254,9 +241,9 @@ impl HatBaseTrait for Hat {
         }
 
         self.interests_new_face(ctx.reborrow());
-        self.pubsub_new_face(ctx.reborrow(), profile);
-        self.queries_new_face(ctx.reborrow(), profile);
-        self.token_new_face(ctx.reborrow(), profile);
+        self.pubsub_new_face(ctx.reborrow());
+        self.queries_new_face(ctx.reborrow());
+        self.token_new_face(ctx.reborrow());
         ctx.tables.disable_all_routes();
 
         if ctx.src_face.whatami == WhatAmI::Peer {
@@ -275,9 +262,6 @@ impl HatBaseTrait for Hat {
     }
 
     fn close_face(&mut self, mut ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
-        // FIXME(regions): compute proper profile
-        let profile = InterestProfile::Push;
-
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.bound].downcast_mut::<HatFace>() {
@@ -326,7 +310,7 @@ impl HatBaseTrait for Hat {
         let mut qabls_matches = vec![];
         for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res, profile);
+            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
 
             if res.ctx.is_some() {
                 for match_ in &res.context().matches {
@@ -344,7 +328,7 @@ impl HatBaseTrait for Hat {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res, profile);
+            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
         }
 
         for mut res in subs_matches {

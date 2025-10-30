@@ -64,7 +64,7 @@ use crate::net::{
             queries::LocalQueryables,
             resource::FaceContext,
         },
-        hat::{BaseContext, InterestProfile, Remote, TREES_COMPUTATION_DELAY_MS},
+        hat::{BaseContext, Remote, TREES_COMPUTATION_DELAY_MS},
     },
     runtime::Runtime,
 };
@@ -445,8 +445,6 @@ impl HatBaseTrait for Hat {
     }
 
     fn close_face(&mut self, mut ctx: BaseContext, tables_ref: &Arc<TablesLock>) {
-        let profile = InterestProfile::with_bound_flow((&ctx.src_face.local_bound, &self.bound));
-
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.bound].downcast_mut::<HatFace>() {
@@ -476,7 +474,7 @@ impl HatBaseTrait for Hat {
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(ctx.reborrow(), &mut res, profile);
+            self.undeclare_simple_subscription(ctx.reborrow(), &mut res);
 
             if res.ctx.is_some() {
                 for match_ in &res.context().matches {
@@ -495,7 +493,7 @@ impl HatBaseTrait for Hat {
         let mut qabls_matches = vec![];
         for (_, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res, profile);
+            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
 
             if res.ctx.is_some() {
                 for match_ in &res.context().matches {
@@ -513,7 +511,7 @@ impl HatBaseTrait for Hat {
 
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_token(ctx.reborrow(), &mut res, profile);
+            self.undeclare_simple_token(ctx.reborrow(), &mut res);
         }
 
         for mut res in subs_matches {

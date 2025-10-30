@@ -28,10 +28,7 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState, gateway::BoundMap, interests::CurrentInterest, tables::TablesData,
     },
-    hat::{
-        BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, InterestProfile,
-        SendDeclare,
-    },
+    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -410,7 +407,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -418,9 +415,7 @@ impl HatTokenTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         interest_id: Option<InterestId>,
-        profile: InterestProfile,
     ) {
-        // FIXME(regions): InterestProfile is ignored
         self.declare_simple_token(
             ctx.tables,
             ctx.src_face,
@@ -431,14 +426,13 @@ impl HatTokenTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_token(ctx, id, res)
     }

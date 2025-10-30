@@ -28,10 +28,7 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState, gateway::BoundMap, interests::CurrentInterest, tables::TablesData,
     },
-    hat::{
-        BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, InterestProfile,
-        SendDeclare,
-    },
+    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -64,7 +61,6 @@ impl Hat {
         res: &Arc<Resource>,
         src_interest_id: Option<InterestId>,
         dst_interest_id: Option<InterestId>,
-        _profile: InterestProfile,
     ) {
         if (src_face.id != dst_face.id || dst_face.zid == ctx.tables.zid)
             && !self.face_hat(dst_face).local_tokens.contains_key(res)
@@ -111,7 +107,6 @@ impl Hat {
         mut ctx: BaseContext,
         res: &Arc<Resource>,
         interest_id: Option<InterestId>,
-        profile: InterestProfile,
     ) {
         for mut dst_face in self.owned_faces(ctx.tables).cloned().collect::<Vec<_>>() {
             let src_face = &mut ctx.src_face.clone();
@@ -122,7 +117,6 @@ impl Hat {
                 res,
                 interest_id,
                 interest_id.is_some().then_some(INITIAL_INTEREST_ID),
-                profile,
             );
         }
     }
@@ -157,7 +151,6 @@ impl Hat {
         id: TokenId,
         res: &mut Arc<Resource>,
         interest_id: Option<InterestId>,
-        profile: InterestProfile,
     ) {
         if let Some(interest_id) = interest_id {
             if let Some(interest) = ctx
@@ -201,7 +194,7 @@ impl Hat {
             }
         }
         self.register_simple_token(ctx.reborrow(), id, res);
-        self.propagate_simple_token(ctx, res, interest_id, profile);
+        self.propagate_simple_token(ctx, res, interest_id);
     }
 
     #[inline]
@@ -344,7 +337,7 @@ impl Hat {
         }
     }
 
-    pub(super) fn token_new_face(&self, mut ctx: BaseContext, profile: InterestProfile) {
+    pub(super) fn token_new_face(&self, mut ctx: BaseContext) {
         if ctx.src_face.whatami != WhatAmI::Client {
             for mut face in self
                 .faces(ctx.tables)
@@ -361,7 +354,6 @@ impl Hat {
                         token,
                         None,
                         Some(INITIAL_INTEREST_ID),
-                        profile,
                     );
                 }
             }
@@ -468,7 +460,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -476,20 +468,18 @@ impl HatTokenTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         interest_id: Option<InterestId>,
-        profile: InterestProfile,
     ) {
         // TODO(regions2): clients of this peer are handled as if they were bound to a future broker south hat
-        self.declare_simple_token(ctx, id, res, interest_id, profile);
+        self.declare_simple_token(ctx, id, res, interest_id);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, profile = %profile))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)
     }

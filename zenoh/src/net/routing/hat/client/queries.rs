@@ -39,7 +39,7 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, InterestProfile, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, SendDeclare, Sources},
         router::{Direction, DEFAULT_NODE_ID},
         RoutingContext,
     },
@@ -173,7 +173,6 @@ impl Hat {
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfoType,
         send_declare: &mut SendDeclare,
-        _profile: InterestProfile,
     ) {
         self.register_simple_queryable(tables, face, id, res, qabl_info);
         self.propagate_simple_queryable(tables, res, Some(face), send_declare);
@@ -300,7 +299,6 @@ impl HatQueriesTrait for Hat {
         res: &mut Arc<Resource>,
         _node_id: NodeId,
         qabl_info: &QueryableInfoType,
-        profile: InterestProfile,
     ) {
         self.declare_simple_queryable(
             ctx.tables,
@@ -309,7 +307,6 @@ impl HatQueriesTrait for Hat {
             res,
             qabl_info,
             ctx.send_declare,
-            profile,
         );
     }
 
@@ -319,7 +316,6 @@ impl HatQueriesTrait for Hat {
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-        _profile: InterestProfile,
     ) -> Option<Arc<Resource>> {
         self.forget_simple_queryable(ctx, id)
     }
