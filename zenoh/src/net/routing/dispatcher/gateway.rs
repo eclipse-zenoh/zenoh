@@ -59,12 +59,12 @@ impl Bound {
     }
 }
 
-impl Into<zenoh_transport::Bound> for Bound {
-    fn into(self) -> zenoh_transport::Bound {
-        match self {
-            Bound::North => zenoh_transport::Bound::North,
-            Bound::South { .. } => zenoh_transport::Bound::South,
-            Bound::Eastwest { .. } => zenoh_transport::Bound::South,
+impl From<Bound> for zenoh_transport::Bound {
+    fn from(value: Bound) -> Self {
+        match value {
+            Bound::North => Self::North,
+            Bound::South { .. } => Self::South,
+            Bound::Eastwest { .. } => Self::South,
         }
     }
 }

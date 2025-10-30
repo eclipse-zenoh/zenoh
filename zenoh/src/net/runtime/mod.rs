@@ -700,7 +700,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                let bound = compute_bound(&peer, &runtime.config().lock())?;
+                let bound = compute_bound(&peer, &runtime.config().lock().0)?;
 
                 fn north_bound_transport_peer_count(
                     runtime: &Runtime,
@@ -728,7 +728,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
                                 // NOTE(regions): compute bound instead of querying the router as
                                 // the corresponding transport face might not exist yet
-                                let Ok(bound) = compute_bound(&peer, &runtime.config().lock())
+                                let Ok(bound) = compute_bound(&peer, &runtime.config().lock().0)
                                 else {
                                     tracing::error!(
                                         zid = %peer.zid.short(),
