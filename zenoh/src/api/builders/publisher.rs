@@ -118,7 +118,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         }
     }
 
-    /// Changes the [`Priority`](crate::qos::Priority) of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) when routing the data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self {
@@ -419,7 +419,10 @@ impl PublisherBuilder<'_, '_> {
                     tracing::warn!(
                         "Publisher declared on `{}` which is included by multiple key_exprs in qos config ({}). Using qos config for `{}`",
                         key_expr,
-                        nodes_including.iter().map(|n| n.keyexpr().to_string()).join(", "),
+                        nodes_including
+                            .iter()
+                            .map(|n| n.keyexpr().to_string())
+                            .join(", "),
                         node.keyexpr(),
                     );
                 }

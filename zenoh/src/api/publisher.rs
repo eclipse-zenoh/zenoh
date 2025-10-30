@@ -70,6 +70,8 @@ impl fmt::Debug for PublisherState {
 }
 
 /// A publisher that allows sending data through a stream.
+/// A Publisher is declared by a [`Session`](crate::api::session::Session) for a given key expression
+/// with method [`Session::declare_publisher`](crate::api::session::Session::declare_publisher).
 ///
 /// Publishers are automatically undeclared when dropped.
 ///

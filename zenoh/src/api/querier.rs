@@ -130,13 +130,13 @@ impl<'a> Querier<'a> {
         &self.key_expr
     }
 
-    /// Get the `congestion_control` applied when routing the data.
+    /// Get the [`CongestionControl`] applied when routing the data.
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Get the priority of the written data.
+    /// Get the [`Priority`] of the querier requests.
     #[inline]
     pub fn priority(&self) -> Priority {
         self.qos.priority()

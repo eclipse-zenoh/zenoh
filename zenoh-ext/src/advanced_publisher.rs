@@ -220,6 +220,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl EncodingBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
+    /// Set the [`Encoding`]
     #[zenoh_macros::unstable]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -232,7 +233,7 @@ impl EncodingBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl QoSBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
-    /// Changes the [`zenoh::qos::CongestionControl`] to apply when routing the data.
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
     #[inline]
     #[zenoh_macros::unstable]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
@@ -242,7 +243,7 @@ impl QoSBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
         }
     }
 
-    /// Changes the [`zenoh::qos::Priority`] of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) to apply when routing the data.
     #[inline]
     #[zenoh_macros::unstable]
     fn priority(self, priority: Priority) -> Self {
@@ -686,6 +687,7 @@ pub struct AdvancedPublicationBuilder<'a, P> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderPut> {
+    /// Set the [`Encoding`]
     #[zenoh_macros::unstable]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
@@ -699,6 +701,7 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 #[zenoh_macros::unstable]
 impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     #[zenoh_macros::unstable]
+    /// Sets an optional [`SourceInfo`](zenoh::sample::SourceInfo) to be sent along with the publication.
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
@@ -706,6 +709,8 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
         }
     }
     #[zenoh_macros::unstable]
+    /// Sets an optional attachment to be sent along with the publication.
+    /// The method accepts both <code>Option&lt;Into&lt;ZBytes&gt;&gt;</code> and <code>Into&lt;ZBytes&gt;</code>.
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -718,6 +723,7 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl<P> TimestampBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    /// Sets an optional timestamp to be sent along with the publication.
     #[zenoh_macros::unstable]
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
