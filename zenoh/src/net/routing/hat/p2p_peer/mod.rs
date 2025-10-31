@@ -81,7 +81,6 @@ macro_rules! hat_mut {
         $t.hat.downcast_mut::<HatTables>().unwrap()
     };
 }
-use hat_mut;
 
 macro_rules! face_hat {
     ($f:expr) => {
