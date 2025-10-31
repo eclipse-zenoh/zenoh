@@ -185,3 +185,8 @@ required-features = ["shared-memory", "unstable"]
 name = "z_custom_shm_provider"
 path = "examples/shm/z_custom_shm_provider.rs"
 required-features = ["shared-memory", "unstable"]
+
+[[example]]
+name = "z_shm_provider"
+path = "examples/shm/z_shm_provider.rs"
+required-features = ["shared-memory", "unstable"]
