@@ -43,7 +43,7 @@ use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 #[cfg(feature = "stats")]
-use crate::stats::TransportStats;
+use crate::stats::LinkStats;
 use crate::unicast::authentication::TransportAuthId;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
@@ -151,7 +151,7 @@ impl TransportUnicast {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_link_stats(&self) -> ZResult<Vec<(Link, Arc<TransportStats>)>> {
+    pub fn get_link_stats(&self) -> ZResult<Vec<(Link, Arc<LinkStats>)>> {
         let transport = self.get_inner()?;
         Ok(transport.get_link_stats())
     }
