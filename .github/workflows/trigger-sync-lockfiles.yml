@@ -5,10 +5,10 @@ on:
     paths: [Cargo.lock]
 
 jobs:
-    trigger-sync-lockfiles:
-        name: Trigger sync lockfiles workflow
-        uses: eclipse-zenoh/ci/.github/workflows/sync-lockfiles.yml@main
-        secrets:
-            github-token: ${{ secrets.GITHUB_TOKEN }}
-        permissions:
-            pull-requests: write
+  trigger-sync-lockfiles:
+    name: Trigger sync lockfiles workflow
+    uses: eclipse-zenoh/ci/.github/workflows/sync-lockfiles.yml@main
+    secrets:
+      github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
+    permissions:
+      pull-requests: write
