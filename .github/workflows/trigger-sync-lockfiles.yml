@@ -1,0 +1,14 @@
+name: Trigger sync lockfiles workflow
+
+on:
+  push:
+    paths: [Cargo.lock]
+
+jobs:
+    trigger-sync-lockfiles:
+        name: Trigger sync lockfiles workflow
+        uses: eclipse-zenoh/ci/.github/workflows/sync-lockfiles.yml@main
+        secrets:
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+        permissions:
+            pull-requests: write
