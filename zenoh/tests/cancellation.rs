@@ -125,6 +125,14 @@ async fn test_cancellation_liveliness_get() {
     tokio::time::sleep(Duration::from_secs(3)).await;
     cancellation_token.cancel().await.unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
+
+    // check that cancelled token cancels operation automatically
+    assert!(cancellation_token.is_cancelled());
+    let replies = ztimeout!(session2.liveliness()
+        .get("test/liveliness_query_cancellation")
+        .with_cancellation_token(cancellation_token.clone()))
+    .unwrap();
+    assert!(replies.is_disconnected());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
