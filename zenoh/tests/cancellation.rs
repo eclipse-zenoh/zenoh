@@ -128,7 +128,8 @@ async fn test_cancellation_liveliness_get() {
 
     // check that cancelled token cancels operation automatically
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(session2.liveliness()
+    let replies = ztimeout!(session2
+        .liveliness()
         .get("test/liveliness_query_cancellation")
         .with_cancellation_token(cancellation_token.clone()))
     .unwrap();
