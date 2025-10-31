@@ -971,7 +971,7 @@ impl TransmissionPipelineConsumer {
                 }
             }
 
-            // In case of writing many small messages, `recv_async()` will most likely return immedietaly.
+            // In case of writing many small messages, `recv_async()` will most likely return immediately.
             // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
             // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
             // spinning the current task indefinitely.
