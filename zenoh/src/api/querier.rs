@@ -175,6 +175,8 @@ impl<'a> Querier<'a> {
             attachment: None,
             parameters: Parameters::empty(),
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            cancellation_token: None,
         }
     }
 
