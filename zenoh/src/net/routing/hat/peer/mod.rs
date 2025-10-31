@@ -376,29 +376,29 @@ impl HatBaseTrait for Hat {
                     }
                 };
             }
-        // } else if oam.id == OAM_IS_GATEWAY {
-        //     let Some(face) = self.face(tables, zid) else {
-        //         bail!("Could not find transport face for ZID {zid}")
-        //     };
+            // } else if oam.id == OAM_IS_GATEWAY {
+            //     let Some(face) = self.face(tables, zid) else {
+            //         bail!("Could not find transport face for ZID {zid}")
+            //     };
 
-        //     tracing::trace!(id = %"OAM_IS_GATEWAY");
+            //     tracing::trace!(id = %"OAM_IS_GATEWAY");
 
-        //     self.face_hat_mut(&mut face.clone()).is_gateway = true;
+            //     self.face_hat_mut(&mut face.clone()).is_gateway = true;
 
-        //     let gwy_count = self
-        //         .faces(tables)
-        //         .iter()
-        //         .filter(|(_, f)| self.face_hat(f).is_gateway)
-        //         .count();
+            //     let gwy_count = self
+            //         .faces(tables)
+            //         .iter()
+            //         .filter(|(_, f)| self.face_hat(f).is_gateway)
+            //         .count();
 
-        //     if gwy_count > 1 {
-        //         tracing::error!(
-        //             bound = ?self.bound,
-        //             total = gwy_count,
-        //             "Multiple gateways found in peer subregion. \
-        //             Only one gateway per subregion is supported."
-        //         );
-        //     }
+            //     if gwy_count > 1 {
+            //         tracing::error!(
+            //             bound = ?self.bound,
+            //             total = gwy_count,
+            //             "Multiple gateways found in peer subregion. \
+            //             Only one gateway per subregion is supported."
+            //         );
+            //     }
         }
 
         Ok(())

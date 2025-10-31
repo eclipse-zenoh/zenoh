@@ -474,7 +474,11 @@ impl RuntimeBuilder {
             .zid(zid)
             .bound_callback({
                 let config = config.clone();
-                move |p| compute_bound(&p, &config).map(|b| b.into()).unwrap_or_default()
+                move |p| {
+                    compute_bound(&p, &config)
+                        .map(|b| b.into())
+                        .unwrap_or_default()
+                }
             });
 
         #[cfg(feature = "shared-memory")]

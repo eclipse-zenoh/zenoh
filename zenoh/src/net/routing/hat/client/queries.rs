@@ -400,7 +400,11 @@ impl HatQueriesTrait for Hat {
 
         if !src_face.local_bound.is_north() {
             // REVIEW(regions): there should only be one such face?
-            for face in self.faces(tables).values().filter(|f| f.local_bound.is_north()) {
+            for face in self
+                .faces(tables)
+                .values()
+                .filter(|f| f.local_bound.is_north())
+            {
                 let has_interest_finalized = expr
                     .resource()
                     .and_then(|res| res.face_ctxs.get(&face.id))

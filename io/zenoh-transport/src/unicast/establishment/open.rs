@@ -22,7 +22,8 @@ use zenoh_link::{EndPoint, LinkUnicast};
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
-        BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage, TransportSn, batch_size, close, open::ext::South
+        batch_size, close, open::ext::South, BatchSize, Close, InitSyn, OpenSyn, TransportBody,
+        TransportMessage, TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -34,12 +35,16 @@ use crate::shm::TransportShmConfig;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
 use crate::{
-    Bound, BoundCallback, TransportManager, TransportPeer, common::batch::BatchConfig, unicast::{
-        TransportConfigUnicast, TransportUnicast, establishment::{OpenFsm, compute_sn, ext}, link::{
+    common::batch::BatchConfig,
+    unicast::{
+        establishment::{compute_sn, ext, OpenFsm},
+        link::{
             LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
             TransportLinkUnicastDirection,
-        }
-    }
+        },
+        TransportConfigUnicast, TransportUnicast,
+    },
+    Bound, BoundCallback, TransportManager, TransportPeer,
 };
 
 type OpenError = (zenoh_result::Error, Option<u8>);

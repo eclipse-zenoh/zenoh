@@ -28,7 +28,8 @@ use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
-    Bound, TransportPeerEventHandler, unicast::{TransportConfigUnicast, link::TransportLinkUnicast}
+    unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
+    Bound, TransportPeerEventHandler,
 };
 
 pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);

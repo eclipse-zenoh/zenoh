@@ -388,7 +388,11 @@ impl HatPubSubTrait for Hat {
 
         if !src_face.local_bound.is_north() {
             // REVIEW(regions): there should only be one such face?
-            for face in self.faces(tables).values().filter(|f| f.local_bound.is_north()) {
+            for face in self
+                .faces(tables)
+                .values()
+                .filter(|f| f.local_bound.is_north())
+            {
                 route.try_insert(face.id, || {
                     let has_interest_finalized = expr
                         .resource()

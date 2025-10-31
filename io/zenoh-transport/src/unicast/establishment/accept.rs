@@ -24,7 +24,10 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
-        BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn, batch_size, close::{self, Close}, open::ext::South
+        batch_size,
+        close::{self, Close},
+        open::ext::South,
+        BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -36,12 +39,16 @@ use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 use crate::{
-    Bound, BoundCallback, TransportManager, TransportPeer, common::batch::BatchConfig, unicast::{
-        TransportConfigUnicast, establishment::{AcceptFsm, Cookie, Zenoh080Cookie, compute_sn, ext}, link::{
+    common::batch::BatchConfig,
+    unicast::{
+        establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
+        link::{
             LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
             TransportLinkUnicastDirection,
-        }
-    }
+        },
+        TransportConfigUnicast,
+    },
+    Bound, BoundCallback, TransportManager, TransportPeer,
 };
 
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
@@ -568,7 +575,9 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let output = RecvOpenSynOut {
             other_zid: cookie.zid,
             other_whatami: cookie.whatami,
-            other_bound: if open_syn.ext_south.is_none() {Bound::North} else {
+            other_bound: if open_syn.ext_south.is_none() {
+                Bound::North
+            } else {
                 Bound::South
             },
             other_lease: open_syn.lease,

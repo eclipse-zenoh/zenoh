@@ -44,9 +44,9 @@ use super::{TransportPeer, TransportPeerEventHandler};
 use crate::shm::TransportShmConfig;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::{Bound, unicast::authentication::TransportAuthId};
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
+use crate::{unicast::authentication::TransportAuthId, Bound};
 
 /*************************************/
 /*        TRANSPORT UNICAST          */

@@ -34,12 +34,15 @@ use super::{
     },
     TransportEventHandler,
 };
-use crate::{TransportPeer, multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-}};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
+use crate::{
+    multicast::manager::{
+        TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+        TransportManagerStateMulticast,
+    },
+    TransportPeer,
+};
 
 fn duration_from_i64us(us: i64) -> Duration {
     if us >= 0 {
@@ -280,7 +283,10 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn bound_callback(mut self, callback: impl Fn(TransportPeer) -> Bound + Send + Sync + 'static) -> Self {
+    pub fn bound_callback(
+        mut self,
+        callback: impl Fn(TransportPeer) -> Bound + Send + Sync + 'static,
+    ) -> Self {
         self.bound_callback = Some(Arc::new(callback));
         self
     }

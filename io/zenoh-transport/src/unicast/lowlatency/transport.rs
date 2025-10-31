@@ -35,9 +35,13 @@ use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
-    Bound, TransportManager, TransportPeerEventHandler, unicast::{
-        TransportConfigUnicast, authentication::TransportAuthId, link::{LinkUnicastWithOpenAck, TransportLinkUnicast}, transport_unicast_inner::{AddLinkResult, TransportUnicastTrait}
-    }
+    unicast::{
+        authentication::TransportAuthId,
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
+        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
+        TransportConfigUnicast,
+    },
+    Bound, TransportManager, TransportPeerEventHandler,
 };
 
 /*************************************/

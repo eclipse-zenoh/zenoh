@@ -230,7 +230,11 @@ impl HatInterestTrait for Hat {
                 let src_nid = self.net().idx.index() as NodeId;
 
                 for id in self.router_local_interests.keys().cloned().collect_vec() {
-                    if self.router_local_interests.get(&id).is_some_and(|local_interest| local_interest == &remote_interest) {
+                    if self
+                        .router_local_interests
+                        .get(&id)
+                        .is_some_and(|local_interest| local_interest == &remote_interest)
+                    {
                         self.router_local_interests.remove(&id);
                         self.send_point_to_point(ctx.reborrow(), gwy_node_id, |next_hop| {
                             next_hop.primitives.send_interest(RoutingContext::with_expr(
