@@ -52,7 +52,7 @@ use zenoh_protocol::{
             SubscriberId, TokenId, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
         },
         ext,
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{self, InterestId, InterestMode, InterestOptions},
         push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
         Response, ResponseFinal,
     },
@@ -899,7 +899,7 @@ impl Session {
 
     /// Returns the [`ShmProviderState`](ShmProviderState) associated with the current [`Session`](Session)’s [`Runtime`](Runtime).
     ///
-    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.  
+    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.
     /// This method exposes that provider so it can also be accessed at the application level.
     ///
     /// Note that the provider may not be immediately available or may be disabled via configuration.
@@ -1458,7 +1458,7 @@ impl SessionInner {
                 wire_expr: Some(res.to_wire(self).to_owned()),
                 ext_qos: network::ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
             });
         }
         Ok(id)
@@ -1485,9 +1485,9 @@ impl SessionInner {
                         //       they are initialized here for internal use by local egress interceptors.
                         options: InterestOptions::SUBSCRIBERS,
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -1514,9 +1514,9 @@ impl SessionInner {
                 mode: InterestMode::CurrentFuture,
                 options: InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
                 wire_expr: Some(res.to_wire(self).to_owned()),
-                ext_qos: network::ext::QoSType::DEFAULT,
+                ext_qos: interest::ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
             });
         }
         Ok(id)
@@ -1542,9 +1542,9 @@ impl SessionInner {
                         mode: InterestMode::Final,
                         options: InterestOptions::empty(),
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -1681,9 +1681,9 @@ impl SessionInner {
                             //       they are initialized here for internal use by local egress interceptors.
                             options: InterestOptions::TOKENS,
                             wire_expr: None,
-                            ext_qos: declare::ext::QoSType::DEFAULT,
+                            ext_qos: interest::ext::QoSType::DEFAULT,
                             ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                         });
                     }
                 }
@@ -1894,9 +1894,9 @@ impl SessionInner {
             },
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(key_expr.to_wire(self).to_owned()),
-            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_qos: interest::ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
 
         Ok(sub_state)
@@ -2421,9 +2421,9 @@ impl SessionInner {
             mode: InterestMode::Current,
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(wexpr.clone()),
-            ext_qos: request::ext::QoSType::DEFAULT,
+            ext_qos: interest::ext::QoSType::DEFAULT,
             ext_tstamp: None,
-            ext_nodeid: request::ext::NodeIdType::DEFAULT,
+            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
 
         Ok(())

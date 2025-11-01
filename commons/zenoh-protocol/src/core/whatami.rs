@@ -61,6 +61,14 @@ impl WhatAmI {
         }
     }
 
+    pub const fn short(self) -> &'static str {
+        match self {
+            Self::Router => "R",
+            Self::Peer => "P",
+            Self::Client => "C",
+        }
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {
@@ -70,6 +78,18 @@ impl WhatAmI {
         *[Self::Router, Self::Peer, Self::Client]
             .choose(&mut rng)
             .unwrap()
+    }
+
+    pub const fn is_client(self) -> bool {
+        matches!(self, WhatAmI::Client)
+    }
+
+    pub const fn is_peer(self) -> bool {
+        matches!(self, WhatAmI::Peer)
+    }
+
+    pub const fn is_router(self) -> bool {
+        matches!(self, WhatAmI::Router)
     }
 }
 

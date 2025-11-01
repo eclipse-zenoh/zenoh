@@ -5979,6 +5979,7 @@ dependencies = [
  "flume",
  "futures",
  "git-version",
+ "hashbrown 0.16.0",
  "itertools 0.14.0",
  "json5",
  "lazy_static",

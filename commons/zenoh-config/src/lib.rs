@@ -22,6 +22,7 @@
 #![allow(deprecated)]
 
 pub mod defaults;
+pub mod gateway;
 mod include;
 pub mod qos;
 pub mod wrappers;
@@ -467,6 +468,7 @@ validated_struct::validator! {
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
+        pub gateway: ModeDependentValue<gateway::GatewayConf>,
         /// Which zenoh nodes to connect to.
         pub connect:
         ConnectConfig {
@@ -581,15 +583,6 @@ validated_struct::validator! {
                     /// If both endpoint nodes of a transport specify its weight, the greater weight is applied.
                     pub transport_weights: Vec<TransportWeight>,
                 },
-            },
-            /// The routing strategy to use in peers and it's configuration.
-            pub peer: #[derive(Default)]
-            PeerRoutingConf {
-                /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
-                /// This option needs to be set to the same value in all peers and routers of the subsystem.
-                mode: Option<String>,
-                /// Linkstate mode configuration (only taken into account if mode == "linkstate").
-                pub linkstate: LinkstateConf,
             },
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).
@@ -1327,6 +1320,51 @@ impl Config {
         } else {
             LibLoader::empty()
         }
+    }
+
+    pub fn canonicalize(&mut self) -> ZResult<()> {
+        match (self.mode, self.gateway.clone()) {
+            (None, ModeDependentValue::Unique(gwy)) => {
+                self.mode = Some(gwy.north.mode);
+            }
+            (None, ref gwy @ ModeDependentValue::Dependent(..)) => {
+                if gwy
+                    .get(WhatAmI::default())
+                    .is_some_and(|gwy| gwy.north.mode != WhatAmI::default())
+                {
+                    bail!(
+                        "mode is undefined (defaults to Peer) \
+                        and gateway is a mode dependent value where gateway.peer.north.mode is not Peer"
+                    )
+                }
+            }
+            (Some(mode), ModeDependentValue::Unique(gwy)) => {
+                if mode != gwy.north.mode {
+                    bail!(
+                        "mode is {} while gateway.north.mode is {}",
+                        mode,
+                        gwy.north.mode
+                    );
+                }
+            }
+            (Some(mode), ref gwy @ ModeDependentValue::Dependent(..)) => match gwy.get(mode) {
+                Some(gwy) => {
+                    if mode != gwy.north.mode {
+                        bail!(
+                            "mode is {} while gateway.{}.north.mode is {}",
+                            mode,
+                            mode,
+                            gwy.north.mode
+                        );
+                    }
+                }
+                None => {
+                    bail!("mode is {mode} but gateway.{mode} (mode dependent) is undefined",);
+                }
+            },
+        }
+
+        Ok(())
     }
 }
 
