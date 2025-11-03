@@ -43,8 +43,8 @@ use super::{
 use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
-        gateway::{Bound, BoundMap},
         queries::disable_matches_query_routes,
+        region::{Region, RegionMap},
         tables::{RoutingExpr, Tables},
     },
     interceptor::{InterceptorTrait, InterceptorsChain},
@@ -77,7 +77,7 @@ pub(crate) type Route = Vec<Direction>;
 pub(crate) struct QueryTargetQabl {
     pub(crate) dir: Direction,
     pub(crate) info: Option<QueryableInfoType>,
-    pub(crate) bound: Bound,
+    pub(crate) region: Region,
 }
 
 impl QueryTargetQabl {
@@ -85,7 +85,7 @@ impl QueryTargetQabl {
         (&fid, ctx): (&FaceId, &Arc<FaceContext>),
         expr: &RoutingExpr,
         complete: bool,
-        bound: &Bound,
+        region: &Region,
     ) -> Option<Self> {
         let qabl = ctx.qabl?;
         let wire_expr = expr.get_best_key(fid);
@@ -101,7 +101,7 @@ impl QueryTargetQabl {
                 // NOTE: local client faces are nearer than remote client faces
                 distance: if ctx.face.is_local { 0 } else { 1 },
             }),
-            bound: *bound,
+            region: *region,
         })
     }
 }
@@ -300,11 +300,11 @@ pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
     // REVIEW(regions): added because e.g. router/router bounds needs separate
     // Routes (WhatAmI, NodeId -> Route) since each linkstate has a NodeId space
-    pub(crate) hats: BoundMap<HatResourceContext>,
+    pub(crate) hats: RegionMap<HatResourceContext>,
 }
 
 impl ResourceContext {
-    pub(crate) fn new(hat: BoundMap<HatResourceContext>) -> ResourceContext {
+    pub(crate) fn new(hat: RegionMap<HatResourceContext>) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             hats: hat,
@@ -887,7 +887,7 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: BoundMap<HatResourceContext>) {
+    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: RegionMap<HatResourceContext>) {
         if res.ctx.is_none() {
             get_mut_unchecked(res).ctx = Some(Box::new(ResourceContext::new(hat)));
         }
@@ -969,7 +969,7 @@ pub(crate) fn register_expr(
                     .remote_mappings
                     .insert(expr_id, res.clone());
 
-                for bound in wtables.hats.bounds() {
+                for bound in wtables.hats.regions() {
                     disable_matches_data_routes(&mut res, bound);
                     disable_matches_query_routes(&mut res, bound);
                 }

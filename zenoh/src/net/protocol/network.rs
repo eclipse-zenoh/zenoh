@@ -41,7 +41,7 @@ use crate::net::{
     codec::Zenoh080Routing,
     common::AutoConnect,
     protocol::linkstate::{LinkEdgeWeight, LinkState, LinkStateList, LocalLinkState},
-    routing::dispatcher::{gateway::Bound, tables::NodeId},
+    routing::dispatcher::{region::Region, tables::NodeId},
     runtime::Runtime,
 };
 
@@ -153,7 +153,7 @@ impl Network {
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
-        bound: &Bound,
+        region: &Region,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -163,7 +163,7 @@ impl Network {
             locators: None,
             sn: 1,
             links: HashMap::new(),
-            is_gateway: !bound.is_north(),
+            is_gateway: region.bound().is_south(),
         });
 
         tracing::trace!(idx = idx.index(), "New network");

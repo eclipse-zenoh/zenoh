@@ -80,7 +80,7 @@ impl Face {
                 let tables = &mut *wtables;
 
                 if let Some(interest_id) = interest_id {
-                    if !self.state.local_bound.is_north() {
+                    if self.state.region.bound().is_south() {
                         tracing::error!(
                             id,
                             "Received current token from south/eastwest-bound face. \
@@ -189,7 +189,7 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        tracing::trace!(?self.state.local_bound);
+        tracing::trace!(?self.state.region);
 
         let res_cleanup = tables.hats.iter_mut().filter_map(|(_, hat)| {
             let res = hat.undeclare_token(

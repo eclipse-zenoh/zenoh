@@ -27,10 +27,10 @@ use super::{initial_interest, Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
         face::InterestState,
-        gateway::BoundMap,
         interests::{
             CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
         },
+        region::RegionMap,
         resource::Resource,
     },
     hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
@@ -41,7 +41,7 @@ impl Hat {
     pub(super) fn interests_new_face(&self, ctx: BaseContext) {
         if ctx.src_face.whatami != WhatAmI::Client {
             for mut face in self.faces(ctx.tables).values().cloned().collect::<Vec<_>>() {
-                if !face.remote_bound.is_north() {
+                if face.remote_bound.is_south() {
                     for RemoteInterest { res, options, .. } in
                         self.face_hat_mut(&mut face).remote_interests.values()
                     {
@@ -85,13 +85,13 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn route_interest(
         &mut self,
         mut ctx: BaseContext,
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        mut south_hats: BoundMap<&mut dyn HatTrait>,
+        mut south_hats: RegionMap<&mut dyn HatTrait>,
     ) {
         // I have received an interest with mode != FINAL.
         // I should be the north hat.
@@ -100,10 +100,10 @@ impl HatInterestTrait for Hat {
         //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
-        assert!(self.bound().is_north());
-        assert!(!ctx.src_face.local_bound.is_north());
+        assert!(self.bound().bound().is_north());
+        assert!(ctx.src_face.region.bound().is_south());
 
-        let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
+        let owner_hat = &mut *south_hats[ctx.src_face.region];
 
         if msg.mode.current() {
             owner_hat.send_declarations(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
@@ -119,7 +119,7 @@ impl HatInterestTrait for Hat {
 
         let interest = Arc::new(CurrentInterest {
             src,
-            src_bound: ctx.src_face.local_bound,
+            src_region: ctx.src_face.region,
             src_interest_id: msg.id,
             mode: msg.mode,
         });
@@ -136,7 +136,7 @@ impl HatInterestTrait for Hat {
             .faces_mut(ctx.tables)
             .values()
             .filter(|f| {
-                (!f.remote_bound.is_north())
+                f.remote_bound.is_south()
                     || (f.whatami == WhatAmI::Peer
                         && msg.options.tokens()
                         && msg.mode == InterestMode::Current
@@ -211,12 +211,12 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn route_interest_final(
         &mut self,
         mut ctx: BaseContext,
         msg: &Interest,
-        mut south_hats: BoundMap<&mut dyn HatTrait>,
+        mut south_hats: RegionMap<&mut dyn HatTrait>,
     ) {
         // I have received an interest with mode FINAL.
         // I should be the north hat.
@@ -224,12 +224,12 @@ impl HatInterestTrait for Hat {
         //   1. I need to unregister it as a remote interest in the owner (south) hat.
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-        assert!(self.bound().is_north());
-        assert!(!ctx.src_face.local_bound.is_north());
+        assert!(self.bound().bound().is_north());
+        assert!(ctx.src_face.region.bound().is_south());
 
         // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
 
-        let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
+        let owner_hat = &mut *south_hats[ctx.src_face.region];
 
         let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
             tracing::error!(id = msg.id, "Unknown remote interest");
@@ -238,7 +238,7 @@ impl HatInterestTrait for Hat {
 
         if let Some(dst_face) = self
             .owned_faces_mut(ctx.tables)
-            .find(|f| !f.remote_bound.is_north())
+            .find(|f| f.remote_bound.is_south())
             .map(get_mut_unchecked)
         {
             dst_face.local_interests.retain(|id, local_interest| {
@@ -268,12 +268,12 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn route_final_declaration(
         &mut self,
         ctx: BaseContext,
         interest_id: InterestId,
-        mut south_hats: BoundMap<&mut dyn HatTrait>,
+        mut south_hats: RegionMap<&mut dyn HatTrait>,
     ) {
         // I have received a Declare Final.
         // Either this is a peer initial interest finalizer, in which case I should own the (peer) face.
@@ -293,8 +293,8 @@ impl HatInterestTrait for Hat {
                 }
             });
         } else {
-            assert!(self.bound().is_north());
-            assert!(ctx.src_face.local_bound.is_north());
+            assert!(self.bound().bound().is_north());
+            assert!(ctx.src_face.region.bound().is_north());
 
             if ctx.src_face.remote_bound.is_north() {
                 tracing::error!(
@@ -323,13 +323,13 @@ impl HatInterestTrait for Hat {
 
             cancellation_token.cancel();
             if let Some(interest) = Arc::into_inner(interest) {
-                let owner_hat = &mut *south_hats[interest.src_bound];
+                let owner_hat = &mut *south_hats[interest.src_region];
                 owner_hat.send_final_declaration(ctx, interest.src_interest_id, &interest.src);
             }
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn send_declarations(
         &mut self,
         ctx: BaseContext,
@@ -371,7 +371,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn send_final_declaration(&mut self, ctx: BaseContext, id: InterestId, src: &Remote) {
         // I should send a DeclareFinal to the source of the current interest identified by the given IID and FID
 
@@ -389,7 +389,7 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn register_interest(
         &mut self,
         ctx: BaseContext,
@@ -406,9 +406,9 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(!self.bound().is_north());
+        assert!(self.bound().bound().is_south());
         self.assert_proper_ownership(&ctx);
 
         let Some(remote_interest) = self

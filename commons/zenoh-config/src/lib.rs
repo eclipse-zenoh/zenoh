@@ -1321,51 +1321,6 @@ impl Config {
             LibLoader::empty()
         }
     }
-
-    pub fn canonicalize(&mut self) -> ZResult<()> {
-        match (self.mode, self.gateway.clone()) {
-            (None, ModeDependentValue::Unique(gwy)) => {
-                self.mode = Some(gwy.north.mode);
-            }
-            (None, ref gwy @ ModeDependentValue::Dependent(..)) => {
-                if gwy
-                    .get(WhatAmI::default())
-                    .is_some_and(|gwy| gwy.north.mode != WhatAmI::default())
-                {
-                    bail!(
-                        "mode is undefined (defaults to Peer) \
-                        and gateway is a mode dependent value where gateway.peer.north.mode is not Peer"
-                    )
-                }
-            }
-            (Some(mode), ModeDependentValue::Unique(gwy)) => {
-                if mode != gwy.north.mode {
-                    bail!(
-                        "mode is {} while gateway.north.mode is {}",
-                        mode,
-                        gwy.north.mode
-                    );
-                }
-            }
-            (Some(mode), ref gwy @ ModeDependentValue::Dependent(..)) => match gwy.get(mode) {
-                Some(gwy) => {
-                    if mode != gwy.north.mode {
-                        bail!(
-                            "mode is {} while gateway.{}.north.mode is {}",
-                            mode,
-                            mode,
-                            gwy.north.mode
-                        );
-                    }
-                }
-                None => {
-                    bail!("mode is {mode} but gateway.{mode} (mode dependent) is undefined",);
-                }
-            },
-        }
-
-        Ok(())
-    }
 }
 
 impl std::fmt::Display for Config {

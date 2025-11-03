@@ -46,8 +46,8 @@ use crate::{
     net::{
         protocol::{linkstate::LinkInfo, network::SuccessorEntry},
         routing::dispatcher::{
-            gateway::{Bound, BoundMap},
             interests::{CurrentInterest, RemoteInterest},
+            region::{Region, RegionMap},
         },
         runtime::Runtime,
     },
@@ -201,20 +201,20 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
     fn whatami(&self) -> WhatAmI;
-    fn bound(&self) -> Bound;
+    fn bound(&self) -> Region;
 
     /// Returns `true` if the hat should route data or queries between `src` and `dst`.
     fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
         // REVIEW(regions): not sure
-        !src.local_bound.is_north() ^ !dst.local_bound.is_north()
-            || (src.whatami.is_client() && !src.local_bound.is_north())
-            || (dst.whatami.is_client() && !dst.local_bound.is_north())
+        src.region.bound().is_south() ^ dst.region.bound().is_south()
+            || (src.whatami.is_client() && src.region.bound().is_south())
+            || (dst.whatami.is_client() && dst.region.bound().is_south())
     }
 
     fn assert_proper_ownership(&self, ctx: &BaseContext) {
         // TODO(regions): remove this
 
-        if self.bound() != ctx.src_face.local_bound {
+        if self.bound() != ctx.src_face.region {
             unreachable!(
                 "Hat doesn't own source face (bound={},face={})",
                 self.bound(),
@@ -265,7 +265,7 @@ pub(crate) trait HatInterestTrait {
         ctx: BaseContext,
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        south_hats: BoundMap<&mut dyn HatTrait>,
+        south_hats: RegionMap<&mut dyn HatTrait>,
     );
 
     /// Handles interest finalization messages.
@@ -275,7 +275,7 @@ pub(crate) trait HatInterestTrait {
         &mut self,
         ctx: BaseContext,
         msg: &Interest,
-        south_hats: BoundMap<&mut dyn HatTrait>,
+        south_hats: RegionMap<&mut dyn HatTrait>,
     );
 
     /// Handles declaration finalization messages.
@@ -285,7 +285,7 @@ pub(crate) trait HatInterestTrait {
         &mut self,
         ctx: BaseContext,
         interest_id: InterestId,
-        south_hats: BoundMap<&mut dyn HatTrait>,
+        south_hats: RegionMap<&mut dyn HatTrait>,
     );
 
     // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
@@ -408,11 +408,11 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, bound: Bound) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(whatami: WhatAmI, region: Region) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::Hat::new(bound)),
-        WhatAmI::Peer => Box::new(peer::Hat::new(bound)),
-        WhatAmI::Router => Box::new(router::Hat::new(bound)),
+        WhatAmI::Client => Box::new(client::Hat::new(region)),
+        WhatAmI::Peer => Box::new(peer::Hat::new(region)),
+        WhatAmI::Router => Box::new(router::Hat::new(region)),
     }
 }
 
@@ -433,7 +433,7 @@ pub(crate) trait HatTokenTrait {
         ctx: BaseContext,
         res: &mut Arc<Resource>,
         interest_id: InterestId,
-        downstream_hats: BoundMap<&mut dyn HatTrait>,
+        downstream_hats: RegionMap<&mut dyn HatTrait>,
     );
 
     fn propagate_current_token(

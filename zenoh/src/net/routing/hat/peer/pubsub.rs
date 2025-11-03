@@ -540,7 +540,7 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.bound), ret)]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.region), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
@@ -587,9 +587,9 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if !src_face.local_bound.is_north() {
+        if src_face.region.bound().is_south() {
             for face in self.faces(tables).values() {
-                if !face.remote_bound.is_north() {
+                if face.remote_bound.is_south() {
                     route.try_insert(face.id, || {
                         let has_interest_finalized = expr
                             .resource()
@@ -607,7 +607,7 @@ impl HatPubSubTrait for Hat {
                         })
                     });
                 } else if face.whatami == WhatAmI::Peer
-                    && face.local_bound.is_north() // REVIEW(regions): not sure
+                    && face.region.bound().is_north() // REVIEW(regions): not sure
                     && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
                     tracing::trace!(dst = %face, reason = "unfinalized initial interest");

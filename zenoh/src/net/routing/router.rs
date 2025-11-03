@@ -21,7 +21,9 @@ use uhlc::HLC;
 use zenoh_config::{Config, ModeDependent};
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
-use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
+use zenoh_transport::{
+    multicast::TransportMulticast, unicast::TransportUnicast, Bound, TransportPeer,
+};
 
 pub use super::dispatcher::{pubsub::*, resource::*};
 use super::{
@@ -38,7 +40,7 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::{FaceState, FaceStateBuilder},
-            gateway::Bound,
+            region::Region,
             tables::{self, Tables},
         },
         hat::BaseContext,
@@ -48,7 +50,7 @@ use crate::net::{
 pub struct RouterBuilder<'conf> {
     config: &'conf Config,
     hlc: Option<Arc<HLC>>,
-    hats: Vec<(Bound, WhatAmI)>,
+    hats: Vec<(Region, WhatAmI)>,
 }
 
 impl<'conf> RouterBuilder<'conf> {
@@ -66,8 +68,8 @@ impl<'conf> RouterBuilder<'conf> {
     }
 
     #[cfg(test)]
-    pub fn hat(mut self, bound: Bound, whatami: WhatAmI) -> Self {
-        self.hats.push((bound, whatami));
+    pub fn hat(mut self, region: Region, whatami: WhatAmI) -> Self {
+        self.hats.push((region, whatami));
         self
     }
 
@@ -84,15 +86,24 @@ impl<'conf> RouterBuilder<'conf> {
 
         // REVIEW(regions): impact of using three hats at minimum
         if self.hats.is_empty() {
-            self.hats.extend([
-                (Bound::north(), mode),
-                (Bound::unbound(), WhatAmI::Router),
-                (Bound::session(), WhatAmI::Client),
-            ]);
+            self.hats
+                .extend([(Region::North, mode), (Region::Local, WhatAmI::Client)]);
+
+            self.hats.push((Region::North, mode));
+            self.hats.push((Region::Local, WhatAmI::Client));
+
+            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+                self.hats.push((Region::Undefined { mode }, mode));
+            }
         }
 
-        for (index, south) in gateway_config.south.iter().enumerate() {
-            self.hats.push((Bound::south(index), south.mode));
+        for (index, _) in gateway_config.south.iter().enumerate() {
+            // TODO(regions): we create three hats per subregion.
+            // If memory usage is an issue, we should create then lazily.
+            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+                self.hats
+                    .push((Region::Subregion { id: index, mode }, mode));
+            }
         }
 
         tracing::trace!(hats = ?self.hats, "New router");
@@ -161,7 +172,7 @@ impl Router {
             state: newface,
         };
         let mut declares = vec![];
-        tables.hats[face.state.local_bound]
+        tables.hats[face.state.region]
             // FIXME(regions): what if face.local is false?
             .new_local_face(
                 BaseContext {
@@ -184,13 +195,13 @@ impl Router {
     pub(crate) fn new_primitives(
         &self,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
-        bound: Bound,
+        region: Region,
     ) -> Arc<Face> {
         self.new_face(|tables| {
             FaceStateBuilder::new(
                 tables.data.new_face_id(),
                 tables.data.zid,
-                bound,
+                region,
                 Bound::North,
                 primitives.clone(),
                 tables.hats.map_ref(|hat| hat.new_face()),
@@ -204,7 +215,7 @@ impl Router {
     pub fn new_transport_unicast(
         &self,
         transport: TransportUnicast,
-        bound: Bound,
+        region: Region,
     ) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -228,8 +239,8 @@ impl Router {
                 let builder = FaceStateBuilder::new(
                     fid,
                     zid,
-                    bound,
-                    transport.get_bound().unwrap_or_default().into(),
+                    region,
+                    transport.get_bound().unwrap_or_default(),
                     mux.clone(),
                     tables.hats.map_ref(|hat| hat.new_face()),
                 )
@@ -247,7 +258,7 @@ impl Router {
             .data
             .faces
             .iter()
-            .filter(|(_, f)| !f.remote_bound.is_north())
+            .filter(|(_, f)| f.remote_bound.is_south())
             .count();
 
         if gwy_count > 1 {
@@ -272,7 +283,7 @@ impl Router {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        tables.hats[bound].new_transport_unicast_face(
+        tables.hats[region].new_transport_unicast_face(
             BaseContext {
                 tables_lock: &face.tables,
                 tables: &mut tables.data,
@@ -294,7 +305,7 @@ impl Router {
     pub fn new_transport_multicast(
         &self,
         transport: TransportMulticast,
-        bound: Bound,
+        region: Region,
     ) -> ZResult<()> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -307,7 +318,7 @@ impl Router {
             FaceStateBuilder::new(
                 fid,
                 ZenohIdProto::from_str("1").unwrap(),
-                bound,
+                region,
                 Bound::North, // TODO
                 mux.clone(),
                 tables.hats.map_ref(|hat| hat.new_face()),
@@ -323,7 +334,7 @@ impl Router {
             state: face.clone(),
             tables: self.tables.clone(),
         });
-        tables.data.hats[bound].mcast_groups.push(face);
+        tables.data.hats[region].mcast_groups.push(face);
 
         tables.data.disable_all_routes();
         Ok(())
@@ -333,7 +344,7 @@ impl Router {
         &self,
         transport: TransportMulticast,
         peer: TransportPeer,
-        bound: Bound,
+        region: Region,
     ) -> ZResult<Arc<DeMux>> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -349,7 +360,7 @@ impl Router {
         let face_state_builder = FaceStateBuilder::new(
             fid,
             peer.zid,
-            bound,
+            region,
             Bound::North, // TODO
             Arc::new(DummyPrimitives),
             tables.hats.map_ref(|hat| hat.new_face()),
@@ -366,7 +377,9 @@ impl Router {
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
         );
-        tables.data.hats[bound].mcast_faces.push(face_state.clone());
+        tables.data.hats[region]
+            .mcast_faces
+            .push(face_state.clone());
 
         tables.data.disable_all_routes();
         Ok(Arc::new(DeMux::new(

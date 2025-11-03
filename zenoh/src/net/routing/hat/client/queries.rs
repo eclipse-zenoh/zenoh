@@ -357,7 +357,7 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.region))]
     fn compute_query_route(
         &self,
         tables: &TablesData,
@@ -389,7 +389,7 @@ impl HatQueriesTrait for Hat {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
                 if self.should_route_between(src_face, &ctx.face) {
-                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.region)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         route.push(qabl);
@@ -398,12 +398,12 @@ impl HatQueriesTrait for Hat {
             }
         }
 
-        if !src_face.local_bound.is_north() {
+        if src_face.region.bound().is_south() {
             // REVIEW(regions): there should only be one such face?
             for face in self
                 .faces(tables)
                 .values()
-                .filter(|f| f.local_bound.is_north())
+                .filter(|f| f.region.bound().is_north())
             {
                 let has_interest_finalized = expr
                     .resource()
@@ -420,7 +420,7 @@ impl HatQueriesTrait for Hat {
                             node_id: DEFAULT_NODE_ID,
                             dst_node_id: DEFAULT_NODE_ID,
                         },
-                        bound: self.bound,
+                        region: self.region,
                     });
                 }
             }

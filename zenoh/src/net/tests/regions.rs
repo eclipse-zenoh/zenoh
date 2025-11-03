@@ -28,12 +28,13 @@ use zenoh_protocol::{
     zenoh::{ConsolidationMode, Query, RequestBody},
 };
 use zenoh_runtime::ZRuntime;
+use zenoh_transport::Bound;
 
 use crate::{
     net::{
         primitives::{DummyPrimitives, EPrimitives, Primitives},
         routing::{
-            dispatcher::{face::FaceStateBuilder, gateway::Bound},
+            dispatcher::{face::FaceStateBuilder, region::Region},
             router::{RouterBuilder, DEFAULT_NODE_ID},
             RoutingContext,
         },
@@ -46,63 +47,64 @@ use crate::{
 fn test_client_to_client_query_route_computation() {
     zenoh_util::try_init_log_from_env();
 
-    const SUBREGION: Bound = Bound::south(0);
+    const SUBREGION: Region = Region::Subregion {
+        id: 0,
+        mode: WhatAmI::Client,
+    };
 
-    for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-        let mut config = Config::default();
-        config.set_mode(Some(mode)).unwrap();
+    let mut config = Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
 
-        let mut router = RouterBuilder::new(&config)
-            .hat(SUBREGION, mode)
-            .build()
-            .unwrap();
+    let mut router = RouterBuilder::new(&config)
+        .hat(SUBREGION, WhatAmI::Client)
+        .build()
+        .unwrap();
 
-        let runtime = ZRuntime::Application
-            .block_in_place(RuntimeBuilder::new(config).build())
-            .unwrap();
-        router.init_hats(runtime).unwrap();
+    let runtime = ZRuntime::Application
+        .block_in_place(RuntimeBuilder::new(config).build())
+        .unwrap();
+    router.init_hats(runtime).unwrap();
 
-        let src_face = router.new_face(|tables| {
-            FaceStateBuilder::new(
-                tables.data.new_face_id(),
-                ZenohIdProto::rand(),
-                SUBREGION,
-                Bound::north(),
-                Arc::new(DummyPrimitives),
-                tables.hats.map_ref(|hat| hat.new_face()),
-            )
-            .whatami(WhatAmI::Client)
-            .build()
-        });
-        let dst_buf = Arc::new(RequestBuffer::default());
-        let dst_face = router.new_face(|tables| {
-            FaceStateBuilder::new(
-                tables.data.new_face_id(),
-                ZenohIdProto::rand(),
-                SUBREGION,
-                Bound::north(),
-                dst_buf.clone(),
-                tables.hats.map_ref(|hat| hat.new_face()),
-            )
-            .whatami(WhatAmI::Client)
-            .build()
-        });
+    let src_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            SUBREGION,
+            Bound::North,
+            Arc::new(DummyPrimitives),
+            tables.hats.map_ref(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Client)
+        .build()
+    });
+    let dst_buf = Arc::new(RequestBuffer::default());
+    let dst_face = router.new_face(|tables| {
+        FaceStateBuilder::new(
+            tables.data.new_face_id(),
+            ZenohIdProto::rand(),
+            SUBREGION,
+            Bound::North,
+            dst_buf.clone(),
+            tables.hats.map_ref(|hat| hat.new_face()),
+        )
+        .whatami(WhatAmI::Client)
+        .build()
+    });
 
-        dst_face.declare_queryable(
-            &router.tables,
-            1,
-            &WireExpr::from("a/b/**"),
-            &QueryableInfoType::DEFAULT,
-            DEFAULT_NODE_ID,
-            &mut |p, m| m.with_mut(|m| p.send_declare(m)),
-        );
+    dst_face.declare_queryable(
+        &router.tables,
+        1,
+        &WireExpr::from("a/b/**"),
+        &QueryableInfoType::DEFAULT,
+        DEFAULT_NODE_ID,
+        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+    );
 
-        let mut msg = new_request(1, WireExpr::from("a/b/1"));
+    let mut msg = new_request(1, WireExpr::from("a/b/1"));
 
-        src_face.route_query(&mut msg);
-        let buf_guard = dst_buf.0.lock().unwrap();
-        assert_eq!(&*buf_guard, &[msg]);
-    }
+    src_face.route_query(&mut msg);
+    let buf_guard = dst_buf.0.lock().unwrap();
+    assert_eq!(&*buf_guard, &[msg]);
 }
 
 #[test]
@@ -127,8 +129,8 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::north(),
-            Bound::south(0),
+            Region::North,
+            Bound::South,
             client_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -141,8 +143,8 @@ fn test_north_bound_client_to_south_bound_peer_query_route_computation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::north(),
-            Bound::north(),
+            Region::North,
+            Bound::North,
             client_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -199,8 +201,8 @@ fn test_peer_interest_propagation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::north(),
-            Bound::south(0),
+            Region::North,
+            Bound::South,
             gateway_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -213,8 +215,8 @@ fn test_peer_interest_propagation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::north(),
-            Bound::north(),
+            Region::North,
+            Bound::North,
             peer_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -227,8 +229,8 @@ fn test_peer_interest_propagation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::session(),
-            Bound::north(),
+            Region::Local,
+            Bound::North,
             client_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -262,14 +264,17 @@ fn test_peer_interest_propagation() {
 fn test_peer_gateway_interest_propagation() {
     zenoh_util::try_init_log_from_env();
 
-    const PEER_SUBREGION: Bound = Bound::south(0);
+    const PEER_SUBREGION: Region = Region::Subregion {
+        id: 0,
+        mode: WhatAmI::Peer,
+    };
 
     let router = {
         let mut config = Config::default();
         config.set_mode(Some(WhatAmI::Peer)).unwrap();
 
         let mut router = RouterBuilder::new(&config)
-            .hat(Bound::north(), WhatAmI::Peer)
+            .hat(Region::North, WhatAmI::Peer)
             .hat(PEER_SUBREGION, WhatAmI::Peer)
             .build()
             .unwrap();
@@ -286,8 +291,8 @@ fn test_peer_gateway_interest_propagation() {
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::north(),
-            Bound::south(0),
+            Region::North,
+            Bound::South,
             gateway_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -301,7 +306,7 @@ fn test_peer_gateway_interest_propagation() {
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
             PEER_SUBREGION,
-            Bound::north(),
+            Bound::North,
             peer_buf.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -331,14 +336,12 @@ fn test_peer_gateway_interest_propagation() {
 fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mode2: WhatAmI) {
     zenoh_util::try_init_log_from_env();
 
-    const SUBREGION2: Bound = Bound::south(0);
-
     let router = {
         let config = Config::default();
 
         let mut router = RouterBuilder::new(&config)
-            .hat(Bound::north(), mode1)
-            .hat(SUBREGION2, mode2)
+            .hat(Region::North, mode1)
+            .hat(Region::Subregion { id: 0, mode: mode2 }, mode2)
             .build()
             .unwrap();
 
@@ -362,8 +365,8 @@ fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mo
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            SUBREGION2,
-            Bound::north(),
+            Region::Subregion { id: 0, mode: mode2 },
+            Bound::North,
             buf2.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
@@ -389,8 +392,8 @@ fn test_declaration_propagation_to_late_faces(mode0: WhatAmI, mode1: WhatAmI, mo
         FaceStateBuilder::new(
             tables.data.new_face_id(),
             ZenohIdProto::rand(),
-            Bound::north(),
-            Bound::north(),
+            Region::North,
+            Bound::North,
             buf0.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )

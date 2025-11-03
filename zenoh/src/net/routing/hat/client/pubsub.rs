@@ -339,7 +339,7 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.bound), ret)]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.region), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
@@ -386,12 +386,12 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if !src_face.local_bound.is_north() {
+        if src_face.region.bound().is_south() {
             // REVIEW(regions): there should only be one such face?
             for face in self
                 .faces(tables)
                 .values()
-                .filter(|f| f.local_bound.is_north())
+                .filter(|f| f.region.bound().is_north())
             {
                 route.try_insert(face.id, || {
                     let has_interest_finalized = expr

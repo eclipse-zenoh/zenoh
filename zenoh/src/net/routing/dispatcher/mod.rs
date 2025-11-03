@@ -18,7 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 pub mod face;
-pub mod gateway;
+pub mod region;
 pub mod interests;
 pub mod local_resources;
 pub mod pubsub;

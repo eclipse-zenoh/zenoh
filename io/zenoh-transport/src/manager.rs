@@ -53,12 +53,22 @@ fn duration_from_i64us(us: i64) -> Duration {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-
 pub enum Bound {
     #[default]
     North,
     South,
 }
+
+impl Bound {
+    pub fn is_north(&self) -> bool {
+        *self == Bound::North
+    }
+
+    pub fn is_south(&self) -> bool {
+        *self == Bound::South
+    }
+}
+
 pub type BoundCallback = Arc<dyn Fn(TransportPeer) -> Bound + Send + Sync>;
 
 /// # Examples

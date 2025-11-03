@@ -86,7 +86,7 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
-    net::routing::{dispatcher::gateway::Bound, router::RouterBuilder},
+    net::routing::{dispatcher::region::Region, router::RouterBuilder},
     GIT_VERSION, LONG_VERSION,
 };
 
@@ -304,12 +304,12 @@ impl IRuntime for RuntimeState {
             Some(ns) => {
                 let face = self.router.new_primitives(
                     Arc::new(ENamespace::new(ns.clone(), e_primitives)),
-                    Bound::session(),
+                    Region::Local,
                 );
                 (face.state.id, Arc::new(Namespace::new(ns.clone(), face)))
             }
             None => {
-                let face = self.router.new_primitives(e_primitives, Bound::session());
+                let face = self.router.new_primitives(e_primitives, Region::Local);
                 (face.state.id, face)
             }
         }
@@ -440,14 +440,12 @@ impl RuntimeBuilder {
 
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
-            mut config,
+            config,
             #[cfg(feature = "plugins")]
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
         } = self;
-
-        config.canonicalize()?;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
         let zid = (*config.id()).unwrap_or_default().into();
@@ -475,8 +473,8 @@ impl RuntimeBuilder {
             .bound_callback({
                 let config = config.clone();
                 move |p| {
-                    compute_bound(&p, &config)
-                        .map(|b| b.into())
+                    compute_region(&p, &config)
+                        .map(|b| b.bound())
                         .unwrap_or_default()
                 }
             });
@@ -703,7 +701,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                let bound = compute_bound(&peer, &runtime.config().lock().0)?;
+                let bound = compute_region(&peer, &runtime.config().lock().0)?;
 
                 fn north_bound_transport_peer_count(
                     runtime: &Runtime,
@@ -731,7 +729,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
                                 // NOTE(regions): compute bound instead of querying the router as
                                 // the corresponding transport face might not exist yet
-                                let Ok(bound) = compute_bound(&peer, &runtime.config().lock().0)
+                                let Ok(bound) = compute_region(&peer, &runtime.config().lock().0)
                                 else {
                                     tracing::error!(
                                         zid = %peer.zid.short(),
@@ -743,13 +741,13 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                                     return false;
                                 };
 
-                                bound.is_north()
+                                bound.bound().is_north()
                             })
                             .count()
                     })
                 }
 
-                if bound.is_north()
+                if bound.bound().is_north()
                     && runtime.whatami() == WhatAmI::Client
                     && north_bound_transport_peer_count(runtime, &peer) > 0
                 {
@@ -785,7 +783,9 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .collect();
 
                 // FIXME(regions): multicast support
-                let bound = Bound::unbound();
+                let bound = Region::Undefined {
+                    mode: WhatAmI::default(),
+                };
 
                 runtime
                     .state
@@ -860,7 +860,9 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .collect();
 
         // FIXME(regions): multicast support
-        let bound = Bound::unbound();
+        let bound = Region::Undefined {
+            mode: WhatAmI::default(),
+        };
 
         Ok(Arc::new(RuntimeMulticastSession {
             main_handler: self.runtime.state.router.new_peer_multicast(
@@ -948,7 +950,7 @@ impl Closeable for Runtime {
     }
 }
 
-fn compute_bound(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult<Bound> {
+fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult<Region> {
     let gateway_config = config
         .gateway
         .get(zenoh_config::unwrap_or_default!(config.mode()))
@@ -999,27 +1001,30 @@ fn compute_bound(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult
     Ok(match (north, south) {
         (true, None) => {
             tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
-            Bound::north()
+            Region::North
         }
         (false, Some(index)) => {
             tracing::debug!(zid = %peer.zid, "Transport peer is south-bound");
-            Bound::south(index)
+            Region::Subregion {
+                id: index,
+                mode: peer.whatami,
+            }
         }
         (false, None) => {
             tracing::info!(
                 zid = %peer.zid,
                 "Transport peer matches neither north nor south filters. \
-                Using eastwest region instead"
+                Using default region instead"
             );
-            Bound::unbound()
+            Region::Undefined { mode: peer.whatami }
         }
         (true, Some(_)) => {
             tracing::warn!(
                 zid = %peer.zid,
                 "Transport peer matches north and south filters. \
-                Using eastwest region instead"
+                Using default region instead"
             );
-            Bound::unbound()
+            Region::Undefined { mode: peer.whatami }
         }
     })
 }

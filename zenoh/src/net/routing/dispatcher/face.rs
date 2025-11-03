@@ -33,16 +33,16 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
-use zenoh_transport::multicast::TransportMulticast;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
+use zenoh_transport::{multicast::TransportMulticast, Bound};
 
 use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
 use crate::net::{
     primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
         dispatcher::{
-            gateway::{Bound, BoundMap},
+            region::{Region, RegionMap},
             interests::{finalize_pending_interests, RemoteInterest},
             queries::{
                 finalize_pending_queries, route_send_response, route_send_response_final, Query,
@@ -111,7 +111,7 @@ pub struct FaceState {
     pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
-    pub(crate) local_bound: Bound,
+    pub(crate) region: Region,
     pub(crate) remote_bound: Bound,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
@@ -126,7 +126,7 @@ pub struct FaceState {
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
     /// Downcasts to `HatFace`.
-    pub(crate) hats: BoundMap<Box<dyn Any + Send + Sync>>,
+    pub(crate) hats: RegionMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
 }
@@ -137,16 +137,16 @@ impl FaceStateBuilder {
     pub(crate) fn new(
         id: usize,
         zid: ZenohIdProto,
-        local_bound: Bound,
+        region: Region,
         remote_bound: Bound,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
-        hats: BoundMap<Box<dyn Any + Send + Sync>>,
+        hats: RegionMap<Box<dyn Any + Send + Sync>>,
     ) -> Self {
         FaceStateBuilder(FaceState {
             id,
             zid,
             whatami: WhatAmI::default(),
-            local_bound,
+            region,
             remote_bound,
             primitives,
             local_interests: HashMap::new(),
@@ -323,7 +323,7 @@ impl FaceState {
 
 impl fmt::Display for FaceState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}:{}", self.id, self.zid.short(), self.local_bound)
+        write!(f, "{}:{}:{}", self.id, self.zid.short(), self.region)
     }
 }
 
@@ -332,7 +332,7 @@ impl fmt::Debug for FaceState {
         f.debug_struct("FaceState")
             .field("id", &self.id)
             .field("zid", &self.zid)
-            .field("bound", &self.local_bound)
+            .field("bound", &self.region)
             .finish()
     }
 }
@@ -561,7 +561,7 @@ impl Primitives for Face {
         });
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
-        tables.hats[self.state.local_bound].close_face(
+        tables.hats[self.state.region].close_face(
             BaseContext {
                 tables_lock: &self.tables,
                 tables: &mut tables.data,

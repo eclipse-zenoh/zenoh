@@ -32,7 +32,7 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::Face,
-            gateway::Bound,
+            region::Region,
             local_resources::{LocalResourceInfoTrait, LocalResources},
         },
         hat::{BaseContext, SendDeclare},
@@ -93,7 +93,7 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.local_bound);
+                tracing::trace!(?self.state.region);
 
                 for (bound, hat) in tables.hats.iter_mut() {
                     hat.declare_subscription(
@@ -203,13 +203,13 @@ impl Face {
     }
 }
 
-pub(crate) fn disable_matches_data_routes(res: &mut Arc<Resource>, bound: &Bound) {
+pub(crate) fn disable_matches_data_routes(res: &mut Arc<Resource>, region: &Region) {
     if res.ctx.is_some() {
-        get_mut_unchecked(res).context_mut().hats[bound].disable_data_routes();
+        get_mut_unchecked(res).context_mut().hats[region].disable_data_routes();
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_).context_mut().hats[bound].disable_data_routes();
+                get_mut_unchecked(&mut match_).context_mut().hats[region].disable_data_routes();
             }
         }
     }
@@ -258,21 +258,21 @@ fn get_data_route(
     expr: &RoutingExpr,
     node_id: NodeId,
     dst_node_id: NodeId,
-    bound: &Bound,
+    region: &Region,
 ) -> Arc<Route> {
-    let node_id = tables.hats[bound].map_routing_context(&tables.data, face, node_id);
-    let dst_node_id = tables.hats[bound].map_routing_context(&tables.data, face, dst_node_id);
+    let node_id = tables.hats[region].map_routing_context(&tables.data, face, node_id);
+    let dst_node_id = tables.hats[region].map_routing_context(&tables.data, face, dst_node_id);
     let compute_route =
-        || tables.hats[bound].compute_data_route(&tables.data, face, expr, node_id, dst_node_id);
+        || tables.hats[region].compute_data_route(&tables.data, face, expr, node_id, dst_node_id);
     match expr
         .resource()
         .as_ref()
         .and_then(|res| res.ctx.as_ref())
-        .map(|ctx| &ctx.hats[bound].data_routes)
+        .map(|ctx| &ctx.hats[region].data_routes)
     {
         Some(data_routes) => get_or_set_route(
             data_routes,
-            tables.data.hats[bound].routes_version,
+            tables.data.hats[region].routes_version,
             face.whatami,
             node_id,
             compute_route,
@@ -287,7 +287,7 @@ pub(crate) fn get_matching_subscriptions(
     key_expr: &KeyExpr<'_>,
 ) -> HashMap<usize, Arc<FaceState>> {
     // REVIEW(regions2): use the broker hat
-    tables.hats[Bound::session()].get_matching_subscriptions(&tables.data, key_expr)
+    tables.hats[Region::Local].get_matching_subscriptions(&tables.data, key_expr)
 }
 
 #[cfg(feature = "stats")]

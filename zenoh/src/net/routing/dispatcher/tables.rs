@@ -36,7 +36,7 @@ use super::face::FaceState;
 pub use super::resource::*;
 use crate::net::{
     routing::{
-        dispatcher::{face::FaceId, gateway::BoundMap},
+        dispatcher::{face::FaceId, region::RegionMap},
         hat::HatTrait,
         interceptor::{interceptor_factories, InterceptorFactory},
     },
@@ -123,7 +123,7 @@ pub(crate) struct TablesData {
 
     pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
 
-    pub(crate) hats: BoundMap<HatTablesData>,
+    pub(crate) hats: RegionMap<HatTablesData>,
 }
 
 impl Debug for TablesData {
@@ -155,7 +155,7 @@ impl TablesData {
         zid: ZenohIdProto,
         hlc: Option<Arc<HLC>>,
         config: &Config,
-        hat: BoundMap<HatTablesData>,
+        hat: RegionMap<HatTablesData>,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -238,7 +238,7 @@ pub struct TablesLock {
 
 pub struct Tables {
     pub data: TablesData,
-    pub hats: BoundMap<Box<dyn HatTrait + Send + Sync>>,
+    pub hats: RegionMap<Box<dyn HatTrait + Send + Sync>>,
 }
 
 impl Debug for Tables {

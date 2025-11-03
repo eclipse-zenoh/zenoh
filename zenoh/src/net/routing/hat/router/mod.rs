@@ -58,10 +58,10 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::{FaceId, InterestState},
-            gateway::Bound,
             interests::{PendingCurrentInterest, RemoteInterest},
             pubsub::LocalSubscribers,
             queries::LocalQueryables,
+            region::Region,
             resource::FaceContext,
         },
         hat::{BaseContext, Remote, TREES_COMPUTATION_DELAY_MS},
@@ -82,7 +82,7 @@ struct TreesComputationWorker {
 }
 
 impl TreesComputationWorker {
-    fn new(bound: Bound) -> Self {
+    fn new(region: Region) -> Self {
         let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
         let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
             loop {
@@ -93,7 +93,7 @@ impl TreesComputationWorker {
                 if let Ok(tables_ref) = rx.recv_async().await {
                     let mut wtables = zwrite!(tables_ref.tables);
                     let tables = &mut *wtables;
-                    let hat = tables.hats[bound]
+                    let hat = tables.hats[region]
                         .as_any_mut()
                         .downcast_mut::<Hat>()
                         .unwrap();
@@ -115,7 +115,7 @@ impl TreesComputationWorker {
 }
 
 pub(crate) struct Hat {
-    bound: Bound,
+    region: Region,
     router_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
@@ -136,7 +136,7 @@ pub(crate) struct Hat {
 impl Debug for Hat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Hat")
-            .field("bound", &self.bound)
+            .field("bound", &self.region)
             .field("subs", &self.router_subs)
             .field("qabls", &self.router_qabls)
             .field("tokens", &self.router_tokens)
@@ -145,15 +145,15 @@ impl Debug for Hat {
 }
 
 impl Hat {
-    pub(crate) fn new(bound: Bound) -> Self {
+    pub(crate) fn new(region: Region) -> Self {
         // FIXME(regions): peer failover brokering is scrapped
         Self {
-            bound,
+            region,
             router_subs: HashSet::new(),
             router_qabls: HashSet::new(),
             router_tokens: HashSet::new(),
             routers_net: None,
-            routers_trees_worker: TreesComputationWorker::new(bound),
+            routers_trees_worker: TreesComputationWorker::new(region),
             router_local_interests: HashMap::new(),
             router_pending_current_interests: HashMap::new(),
             router_remote_interests: HashMap::new(),
@@ -167,11 +167,11 @@ impl Hat {
     }
 
     pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
-        res.context().hats[self.bound].ctx.downcast_ref().unwrap()
+        res.context().hats[self.region].ctx.downcast_ref().unwrap()
     }
 
     pub(self) fn res_hat_mut<'r>(&self, res: &'r mut Arc<Resource>) -> &'r mut HatContext {
-        get_mut_unchecked(res).context_mut().hats[self.bound]
+        get_mut_unchecked(res).context_mut().hats[self.region]
             .ctx
             .downcast_mut()
             .unwrap()
@@ -182,11 +182,11 @@ impl Hat {
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
-        face_state.hats[self.bound].downcast_ref().unwrap()
+        face_state.hats[self.region].downcast_ref().unwrap()
     }
 
     pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
-        get_mut_unchecked(face_state).hats[self.bound]
+        get_mut_unchecked(face_state).hats[self.region]
             .downcast_mut()
             .unwrap()
     }
@@ -206,7 +206,7 @@ impl Hat {
         &self,
         tables: &'t TablesData,
     ) -> impl Iterator<Item = &'t Arc<FaceState>> {
-        tables.hats[self.bound].mcast_groups.iter()
+        tables.hats[self.region].mcast_groups.iter()
     }
 
     pub(crate) fn face<'t>(
@@ -221,13 +221,13 @@ impl Hat {
     pub(crate) fn owns_router(&self, face: &FaceState) -> bool {
         // TODO(regions): move `face.whatami == WhatAmI::Router` out of here
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.local_bound && face.whatami == WhatAmI::Router
+        self.region == face.region && face.whatami == WhatAmI::Router
     }
 
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.local_bound
+        self.region == face.region
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -268,7 +268,7 @@ impl Hat {
 
         if gwys.next().is_some() {
             tracing::error!(
-                bound = ?self.bound,
+                bound = ?self.region,
                 total = gwys.count() + 2,
                 selected = ?net.graph[gwy].zid,
                 "Multiple gateways found in router subregion. \
@@ -368,7 +368,7 @@ impl HatBaseTrait for Hat {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
         let config = &config_guard.0;
-        let whatami = tables.hats[self.bound].whatami;
+        let whatami = tables.hats[self.region].whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
         let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
@@ -398,7 +398,7 @@ impl HatBaseTrait for Hat {
             gossip_target,
             autoconnect,
             link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
-            &self.bound,
+            &self.region,
         ));
         Ok(())
     }
@@ -420,7 +420,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
@@ -447,7 +447,7 @@ impl HatBaseTrait for Hat {
     fn close_face(&mut self, mut ctx: BaseContext, tables_ref: &Arc<TablesLock>) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
-        let hat_face = match face.hats[self.bound].downcast_mut::<HatFace>() {
+        let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
             Some(hate_face) => hate_face,
             None => {
                 tracing::error!("Error downcasting face hat in close_face!");
@@ -480,12 +480,12 @@ impl HatBaseTrait for Hat {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
                             .disable_data_routes();
                         subs_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
                 subs_matches.push(res);
             }
         }
@@ -499,12 +499,12 @@ impl HatBaseTrait for Hat {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
                             .disable_query_routes();
                         qabls_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
                 qabls_matches.push(res);
             }
         }
@@ -515,11 +515,11 @@ impl HatBaseTrait for Hat {
         }
 
         for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
             Resource::clean(&mut res);
         }
         for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
             Resource::clean(&mut res);
         }
         self.faces_mut(ctx.tables).remove(&face.id);
@@ -690,8 +690,8 @@ impl HatBaseTrait for Hat {
         WhatAmI::Router
     }
 
-    fn bound(&self) -> Bound {
-        self.bound
+    fn bound(&self) -> Region {
+        self.region
     }
 }
 

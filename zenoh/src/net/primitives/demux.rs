@@ -170,7 +170,7 @@ impl TransportPeerEventHandler for DeMux {
                     let mut wtables = zwrite!(self.face.tables.tables);
                     let tables = &mut *wtables;
 
-                    tables.hats[self.face.state.local_bound].handle_oam(
+                    tables.hats[self.face.state.region].handle_oam(
                         &mut tables.data,
                         &self.face.tables,
                         m,

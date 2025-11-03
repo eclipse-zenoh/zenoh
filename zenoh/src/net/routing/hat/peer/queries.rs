@@ -560,7 +560,7 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.region))]
     fn compute_query_route(
         &self,
         tables: &TablesData,
@@ -596,7 +596,7 @@ impl HatQueriesTrait for Hat {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
                 if self.should_route_between(src_face, &ctx.face) {
-                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.region)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         route.push(qabl);
@@ -605,10 +605,10 @@ impl HatQueriesTrait for Hat {
             }
         }
 
-        if !src_face.local_bound.is_north() {
+        if src_face.region.bound().is_south() {
             // TODO: BestMatching: What if there is a local compete ?
             for face in self.faces(tables).values() {
-                if !face.remote_bound.is_north() {
+                if face.remote_bound.is_south() {
                     let has_interest_finalized = expr
                         .resource()
                         .and_then(|res| res.face_ctxs.get(&face.id))
@@ -624,11 +624,11 @@ impl HatQueriesTrait for Hat {
                                 dst_node_id: DEFAULT_NODE_ID,
                             },
                             info: None,
-                            bound: self.bound,
+                            region: self.region,
                         });
                     }
                 } else if face.whatami == WhatAmI::Peer
-                    && face.local_bound.is_north() // REVIEW(regions): not sure
+                    && face.region.bound().is_north() // REVIEW(regions): not sure
                     && initial_interest(face).is_some_and(|i| !i.finalized)
                 {
                     tracing::trace!(dst = %face, reason = "unfinalized initial interest");
@@ -641,7 +641,7 @@ impl HatQueriesTrait for Hat {
                             dst_node_id: DEFAULT_NODE_ID,
                         },
                         info: None,
-                        bound: self.bound,
+                        region: self.region,
                     });
                 }
             }

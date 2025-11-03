@@ -32,7 +32,7 @@ use zenoh_util::Timed;
 
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
-    dispatcher::{face::Face, gateway::Bound, tables::Tables},
+    dispatcher::{face::Face, region::Region, tables::Tables},
     hat::{BaseContext, HatTrait, Remote, SendDeclare},
     router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,
@@ -40,7 +40,7 @@ use crate::net::routing::{
 
 pub(crate) struct CurrentInterest {
     pub(crate) src: Remote,
-    pub(crate) src_bound: Bound,
+    pub(crate) src_region: Region,
     pub(crate) src_interest_id: InterestId,
     pub(crate) mode: InterestMode,
 }
@@ -310,7 +310,7 @@ impl Face {
         if self.state.whatami == WhatAmI::Peer && interest_id == 0 {
             tracing::debug!(dst = %ctx.src_face, "Finalizing (peer-to-peer) initial interest");
 
-            let peer_owner_hat = &mut tables.hats[self.state.local_bound];
+            let peer_owner_hat = &mut tables.hats[self.state.region];
             let Some(src) = peer_owner_hat.new_remote(ctx.src_face, node_id) else {
                 return;
             };
@@ -319,7 +319,7 @@ impl Face {
             return;
         }
 
-        if !self.state.local_bound.is_north() {
+        if self.state.region.bound().is_south() {
             tracing::error!(
                 interest_id,
                 "Received current interest finalization from south/eastwest-bound face. \

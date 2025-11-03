@@ -721,7 +721,7 @@ impl Hat {
         for mut res in qabls {
             self.unregister_router_queryable(tables, &mut res, node, send_declare);
 
-            disable_matches_query_routes(&mut res, &self.bound);
+            disable_matches_query_routes(&mut res, &self.region);
             Resource::clean(&mut res);
         }
     }
@@ -795,7 +795,7 @@ impl Hat {
                                                 complete: complete && qabl_info.complete,
                                                 distance: net.distances[qabl_idx.index()] as u16,
                                             }),
-                                            bound: self.bound,
+                                            region: self.region,
                                         });
                                     }
                                 }
@@ -1088,7 +1088,7 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.region))]
     fn compute_query_route(
         &self,
         tables: &TablesData,
@@ -1138,7 +1138,7 @@ impl HatQueriesTrait for Hat {
 
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
                 if self.should_route_between(src_face, &ctx.face) {
-                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.bound)
+                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.region)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         route.push(qabl);

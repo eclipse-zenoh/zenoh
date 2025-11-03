@@ -36,7 +36,7 @@ use zenoh_result::{bail, ZError};
 ///
 /// A more detailed explanation of each mode is at [Zenoh Documentation](https://zenoh.io/docs/getting-started/deployment/)
 #[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum WhatAmI {
     Router = 0b001,
     #[default]

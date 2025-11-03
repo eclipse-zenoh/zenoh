@@ -45,7 +45,7 @@ use super::{
 };
 use crate::net::{
     routing::{
-        dispatcher::{face::FaceId, gateway::Bound, interests::RemoteInterest},
+        dispatcher::{face::FaceId, region::Region, interests::RemoteInterest},
         hat::{BaseContext, Remote},
         router::FaceContext,
     },
@@ -58,20 +58,20 @@ mod queries;
 mod token;
 
 pub(crate) struct Hat {
-    bound: Bound,
+    region: Region,
 }
 
 impl Hat {
-    pub(crate) fn new(bound: Bound) -> Self {
-        Self { bound }
+    pub(crate) fn new(region: Region) -> Self {
+        Self { region }
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
-        face_state.hats[self.bound].downcast_ref().unwrap()
+        face_state.hats[self.region].downcast_ref().unwrap()
     }
 
     pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
-        get_mut_unchecked(face_state).hats[self.bound]
+        get_mut_unchecked(face_state).hats[self.region]
             .downcast_mut()
             .unwrap()
     }
@@ -97,7 +97,7 @@ impl Hat {
     /// Returns `true` if `face` belongs to this [`Hat`].
     pub(crate) fn owns(&self, face: &FaceState) -> bool {
         // TODO(regions): move this method to a Hat trait
-        self.bound == face.local_bound
+        self.region == face.region
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -158,7 +158,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
@@ -176,7 +176,7 @@ impl HatBaseTrait for Hat {
     fn close_face(&mut self, mut ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
-        let hat_face = match face.hats[self.bound].downcast_mut::<HatFace>() {
+        let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
             Some(hate_face) => hate_face,
             None => {
                 tracing::error!("Error downcasting face hat in close_face!");
@@ -209,12 +209,12 @@ impl HatBaseTrait for Hat {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
                             .disable_data_routes();
                         subs_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
                 subs_matches.push(res);
             }
         }
@@ -228,12 +228,12 @@ impl HatBaseTrait for Hat {
                 for match_ in &res.context().matches {
                     let mut match_ = match_.upgrade().unwrap();
                     if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.bound]
+                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
                             .disable_query_routes();
                         qabls_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
+                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
                 qabls_matches.push(res);
             }
         }
@@ -244,11 +244,11 @@ impl HatBaseTrait for Hat {
         }
 
         for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_data_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
             Resource::clean(&mut res);
         }
         for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.bound].disable_query_routes();
+            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
             Resource::clean(&mut res);
         }
         self.faces_mut(ctx.tables).remove(&face.id);
@@ -310,8 +310,8 @@ impl HatBaseTrait for Hat {
         WhatAmI::Client
     }
 
-    fn bound(&self) -> Bound {
-        self.bound
+    fn bound(&self) -> Region {
+        self.region
     }
 }
 

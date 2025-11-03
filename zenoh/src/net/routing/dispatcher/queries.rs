@@ -45,8 +45,8 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::Face,
-            gateway::Bound,
             local_resources::{LocalResourceInfoTrait, LocalResources},
+            region::Region,
             tables::Tables,
         },
         hat::{BaseContext, SendDeclare},
@@ -132,7 +132,7 @@ pub(crate) fn get_matching_queryables(
     complete: bool,
 ) -> HashMap<usize, Arc<FaceState>> {
     // REVIEW(regions2): use the broker hat
-    tables.hats[Bound::session()].get_matching_queryables(&tables.data, key_expr, complete)
+    tables.hats[Region::Local].get_matching_queryables(&tables.data, key_expr, complete)
 }
 
 impl Face {
@@ -185,7 +185,7 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.local_bound);
+                tracing::trace!(?self.state.region);
 
                 for hat in tables.hats.values_mut() {
                     hat.declare_queryable(
@@ -202,7 +202,7 @@ impl Face {
                     );
                 }
 
-                for bound in tables.hats.bounds() {
+                for bound in tables.hats.regions() {
                     disable_matches_query_routes(&mut res, bound);
                 }
 
@@ -263,7 +263,7 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        tracing::trace!(?self.state.local_bound);
+        tracing::trace!(?self.state.region);
 
         let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
             let res = hat.undeclare_queryable(
@@ -456,7 +456,7 @@ fn compute_final_route(
     match target {
         QueryTarget::All => {
             for qabl in qabls.iter() {
-                if tables.hats[qabl.bound].egress_filter(
+                if tables.hats[qabl.region].egress_filter(
                     &tables.data,
                     src_face,
                     &qabl.dir.dst_face,
@@ -473,7 +473,7 @@ fn compute_final_route(
         QueryTarget::AllComplete => {
             for qabl in qabls.iter() {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
-                    && tables.hats[qabl.bound].egress_filter(
+                    && tables.hats[qabl.region].egress_filter(
                         &tables.data,
                         src_face,
                         &qabl.dir.dst_face,
@@ -609,13 +609,13 @@ impl Timed for QueryCleanup {
     }
 }
 
-pub(crate) fn disable_matches_query_routes(res: &mut Arc<Resource>, bound: &Bound) {
+pub(crate) fn disable_matches_query_routes(res: &mut Arc<Resource>, region: &Region) {
     if res.ctx.is_some() {
-        get_mut_unchecked(res).context_mut().hats[bound].disable_query_routes();
+        get_mut_unchecked(res).context_mut().hats[region].disable_query_routes();
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_).context_mut().hats[bound].disable_query_routes();
+                get_mut_unchecked(&mut match_).context_mut().hats[region].disable_query_routes();
             }
         }
     }
@@ -627,20 +627,21 @@ fn get_query_route(
     face: &FaceState,
     expr: &RoutingExpr,
     routing_context: NodeId,
-    bound: &Bound,
+    region: &Region,
 ) -> Arc<QueryTargetQablSet> {
-    let local_context = tables.hats[bound].map_routing_context(&tables.data, face, routing_context);
+    let local_context =
+        tables.hats[region].map_routing_context(&tables.data, face, routing_context);
     let compute_route =
-        || tables.hats[bound].compute_query_route(&tables.data, face, expr, local_context);
+        || tables.hats[region].compute_query_route(&tables.data, face, expr, local_context);
     if let Some(query_routes) = expr
         .resource()
         .as_ref()
         .and_then(|res| res.ctx.as_ref())
-        .map(|ctx| &ctx.hats[bound].query_routes)
+        .map(|ctx| &ctx.hats[region].query_routes)
     {
         return get_or_set_route(
             query_routes,
-            tables.data.hats[bound].routes_version,
+            tables.data.hats[region].routes_version,
             face.whatami,
             local_context,
             compute_route,

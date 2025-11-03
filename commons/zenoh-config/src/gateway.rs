@@ -5,7 +5,7 @@ use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
 };
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
+use zenoh_protocol::core::WhatAmIMatcher;
 
 use crate::{Interface, ModeDependentValue, ModeValues, ZenohId};
 
@@ -49,7 +49,6 @@ impl Default for ModeDependentValue<GatewayConf> {
         ModeDependentValue::Dependent(ModeValues {
             router: Some(GatewayConf {
                 north: BoundConf {
-                    mode: WhatAmI::Router,
                     filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().router()),
                         interfaces: None,
@@ -57,7 +56,6 @@ impl Default for ModeDependentValue<GatewayConf> {
                     }]),
                 },
                 south: vec![BoundConf {
-                    mode: WhatAmI::Peer,
                     filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().peer().client()),
                         interfaces: None,
@@ -67,7 +65,6 @@ impl Default for ModeDependentValue<GatewayConf> {
             }),
             peer: Some(GatewayConf {
                 north: BoundConf {
-                    mode: WhatAmI::Peer,
                     filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().peer().router()),
                         interfaces: None,
@@ -75,7 +72,6 @@ impl Default for ModeDependentValue<GatewayConf> {
                     }]),
                 },
                 south: vec![BoundConf {
-                    mode: WhatAmI::Client,
                     filters: Some(vec![BoundFilterConf {
                         modes: Some(WhatAmIMatcher::empty().client()),
                         interfaces: None,
@@ -84,10 +80,7 @@ impl Default for ModeDependentValue<GatewayConf> {
                 }],
             }),
             client: Some(GatewayConf {
-                north: BoundConf {
-                    mode: WhatAmI::Client,
-                    filters: None,
-                },
+                north: BoundConf { filters: None },
                 south: vec![],
             }),
         })
@@ -102,7 +95,6 @@ pub struct GatewayConf {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundConf {
-    pub mode: WhatAmI,
     pub filters: Option<Vec<BoundFilterConf>>,
 }
 

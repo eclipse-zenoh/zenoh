@@ -26,7 +26,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::{Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState, gateway::BoundMap, interests::CurrentInterest, tables::TablesData,
+        face::FaceState, interests::CurrentInterest, region::RegionMap, tables::TablesData,
     },
     hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
@@ -460,7 +460,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -473,7 +473,7 @@ impl HatTokenTrait for Hat {
         self.declare_simple_token(ctx, id, res, interest_id);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
@@ -484,15 +484,15 @@ impl HatTokenTrait for Hat {
         self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, interest_id))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region, interest_id))]
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
         res: &mut Arc<Resource>,
         interest_id: InterestId,
-        mut downstream_hats: BoundMap<&mut dyn HatTrait>,
+        mut downstream_hats: RegionMap<&mut dyn HatTrait>,
     ) {
-        debug_assert!(self.bound.is_north());
+        debug_assert!(self.region.bound().is_north());
 
         if let Some(interest) = ctx
             .src_face
@@ -501,7 +501,7 @@ impl HatTokenTrait for Hat {
             .get(&interest_id)
             .map(|p| &p.interest)
         {
-            let hat = &mut downstream_hats[interest.src_bound];
+            let hat = &mut downstream_hats[interest.src_region];
             hat.propagate_current_token(ctx, res, interest);
         } else {
             tracing::error!(
@@ -513,14 +513,14 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound, interest_id = interest.src_interest_id))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region, interest_id = interest.src_interest_id))]
     fn propagate_current_token(
         &mut self,
         mut ctx: BaseContext,
         res: &mut Arc<Resource>,
         interest: &CurrentInterest,
     ) {
-        debug_assert!(!self.bound.is_north());
+        debug_assert!(self.region.bound().is_south());
 
         if interest.mode == InterestMode::CurrentFuture {
             self.register_simple_token(ctx.reborrow(), interest.src_interest_id, res);

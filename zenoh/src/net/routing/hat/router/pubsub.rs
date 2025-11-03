@@ -639,7 +639,7 @@ impl Hat {
         {
             self.unregister_router_subscription(tables, &mut res, node, send_declare);
 
-            disable_matches_data_routes(&mut res, &self.bound);
+            disable_matches_data_routes(&mut res, &self.region);
             Resource::clean(&mut res)
         }
     }
@@ -949,7 +949,7 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.bound), ret)]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.region), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,

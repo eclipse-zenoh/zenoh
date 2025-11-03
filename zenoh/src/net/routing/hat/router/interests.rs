@@ -25,8 +25,8 @@ use zenoh_runtime::ZRuntime;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
-        gateway::{Bound, BoundMap},
         interests::{CurrentInterest, PendingCurrentInterest, RemoteInterest},
+        region::{Region, RegionMap},
         resource::Resource,
     },
     hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
@@ -35,13 +35,13 @@ use crate::net::routing::{
 };
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn route_interest(
         &mut self,
         mut ctx: BaseContext,
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        mut south_hats: BoundMap<&mut dyn HatTrait>,
+        mut south_hats: RegionMap<&mut dyn HatTrait>,
     ) {
         // I have received an interest with mode != FINAL.
         // I should be the north hat.
@@ -51,7 +51,7 @@ impl HatInterestTrait for Hat {
         //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
-        assert!(self.bound().is_north());
+        assert!(self.bound().bound().is_north());
 
         // REVIEW(regions): mainline zenoh has a failure mode for aggregate interests from peers to routers.
         // See: https://github.com/eclipse-zenoh/zenoh/blob/1bd82eeef7d9b2df0d96dbbaf947ac75c90571aa/zenoh/src/net/routing/hat/router/interests.rs#L53-L59
@@ -101,7 +101,7 @@ impl HatInterestTrait for Hat {
                 );
             }
         } else {
-            let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
+            let owner_hat = &mut *south_hats[ctx.src_face.region];
 
             if msg.mode.current() {
                 owner_hat.send_declarations(ctx.reborrow(), &msg, res.as_deref().cloned().as_mut());
@@ -169,12 +169,12 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn route_interest_final(
         &mut self,
         mut ctx: BaseContext,
         msg: &Interest,
-        mut south_hats: BoundMap<&mut dyn HatTrait>,
+        mut south_hats: RegionMap<&mut dyn HatTrait>,
     ) {
         // I have received an interest with mode FINAL.
         // I should be the north hat.
@@ -183,7 +183,7 @@ impl HatInterestTrait for Hat {
         //   1. I need to unregister it as a remote interest in the owner (south) hat.
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-        assert!(self.bound().is_north());
+        assert!(self.bound().bound().is_north());
 
         // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
 
@@ -214,12 +214,12 @@ impl HatInterestTrait for Hat {
                 });
             } else {
                 tracing::error!(
-                    bnd = ?self.bound,
+                    bnd = ?self.region,
                     "No gateway found in router subregion. Will not forward interest finalization"
                 );
             }
         } else {
-            let owner_hat = &mut *south_hats[ctx.src_face.local_bound];
+            let owner_hat = &mut *south_hats[ctx.src_face.region];
 
             let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
                 tracing::error!(id = msg.id, "Unknown remote interest");
@@ -256,19 +256,19 @@ impl HatInterestTrait for Hat {
                 }
             } else {
                 tracing::debug!(
-                    bnd = ?self.bound,
+                    bnd = ?self.region,
                     "No gateway found in router subregion. Will not propagate interest finalization"
                 );
             }
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn route_final_declaration(
         &mut self,
         _ctx: BaseContext,
         _interest_id: InterestId,
-        _south_hats: BoundMap<&mut dyn HatTrait>,
+        _south_hats: RegionMap<&mut dyn HatTrait>,
     ) {
         // I have received a Declare Final.
         // I should be the north hat.
@@ -276,13 +276,13 @@ impl HatInterestTrait for Hat {
         // and I should call the owner south hat with .send_final_declaration(..).
         // Or, it is destined for another router in my region, in which case I should pass the parcel till the interest source.
 
-        assert!(self.bound().is_north());
+        assert!(self.bound().bound().is_north());
 
         // TODO(regions): this requires a protocol ext for dst NIDs.
         unimplemented!()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn send_declarations(
         &mut self,
         ctx: BaseContext,
@@ -293,7 +293,7 @@ impl HatInterestTrait for Hat {
         //   1. If the interest is current, I need to send all current declarations with the source IID
         //   2. If the interest is future, I need to register it as a remote interest identified by ZID and IID
 
-        assert!(!self.bound().is_north());
+        assert!(self.bound().bound().is_south());
         self.assert_proper_ownership(&ctx);
 
         let src_node_id = self.net().idx.index() as NodeId;
@@ -338,7 +338,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn send_final_declaration(&mut self, mut ctx: BaseContext, id: InterestId, src: &Remote) {
         // I should send a DeclareFinal to the source of the current interest identified by the given IID and ZID
 
@@ -365,14 +365,14 @@ impl HatInterestTrait for Hat {
         });
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn register_interest(
         &mut self,
         ctx: BaseContext,
         msg: &Interest,
         res: Option<&mut Arc<Resource>>,
     ) {
-        assert!(!self.bound().is_north());
+        assert!(self.bound().bound().is_south());
         self.assert_proper_ownership(&ctx);
 
         let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
@@ -394,9 +394,9 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.bound))]
+    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(!self.bound().is_north());
+        assert!(self.bound().bound().is_south());
         self.assert_proper_ownership(&ctx);
 
         let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
@@ -444,7 +444,7 @@ impl Hat {
                 let _span = tracing::trace_span!(
                     "cleanup_pending_current_interest",
                     wai = %WhatAmI::Router.short(),
-                    bnd = %Bound::north(),
+                    bnd = %Region::North,
                     id
                 )
                 .entered();
@@ -453,7 +453,7 @@ impl Hat {
                 let mut wtables = zwrite!(tables_lock.tables);
                 let tables = &mut *wtables;
 
-                let this = tables.hats[Bound::north()]
+                let this = tables.hats[Region::North]
                     .as_any_mut()
                     .downcast_mut::<Hat>()
                     .unwrap();
@@ -493,7 +493,7 @@ impl Hat {
                     return;
                 };
 
-                tables.hats[interest.src_bound].send_final_declaration(
+                tables.hats[interest.src_region].send_final_declaration(
                     BaseContext {
                         tables_lock: &tables_lock,
                         tables: &mut tables.data,
@@ -521,7 +521,7 @@ impl Hat {
                 interest: Arc::new(CurrentInterest {
                     src,
                     src_interest_id: id,
-                    src_bound: ctx.src_face.local_bound,
+                    src_region: ctx.src_face.region,
                     mode: msg.mode,
                 }),
                 cancellation_token,
