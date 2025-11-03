@@ -146,7 +146,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_remote(&self, face: &Arc<FaceState>, _nid: NodeId) -> Option<Remote> {
-        Some(Remote(Box::new(face.clone())))
+        Some(face.clone())
     }
 
     fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
@@ -351,4 +351,4 @@ impl HatFace {
 
 impl HatTrait for Hat {}
 
-type HatRemote = Arc<FaceState>;
+type HatRemote = FaceState;

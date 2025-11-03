@@ -203,7 +203,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_remote(&self, face: &Arc<FaceState>, _nid: NodeId) -> Option<Remote> {
-        Some(Remote(Box::new(face.clone())))
+        Some(face.clone())
     }
 
     fn new_local_face(
@@ -507,4 +507,4 @@ pub(super) fn push_declaration_profile(face: &FaceState) -> bool {
     face.whatami != WhatAmI::Client
 }
 
-type HatRemote = Arc<FaceState>;
+type HatRemote = FaceState;

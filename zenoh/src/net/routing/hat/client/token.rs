@@ -135,9 +135,13 @@ impl Hat {
                 }
 
                 // FIXME(regions): router subregions don't support the interest protocol
-                let src_face = interest.src.downcast_ref::<Arc<FaceState>>().unwrap();
+                let src_face = unsafe {
+                    &mut (*(std::sync::Arc::as_ptr(&interest.src) as *mut dyn std::any::Any))
+                }
+                .downcast_mut::<FaceState>()
+                .unwrap();
 
-                let id = self.make_token_id(res, &mut src_face.clone(), interest.mode);
+                let id = self.make_token_id(res, src_face, interest.mode);
                 let wire_expr = Resource::get_best_key(res, "", src_face.id);
                 send_declare(
                     &src_face.primitives,
@@ -313,18 +317,26 @@ impl Hat {
     }
 
     #[inline]
-    fn make_token_id(
-        &self,
-        res: &Arc<Resource>,
-        face: &mut Arc<FaceState>,
-        mode: InterestMode,
-    ) -> u32 {
+    fn make_token_id(&self, res: &Arc<Resource>, face: &mut FaceState, mode: InterestMode) -> u32 {
         if mode.future() {
-            if let Some(id) = self.face_hat(face).local_tokens.get(res) {
+            if let Some(id) = face.hats[self.region]
+                .downcast_ref::<super::HatFace>()
+                .unwrap()
+                .local_tokens
+                .get(res)
+            {
                 *id
             } else {
-                let id = self.face_hat(face).next_id.fetch_add(1, Ordering::SeqCst);
-                self.face_hat_mut(face).local_tokens.insert(res.clone(), id);
+                let id = face.hats[self.region]
+                    .downcast_ref::<super::HatFace>()
+                    .unwrap()
+                    .next_id
+                    .fetch_add(1, Ordering::SeqCst);
+                face.hats[self.region]
+                    .downcast_mut::<super::HatFace>()
+                    .unwrap()
+                    .local_tokens
+                    .insert(res.clone(), id);
                 id
             }
         } else {
@@ -354,7 +366,7 @@ impl Hat {
                 {
                     for token in self.face_hat(&src_face).remote_tokens.values() {
                         if token.ctx.is_some() && token.matches(res) {
-                            let id = self.make_token_id(token, face, mode);
+                            let id = self.make_token_id(token, get_mut_unchecked(face), mode);
                             let wire_expr = Resource::decl_key(token, face, true);
                             send_declare(
                                 &face.primitives,
@@ -384,7 +396,7 @@ impl Hat {
                     .collect::<Vec<Arc<FaceState>>>()
                 {
                     for token in self.face_hat(&src_face).remote_tokens.values() {
-                        let id = self.make_token_id(token, face, mode);
+                        let id = self.make_token_id(token, get_mut_unchecked(face), mode);
                         let wire_expr = Resource::decl_key(token, face, true);
                         send_declare(
                             &face.primitives,
@@ -485,9 +497,12 @@ impl HatTokenTrait for Hat {
         }
 
         // FIXME(regions): router subregions don't support the interest protocol
-        let src_face = interest.src.downcast_ref::<Arc<FaceState>>().unwrap();
+        let src_face =
+            unsafe { &mut (*(std::sync::Arc::as_ptr(&interest.src) as *mut dyn std::any::Any)) }
+                .downcast_mut::<FaceState>()
+                .unwrap();
 
-        let id = self.make_token_id(res, &mut src_face.clone(), interest.mode);
+        let id = self.make_token_id(res, src_face, interest.mode);
         let wire_expr = Resource::get_best_key(res, "", src_face.id);
         (ctx.send_declare)(
             &src_face.primitives,

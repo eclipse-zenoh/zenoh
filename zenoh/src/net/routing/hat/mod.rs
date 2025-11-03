@@ -17,7 +17,7 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, collections::HashMap, ops::Deref, sync::Arc};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -111,15 +111,17 @@ impl BaseContext<'_> {
 /// to nodes that don't have a face but still need to be identified in hat interfaces.
 ///
 /// Named after Git remotes.
-pub(crate) struct Remote(Box<dyn Any + Send + Sync>);
+// pub(crate) struct Remote(Box<dyn Any + Send + Sync>);
 
-impl Deref for Remote {
-    type Target = dyn Any;
+// impl Deref for Remote {
+//     type Target = dyn Any;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+
+pub(crate) type Remote = Arc<dyn Any + Send + Sync>;
 
 pub(crate) trait HatBaseTrait: Any {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;

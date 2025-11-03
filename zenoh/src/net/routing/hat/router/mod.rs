@@ -412,7 +412,8 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote> {
-        self.get_router(face, nid).map(|zid| Remote(Box::new(zid)))
+        self.get_router(face, nid)
+            .map(|zid| Arc::new(zid) as Arc<(dyn std::any::Any + std::marker::Send + Sync)>)
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
