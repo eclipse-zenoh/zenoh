@@ -249,6 +249,34 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
 #[cfg(feature = "unstable")]
 #[zenoh_macros::internal_trait]
 impl<Handler> CancellationTokenBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt GET operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::{query::{ConsolidationMode, QueryTarget}};
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let querier = session.declare_querier("key/expression")
+    ///     .target(QueryTarget::All)
+    ///     .consolidation(ConsolidationMode::None)
+    ///     .await
+    ///     .unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let _ = querier
+    ///     .get()
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
+    ///     .with_cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// # }
+    /// ```
     fn with_cancellation_token(
         self,
         cancellation_token: crate::api::cancellation::CancellationToken,

@@ -773,6 +773,31 @@ impl<Handler> LivelinessGetBuilder<'_, '_, Handler> {
 #[cfg(feature = "unstable")]
 #[zenoh_macros::internal_trait]
 impl<Handler> CancellationTokenBuilderTrait for LivelinessGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let replies = session
+    ///     .liveliness()
+    ///     .get("key/expression")
+    ///     .with(flume::bounded(32))
+    ///     .with_cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     println!("Received {:?}", reply.result());
+    /// }
+    /// # }
+    /// ```
     fn with_cancellation_token(
         self,
         cancellation_token: crate::api::cancellation::CancellationToken,

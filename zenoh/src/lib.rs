@@ -1101,6 +1101,7 @@ pub mod shm {
     };
 }
 
+/// Functionality for interrupting queries.
 #[zenoh_macros::unstable]
 pub mod cancellation {
     pub use crate::api::cancellation::CancellationToken;
