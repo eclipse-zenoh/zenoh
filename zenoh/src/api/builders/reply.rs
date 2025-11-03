@@ -111,6 +111,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
 
 #[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Sets an optional timestamp to be sent along with the publication.
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -121,6 +122,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Sets an optional attachment to be sent along with the publication.
+    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -130,6 +133,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[cfg(feature = "unstable")]
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     fn source_info(self, source_info: SourceInfo) -> Self {
         Self {
             source_info,
@@ -140,16 +144,22 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the reply.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
     }
 
+    /// Changes the [`Priority`](crate::qos::Priority) of the reply.
     fn priority(self, priority: Priority) -> Self {
         let qos = self.qos.priority(priority);
         Self { qos, ..self }
     }
 
+    /// Changes the Express policy to apply when routing the reply.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
         Self { qos, ..self }
@@ -158,6 +168,7 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
@@ -243,6 +254,7 @@ impl<'a> ReplyErrBuilder<'a> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             encoding: encoding.into(),
