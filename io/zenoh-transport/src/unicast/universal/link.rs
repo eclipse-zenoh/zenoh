@@ -15,13 +15,14 @@ use std::{
     future::poll_fn,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
     },
     task::Poll,
     time::{Duration, Instant},
 };
 
 use futures::{future::select_all, task::AtomicWaker};
+use tokio::task::JoinHandle;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
@@ -240,7 +241,7 @@ async fn tx_task(
         let (res, _, _) = select_all(pipeline.split().into_iter().map(|pipeline| {
             let mut link = link.clone();
             let token = token.clone();
-            let latest_message_tracker = keep_alive_tracker.clone();
+            let keep_alive_tracker = keep_alive_tracker.clone();
             #[cfg(feature = "stats")]
             let stats = stats.clone();
             zenoh_runtime::ZRuntime::TX.spawn(async move {
@@ -248,7 +249,7 @@ async fn tx_task(
                     pipeline.priority(),
                     pipeline,
                     &mut link,
-                    latest_message_tracker,
+                    keep_alive_tracker,
                     token,
                     #[cfg(feature = "stats")]
                     stats,
@@ -274,10 +275,10 @@ async fn tx_task(
 }
 
 async fn write_loop(
-    priority: Priority,
+    write_priority: Priority,
     mut pipeline: impl PipelineConsumer,
     link: &mut TransportLinkUnicastTx,
-    keep_alive_tracker: Arc<TimeoutTracker>,
+    keep_alive_tracker: TimeoutTracker,
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
@@ -288,7 +289,8 @@ async fn write_loop(
                     // The queue has been disabled: break the tx loop, drain the queue, and exit
                     break
                 };
-                link.send_batch(&mut batch, priority).await?;
+                debug_assert!(write_priority == Priority::Control || priority == write_priority);
+                link.send_batch(&mut batch, write_priority).await?;
                 // inform the latest message tracker that a message has been sent
                 keep_alive_tracker.reset();
 
@@ -301,7 +303,7 @@ async fn write_loop(
                 // Reinsert the batch into the queue
                 pipeline.refill(batch, priority);
             },
-            _ = keep_alive_tracker.wait_if(priority == Priority::Control) => {
+            _ = keep_alive_tracker.wait_if(write_priority == Priority::Control) => {
                 // A timeout occurred, no control/data messages have been sent during
                 // the keep_alive period, we need to send a KeepAlive message
                 let message: TransportMessage = KeepAlive.into();
@@ -364,7 +366,7 @@ async fn rx_task(
             let mut link = link.clone();
             let transport = transport.clone();
             let token = token.clone();
-            let latest_message_tracker = lease_tracker.clone();
+            let lease_tracker = lease_tracker.clone();
             #[cfg(feature = "stats")]
             let stats = stats.clone();
             let pool = pool.clone();
@@ -373,7 +375,7 @@ async fn rx_task(
                     Priority::try_from(prio).unwrap(),
                     &mut link,
                     transport,
-                    latest_message_tracker,
+                    lease_tracker,
                     token,
                     #[cfg(feature = "stats")]
                     stats,
@@ -403,7 +405,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
     priority: Priority,
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
-    lease_tracker: Arc<TimeoutTracker>,
+    lease_tracker: TimeoutTracker,
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     pool: &RecyclingObjectPool<Box<[u8]>, F>,
@@ -428,6 +430,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
         tokio::select! {
             batch = read(link, priority, pool) => {
                 let batch = batch?;
+                lease_tracker.reset();
                 #[cfg(feature = "stats")]
                 {
                     let header_bytes = if l.is_streamed { 2 } else { 0 };
@@ -443,44 +446,51 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
     }
 }
 
-struct TimeoutTracker {
+struct TimeoutTrackerInner {
     timeout: Duration,
     waker: AtomicWaker,
     has_timed_out: AtomicBool,
     latest_reset: Mutex<Instant>,
+    task: OnceLock<JoinHandle<()>>,
 }
 
+#[derive(Clone)]
+struct TimeoutTracker(Arc<TimeoutTrackerInner>);
+
 impl TimeoutTracker {
-    fn new(timeout: Duration) -> Arc<TimeoutTracker> {
+    fn new(timeout: Duration) -> TimeoutTracker {
         let now = Instant::now();
-        let this = Arc::new(TimeoutTracker {
+        let inner = Arc::new(TimeoutTrackerInner {
             timeout,
             waker: AtomicWaker::new(),
             has_timed_out: AtomicBool::new(false),
             latest_reset: Mutex::new(now),
+            task: OnceLock::new(),
         });
-        let tracker = this.clone();
-        tokio::spawn(async move {
-            let mut latest_message = now;
+        let tracker = inner.clone();
+        let task = zenoh_runtime::ZRuntime::TX.spawn(async move {
+            let mut latest_reset = now;
             loop {
-                tokio::time::sleep_until((latest_message + tracker.timeout).into()).await;
-                let prev = latest_message;
-                latest_message = *tracker.latest_reset.lock().unwrap();
-                if latest_message <= prev {
+                tokio::time::sleep_until((latest_reset + tracker.timeout).into()).await;
+                let prev = latest_reset;
+                latest_reset = *tracker.latest_reset.lock().unwrap();
+                if latest_reset <= prev {
+                    latest_reset = Instant::now();
                     tracker.has_timed_out.store(true, Ordering::Release);
                     tracker.waker.wake();
                 }
             }
         });
-        this
+        inner.task.set(task).unwrap();
+        Self(inner)
     }
 
     fn timeout(&self) -> Duration {
-        self.timeout
+        self.0.timeout
     }
 
     fn reset(&self) {
-        *self.latest_reset.lock().unwrap() = Instant::now();
+        *self.0.latest_reset.lock().unwrap() = Instant::now();
     }
 
     async fn wait_if(&self, predicate: bool) {
@@ -488,13 +498,21 @@ impl TimeoutTracker {
             if !predicate {
                 return Poll::Pending;
             }
-            self.waker.register(cx.waker());
-            if self.has_timed_out.load(Ordering::Acquire) {
-                self.has_timed_out.store(false, Ordering::Release);
+            self.0.waker.register(cx.waker());
+            if self.0.has_timed_out.load(Ordering::Acquire) {
+                self.0.has_timed_out.store(false, Ordering::Release);
                 return Poll::Ready(());
             }
             Poll::Pending
         })
         .await
+    }
+}
+
+impl Drop for TimeoutTracker {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 2 {
+            self.0.task.get().unwrap().abort();
+        }
     }
 }
