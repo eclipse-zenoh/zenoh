@@ -1,0 +1,28 @@
+name: Check deps for Eclipse IPDDP compliance
+
+on:
+  push:
+    branches:
+      - main
+    paths: [Cargo.toml, Cargo.lock]
+
+jobs:
+  check-ipddp-compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Download Eclipse IPDDP License Tool
+        run: |
+          wget "https://repo.eclipse.org/service/local/artifact/maven/redirect?r=dash-licenses&g=org.eclipse.dash&a=org.eclipse.dash.licenses&v=LATEST" -O org.eclipse.dash.licenses-latest.jar
+
+      - name: Generate dependencies.txt and check compliance
+        run: | 
+          cargo tree -e normal --prefix none --no-dedupe | sort -u | grep -v '^[[:space:]]*$' | grep -v zenoh | sed -E 's|([^ ]+) v([^ ]+).*|crate/cratesio/-/\1/\2|' > dependencies.txt
+          java -jar org.eclipse.dash.licenses-latest.jar dependencies.txt -summary DEPENDENCIES
+          exit $?
