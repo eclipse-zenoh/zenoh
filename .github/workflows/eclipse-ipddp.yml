@@ -12,17 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: 'temurin'
-          java-version: '11'
-
-      - name: Download Eclipse IPDDP License Tool
-        run: |
-          wget "https://repo.eclipse.org/service/local/artifact/maven/redirect?r=dash-licenses&g=org.eclipse.dash&a=org.eclipse.dash.licenses&v=LATEST" -O org.eclipse.dash.licenses-latest.jar
-
       - name: Generate dependencies.txt and check compliance
-        run: | 
+        id: generate-deps
+        run: |
           cargo tree -e normal --prefix none --no-dedupe | sort -u | grep -v '^[[:space:]]*$' | grep -v zenoh | sed -E 's|([^ ]+) v([^ ]+).*|crate/cratesio/-/\1/\2|' > dependencies.txt
-          java -jar org.eclipse.dash.licenses-latest.jar dependencies.txt -summary DEPENDENCIES
-          exit $?
+          echo "dependencies=$(cat dependencies.txt)" >> $GITHUB_OUTPUT
+
+      - name: Run Eclipse IPDDP License Tool
+        uses: eclipse-zenoh/ci/.github/workflows/eclipse-ipddp.yml@main
+        with:
+          dependencies: ${{ steps.generate-deps.outputs.dependencies }}
