@@ -2,6 +2,8 @@ name: Trigger sync lockfiles workflow
 
 on:
   push:
+    branches:
+      - main
     paths: [Cargo.lock]
 
 jobs:
