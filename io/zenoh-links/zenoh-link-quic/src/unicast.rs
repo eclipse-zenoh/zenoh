@@ -13,20 +13,25 @@
 //
 
 use std::{
-    fmt,
+    cell::UnsafeCell,
+    collections::HashMap,
+    fmt, mem,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
 use async_trait::async_trait;
+use futures::FutureExt;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, Notify};
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
-use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names, parse_dscp,
     quic::{
@@ -39,131 +44,150 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{Address, EndPoint, Locator, Priority},
-    transport::BatchSize,
+    core::{Address, Config, EndPoint, Locator, Priority},
+    transport::{init::ext::PatchType, BatchSize},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+enum MultiStream {
+    #[default]
+    Auto,
+    Disabled,
+    Enabled,
+}
+
+impl MultiStream {
+    fn new(config: Config) -> ZResult<Self> {
+        Ok(match config.get("multistream") {
+            None | Some("auto") => Self::Auto,
+            Some("false") => Self::Disabled,
+            Some("true") => Self::Enabled,
+            Some(m) => bail!("Invalid multistream config: {m}"),
+        })
+    }
+}
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    send: [AsyncMutex<Option<quinn::SendStream>>; Priority::NUM],
-    recv: [(AsyncMutex<Option<quinn::RecvStream>>, Notify); Priority::NUM],
-    accept_lock: AsyncMutex<()>,
+    multistream: MultiStream,
+    support_priorities: AtomicBool,
+    send: [UnsafeCell<Option<quinn::SendStream>>; Priority::NUM],
+    recv: [UnsafeCell<RecvStream>; Priority::NUM],
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
+unsafe impl Sync for LinkUnicastQuic {}
+
+enum RecvStream {
+    None,
+    Pending(oneshot::Receiver<quinn::RecvStream>),
+    Accepted(quinn::RecvStream),
+}
+
 impl LinkUnicastQuic {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         connection: quinn::Connection,
         src_addr: SocketAddr,
         dst_locator: Locator,
         send_control: quinn::SendStream,
         recv_control: quinn::RecvStream,
+        multistream: MultiStream,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
-        let mut send = vec![AsyncMutex::new(Some(send_control))];
-        send.resize_with(Priority::NUM, || AsyncMutex::new(None));
-        let mut recv = vec![(AsyncMutex::new(Some(recv_control)), Notify::new())];
-        recv.resize_with(Priority::NUM, || (AsyncMutex::new(None), Notify::new()));
+        let mut send = vec![UnsafeCell::new(Some(send_control))];
+        send.resize_with(Priority::NUM, || UnsafeCell::new(None));
+        let mut recv = vec![UnsafeCell::new(RecvStream::Accepted(recv_control))];
+        recv.resize_with(Priority::NUM, || UnsafeCell::new(RecvStream::None));
 
         // Build the Quic object
-        LinkUnicastQuic {
+        let link = LinkUnicastQuic {
             connection,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
+            multistream,
+            support_priorities: AtomicBool::new(false),
             send: send.try_into().unwrap(),
             recv: recv.try_into().unwrap(),
-            accept_lock: AsyncMutex::new(()),
             auth_identifier,
             expiration_manager,
+        };
+        if multistream == MultiStream::Enabled {
+            link.start_multistream();
         }
+        link
+    }
+
+    fn start_multistream(&self) {
+        self.support_priorities.store(true, Ordering::Relaxed);
+        for send in &self.send[1..] {
+            let open = self.connection.open_uni().now_or_never();
+            unsafe { *send.get() = open.transpose().ok().flatten() }
+        }
+        let mut priorities = HashMap::new();
+        for (id, recv) in self.recv[1..].iter().enumerate() {
+            let (tx, rx) = oneshot::channel();
+            priorities.insert(id, tx);
+            unsafe { *recv.get() = RecvStream::Pending(rx) }
+        }
+        let conn = self.connection.clone();
+        zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
+            while !priorities.is_empty() {
+                let recv = conn.accept_uni().await?;
+                if let Some(tx) = priorities.remove(&(recv.id().index() as usize)) {
+                    tx.send(recv).ok();
+                }
+            }
+            Ok::<_, quinn::ConnectionError>(())
+        });
     }
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
         // Flush the QUIC stream
-        let mut guard = zasynclock!(self.send[Priority::Control as usize]);
-        if let Err(e) = guard.as_mut().unwrap().finish() {
-            tracing::trace!("Error closing QUIC stream {}: {}", self, e);
+        for (i, send) in self.send.iter().enumerate() {
+            if let Some(send) = unsafe { &mut (*send.get()) }.as_mut() {
+                if let Err(e) = send.finish() {
+                    tracing::trace!("Error closing QUIC stream {self}-{i}: {e}",);
+                }
+            }
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
     }
 
-    async fn write_stream<'a>(
-        &self,
-        stream: &'a mut Option<quinn::SendStream>,
-        priority: Priority,
-    ) -> ZResult<&'a mut quinn::SendStream> {
-        if stream.is_none() {
-            let mut send = self.connection.open_uni().await.map_err(|e| {
-                tracing::trace!("Open error on QUIC link {}: {}", self, e);
-                zerror!(e)
-            })?;
-            send.set_priority(-(priority as i32)).ok();
-            send.write_all(&[priority as u8]).await.map_err(|e| {
-                tracing::trace!("Write error on QUIC link {}: {}", self, e);
-                zerror!(e)
-            })?;
-            *stream = Some(send);
-        }
-        Ok(stream.as_mut().unwrap())
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn write_stream(&self, priority: Priority) -> &mut quinn::SendStream {
+        unsafe { &mut *self.send[priority as usize].get() }
+            .as_mut()
+            .expect("multistream should have been started")
     }
 
-    async fn read_stream<'a: 'b, 'b>(
-        &'a self,
-        stream: &'b mut Option<AsyncMutexGuard<'a, Option<quinn::RecvStream>>>,
-        priority: Priority,
-    ) -> ZResult<&'b mut quinn::RecvStream> {
-        if stream.as_ref().unwrap().is_none() {
-            drop(stream.take());
-            tokio::select! {
-                biased;
-                _ = self.recv[priority as usize].1.notified() => {}
-                _guard = self.accept_lock.lock() => self.accept_loop(priority).await?
+    #[allow(clippy::mut_from_ref)]
+    async unsafe fn read_stream(&self, priority: Priority) -> ZResult<&mut quinn::RecvStream> {
+        match unsafe { &mut *self.recv[priority as usize].get() } {
+            RecvStream::None => panic!("multistream should have been started"),
+            pending @ RecvStream::Pending(_) => {
+                let RecvStream::Pending(rx) = mem::replace(pending, RecvStream::None) else {
+                    unreachable!()
+                };
+                let recv = rx.await.map_err(|_| zerror!("connection closed"))?;
+                *pending = RecvStream::Accepted(recv);
+                let RecvStream::Accepted(recv) = pending else {
+                    unreachable!()
+                };
+                Ok(recv)
             }
-            *stream = Some(self.recv[priority as usize].0.lock().await);
-        }
-        Ok(stream.as_mut().unwrap().as_mut().unwrap())
-    }
-
-    async fn accept_loop(&self, priority: Priority) -> ZResult<()> {
-        loop {
-            let mut recv = self.connection.accept_uni().await.map_err(|e| {
-                tracing::trace!("Accept error on QUIC link {}: {}", self, e);
-                zerror!(e)
-            })?;
-            let mut prio_byte = [0];
-            recv.read_exact(&mut prio_byte).await.map_err(|e| {
-                tracing::trace!("Read error on QUIC link {}: {}", self, e);
-                zerror!(e)
-            })?;
-            let accepted_prio = Priority::try_from(prio_byte[0]).map_err(|e| {
-                tracing::trace!("Invalid priority accepted on QUIC link {}: {}", self, e);
-                e
-            })?;
-            let mut accepted_stream = self.recv[accepted_prio as usize].0.lock().await;
-            if accepted_stream.is_some() {
-                tracing::trace!(
-                    "duplicate priority accepted on QUIC link {}: {:?}",
-                    self,
-                    accepted_prio
-                );
-                bail!("duplicate stream");
-            }
-            *accepted_stream = Some(recv);
-            if accepted_prio == priority {
-                return Ok(());
-            }
-            self.recv[accepted_prio as usize].1.notify_one();
+            RecvStream::Accepted(recv) => Ok(recv),
         }
     }
 }
@@ -186,9 +210,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn write(&self, buffer: &[u8], priority: Priority) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.send[priority as usize]);
-        self.write_stream(&mut guard, priority)
-            .await?
+        unsafe { self.write_stream(priority) }
             .write(buffer)
             .await
             .map_err(|e| {
@@ -198,9 +220,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()> {
-        let mut guard = zasynclock!(self.send[priority as usize]);
-        self.write_stream(&mut guard, priority)
-            .await?
+        unsafe { self.write_stream(priority) }
             .write_all(buffer)
             .await
             .map_err(|e| {
@@ -210,8 +230,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn read(&self, buffer: &mut [u8], priority: Priority) -> ZResult<usize> {
-        let mut guard = Some(zasynclock!(self.recv[priority as usize].0));
-        let recv = self.read_stream(&mut guard, priority).await?;
+        let recv = unsafe { self.read_stream(priority).await? };
         recv.read(buffer)
             .await
             .map_err(|e| {
@@ -231,9 +250,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn read_exact(&self, buffer: &mut [u8], priority: Priority) -> ZResult<()> {
-        let mut guard = Some(zasynclock!(self.recv[priority as usize].0));
-        self.read_stream(&mut guard, priority)
-            .await?
+        unsafe { self.read_stream(priority).await? }
             .read_exact(buffer)
             .await
             .map_err(|e| {
@@ -280,7 +297,13 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn supports_priorities(&self) -> bool {
-        true
+        self.support_priorities.load(Ordering::Relaxed)
+    }
+
+    fn apply_patch(&self, patch: PatchType) {
+        if patch.supports_quic_multistream() && self.multistream == MultiStream::Auto {
+            self.start_multistream();
+        }
     }
 }
 
@@ -357,6 +380,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             )
         }
 
+        let multistream = MultiStream::new(epconf)?;
+
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
             .await
@@ -418,6 +443,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             })?
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+        quic_conn.set_max_concurrent_bi_streams(1u8.into());
+        quic_conn.set_max_concurrent_uni_streams((Priority::NUM as u8 + 1).into());
 
         let (send, recv) = quic_conn
             .open_bi()
@@ -446,6 +473,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 endpoint.into(),
                 send,
                 recv,
+                multistream,
                 auth_id.into(),
                 expiration_manager,
             )
@@ -461,6 +489,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         if epconf.is_empty() {
             bail!("No QUIC configuration provided");
         };
+
+        let multistream = MultiStream::new(epconf)?;
 
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
@@ -494,7 +524,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .max_concurrent_bidi_streams(1_u8.into());
         Arc::get_mut(&mut server_config.transport)
             .unwrap()
-            .max_concurrent_uni_streams((Priority::NUM - 1).try_into().unwrap());
+            .max_concurrent_uni_streams((Priority::NUM as u8 + 1).into());
 
         // Initialize the Endpoint
         let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
@@ -547,6 +577,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             async move {
                 accept_task(
                     quic_endpoint,
+                    multistream,
                     token,
                     manager,
                     server_crypto.tls_close_link_on_expiration,
@@ -580,6 +611,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
 async fn accept_task(
     quic_endpoint: quinn::Endpoint,
+    multistream: MultiStream,
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_close_link_on_expiration: bool,
@@ -667,6 +699,7 @@ async fn accept_task(
                                 dst_locator,
                                 send,
                                 recv,
+                                multistream,
                                 auth_id.into(),
                                 expiration_manager,
                             )

@@ -169,11 +169,6 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 #[async_trait]

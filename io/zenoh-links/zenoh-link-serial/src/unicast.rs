@@ -223,11 +223,6 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Serial
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 impl fmt::Display for LinkUnicastSerial {

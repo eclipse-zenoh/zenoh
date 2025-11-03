@@ -530,11 +530,6 @@ impl LinkUnicastTrait for UnicastPipe {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Unixpipe
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 impl fmt::Display for UnicastPipe {

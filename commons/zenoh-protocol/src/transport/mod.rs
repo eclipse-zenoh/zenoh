@@ -323,7 +323,7 @@ pub mod ext {
 
     impl<const ID: u8> PatchType<ID> {
         pub const NONE: Self = Self(0);
-        pub const CURRENT: Self = Self(1);
+        pub const CURRENT: Self = Self(2);
 
         pub fn new(int: u8) -> Self {
             Self(int)
@@ -333,8 +333,12 @@ pub mod ext {
             self.0
         }
 
-        pub fn has_fragmentation_markers(&self) -> bool {
+        pub fn supports_fragmentation_markers(&self) -> bool {
             self.0 >= 1
+        }
+
+        pub fn supports_quic_multistream(&self) -> bool {
+            self.0 >= 2
         }
 
         #[cfg(feature = "test")]
