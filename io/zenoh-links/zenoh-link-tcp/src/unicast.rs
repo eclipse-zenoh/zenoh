@@ -197,11 +197,6 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Tcp
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 // // WARN: This sometimes causes timeout in routing test

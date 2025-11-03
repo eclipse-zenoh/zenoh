@@ -148,11 +148,6 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::UnixsockStream
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 impl Drop for LinkUnicastUnixSocketStream {

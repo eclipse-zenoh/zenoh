@@ -231,11 +231,6 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Udp
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 impl fmt::Display for LinkUnicastUdp {

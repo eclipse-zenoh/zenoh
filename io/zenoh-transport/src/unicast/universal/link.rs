@@ -14,7 +14,7 @@
 use std::{
     future::poll_fn,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     task::Poll,
@@ -481,10 +481,6 @@ impl TimeoutTracker {
 
     fn reset(&self) {
         *self.latest_reset.lock().unwrap() = Instant::now();
-    }
-
-    async fn wait(&self) {
-        self.wait_if(true).await
     }
 
     async fn wait_if(&self, predicate: bool) {
