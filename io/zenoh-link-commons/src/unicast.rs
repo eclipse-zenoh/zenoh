@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
-    transport::BatchSize,
+    transport::{init::ext::PatchType, BatchSize},
 };
 use zenoh_result::ZResult;
 
@@ -54,7 +54,12 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
     fn get_auth_id(&self) -> &LinkAuthId;
-    fn supports_priorities(&self) -> bool;
+    fn supports_priorities(&self) -> bool {
+        false
+    }
+    fn apply_patch(&self, patch: PatchType) {
+        let _ = patch;
+    }
     async fn write(&self, buffer: &[u8], priority: Priority) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8], priority: Priority) -> ZResult<usize>;

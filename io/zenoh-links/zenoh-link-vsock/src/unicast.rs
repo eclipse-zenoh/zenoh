@@ -194,11 +194,6 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Vsock
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 impl fmt::Display for LinkUnicastVsock {

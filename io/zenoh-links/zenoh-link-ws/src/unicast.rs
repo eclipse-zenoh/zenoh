@@ -230,11 +230,6 @@ impl LinkUnicastTrait for LinkUnicastWs {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Ws
     }
-
-    #[inline(always)]
-    fn supports_priorities(&self) -> bool {
-        false
-    }
 }
 
 impl Drop for LinkUnicastWs {
