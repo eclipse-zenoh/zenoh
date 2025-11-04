@@ -319,6 +319,15 @@ pub enum ZExtBody {
 }
 
 impl ZExtBody {
+    pub const fn id(&self, id: u8, mandatory: bool) -> u8 {
+        let enc = match self {
+            ZExtBody::Unit => iext::ENC_UNIT,
+            ZExtBody::Z64(_) => iext::ENC_Z64,
+            ZExtBody::ZBuf(_) => iext::ENC_ZBUF,
+        };
+        iext::id(id, mandatory, enc)
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {
@@ -343,12 +352,7 @@ pub struct ZExtUnknown {
 
 impl ZExtUnknown {
     pub const fn new(id: u8, mandatory: bool, body: ZExtBody) -> Self {
-        let enc = match &body {
-            ZExtBody::Unit => iext::ENC_UNIT,
-            ZExtBody::Z64(_) => iext::ENC_Z64,
-            ZExtBody::ZBuf(_) => iext::ENC_ZBUF,
-        };
-        let id = iext::id(id, mandatory, enc);
+        let id = body.id(id, mandatory);
         Self { id, body }
     }
 

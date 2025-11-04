@@ -164,7 +164,7 @@ impl TransportUnicastUniversal {
             // Drop invalid message and continue
             return Ok(());
         }
-        if self.config.patch.supports_fragmentation_markers() {
+        if self.config.patch.has_fragmentation_markers() {
             if ext_first.is_some() {
                 guard.defrag.clear();
             } else if guard.defrag.is_empty() {
