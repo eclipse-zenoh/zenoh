@@ -66,7 +66,7 @@ impl MultiStreamConfig {
         })
     }
 
-    fn alpn_protocol(&self) -> Vec<Vec<u8>> {
+    fn alpn_protocols(&self) -> Vec<Vec<u8>> {
         match self {
             Self::Disabled => vec![PROTOCOL_SINGLE_STREAM.into(), PROTOCOL_LEGACY.into()],
             Self::Enabled => vec![PROTOCOL_MULTI_STREAM.into()],
@@ -400,7 +400,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
-        client_crypto.client_config.alpn_protocols = multistream.alpn_protocol();
+        client_crypto.client_config.alpn_protocols = multistream.alpn_protocols();
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
             get_quic_addr(&Address::from(bind_socket_str)).await?
@@ -512,7 +512,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let mut server_crypto = TlsServerConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
-        server_crypto.server_config.alpn_protocols = multistream.alpn_protocol();
+        server_crypto.server_config.alpn_protocols = multistream.alpn_protocols();
 
         // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()
