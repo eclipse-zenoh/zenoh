@@ -52,13 +52,10 @@ use zenoh_result::{bail, zerror, ZError, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MultiStream {
-    #[default]
     Auto,
-    Explicit {
-        enabled: bool,
-    },
+    Explicit { enabled: bool },
 }
 
 impl MultiStream {
@@ -143,7 +140,7 @@ impl LinkUnicastQuic {
         recv.resize_with(Priority::NUM, || UnsafeCell::new(RecvStream::None));
 
         // Build the Quic object
-        let link = LinkUnicastQuic {
+        LinkUnicastQuic {
             connection,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
@@ -154,8 +151,7 @@ impl LinkUnicastQuic {
             recv: recv.try_into().unwrap(),
             auth_identifier,
             expiration_manager,
-        };
-        link
+        }
     }
 
     fn start_multistream(&self) {
