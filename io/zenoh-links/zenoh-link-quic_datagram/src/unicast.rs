@@ -29,7 +29,7 @@ use zenoh_link_commons::{
     get_ip_interface_names, parse_dscp,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr, get_quic_host,
-        TlsClientConfig, TlsServerConfig, ALPN_QUIC_HTTP,
+        TlsClientConfig, TlsServerConfig, PROTOCOL_LEGACY,
     },
     set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
@@ -249,8 +249,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             zerror!("Cannot create a new unreliable QUIC client on {dst_addr}: {e}")
         })?;
 
-        client_crypto.client_config.alpn_protocols =
-            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        client_crypto.client_config.alpn_protocols = vec![PROTOCOL_LEGACY.into()];
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
             get_quic_addr(&Address::from(bind_socket_str)).await?
@@ -353,8 +352,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
         let mut server_crypto = TlsServerConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new unreliable QUIC listener on {addr}: {e}"))?;
-        server_crypto.server_config.alpn_protocols =
-            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        server_crypto.server_config.alpn_protocols = vec![PROTOCOL_LEGACY.into()];
 
         // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()

@@ -17,17 +17,14 @@ use std::{
     collections::HashMap,
     fmt, mem,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Duration,
 };
 
 use async_trait::async_trait;
 use futures::FutureExt;
 use quinn::{
-    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    crypto::rustls::{HandshakeData, QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
 use tokio::sync::oneshot;
@@ -36,7 +33,8 @@ use zenoh_link_commons::{
     get_ip_interface_names, parse_dscp,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr, get_quic_host,
-        TlsClientConfig, TlsServerConfig, ALPN_QUIC_HTTP,
+        TlsClientConfig, TlsServerConfig, PROTOCOL_LEGACY, PROTOCOL_MULTI_STREAM,
+        PROTOCOL_SINGLE_STREAM,
     },
     set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
@@ -44,61 +42,63 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    common::ZExtBody,
     core::{Address, Config, EndPoint, Locator, Priority},
-    transport::{init::ext, BatchSize},
+    transport::BatchSize,
 };
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MultiStream {
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+enum MultiStreamConfig {
+    #[default]
+    Disabled,
+    Enabled,
     Auto,
-    Explicit { enabled: bool },
 }
 
-impl MultiStream {
+impl MultiStreamConfig {
     fn new(config: Config) -> ZResult<Self> {
         Ok(match config.get("multistream") {
+            Some("false") => Self::Disabled,
+            Some("true") => Self::Enabled,
             None | Some("auto") => Self::Auto,
-            Some(s) => Self::Explicit {
-                enabled: s
-                    .parse()
-                    .map_err(|_| zerror!("Invalid multistream config: {s}"))?,
-            },
+            Some(s) => bail!("Invalid multistream config: {s}"),
         })
+    }
+
+    fn alpn_protocol(&self) -> Vec<Vec<u8>> {
+        match self {
+            Self::Disabled => vec![PROTOCOL_SINGLE_STREAM.into(), PROTOCOL_LEGACY.into()],
+            Self::Enabled => vec![PROTOCOL_MULTI_STREAM.into()],
+            Self::Auto => vec![
+                PROTOCOL_MULTI_STREAM.into(),
+                PROTOCOL_SINGLE_STREAM.into(),
+                PROTOCOL_LEGACY.into(),
+            ],
+        }
     }
 
     fn max_concurrent_uni_streams(&self) -> quinn::VarInt {
         match self {
-            Self::Explicit { enabled: false } => 0u8.into(),
+            Self::Disabled => 0u8.into(),
             _ => (Priority::NUM as u8 - 1).into(),
         }
     }
 }
 
-impl From<MultiStream> for ext::Link {
-    fn from(value: MultiStream) -> Self {
-        Self(match value {
-            MultiStream::Auto => ZExtBody::Unit,
-            MultiStream::Explicit { enabled } => ZExtBody::Z64(enabled as _),
-        })
-    }
-}
-
-impl TryFrom<ext::Link> for MultiStream {
-    type Error = ZError;
-    fn try_from(value: ext::Link) -> Result<Self, Self::Error> {
-        match value.0 {
-            ZExtBody::Unit => Ok(MultiStream::Auto),
-            ZExtBody::Z64(i) => Ok(MultiStream::Explicit {
-                enabled: i & 1 != 0,
-            }),
-            // TODO ZBuf extension is not backward compatible
-            ZExtBody::ZBuf(body) => Err(zerror!("Invalid multistream configuration {body:?}")),
-        }
-    }
+fn is_multistream(connection: &quinn::Connection) -> ZResult<bool> {
+    let handshake_data = connection
+        .handshake_data()
+        .ok_or_else(|| zerror!("No handshake data"))?;
+    let handshake_data = handshake_data
+        .downcast_ref::<HandshakeData>()
+        .ok_or_else(|| zerror!("Invalid handshake data"))?;
+    Ok(match handshake_data.protocol.as_deref() {
+        Some(PROTOCOL_MULTI_STREAM) => true,
+        Some(PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY) => false,
+        _ => unreachable!(),
+    })
 }
 
 pub struct LinkUnicastQuic {
@@ -106,10 +106,9 @@ pub struct LinkUnicastQuic {
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    multistream: MultiStream,
-    support_priorities: AtomicBool,
+    multistream: bool,
     send: [UnsafeCell<Option<quinn::SendStream>>; Priority::NUM],
-    recv: [UnsafeCell<RecvStream>; Priority::NUM],
+    recv: [UnsafeCell<Option<RecvStream>>; Priority::NUM],
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
@@ -117,7 +116,6 @@ pub struct LinkUnicastQuic {
 unsafe impl Sync for LinkUnicastQuic {}
 
 enum RecvStream {
-    None,
     Pending(oneshot::Receiver<quinn::RecvStream>),
     Accepted(quinn::RecvStream),
 }
@@ -130,52 +128,48 @@ impl LinkUnicastQuic {
         dst_locator: Locator,
         send_control: quinn::SendStream,
         recv_control: quinn::RecvStream,
-        multistream: MultiStream,
+        multistream: bool,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
         let mut send = vec![UnsafeCell::new(Some(send_control))];
-        send.resize_with(Priority::NUM, || UnsafeCell::new(None));
-        let mut recv = vec![UnsafeCell::new(RecvStream::Accepted(recv_control))];
-        recv.resize_with(Priority::NUM, || UnsafeCell::new(RecvStream::None));
-
-        // Build the Quic object
+        let mut recv = vec![UnsafeCell::new(Some(RecvStream::Accepted(recv_control)))];
+        if multistream {
+            send.resize_with(Priority::NUM, || {
+                let open = connection.open_uni().now_or_never();
+                UnsafeCell::new(open.transpose().ok().flatten())
+            });
+            let mut priorities = HashMap::new();
+            recv.resize_with(Priority::NUM, || {
+                let (tx, rx) = oneshot::channel();
+                priorities.insert(priorities.len() + 1, tx);
+                UnsafeCell::new(Some(RecvStream::Pending(rx)))
+            });
+            let connection = connection.clone();
+            zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
+                while !priorities.is_empty() {
+                    let recv = connection.accept_uni().await?;
+                    if let Some(tx) = priorities.remove(&(recv.id().index() as usize)) {
+                        tx.send(recv).ok();
+                    }
+                }
+                Ok::<_, quinn::ConnectionError>(())
+            });
+        } else {
+            send.resize_with(Priority::NUM, || UnsafeCell::new(None));
+            recv.resize_with(Priority::NUM, || UnsafeCell::new(None));
+        }
         LinkUnicastQuic {
             connection,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
             multistream,
-            support_priorities: AtomicBool::new(false),
             send: send.try_into().unwrap(),
             recv: recv.try_into().unwrap(),
             auth_identifier,
             expiration_manager,
         }
-    }
-
-    fn start_multistream(&self) {
-        self.support_priorities.store(true, Ordering::Relaxed);
-        for send in &self.send[1..] {
-            let open = self.connection.open_uni().now_or_never();
-            unsafe { *send.get() = open.transpose().ok().flatten() }
-        }
-        let mut priorities = HashMap::new();
-        for (id, recv) in self.recv[1..].iter().enumerate() {
-            let (tx, rx) = oneshot::channel();
-            priorities.insert(id, tx);
-            unsafe { *recv.get() = RecvStream::Pending(rx) }
-        }
-        let conn = self.connection.clone();
-        zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
-            while !priorities.is_empty() {
-                let recv = conn.accept_uni().await?;
-                if let Some(tx) = priorities.remove(&(recv.id().index() as usize)) {
-                    tx.send(recv).ok();
-                }
-            }
-            Ok::<_, quinn::ConnectionError>(())
-        });
     }
 
     async fn close(&self) -> ZResult<()> {
@@ -202,19 +196,18 @@ impl LinkUnicastQuic {
     #[allow(clippy::mut_from_ref)]
     async unsafe fn read_stream(&self, priority: Priority) -> ZResult<&mut quinn::RecvStream> {
         match unsafe { &mut *self.recv[priority as usize].get() } {
-            RecvStream::None => panic!("multistream should have been started"),
-            pending @ RecvStream::Pending(_) => {
-                let RecvStream::Pending(rx) = mem::replace(pending, RecvStream::None) else {
+            None => panic!("multistream should have been started"),
+            pending @ Some(RecvStream::Pending(_)) => {
+                let Some(RecvStream::Pending(rx)) = mem::replace(pending, None) else {
                     unreachable!()
                 };
                 let recv = rx.await.map_err(|_| zerror!("connection closed"))?;
-                *pending = RecvStream::Accepted(recv);
-                let RecvStream::Accepted(recv) = pending else {
+                let RecvStream::Accepted(recv) = pending.insert(RecvStream::Accepted(recv)) else {
                     unreachable!()
                 };
                 Ok(recv)
             }
-            RecvStream::Accepted(recv) => Ok(recv),
+            Some(RecvStream::Accepted(recv)) => Ok(recv),
         }
     }
 }
@@ -324,37 +317,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn supports_priorities(&self) -> bool {
-        self.support_priorities.load(Ordering::Relaxed)
-    }
-
-    fn open_ext(&self) -> Option<ext::Link> {
-        Some(self.multistream.into())
-    }
-
-    async fn accept_ext(&self, open_ext: Option<ext::Link>) -> ZResult<Option<ext::Link>> {
-        let open = open_ext
-            .map(TryInto::try_into)
-            .transpose()?
-            .unwrap_or(MultiStream::Explicit { enabled: false });
-        let enabled = match (self.multistream, open) {
-            (MultiStream::Explicit { enabled: e1 }, MultiStream::Explicit { enabled: e2 })
-                if e1 != e2 =>
-            {
-                bail!("Incompatible multistream configurations")
-            }
-            (MultiStream::Explicit { enabled: false }, _)
-            | (_, MultiStream::Explicit { enabled: false }) => false,
-            _ => true,
-        };
-        if enabled {
-            self.start_multistream();
-        }
-        Ok(Some(MultiStream::Explicit { enabled }.into()))
-    }
-
-    async fn ack_ext(&self, accept_ext: Option<ext::Link>) -> ZResult<()> {
-        self.accept_ext(accept_ext).await?;
-        Ok(())
+        self.multistream
     }
 }
 
@@ -431,15 +394,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             )
         }
 
-        let multistream = MultiStream::new(epconf)?;
+        let multistream = MultiStreamConfig::new(epconf)?;
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
-        client_crypto.client_config.alpn_protocols =
-            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        client_crypto.client_config.alpn_protocols = multistream.alpn_protocol();
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
             get_quic_addr(&Address::from(bind_socket_str)).await?
@@ -506,6 +468,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let certchain_expiration_time =
             get_cert_chain_expiration(&quic_conn)?.expect("server should have certificate chain");
 
+        let is_multistream = is_multistream(&quic_conn)?;
         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
             let mut expiration_manager = None;
             if client_crypto.tls_close_link_on_expiration {
@@ -524,7 +487,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 endpoint.into(),
                 send,
                 recv,
-                multistream,
+                is_multistream,
                 auth_id.into(),
                 expiration_manager,
             )
@@ -541,7 +504,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             bail!("No QUIC configuration provided");
         };
 
-        let multistream = MultiStream::new(epconf)?;
+        let multistream = MultiStreamConfig::new(epconf)?;
 
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
@@ -550,8 +513,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let mut server_crypto = TlsServerConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
-        server_crypto.server_config.alpn_protocols =
-            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        server_crypto.server_config.alpn_protocols = multistream.alpn_protocol();
 
         // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()
@@ -628,7 +590,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             async move {
                 accept_task(
                     quic_endpoint,
-                    multistream,
                     token,
                     manager,
                     server_crypto.tls_close_link_on_expiration,
@@ -662,7 +623,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
 async fn accept_task(
     quic_endpoint: quinn::Endpoint,
-    multistream: MultiStream,
     token: CancellationToken,
     manager: NewLinkChannelSender,
     tls_close_link_on_expiration: bool,
@@ -731,6 +691,7 @@ async fn accept_task(
                         }
 
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
+                        let is_multistream = is_multistream(&quic_conn)?;
                         // Create the new link object
                         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
@@ -750,7 +711,7 @@ async fn accept_task(
                                 dst_locator,
                                 send,
                                 recv,
-                                multistream,
+                                is_multistream,
                                 auth_id.into(),
                                 expiration_manager,
                             )
