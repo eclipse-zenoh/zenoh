@@ -49,9 +49,8 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MultiStreamConfig {
-    #[default]
     Disabled,
     Enabled,
     Auto,
