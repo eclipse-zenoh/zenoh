@@ -201,6 +201,9 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Link
+        let ext_link = link.link.open_ext();
+
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
@@ -216,6 +219,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_link,
         }
         .into();
 
@@ -360,6 +364,12 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         // Extension Patch
         self.ext_patch
             .recv_init_ack((&mut state.transport.ext_patch, init_ack.ext_patch))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Link
+        link.link
+            .ack_ext(init_ack.ext_link)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -702,7 +712,7 @@ pub(crate) async fn open_link(
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
     };
-    let o_link = link.reconfigure(o_config, config.patch);
+    let o_link = link.reconfigure(o_config);
     let s_link = format!("{o_link:?}");
     let o_link = LinkUnicastWithOpenAck::new(o_link, None);
     let transport = manager

@@ -132,12 +132,13 @@ pub struct InitSyn {
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
     pub ext_patch: ext::PatchType,
+    pub ext_link: Option<ext::Link>,
 }
 
 // Extensions
 pub mod ext {
     use crate::{
-        common::{ZExtUnit, ZExtZ64, ZExtZBuf},
+        common::{ZExtBody, ZExtUnit, ZExtZ64, ZExtZBuf},
         zextunit, zextz64, zextzbuf,
     };
 
@@ -173,6 +174,24 @@ pub mod ext {
     /// if >= 1, then fragmentation first/drop markers
     pub type Patch = zextz64!(0x7, false);
     pub type PatchType = crate::transport::ext::PatchType<{ Patch::ID }>;
+
+    /// # Link extension
+    /// Used to negotiate link configuration, e.g. QUIC multistream
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Link(pub ZExtBody);
+
+    impl Link {
+        pub const ID: u8 = 0x8;
+
+        pub const fn id(&self) -> u8 {
+            self.0.id(Self::ID, false)
+        }
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            Self(ZExtBody::rand())
+        }
+    }
 }
 
 impl InitSyn {
@@ -199,6 +218,7 @@ impl InitSyn {
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_patch = ext::PatchType::rand();
+        let ext_link = rng.gen_bool(0.5).then(ext::Link::rand);
 
         Self {
             version,
@@ -215,6 +235,7 @@ impl InitSyn {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_link,
         }
     }
 }
@@ -246,6 +267,7 @@ pub struct InitAck {
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
     pub ext_patch: ext::PatchType,
+    pub ext_link: Option<ext::Link>,
 }
 
 impl InitAck {
@@ -277,6 +299,7 @@ impl InitAck {
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_patch = ext::PatchType::rand();
+        let ext_link = rng.gen_bool(0.5).then(ext::Link::rand);
 
         Self {
             version,
@@ -294,6 +317,7 @@ impl InitAck {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_link,
         }
     }
 }

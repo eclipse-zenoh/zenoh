@@ -44,10 +44,11 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
+    common::ZExtBody,
     core::{Address, Config, EndPoint, Locator, Priority},
-    transport::{init::ext::PatchType, BatchSize},
+    transport::{init::ext, BatchSize},
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror, ZError, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
@@ -55,18 +56,51 @@ use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 enum MultiStream {
     #[default]
     Auto,
-    Disabled,
-    Enabled,
+    Explicit {
+        enabled: bool,
+    },
 }
 
 impl MultiStream {
     fn new(config: Config) -> ZResult<Self> {
         Ok(match config.get("multistream") {
             None | Some("auto") => Self::Auto,
-            Some("false") => Self::Disabled,
-            Some("true") => Self::Enabled,
-            Some(m) => bail!("Invalid multistream config: {m}"),
+            Some(s) => Self::Explicit {
+                enabled: s
+                    .parse()
+                    .map_err(|_| zerror!("Invalid multistream config: {s}"))?,
+            },
         })
+    }
+
+    fn max_concurrent_uni_streams(&self) -> quinn::VarInt {
+        match self {
+            Self::Explicit { enabled: false } => 0u8.into(),
+            _ => (Priority::NUM as u8 - 1).into(),
+        }
+    }
+}
+
+impl From<MultiStream> for ext::Link {
+    fn from(value: MultiStream) -> Self {
+        Self(match value {
+            MultiStream::Auto => ZExtBody::Unit,
+            MultiStream::Explicit { enabled } => ZExtBody::Z64(enabled as _),
+        })
+    }
+}
+
+impl TryFrom<ext::Link> for MultiStream {
+    type Error = ZError;
+    fn try_from(value: ext::Link) -> Result<Self, Self::Error> {
+        match value.0 {
+            ZExtBody::Unit => Ok(MultiStream::Auto),
+            ZExtBody::Z64(i) => Ok(MultiStream::Explicit {
+                enabled: i & 1 != 0,
+            }),
+            // TODO ZBuf extension is not backward compatible
+            ZExtBody::ZBuf(body) => Err(zerror!("Invalid multistream configuration {body:?}")),
+        }
     }
 }
 
@@ -121,9 +155,6 @@ impl LinkUnicastQuic {
             auth_identifier,
             expiration_manager,
         };
-        if multistream == MultiStream::Enabled {
-            link.start_multistream();
-        }
         link
     }
 
@@ -300,10 +331,34 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         self.support_priorities.load(Ordering::Relaxed)
     }
 
-    fn apply_patch(&self, patch: PatchType) {
-        if patch.supports_quic_multistream() && self.multistream == MultiStream::Auto {
+    fn open_ext(&self) -> Option<ext::Link> {
+        Some(self.multistream.into())
+    }
+
+    async fn accept_ext(&self, open_ext: Option<ext::Link>) -> ZResult<Option<ext::Link>> {
+        let open = open_ext
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or(MultiStream::Explicit { enabled: false });
+        let enabled = match (self.multistream, open) {
+            (MultiStream::Explicit { enabled: e1 }, MultiStream::Explicit { enabled: e2 })
+                if e1 != e2 =>
+            {
+                bail!("Incompatible multistream configurations")
+            }
+            (MultiStream::Explicit { enabled: false }, _)
+            | (_, MultiStream::Explicit { enabled: false }) => false,
+            _ => true,
+        };
+        if enabled {
             self.start_multistream();
         }
+        Ok(Some(MultiStream::Explicit { enabled }.into()))
+    }
+
+    async fn ack_ext(&self, accept_ext: Option<ext::Link>) -> ZResult<()> {
+        self.accept_ext(accept_ext).await?;
+        Ok(())
     }
 }
 
@@ -444,7 +499,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
         quic_conn.set_max_concurrent_bi_streams(1u8.into());
-        quic_conn.set_max_concurrent_uni_streams((Priority::NUM as u8 + 1).into());
+        quic_conn.set_max_concurrent_uni_streams(multistream.max_concurrent_uni_streams());
 
         let (send, recv) = quic_conn
             .open_bi()
@@ -524,7 +579,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .max_concurrent_bidi_streams(1_u8.into());
         Arc::get_mut(&mut server_config.transport)
             .unwrap()
-            .max_concurrent_uni_streams((Priority::NUM as u8 + 1).into());
+            .max_concurrent_uni_streams(multistream.max_concurrent_uni_streams());
 
         // Initialize the Endpoint
         let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
