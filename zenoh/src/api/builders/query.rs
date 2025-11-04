@@ -157,6 +157,7 @@ impl<Handler> CancellationTokenBuilderTrait for SessionGetBuilder<'_, '_, Handle
     /// });
     /// # }
     /// ```
+    #[zenoh_macros::unstable_doc]
     fn with_cancellation_token(
         self,
         cancellation_token: crate::api::cancellation::CancellationToken,

@@ -798,6 +798,7 @@ impl<Handler> CancellationTokenBuilderTrait for LivelinessGetBuilder<'_, '_, Han
     /// }
     /// # }
     /// ```
+    #[zenoh_macros::unstable_doc]
     fn with_cancellation_token(
         self,
         cancellation_token: crate::api::cancellation::CancellationToken,

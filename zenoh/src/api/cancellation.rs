@@ -137,6 +137,7 @@ impl CancellationToken {
     /// Returns a future-like object that resolves to `ZResult<()>` in case of when awaited or when calling `.wait()`.
     /// In case of failure, some operations might not be cancelled.
     /// Once cancelled, all newly added get queries will cancel automatically.
+    #[zenoh_macros::unstable_doc]
     pub fn cancel(&self) -> CancelResult {
         match self.inner.is_cancelled.compare_exchange(
             false,
@@ -153,6 +154,7 @@ impl CancellationToken {
     }
 
     /// Returns true if token was cancelled. I.e. if [`CancellationToken::cancel`] was called.
+    #[zenoh_macros::unstable_doc]
     pub fn is_cancelled(&self) -> bool {
         self.inner
             .is_cancelled
