@@ -56,9 +56,9 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::{FaceId, InterestState},
-            region::Region,
             interests::RemoteInterest,
             queries::LocalQueryables,
+            region::Region,
         },
         hat::{BaseContext, Remote},
         router::{FaceContext, LocalSubscribers},
@@ -117,12 +117,6 @@ impl Hat {
         tables: &'t TablesData,
     ) -> impl Iterator<Item = &'t Arc<FaceState>> {
         tables.hats[self.region].mcast_groups.iter()
-    }
-
-    /// Returns `true` if `face` belongs to this [`Hat`].
-    pub(crate) fn owns(&self, face: &FaceState) -> bool {
-        // TODO(regions): move this method to a Hat trait
-        self.region == face.region
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -448,7 +442,7 @@ impl HatBaseTrait for Hat {
         WhatAmI::Peer
     }
 
-    fn bound(&self) -> Region {
+    fn region(&self) -> Region {
         self.region
     }
 }

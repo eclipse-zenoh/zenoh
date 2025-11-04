@@ -203,7 +203,8 @@ pub(crate) trait HatBaseTrait: Any {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
     fn whatami(&self) -> WhatAmI;
-    fn bound(&self) -> Region;
+
+    fn region(&self) -> Region;
 
     /// Returns `true` if the hat should route data or queries between `src` and `dst`.
     fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
@@ -213,24 +214,13 @@ pub(crate) trait HatBaseTrait: Any {
             || (dst.whatami.is_client() && dst.region.bound().is_south())
     }
 
-    fn assert_proper_ownership(&self, ctx: &BaseContext) {
-        // TODO(regions): remove this
-
-        if self.bound() != ctx.src_face.region {
-            unreachable!(
-                "Hat doesn't own source face (bound={},face={})",
-                self.bound(),
-                ctx.src_face
-            )
+    /// Returns `true` if `face` belongs to this [`Hat`].
+    fn owns(&self, face: &FaceState) -> bool {
+        if self.region() == face.region && face.remote_bound.is_north() {
+            assert_eq!(self.whatami(), face.whatami);
         }
 
-        if self.whatami() != ctx.src_face.whatami {
-            unreachable!(
-                "Hat owns source face but whatami's don't match (whatami={},face={})",
-                self.whatami(),
-                ctx.src_face
-            )
-        }
+        self.region() == face.region
     }
 }
 

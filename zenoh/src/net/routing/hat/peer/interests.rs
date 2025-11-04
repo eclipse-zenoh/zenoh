@@ -100,7 +100,7 @@ impl HatInterestTrait for Hat {
         //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
-        assert!(self.bound().bound().is_north());
+        assert!(self.region().bound().is_north());
         assert!(ctx.src_face.region.bound().is_south());
 
         let owner_hat = &mut *south_hats[ctx.src_face.region];
@@ -224,7 +224,7 @@ impl HatInterestTrait for Hat {
         //   1. I need to unregister it as a remote interest in the owner (south) hat.
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-        assert!(self.bound().bound().is_north());
+        assert!(self.region().bound().is_north());
         assert!(ctx.src_face.region.bound().is_south());
 
         // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
@@ -280,7 +280,7 @@ impl HatInterestTrait for Hat {
         // Or, the source face is a gateway, in which case there should be a pending current interest and I should be the north hat.
 
         if interest_id == INITIAL_INTEREST_ID {
-            self.assert_proper_ownership(&ctx);
+            assert!(self.owns(&ctx.src_face));
 
             zenoh_runtime::ZRuntime::Net.block_in_place(async move {
                 if let Some(runtime) = &ctx.tables.runtime {
@@ -293,7 +293,7 @@ impl HatInterestTrait for Hat {
                 }
             });
         } else {
-            assert!(self.bound().bound().is_north());
+            assert!(self.region().bound().is_north());
             assert!(ctx.src_face.region.bound().is_north());
 
             if ctx.src_face.remote_bound.is_north() {
@@ -408,8 +408,8 @@ impl HatInterestTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(self.bound().bound().is_south());
-        self.assert_proper_ownership(&ctx);
+        assert!(!self.region().bound().is_north());
+        assert!(self.owns(&ctx.src_face));
 
         let Some(remote_interest) = self
             .face_hat_mut(ctx.src_face)

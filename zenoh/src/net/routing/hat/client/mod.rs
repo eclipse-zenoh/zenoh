@@ -45,7 +45,7 @@ use super::{
 };
 use crate::net::{
     routing::{
-        dispatcher::{face::FaceId, region::Region, interests::RemoteInterest},
+        dispatcher::{face::FaceId, interests::RemoteInterest, region::Region},
         hat::{BaseContext, Remote},
         router::FaceContext,
     },
@@ -310,7 +310,7 @@ impl HatBaseTrait for Hat {
         WhatAmI::Client
     }
 
-    fn bound(&self) -> Region {
+    fn region(&self) -> Region {
         self.region
     }
 }

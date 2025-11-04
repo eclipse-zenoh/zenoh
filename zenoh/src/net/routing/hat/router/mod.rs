@@ -691,7 +691,7 @@ impl HatBaseTrait for Hat {
         WhatAmI::Router
     }
 
-    fn bound(&self) -> Region {
+    fn region(&self) -> Region {
         self.region
     }
 }
