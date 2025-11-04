@@ -285,6 +285,49 @@ where
     }
 }
 
+// ZExtBody
+impl<W> WCodec<&ZExtBody, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &ZExtBody) -> Self::Output {
+        match x {
+            ZExtBody::Unit => {}
+            ZExtBody::Z64(u64) => self.write(&mut *writer, *u64)?,
+            ZExtBody::ZBuf(zbuf) => {
+                let bodec = Zenoh080Bounded::<u32>::new();
+                bodec.write(&mut *writer, zbuf)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<R> RCodec<ZExtBody, &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<ZExtBody, Self::Error> {
+        Ok(match self.header & iext::ENC_MASK {
+            iext::ENC_UNIT => ZExtBody::Unit,
+            iext::ENC_Z64 => {
+                let u64: u64 = self.codec.read(&mut *reader)?;
+                ZExtBody::Z64(u64)
+            }
+            iext::ENC_ZBUF => {
+                let bodec = Zenoh080Bounded::<u32>::new();
+                let zbuf: ZBuf = bodec.read(&mut *reader)?;
+                ZExtBody::ZBuf(zbuf)
+            }
+            _ => return Err(DidntRead),
+        })
+    }
+}
+
 // ZExtUnknown
 impl<W> WCodec<(&ZExtUnknown, bool), &mut W> for Zenoh080
 where
@@ -300,18 +343,8 @@ where
         if more {
             header |= iext::FLAG_Z;
         }
-        match body {
-            ZExtBody::Unit => self.write(&mut *writer, header)?,
-            ZExtBody::Z64(u64) => {
-                self.write(&mut *writer, header)?;
-                self.write(&mut *writer, *u64)?
-            }
-            ZExtBody::ZBuf(zbuf) => {
-                self.write(&mut *writer, header)?;
-                let bodec = Zenoh080Bounded::<u32>::new();
-                bodec.write(&mut *writer, zbuf)?
-            }
-        }
+        self.write(&mut *writer, header)?;
+        self.write(&mut *writer, body)?;
         Ok(())
     }
 }
@@ -336,29 +369,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ZExtUnknown, bool), Self::Error> {
-        let body = match self.header & iext::ENC_MASK {
-            iext::ENC_UNIT => ZExtBody::Unit,
-            iext::ENC_Z64 => {
-                let u64: u64 = self.codec.read(&mut *reader)?;
-                ZExtBody::Z64(u64)
-            }
-            iext::ENC_ZBUF => {
-                let bodec = Zenoh080Bounded::<u32>::new();
-                let zbuf: ZBuf = bodec.read(&mut *reader)?;
-                ZExtBody::ZBuf(zbuf)
-            }
-            _ => {
-                return Err(DidntRead);
-            }
+        let ext = ZExtUnknown {
+            id: self.header & !iext::FLAG_Z,
+            body: self.read(&mut *reader)?,
         };
-
-        Ok((
-            ZExtUnknown {
-                id: self.header & !iext::FLAG_Z,
-                body,
-            },
-            has_flag(self.header, iext::FLAG_Z),
-        ))
+        Ok((ext, has_flag(self.header, iext::FLAG_Z)))
     }
 }
 

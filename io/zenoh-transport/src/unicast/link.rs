@@ -18,7 +18,7 @@ use zenoh_core::zcondfeat;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
-    transport::{init::ext::PatchType, BatchSize, Close, OpenAck, TransportMessage},
+    transport::{BatchSize, Close, OpenAck, TransportMessage},
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -50,12 +50,7 @@ impl TransportLinkUnicast {
         Self::init(link, config)
     }
 
-    pub(crate) fn reconfigure(
-        self,
-        new_config: TransportLinkUnicastConfig,
-        patch: PatchType,
-    ) -> Self {
-        self.link.apply_patch(patch);
+    pub(crate) fn reconfigure(self, new_config: TransportLinkUnicastConfig) -> Self {
         Self::init(self.link, new_config)
     }
 
