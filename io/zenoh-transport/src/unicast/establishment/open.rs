@@ -201,9 +201,6 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        // Extension Link
-        let ext_link = link.link.open_ext();
-
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
@@ -219,7 +216,6 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_lowlatency,
             ext_compression,
             ext_patch,
-            ext_link,
         }
         .into();
 
@@ -364,12 +360,6 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         // Extension Patch
         self.ext_patch
             .recv_init_ack((&mut state.transport.ext_patch, init_ack.ext_patch))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
-        // Extension Link
-        link.link
-            .ack_ext(init_ack.ext_link)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 

@@ -43,7 +43,9 @@ use crate::{
 };
 
 // Default ALPN protocol
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
+pub const PROTOCOL_LEGACY: &[u8] = b"hq-29";
+pub const PROTOCOL_SINGLE_STREAM: &[u8] = b"zenoh";
+pub const PROTOCOL_MULTI_STREAM: &[u8] = b"zenoh-multistream";
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;

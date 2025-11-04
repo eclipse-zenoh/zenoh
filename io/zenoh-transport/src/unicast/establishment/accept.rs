@@ -26,7 +26,7 @@ use zenoh_protocol::{
     transport::{
         batch_size,
         close::{self, Close},
-        init, BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
+        BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -87,7 +87,6 @@ struct RecvInitSynOut {
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
-    ext_link: Option<init::ext::Link>,
 }
 
 // InitAck
@@ -99,7 +98,6 @@ struct SendInitAckIn {
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
-    ext_link: Option<init::ext::Link>,
 }
 struct SendInitAckOut {
     cookie_nonce: u64,
@@ -278,20 +276,11 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        // Extension Link
-        let ext_link = self
-            .link
-            .link
-            .accept_ext(init_syn.ext_link)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
         let output = RecvInitSynOut {
             other_zid: init_syn.zid,
             other_whatami: init_syn.whatami,
             #[cfg(feature = "shared-memory")]
             ext_shm,
-            ext_link,
         };
         Ok(output)
     }
@@ -366,9 +355,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        // Extension Link
-        let ext_link = input.ext_link;
-
         // Create the cookie
         let (cookie, cookie_nonce): (ZSlice, u64) = {
             let mut prng = zasynclock!(self.prng);
@@ -426,7 +412,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_lowlatency,
             ext_compression,
             ext_patch,
-            ext_link,
         }
         .into();
 
@@ -791,7 +776,6 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             other_whatami: isyn_out.other_whatami,
             #[cfg(feature = "shared-memory")]
             ext_shm: isyn_out.ext_shm,
-            ext_link: isyn_out.ext_link,
         };
         step!(fsm.send_init_ack((state, iack_in)).await)
     };

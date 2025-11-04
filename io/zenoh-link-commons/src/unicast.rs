@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
-    transport::{init::ext, BatchSize},
+    transport::BatchSize,
 };
 use zenoh_result::ZResult;
 
@@ -56,17 +56,6 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn get_auth_id(&self) -> &LinkAuthId;
     fn supports_priorities(&self) -> bool {
         false
-    }
-    fn open_ext(&self) -> Option<ext::Link> {
-        None
-    }
-    async fn accept_ext(&self, open_ext: Option<ext::Link>) -> ZResult<Option<ext::Link>> {
-        let _ = open_ext;
-        Ok(None)
-    }
-    async fn ack_ext(&self, accept_ext: Option<ext::Link>) -> ZResult<()> {
-        let _ = accept_ext;
-        Ok(())
     }
     async fn write(&self, buffer: &[u8], priority: Priority) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()>;
