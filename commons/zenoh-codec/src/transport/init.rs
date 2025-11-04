@@ -17,7 +17,7 @@ use zenoh_buffers::{
     ZSlice,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, imsg::has_flag},
+    common::{iext, imsg},
     core::{Resolution, WhatAmI, ZenohIdProto},
     transport::{
         batch_size, id,
@@ -29,54 +29,6 @@ use zenoh_protocol::{
 use crate::{
     common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length,
 };
-
-// ext::Link
-impl<W> WCodec<(&ext::Link, bool), &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, (ext, more): (&ext::Link, bool)) -> Self::Output {
-        let mut header: u8 = ext.id();
-        if more {
-            header |= iext::FLAG_Z;
-        }
-        self.write(&mut *writer, header)?;
-        self.write(&mut *writer, &ext.0)?;
-        Ok(())
-    }
-}
-
-impl<R> RCodec<(ext::Link, bool), &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::Link, bool), Self::Error> {
-        let header: u8 = self.read(&mut *reader)?;
-        let codec = Zenoh080Header::new(header);
-        codec.read(&mut *reader)
-    }
-}
-
-impl<R> RCodec<(ext::Link, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::Link, bool), Self::Error> {
-        if iext::mid(self.header) != ext::Link::ID {
-            return Err(DidntRead);
-        }
-        Ok((
-            ext::Link(self.read(&mut *reader)?),
-            has_flag(self.header, iext::FLAG_Z),
-        ))
-    }
-}
 
 // InitSyn
 impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
@@ -101,7 +53,6 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
-            ext_link,
         } = x;
 
         // Header
@@ -115,8 +66,7 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (*ext_patch != ext::PatchType::NONE) as u8
-            + (ext_link.is_some() as u8);
+            + (*ext_patch != ext::PatchType::NONE) as u8;
 
         #[cfg(feature = "shared-memory")]
         {
@@ -181,10 +131,6 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
-        if let Some(ext_link) = ext_link.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (ext_link, n_exts != 0))?;
-        }
 
         Ok(())
     }
@@ -247,7 +193,6 @@ where
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
         let mut ext_patch = ext::PatchType::NONE;
-        let mut ext_link = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -295,11 +240,6 @@ where
                     ext_patch = p;
                     has_ext = ext;
                 }
-                id if iext::mid(id) == ext::Link::ID => {
-                    let (l, ext) = eodec.read(&mut *reader)?;
-                    ext_link = Some(l);
-                    has_ext = ext;
-                }
                 _ => {
                     has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
@@ -321,7 +261,6 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
-            ext_link,
         })
     }
 }
@@ -350,7 +289,6 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
-            ext_link,
         } = x;
 
         // Header
@@ -364,8 +302,7 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (*ext_patch != ext::PatchType::NONE) as u8
-            + (ext_link.is_some() as u8);
+            + (*ext_patch != ext::PatchType::NONE) as u8;
 
         #[cfg(feature = "shared-memory")]
         {
@@ -433,10 +370,6 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
-        if let Some(link) = ext_link.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (link, n_exts != 0))?;
-        }
 
         Ok(())
     }
@@ -502,7 +435,6 @@ where
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
         let mut ext_patch = ext::PatchType::NONE;
-        let mut ext_link = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -550,11 +482,6 @@ where
                     ext_patch = p;
                     has_ext = ext;
                 }
-                id if iext::mid(id) == ext::Link::ID => {
-                    let (l, ext) = eodec.read(&mut *reader)?;
-                    ext_link = Some(l);
-                    has_ext = ext;
-                }
                 _ => {
                     has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
@@ -577,7 +504,6 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
-            ext_link,
         })
     }
 }
