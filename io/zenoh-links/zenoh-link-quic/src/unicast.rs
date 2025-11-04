@@ -15,7 +15,9 @@
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
-    fmt, mem,
+    fmt,
+    future::poll_fn,
+    mem,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,
@@ -49,14 +51,18 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Quic endpoint `multistream` config
 enum MultiStreamConfig {
+    /// `multistream=false`
     Disabled,
+    /// `multistream=true`
     Enabled,
+    /// default, or `multistream=auto`
     Auto,
 }
 
 impl MultiStreamConfig {
+    /// Parse multistream configuration.
     fn new(config: Config) -> ZResult<Self> {
         Ok(match config.get("multistream") {
             Some("false") => Self::Disabled,
@@ -66,10 +72,16 @@ impl MultiStreamConfig {
         })
     }
 
+    /// Returns the list of protocols supported for Quic ALPN.
+    ///
+    /// Protocols are ordered by decreasing selection priority.
     fn alpn_protocols(&self) -> Vec<Vec<u8>> {
         match self {
+            // Disabled must be compatible with legacy protocol
             Self::Disabled => vec![PROTOCOL_SINGLE_STREAM.into(), PROTOCOL_LEGACY.into()],
+            // Enabled forces multistream, so it's not compatible with legacy protocol
             Self::Enabled => vec![PROTOCOL_MULTI_STREAM.into()],
+            // Auto prioritize multistream, but must also be compatible with legacy protocol
             Self::Auto => vec![
                 PROTOCOL_MULTI_STREAM.into(),
                 PROTOCOL_SINGLE_STREAM.into(),
@@ -78,6 +90,8 @@ impl MultiStreamConfig {
         }
     }
 
+    /// Returns the maximum concurrent uni streams that should be opened, i.e. one per priority
+    /// except Control for multistream, zero otherwise.
     fn max_concurrent_uni_streams(&self) -> quinn::VarInt {
         match self {
             Self::Disabled => 0u8.into(),
@@ -86,18 +100,80 @@ impl MultiStreamConfig {
     }
 }
 
-fn is_multistream(connection: &quinn::Connection) -> ZResult<bool> {
-    let handshake_data = connection
-        .handshake_data()
-        .ok_or_else(|| zerror!("No handshake data"))?;
-    let handshake_data = handshake_data
-        .downcast_ref::<HandshakeData>()
-        .ok_or_else(|| zerror!("Invalid handshake data"))?;
-    Ok(match handshake_data.protocol.as_deref() {
-        Some(PROTOCOL_MULTI_STREAM) => true,
-        Some(PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY) => false,
-        _ => unreachable!(),
-    })
+/// Priority-mapped uni streams.
+///
+/// `quinn` doesn't allow direct stream index manipulation, but provides instead API guarantees:
+/// - streams are opened with increasing indexes
+/// - streams creation doesn't yield if it doesn't overflow the limit, hence `now_or_never`
+///
+/// So, in order to map streams on priorities (except Control already mapped on the bi stream),
+/// one stream per priority must be opened successively in the priority order. This way, the
+/// stream index (starting from 0) can be used to retrieve its priority (starting from 1).
+///
+/// Streams could be opened directly in [`LinkUnicastQuic`] constructor, but this one cannot fail
+/// because it's used in `Arc::new_cyclic`. So the failing part is extracted into this type.
+struct UniStreams(Vec<quinn::SendStream>);
+
+impl UniStreams {
+    /// Opens priority-mapped uni streams if supported.
+    ///
+    /// This method leverages on Quic ALPN (see [`MultiStreamConfig::alpn_protocols`]): if the
+    /// negotiated protocol is [`PROTOCOL_MULTI_STREAM`], then uni streams are opened.
+    /// Otherwise, it returns None.
+    fn try_open(connection: &quinn::Connection) -> ZResult<Option<Self>> {
+        let handshake_data = connection
+            .handshake_data()
+            .ok_or_else(|| zerror!("No handshake data"))?;
+        let handshake_data = handshake_data
+            .downcast_ref::<HandshakeData>()
+            .expect("HandshakeData should be only existing implementation");
+        let open_uni = |_prio| {
+            let open = connection.open_uni().now_or_never();
+            Ok(open.ok_or_else(|| zerror!("Cannot open uni stream"))??)
+        };
+        Ok(match handshake_data.protocol.as_deref() {
+            Some(PROTOCOL_MULTI_STREAM) => Some(Self(
+                (1..Priority::NUM).map(open_uni).collect::<ZResult<_>>()?,
+            )),
+            Some(PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY) => None,
+            _ => unreachable!(),
+        })
+    }
+}
+
+/// A maybe-pending [`quinn::RecvStream`].
+///
+/// `quinn` streams are only "accepted" when data is received, so they start with a "pending" state,
+/// and are notified by [`RecvStream::acceptor_task`].
+enum RecvStream {
+    /// A pending channel waiting for [`RecvStream::acceptor_task`] notification.
+    Pending(oneshot::Receiver<quinn::RecvStream>),
+    /// An accepted stream
+    Accepted(quinn::RecvStream),
+}
+
+impl RecvStream {
+    /// Instantiate a task to accept uni streams and notify the associated pending channel.
+    ///
+    /// Streams are mapped to their priority using their index, see [`UniStreams`].
+    /// The task stop when all streams have been received, or with connection errors; there is no
+    /// cancellation to handle as the connection will be closed eventually, triggering an error
+    /// if the task is still alive.
+    async fn acceptor_task(
+        connection: quinn::Connection,
+        mut priority_txs: HashMap<usize, oneshot::Sender<quinn::RecvStream>>,
+    ) -> ZResult<()> {
+        while !priority_txs.is_empty() {
+            let recv = connection.accept_uni().await?;
+            // Uni streams' indexes starts from zero, while priorities above Control starts from 1,
+            // hence the `+ 1`
+            let prio = recv.id().index() as usize + 1;
+            if let Some(tx) = priority_txs.remove(&prio) {
+                tx.send(recv).ok();
+            }
+        }
+        Ok(())
+    }
 }
 
 pub struct LinkUnicastQuic {
@@ -105,7 +181,7 @@ pub struct LinkUnicastQuic {
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    multistream: bool,
+    is_multistream: bool,
     send: [UnsafeCell<Option<quinn::SendStream>>; Priority::NUM],
     recv: [UnsafeCell<Option<RecvStream>>; Priority::NUM],
     auth_identifier: LinkAuthId,
@@ -113,11 +189,6 @@ pub struct LinkUnicastQuic {
 }
 
 unsafe impl Sync for LinkUnicastQuic {}
-
-enum RecvStream {
-    Pending(oneshot::Receiver<quinn::RecvStream>),
-    Accepted(quinn::RecvStream),
-}
 
 impl LinkUnicastQuic {
     #[allow(clippy::too_many_arguments)]
@@ -127,43 +198,37 @@ impl LinkUnicastQuic {
         dst_locator: Locator,
         send_control: quinn::SendStream,
         recv_control: quinn::RecvStream,
-        multistream: bool,
+        uni_streams: Option<UniStreams>,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
+        // Initialize the streams with Control bi stream
         let mut send = vec![UnsafeCell::new(Some(send_control))];
         let mut recv = vec![UnsafeCell::new(Some(RecvStream::Accepted(recv_control)))];
-        if multistream {
-            send.resize_with(Priority::NUM, || {
-                let open = connection.open_uni().now_or_never();
-                UnsafeCell::new(open.transpose().ok().flatten())
-            });
-            let mut priorities = HashMap::new();
-            recv.resize_with(Priority::NUM, || {
+        let is_multistream = uni_streams.is_some();
+        // If multistream is enabled, initializes the priority-mapped streams
+        if let Some(streams) = uni_streams {
+            send.extend(streams.0.into_iter().map(Some).map(UnsafeCell::new));
+            let mut priority_txs = HashMap::new();
+            // For each priority, creates a channel to notify the acceptation and initialize
+            // the stream to pending
+            for prio in 1..Priority::NUM {
                 let (tx, rx) = oneshot::channel();
-                priorities.insert(priorities.len() + 1, tx);
-                UnsafeCell::new(Some(RecvStream::Pending(rx)))
-            });
-            let connection = connection.clone();
-            zenoh_runtime::ZRuntime::Acceptor.spawn(async move {
-                while !priorities.is_empty() {
-                    let recv = connection.accept_uni().await?;
-                    if let Some(tx) = priorities.remove(&(recv.id().index() as usize)) {
-                        tx.send(recv).ok();
-                    }
-                }
-                Ok::<_, quinn::ConnectionError>(())
-            });
+                priority_txs.insert(prio, tx);
+                recv.push(UnsafeCell::new(Some(RecvStream::Pending(rx))));
+            }
+            zenoh_runtime::ZRuntime::Acceptor
+                .spawn(RecvStream::acceptor_task(connection.clone(), priority_txs));
         } else {
-            send.resize_with(Priority::NUM, || UnsafeCell::new(None));
-            recv.resize_with(Priority::NUM, || UnsafeCell::new(None));
+            send.resize_with(Priority::NUM, Default::default);
+            recv.resize_with(Priority::NUM, Default::default);
         }
         LinkUnicastQuic {
             connection,
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
-            multistream,
+            is_multistream,
             send: send.try_into().unwrap(),
             recv: recv.try_into().unwrap(),
             auth_identifier,
@@ -185,6 +250,11 @@ impl LinkUnicastQuic {
         Ok(())
     }
 
+    /// Retrieved the write-stream mapped to the priority
+    ///
+    /// # Safety
+    ///
+    /// There should be only one caller per priority.
     #[allow(clippy::mut_from_ref)]
     unsafe fn write_stream(&self, priority: Priority) -> &mut quinn::SendStream {
         unsafe { &mut *self.send[priority as usize].get() }
@@ -192,21 +262,31 @@ impl LinkUnicastQuic {
             .expect("multistream should have been started")
     }
 
+    /// Retrieved the read-stream mapped to the priority
+    ///
+    /// The stream may be pending, in which case we wait until it is accepted.
+    ///
+    /// # Safety
+    ///
+    /// There should be only one caller per priority.
     #[allow(clippy::mut_from_ref)]
     async unsafe fn read_stream(&self, priority: Priority) -> ZResult<&mut quinn::RecvStream> {
-        match unsafe { &mut *self.recv[priority as usize].get() } {
-            None => panic!("multistream should have been started"),
-            pending @ Some(RecvStream::Pending(_)) => {
-                let Some(RecvStream::Pending(rx)) = mem::replace(pending, None) else {
+        match unsafe { &mut *self.recv[priority as usize].get() }
+            .as_mut()
+            .expect("multistream should have been started")
+        {
+            stream @ RecvStream::Pending(_) => {
+                let RecvStream::Pending(rx) = stream else {
                     unreachable!()
                 };
-                let recv = rx.await.map_err(|_| zerror!("connection closed"))?;
-                let RecvStream::Accepted(recv) = pending.insert(RecvStream::Accepted(recv)) else {
+                let recv = rx.await.map_err(|_| zerror!("Connection closed"))?;
+                *stream = RecvStream::Accepted(recv);
+                let RecvStream::Accepted(recv) = stream else {
                     unreachable!()
                 };
                 Ok(recv)
             }
-            Some(RecvStream::Accepted(recv)) => Ok(recv),
+            RecvStream::Accepted(recv) => Ok(recv),
         }
     }
 }
@@ -316,7 +396,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
     #[inline(always)]
     fn supports_priorities(&self) -> bool {
-        self.multistream
+        self.is_multistream
     }
 }
 
@@ -467,7 +547,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let certchain_expiration_time =
             get_cert_chain_expiration(&quic_conn)?.expect("server should have certificate chain");
 
-        let is_multistream = is_multistream(&quic_conn)?;
+        let uni_streams = UniStreams::try_open(&quic_conn)?;
         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
             let mut expiration_manager = None;
             if client_crypto.tls_close_link_on_expiration {
@@ -486,7 +566,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 endpoint.into(),
                 send,
                 recv,
-                is_multistream,
+                uni_streams,
                 auth_id.into(),
                 expiration_manager,
             )
@@ -690,7 +770,7 @@ async fn accept_task(
                         }
 
                         tracing::debug!("Accepted QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
-                        let is_multistream = is_multistream(&quic_conn)?;
+                        let uni_streams = UniStreams::try_open(&quic_conn)?;
                         // Create the new link object
                         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
@@ -710,7 +790,7 @@ async fn accept_task(
                                 dst_locator,
                                 send,
                                 recv,
-                                is_multistream,
+                                uni_streams,
                                 auth_id.into(),
                                 expiration_manager,
                             )
