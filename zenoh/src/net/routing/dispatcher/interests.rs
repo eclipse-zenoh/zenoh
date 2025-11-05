@@ -13,6 +13,7 @@
 //
 
 use std::{
+    collections::HashSet,
     fmt,
     sync::{Arc, Weak},
     time::Duration,
@@ -33,7 +34,7 @@ use zenoh_util::Timed;
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, region::Region, tables::Tables},
-    hat::{BaseContext, HatTrait, Remote, SendDeclare},
+    hat::{BaseContext, Remote, SendDeclare},
     router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,
 };
@@ -51,7 +52,7 @@ pub(crate) struct PendingCurrentInterest {
     pub(crate) rejection_token: CancellationToken,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RemoteInterest {
     pub(crate) res: Option<Arc<Resource>>,
     pub(crate) options: InterestOptions,
@@ -180,13 +181,17 @@ impl Timed for CurrentInterestCleanup {
 }
 
 impl Face {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_interest(
         &self,
         tables_lock: &Arc<TablesLock>,
         msg: &mut Interest,
         send_declare: &mut SendDeclare,
     ) {
+        if msg.options.aggregate() && self.state.whatami == WhatAmI::Peer {
+            tracing::warn!("Ignoring aggregate interest option from peer (unsupported)");
+            msg.options -= InterestOptions::AGGREGATE;
+        }
+
         let Interest {
             id,
             mode,
@@ -194,6 +199,7 @@ impl Face {
             wire_expr,
             ..
         } = msg;
+
         if options.keyexprs() && mode != &InterestMode::Current {
             register_expr_interest(
                 tables_lock,
@@ -202,7 +208,7 @@ impl Face {
                 wire_expr.as_ref(),
             );
         }
-        let (mut res, mut wtables) = if let Some(expr) = wire_expr {
+        let (res, mut wtables) = if let Some(expr) = wire_expr {
             let rtables = zread!(tables_lock.tables);
             match rtables
                 .data
@@ -254,21 +260,47 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        let (north_hat, south_hats) = tables.hats.partition_north_mut();
-
-        let ctx = BaseContext {
+        let mut ctx = BaseContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
             send_declare,
         };
 
-        north_hat.route_interest(
-            ctx,
+        let hats = &mut tables.hats;
+        let region = ctx.src_face.region;
+
+        let Some(remote) = hats[region].new_remote(&ctx.src_face, msg.ext_nodeid.node_id) else {
+            return;
+        };
+
+        let resolved_interest_opt =
+            hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &remote);
+
+        let other_sub_matches = hats
+            .values()
+            .filter(|hat| hat.region() != region)
+            .flat_map(|hat| hat.remote_subscriptions(&ctx.tables).into_keys())
+            .collect::<HashSet<_>>();
+        hats[region].propagate_current_subscriptions(
+            ctx.reborrow(),
             msg,
-            res.as_mut(),
-            south_hats.map(|d| &mut **d as &mut dyn HatTrait),
+            res.clone(),
+            other_sub_matches,
         );
+
+        hats[region].register_interest(ctx.reborrow(), msg, res);
+
+        if let Some(resolved_interest) = resolved_interest_opt {
+            tracing::trace!(
+                "Resolving current interest; it was not propagated in the north region"
+            );
+            hats[region].send_declare_final(
+                ctx.reborrow(),
+                resolved_interest.src_interest_id,
+                &resolved_interest.src,
+            );
+        }
     }
 
     pub(crate) fn undeclare_interest(&self, tables: &TablesLock, msg: &Interest) {
@@ -278,62 +310,66 @@ impl Face {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let (north_hat, south_hats) = tables.hats.partition_north_mut();
-
-        let ctx = BaseContext {
+        let mut ctx = BaseContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
             send_declare: &mut |_, _| unreachable!(),
         };
 
-        north_hat.route_interest_final(ctx, msg, south_hats.map(|d| &mut **d as &mut dyn HatTrait));
+        let hats = &mut tables.hats;
+        let region = ctx.src_face.region;
+
+        let Some(remote_interest) = hats[region].unregister_interest(ctx.reborrow(), msg) else {
+            tracing::error!(id = msg.id, "Unknown remote interest");
+            return;
+        };
+
+        // FIXME(regions): check if any other subregion has the same remote interest before propagating interest final
+        hats[Region::North].route_interest_final(ctx, msg, &remote_interest);
     }
 
     pub(crate) fn declare_final(
         &self,
         wtables: &mut Tables,
         interest_id: InterestId,
-        node_id: NodeId,
+        _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
         let tables = &mut *wtables;
 
-        let ctx = BaseContext {
+        let mut ctx = BaseContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
             send_declare,
         };
 
-        // REVIEW(regions): peer initial interest
-        if self.state.whatami == WhatAmI::Peer && interest_id == 0 {
-            tracing::debug!(dst = %ctx.src_face, "Finalizing (peer-to-peer) initial interest");
+        let hats = &mut tables.hats;
+        let region = ctx.src_face.region;
 
-            let peer_owner_hat = &mut tables.hats[self.state.region];
-            let Some(src) = peer_owner_hat.new_remote(ctx.src_face, node_id) else {
-                return;
-            };
-
-            peer_owner_hat.send_final_declaration(ctx, interest_id, &src);
-            return;
-        }
-
-        if self.state.region.bound().is_south() {
+        if region.bound().is_south() {
             tracing::error!(
                 interest_id,
-                "Received current interest finalization from south/eastwest-bound face. \
+                "Received current interest finalization from south-bound face. \
                 This message should only flow downstream"
             );
             return;
         }
 
-        let (north_hat, south_hats) = tables.hats.partition_north_mut();
-
-        north_hat.route_final_declaration(
-            ctx,
-            interest_id,
-            south_hats.map(|d| &mut **d as &mut dyn HatTrait),
-        );
+        if let Some(resolved_interest) =
+            hats[Region::North].route_declare_final(ctx.reborrow(), interest_id)
+        {
+            tracing::trace!(
+                src_id = resolved_interest.src_interest_id,
+                %region,
+                "Resolving current interest"
+            );
+            hats[resolved_interest.src_region].send_declare_final(
+                ctx,
+                resolved_interest.src_interest_id,
+                &resolved_interest.src,
+            );
+        }
     }
 }

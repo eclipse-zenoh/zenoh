@@ -72,10 +72,6 @@ impl<D> RegionMap<D> {
         north
     }
 
-    pub(crate) fn partition_north_mut(&mut self) -> (&mut D, RegionMap<&mut D>) {
-        self.partition_mut(&Region::North)
-    }
-
     pub(crate) fn partition_mut(&mut self, region: &Region) -> (&mut D, RegionMap<&mut D>) {
         let (mut main, others) = self
             .0

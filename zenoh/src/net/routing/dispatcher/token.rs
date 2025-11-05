@@ -25,7 +25,7 @@ use zenoh_protocol::{
 
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::{face::Face, region::Region},
     hat::{BaseContext, HatTrait, SendDeclare},
     router::Resource,
 };
@@ -83,15 +83,15 @@ impl Face {
                     if self.state.region.bound().is_south() {
                         tracing::error!(
                             id,
-                            "Received current token from south/eastwest-bound face. \
+                            "Received current token from south-bound face. \
                             This message should only flow downstream"
                         );
                         return;
                     }
 
-                    let (upstream_hat, downstream_hats) = tables.hats.partition_north_mut();
+                    let (north_hat, south_hats) = tables.hats.partition_mut(&Region::North);
 
-                    upstream_hat.declare_current_token(
+                    north_hat.declare_current_token(
                         BaseContext {
                             tables_lock: &self.tables,
                             tables: &mut tables.data,
@@ -100,10 +100,7 @@ impl Face {
                         },
                         &mut res,
                         interest_id,
-                        downstream_hats
-                            .into_iter()
-                            .map(|(b, d)| (b, &mut **d as &mut dyn HatTrait))
-                            .collect(),
+                        south_hats.map(|d| &mut **d as &mut dyn HatTrait),
                     );
                 } else {
                     for hat in tables.hats.values_mut() {

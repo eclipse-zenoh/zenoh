@@ -376,6 +376,7 @@ impl Hat {
         }
     }
 
+    #[allow(dead_code)] // FIXME(regions)
     #[allow(clippy::too_many_arguments)]
     pub(super) fn declare_qabl_interest(
         &self,
@@ -560,7 +561,7 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, rgn = %self.region))]
     fn compute_query_route(
         &self,
         tables: &TablesData,

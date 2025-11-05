@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -48,10 +48,11 @@ use crate::net::{
         dispatcher::{
             face::FaceId,
             interests::RemoteInterest,
+            queries::LocalQueryables,
             region::{Region, RegionMap},
         },
         hat::{BaseContext, Remote},
-        router::FaceContext,
+        router::{FaceContext, LocalSubscribers},
     },
     runtime::Runtime,
 };
@@ -67,6 +68,7 @@ pub(crate) struct Hat {
 
 impl Hat {
     pub(crate) fn new(region: Region) -> Self {
+        assert!(region.bound().is_south());
         Self { region }
     }
 
@@ -148,11 +150,15 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        self.interests_new_face(ctx.tables, ctx.src_face);
-        self.pubsub_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.queries_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
+        assert!(self.owns(ctx.src_face));
+        assert!(ctx.src_face.region.bound().is_south());
+
+        // NOTE:
+        // - The broker hat is never the north hat, thus there are no interests to re-propagate
+        // - The broker hat doesn't re-propagate entities to between clients
+
         ctx.tables.disable_all_routes();
+
         Ok(())
     }
 
@@ -164,15 +170,19 @@ impl HatBaseTrait for Hat {
         _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
-        self.interests_new_face(ctx.tables, ctx.src_face);
-        self.pubsub_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.queries_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
+        assert!(self.owns(ctx.src_face));
+        assert!(ctx.src_face.region.bound().is_south());
+
+        // NOTE:
+        // - The broker hat is never the north hat, thus there are no interests to re-propagate
+        // - The broker hat doesn't re-propagate entities to between clients
+
         ctx.tables.disable_all_routes();
+
         Ok(())
     }
 
-    fn close_face(&mut self, mut ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
+    fn close_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -199,57 +209,6 @@ impl HatBaseTrait for Hat {
         }
         face.local_mappings.clear();
 
-        let mut subs_matches = vec![];
-        for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-                subs_matches.push(res);
-            }
-        }
-
-        let mut qabls_matches = vec![];
-        for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-                qabls_matches.push(res);
-            }
-        }
-
-        for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_token(ctx.reborrow(), &mut res);
-        }
-
-        for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-            Resource::clean(&mut res);
-        }
         self.faces_mut(ctx.tables).remove(&face.id);
     }
 
@@ -325,9 +284,9 @@ impl HatContext {
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
+    local_qabls: LocalQueryables,
     remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
@@ -338,9 +297,9 @@ impl HatFace {
         Self {
             next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
-            local_qabls: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),
