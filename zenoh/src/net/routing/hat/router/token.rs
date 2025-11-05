@@ -875,7 +875,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -921,7 +921,7 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
@@ -957,7 +957,7 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region, interest_id))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region, interest_id))]
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
@@ -984,7 +984,7 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region, interest_id = interest.src_interest_id))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region, interest_id = interest.src_interest_id))]
     fn propagate_current_token(
         &mut self,
         ctx: BaseContext,

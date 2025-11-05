@@ -949,7 +949,7 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), bnd = %self.region), ret)]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), rgn = %self.region), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,

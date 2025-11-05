@@ -79,7 +79,7 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn route_interest(
         &mut self,
         mut ctx: BaseContext,
@@ -194,7 +194,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn route_interest_final(
         &mut self,
         mut ctx: BaseContext,
@@ -286,7 +286,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn send_declarations(
         &mut self,
         ctx: BaseContext,
@@ -319,7 +319,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn send_final_declaration(&mut self, ctx: BaseContext, id: InterestId, src: &Remote) {
         // I should send a DeclareFinal to the source of the current interest identified by the given IID and FID
 
@@ -337,7 +337,7 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn register_interest(
         &mut self,
         ctx: BaseContext,
@@ -354,7 +354,7 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
         assert!(self.region().bound().is_south());
         assert!(self.owns(&ctx.src_face));

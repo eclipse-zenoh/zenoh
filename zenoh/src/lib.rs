@@ -13,6 +13,7 @@
 //
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![allow(dead_code)] // FIXME(regions)
 
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest, and computations. It elegantly blends traditional pub/sub with geo-distributed
@@ -22,7 +23,7 @@
 //! # Components and concepts
 //!
 //! The main Zenoh components and concepts are described below.
-//!  
+//!
 //! ## Session
 //!
 //! The root element of the Zenoh API is the [session].

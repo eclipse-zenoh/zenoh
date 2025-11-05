@@ -28,7 +28,7 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState, interests::CurrentInterest, region::RegionMap, tables::TablesData,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
+    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -392,6 +392,7 @@ impl Hat {
         }
     }
 
+    #[allow(dead_code)] // FIXME(regions)
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_token_interest(
         &self,
@@ -472,7 +473,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn declare_token(
         &mut self,
         ctx: BaseContext,
@@ -485,7 +486,7 @@ impl HatTokenTrait for Hat {
         self.declare_simple_token(ctx, id, res, interest_id);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn undeclare_token(
         &mut self,
         ctx: BaseContext,
@@ -496,7 +497,7 @@ impl HatTokenTrait for Hat {
         self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region, interest_id))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region, interest_id))]
     fn declare_current_token(
         &mut self,
         ctx: BaseContext,
@@ -525,7 +526,7 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(wai = %self.whatami().short(), bnd = %self.region, interest_id = interest.src_interest_id))]
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region, interest_id = interest.src_interest_id))]
     fn propagate_current_token(
         &mut self,
         mut ctx: BaseContext,

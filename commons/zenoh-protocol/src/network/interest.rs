@@ -153,7 +153,7 @@ pub struct Interest {
 pub type DeclareRequestId = u32;
 pub type AtomicDeclareRequestId = AtomicU32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InterestMode {
     Final,
     Current,
@@ -247,7 +247,7 @@ impl Interest {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Hash)]
 pub struct InterestOptions {
     options: u8,
 }
