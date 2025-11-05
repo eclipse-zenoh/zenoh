@@ -547,7 +547,6 @@ impl HatPubSubTrait for Hat {
         src_face: &FaceState,
         expr: &RoutingExpr,
         node_id: NodeId,
-        _dst_node_id: NodeId,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::<Direction>::new();
         let Some(key_expr) = expr.key_expr() else {
@@ -580,7 +579,6 @@ impl HatPubSubTrait for Hat {
                             dst_face: ctx.face.clone(),
                             wire_expr: wire_expr.to_owned(),
                             node_id: DEFAULT_NODE_ID,
-                            dst_node_id: DEFAULT_NODE_ID,
                         }
                     });
                 }
@@ -602,7 +600,6 @@ impl HatPubSubTrait for Hat {
                                 dst_face: face.clone(),
                                 wire_expr: wire_expr.to_owned(),
                                 node_id: DEFAULT_NODE_ID,
-                                dst_node_id: DEFAULT_NODE_ID,
                             }
                         })
                     });
@@ -617,7 +614,6 @@ impl HatPubSubTrait for Hat {
                             dst_face: face.clone(),
                             wire_expr: wire_expr.to_owned(),
                             node_id: DEFAULT_NODE_ID,
-                            dst_node_id: DEFAULT_NODE_ID,
                         }
                     });
                 }
@@ -629,7 +625,6 @@ impl HatPubSubTrait for Hat {
                 dst_face: mcast_group.clone(),
                 wire_expr: key_expr.to_string().into(),
                 node_id: DEFAULT_NODE_ID,
-                dst_node_id: DEFAULT_NODE_ID,
             });
         }
         Arc::new(route.build())

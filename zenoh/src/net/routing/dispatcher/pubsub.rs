@@ -260,13 +260,11 @@ fn get_data_route(
     face: &FaceState,
     expr: &RoutingExpr,
     node_id: NodeId,
-    dst_node_id: NodeId,
     region: &Region,
 ) -> Arc<Route> {
     let node_id = tables.hats[region].map_routing_context(&tables.data, face, node_id);
-    let dst_node_id = tables.hats[region].map_routing_context(&tables.data, face, dst_node_id);
     let compute_route =
-        || tables.hats[region].compute_data_route(&tables.data, face, expr, node_id, dst_node_id);
+        || tables.hats[region].compute_data_route(&tables.data, face, expr, node_id);
     match expr
         .resource()
         .as_ref()
@@ -367,14 +365,7 @@ pub fn route_data(
 
     for (bound, hat) in rtables.hats.iter() {
         if hat.ingress_filter(&rtables.data, face, &expr) {
-            let route = get_data_route(
-                &rtables,
-                face,
-                &expr,
-                msg.ext_nodeid.node_id,
-                msg.ext_dst_nodeid.node_id,
-                bound,
-            );
+            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
 
             for dir in route.iter() {
                 if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
@@ -419,9 +410,6 @@ pub fn route_data(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType {
                         node_id: dir.node_id,
-                    },
-                    ext_dst_nodeid: ext::DstNodeIdType {
-                        node_id: dir.dst_node_id,
                     },
                     payload: msg.payload.clone(),
                 },

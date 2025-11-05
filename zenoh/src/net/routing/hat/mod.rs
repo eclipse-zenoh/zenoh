@@ -350,7 +350,6 @@ pub(crate) trait HatPubSubTrait {
         face: &FaceState,
         expr: &RoutingExpr,
         node_id: NodeId,
-        dst_node_id: NodeId,
     ) -> Arc<Route>;
 
     fn get_matching_subscriptions(

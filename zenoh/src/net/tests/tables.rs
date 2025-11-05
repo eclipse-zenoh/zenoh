@@ -654,9 +654,7 @@ fn client_test() {
                 ext_nodeid: ext::NodeIdType {
                     node_id: DEFAULT_NODE_ID,
                 },
-                ext_dst_nodeid: ext::NodeIdType {
-                    node_id: DEFAULT_NODE_ID,
-                },
+
                 payload: PushBody::Put(Put {
                     timestamp: None,
                     encoding: Encoding::empty(),

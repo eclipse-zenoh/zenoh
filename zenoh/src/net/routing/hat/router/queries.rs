@@ -53,7 +53,7 @@ use crate::{
                 BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, SendDeclare,
                 Sources,
             },
-            router::{Direction, DEFAULT_NODE_ID},
+            router::Direction,
             RoutingContext,
         },
     },
@@ -789,7 +789,6 @@ impl Hat {
                                                 dst_face: face.clone(),
                                                 wire_expr: wire_expr.to_owned(),
                                                 node_id: source,
-                                                dst_node_id: DEFAULT_NODE_ID,
                                             },
                                             info: Some(QueryableInfoType {
                                                 complete: complete && qabl_info.complete,
