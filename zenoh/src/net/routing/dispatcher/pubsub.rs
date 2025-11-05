@@ -93,22 +93,23 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.region);
+                let mut ctx = BaseContext {
+                    tables_lock: &self.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut self.state.clone(),
+                    send_declare,
+                };
+
+                tables.hats[self.state.region].register_subscription(
+                    ctx.reborrow(),
+                    id,
+                    &mut res,
+                    node_id,
+                    sub_info,
+                );
 
                 for (bound, hat) in tables.hats.iter_mut() {
-                    hat.declare_subscription(
-                        BaseContext {
-                            tables_lock: &self.tables,
-                            tables: &mut tables.data,
-                            src_face: &mut self.state.clone(),
-                            send_declare,
-                        },
-                        id,
-                        &mut res,
-                        node_id,
-                        sub_info,
-                    );
-
+                    hat.propagate_subscription(ctx.reborrow(), &mut res, sub_info);
                     disable_matches_data_routes(&mut res, bound);
                 }
 

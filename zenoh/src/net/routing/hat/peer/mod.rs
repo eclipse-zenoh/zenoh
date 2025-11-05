@@ -58,7 +58,7 @@ use crate::net::{
             face::{FaceId, InterestState},
             interests::RemoteInterest,
             queries::LocalQueryables,
-            region::Region,
+            region::{Region, RegionMap},
         },
         hat::{BaseContext, Remote},
         router::{FaceContext, LocalSubscribers},
@@ -200,33 +200,31 @@ impl HatBaseTrait for Hat {
         Some(face.clone())
     }
 
-    fn new_local_face(
-        &mut self,
-        mut ctx: BaseContext,
-        _tables_ref: &Arc<TablesLock>,
-    ) -> ZResult<()> {
-        self.interests_new_face(ctx.reborrow());
-
-        self.pubsub_new_face(ctx.reborrow());
-        self.queries_new_face(ctx.reborrow());
-        self.token_new_face(ctx.reborrow());
-        ctx.tables.disable_all_routes();
-        Ok(())
+    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+        bail!("Local sessions should not be bound to peer hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
         mut ctx: BaseContext,
+        other_hats: RegionMap<&dyn HatTrait>,
         _tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {
-        if ctx.src_face.whatami != WhatAmI::Client {
-            if let Some(net) = self.gossip.as_mut() {
-                net.add_link(transport.clone());
-            }
+        assert!(self.owns(ctx.src_face));
+
+        if let Some(net) = self.gossip.as_mut() {
+            net.add_link(transport.clone());
         }
-        if ctx.src_face.whatami == WhatAmI::Peer {
+
+        // NOTE(regions): we only send/recv initial interests between peers that are mutually north-bound,
+        // otherwise we are in PULL mode. In particular, the `open.return_conditions.delcares` configuration
+        // option doesn't apply to region gateways.
+        let do_initial_interest =
+            ctx.src_face.region.bound().is_north() && ctx.src_face.remote_bound.is_north();
+
+        if do_initial_interest {
             let face_id = ctx.src_face.id;
             get_mut_unchecked(ctx.src_face).local_interests.insert(
                 INITIAL_INTEREST_ID,
@@ -235,12 +233,12 @@ impl HatBaseTrait for Hat {
         }
 
         self.interests_new_face(ctx.reborrow());
-        self.pubsub_new_face(ctx.reborrow());
+        self.pubsub_new_face(ctx.reborrow(), other_hats);
         self.queries_new_face(ctx.reborrow());
         self.token_new_face(ctx.reborrow());
         ctx.tables.disable_all_routes();
 
-        if ctx.src_face.whatami == WhatAmI::Peer {
+        if do_initial_interest {
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::new(Declare {
@@ -252,6 +250,7 @@ impl HatBaseTrait for Hat {
                 }),
             );
         }
+
         Ok(())
     }
 

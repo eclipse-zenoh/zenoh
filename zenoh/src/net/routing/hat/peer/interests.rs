@@ -103,6 +103,9 @@ impl HatInterestTrait for Hat {
         assert!(self.region().bound().is_north());
         assert!(ctx.src_face.region.bound().is_south());
 
+        // REVIEW(regions): mainline zenoh has a failure mode for aggregate interests from peers to routers.
+        // See: https://github.com/eclipse-zenoh/zenoh/blob/1bd82eeef7d9b2df0d96dbbaf947ac75c90571aa/zenoh/src/net/routing/hat/router/interests.rs#L53-L59
+
         let owner_hat = &mut *south_hats[ctx.src_face.region];
 
         if msg.mode.current() {

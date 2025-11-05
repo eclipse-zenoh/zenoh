@@ -61,7 +61,7 @@ use crate::net::{
             interests::{PendingCurrentInterest, RemoteInterest},
             pubsub::LocalSubscribers,
             queries::LocalQueryables,
-            region::Region,
+            region::{Region, RegionMap},
             resource::FaceContext,
         },
         hat::{BaseContext, Remote, TREES_COMPUTATION_DELAY_MS},
@@ -425,6 +425,7 @@ impl HatBaseTrait for Hat {
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
+        _other_hats: RegionMap<&dyn HatTrait>,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {

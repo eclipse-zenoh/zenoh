@@ -43,7 +43,7 @@ use crate::net::{
             region::Region,
             tables::{self, Tables},
         },
-        hat::BaseContext,
+        hat::{BaseContext, HatTrait},
     },
 };
 
@@ -283,13 +283,16 @@ impl Router {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        tables.hats[region].new_transport_unicast_face(
-            BaseContext {
-                tables_lock: &face.tables,
-                tables: &mut tables.data,
-                src_face: &mut face.state,
-                send_declare: &mut |p, m| declares.push((p.clone(), m)),
-            },
+        let (owner_hat, other_hats) = tables.hats.partition_mut(&region);
+        let ctx = BaseContext {
+            tables_lock: &face.tables,
+            tables: &mut tables.data,
+            src_face: &mut face.state,
+            send_declare: &mut |p, m| declares.push((p.clone(), m)),
+        };
+        owner_hat.new_transport_unicast_face(
+            ctx,
+            other_hats.map(|hat| &**hat as &dyn HatTrait),
             &self.tables,
             &transport,
         )?;
