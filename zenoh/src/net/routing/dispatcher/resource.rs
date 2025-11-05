@@ -23,7 +23,6 @@ use std::{
 };
 
 use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
-use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
@@ -210,18 +209,14 @@ impl FaceContext {
 pub type RoutesVersion = u64;
 
 pub(crate) struct Routes<T> {
-    routers: Vec<Option<T>>,
-    peers: Vec<Option<T>>,
-    clients: Vec<Option<T>>,
+    by_node_id: Vec<Option<T>>,
     version: u64,
 }
 
 impl<T> Default for Routes<T> {
     fn default() -> Self {
         Self {
-            routers: Vec::new(),
-            peers: Vec::new(),
-            clients: Vec::new(),
+            by_node_id: Vec::new(),
             version: 0,
         }
     }
@@ -229,67 +224,44 @@ impl<T> Default for Routes<T> {
 
 impl<T> Routes<T> {
     pub(crate) fn clear(&mut self) {
-        self.routers.clear();
-        self.peers.clear();
-        self.clients.clear();
+        self.by_node_id.clear();
     }
 
     #[inline]
-    pub(crate) fn get_route(
-        &self,
-        version: RoutesVersion,
-        whatami: WhatAmI,
-        context: NodeId,
-    ) -> Option<&T> {
+    pub(crate) fn get_route(&self, version: RoutesVersion, context: NodeId) -> Option<&T> {
         if version != self.version {
             return None;
         }
-        let routes = match whatami {
-            WhatAmI::Router => &self.routers,
-            WhatAmI::Peer => &self.peers,
-            WhatAmI::Client => &self.clients,
-        };
-        routes.get(context as usize)?.as_ref()
+        self.by_node_id.get(context as usize)?.as_ref()
     }
 
     #[inline]
-    pub(crate) fn set_route(
-        &mut self,
-        version: RoutesVersion,
-        whatami: WhatAmI,
-        context: NodeId,
-        route: T,
-    ) {
+    pub(crate) fn set_route(&mut self, version: RoutesVersion, context: NodeId, route: T) {
         if self.version != version {
             self.clear();
             self.version = version;
         }
-        let routes = match whatami {
-            WhatAmI::Router => &mut self.routers,
-            WhatAmI::Peer => &mut self.peers,
-            WhatAmI::Client => &mut self.clients,
-        };
-        routes.resize_with(context as usize + 1, || None);
-        routes[context as usize] = Some(route);
+
+        self.by_node_id.resize_with(context as usize + 1, || None);
+        self.by_node_id[context as usize] = Some(route);
     }
 }
 
 pub(crate) fn get_or_set_route<T: Clone>(
     routes: &RwLock<Routes<T>>,
     version: RoutesVersion,
-    whatami: WhatAmI,
     context: NodeId,
     compute_route: impl FnOnce() -> T,
 ) -> T {
-    if let Some(route) = routes.read().unwrap().get_route(version, whatami, context) {
+    if let Some(route) = routes.read().unwrap().get_route(version, context) {
         return route.clone();
     }
     let mut routes = routes.write().unwrap();
-    if let Some(route) = routes.get_route(version, whatami, context) {
+    if let Some(route) = routes.get_route(version, context) {
         return route.clone();
     }
     let route = compute_route();
-    routes.set_route(version, whatami, context, route.clone());
+    routes.set_route(version, context, route.clone());
     route
 }
 

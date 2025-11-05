@@ -642,7 +642,6 @@ fn get_query_route(
         return get_or_set_route(
             query_routes,
             tables.data.hats[region].routes_version,
-            face.whatami,
             local_context,
             compute_route,
         );

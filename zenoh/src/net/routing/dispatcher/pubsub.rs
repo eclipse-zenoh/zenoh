@@ -32,8 +32,8 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::Face,
-            region::Region,
             local_resources::{LocalResourceInfoTrait, LocalResources},
+            region::Region,
         },
         hat::{BaseContext, SendDeclare},
         router::{get_or_set_route, Direction, RouteBuilder},
@@ -203,6 +203,9 @@ impl Face {
     }
 }
 
+/// Disables data routes of the given regions's hat.
+///
+/// A subscription declaration or undeclaration should in theory only invalidate data routes of its owner hat.
 pub(crate) fn disable_matches_data_routes(res: &mut Arc<Resource>, region: &Region) {
     if res.ctx.is_some() {
         get_mut_unchecked(res).context_mut().hats[region].disable_data_routes();
@@ -273,7 +276,6 @@ fn get_data_route(
         Some(data_routes) => get_or_set_route(
             data_routes,
             tables.data.hats[region].routes_version,
-            face.whatami,
             node_id,
             compute_route,
         ),
