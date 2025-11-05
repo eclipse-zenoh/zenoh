@@ -17,6 +17,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use itertools::Itertools;
 use zenoh_protocol::{
     core::WhatAmI,
     network::{
@@ -35,12 +36,14 @@ use crate::{
         dispatcher::{
             face::FaceState,
             pubsub::SubscriberInfo,
+            region::RegionMap,
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
         hat::{
             peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
-            BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources,
+            BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare,
+            Sources,
         },
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
@@ -344,24 +347,19 @@ impl Hat {
         }
     }
 
-    pub(super) fn pubsub_new_face(&self, mut ctx: BaseContext) {
-        let sub_info = SubscriberInfo;
-        for mut face in self
-            .faces(ctx.tables)
+    pub(super) fn pubsub_new_face(&self, ctx: BaseContext, other_hats: RegionMap<&dyn HatTrait>) {
+        if ctx.src_face.region.bound().is_south() {
+            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote. Not propagating subscriptions");
+            return;
+        }
+
+        let info = SubscriberInfo;
+
+        for res in other_hats
             .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
+            .flat_map(|hat| hat.remote_subscriptions(&ctx.tables).into_keys())
         {
-            for sub in self.face_hat(&face.clone()).remote_subs.values() {
-                let dst_face = &mut ctx.src_face.clone();
-                self.propagate_simple_subscription_to(
-                    ctx.reborrow(),
-                    &mut face, // src
-                    dst_face,  // dst
-                    sub,
-                    &sub_info,
-                );
-            }
+            self.maybe_propagate_subscription(&res, &info, ctx.src_face, ctx.send_declare);
         }
     }
 
@@ -466,6 +464,79 @@ impl Hat {
                     ),
                 );
             }
+        }
+    }
+
+    fn maybe_propagate_subscription(
+        &self,
+        res: &Arc<Resource>,
+        info: &SubscriberInfo,
+        dst_face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if self
+            .face_hat(dst_face)
+            .local_subs
+            .contains_simple_resource(res)
+        {
+            return;
+        };
+
+        let should_push = dst_face.region.bound().is_north();
+
+        // FIXME(regions): it's not because of initial interest that we push subscribers to north-bound peers.
+        // Initial interest only exists to track current declarations at startup. This code is misleading.
+        // See 20a95fb.
+        let initial_interest = should_push.then_some(INITIAL_INTEREST_ID);
+
+        let (should_notify, simple_interests) = match initial_interest {
+            Some(interest) => (true, HashSet::from([interest])),
+            None => self
+                .face_hat(dst_face)
+                .remote_interests
+                .iter()
+                .filter(|(_, i)| i.options.subscribers() && i.matches(res))
+                .fold(
+                    (false, HashSet::new()),
+                    |(_, mut simple_interests), (id, i)| {
+                        if !i.options.aggregate() {
+                            simple_interests.insert(*id);
+                        }
+                        (true, simple_interests)
+                    },
+                ),
+        };
+
+        if !should_notify {
+            return;
+        }
+
+        let face_hat_mut = self.face_hat_mut(dst_face);
+        let (_, subs_to_notify) = face_hat_mut.local_subs.insert_simple_resource(
+            res.clone(),
+            *info,
+            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+            simple_interests,
+        );
+
+        for update in subs_to_notify {
+            let key_expr = Resource::decl_key(&update.resource, dst_face, should_push);
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id: update.id,
+                            wire_expr: key_expr.clone(),
+                        }),
+                    },
+                    update.resource.expr().to_string(),
+                ),
+            );
         }
     }
 }
@@ -659,5 +730,121 @@ impl HatPubSubTrait for Hat {
             }
         }
         matching_subscriptions
+    }
+
+    fn register_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        res: &mut Arc<Resource>,
+        _nid: NodeId,
+        info: &SubscriberInfo,
+    ) {
+        assert!(self.owns(&ctx.src_face));
+
+        {
+            let res = get_mut_unchecked(res);
+            match res.face_ctxs.get_mut(&ctx.src_face.id) {
+                Some(ctx) => {
+                    if ctx.subs.is_none() {
+                        get_mut_unchecked(ctx).subs = Some(*info);
+                    }
+                }
+                None => {
+                    let ctx = res
+                        .face_ctxs
+                        .entry(ctx.src_face.id)
+                        .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
+                    get_mut_unchecked(ctx).subs = Some(*info);
+                }
+            }
+        }
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_subs
+            .insert(id, res.clone());
+    }
+
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        _res: &mut Arc<Resource>,
+        _nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) else {
+            return None;
+        };
+
+        // NOTE: some remotes may send duplicated subscriptions
+        if !self
+            .face_hat(ctx.src_face)
+            .remote_subs
+            .values()
+            .contains(&res)
+        {
+            if let Some(ctx) = get_mut_unchecked(&mut res)
+                .face_ctxs
+                .get_mut(&ctx.src_face.id)
+            {
+                get_mut_unchecked(ctx).subs = None;
+            }
+        }
+
+        Some(res)
+    }
+
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        info: &SubscriberInfo,
+    ) {
+        for dst_face in self.owned_faces_mut(ctx.tables) {
+            self.maybe_propagate_subscription(res, info, dst_face, ctx.send_declare);
+        }
+    }
+
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: &mut Arc<Resource>) {
+        for mut face in self.owned_faces(&ctx.tables).cloned() {
+            self.maybe_unregister_local_subscriber(&mut face, res, ctx.send_declare);
+        }
+    }
+
+    fn unpropagate_last_non_owned_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+    ) {
+        // FIXME(regions): remove this
+        assert!(!self.remote_subscriptions_for(res).is_empty());
+
+        if let Ok(face) = self
+            .owned_face_contexts(res)
+            .filter_map(|(_, ctx)| ctx.subs.map(|_| ctx.face.clone()))
+            .exactly_one()
+            .as_mut()
+        {
+            self.maybe_unregister_local_subscriber(face, res, ctx.send_declare)
+        }
+    }
+
+    fn remote_subscriptions_for(&self, res: &Resource) -> Vec<SubscriberInfo> {
+        self.owned_face_contexts(res)
+            .filter_map(|(_, ctx)| ctx.subs)
+            .collect()
+    }
+
+    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.owned_faces(&tables)
+            .flat_map(|face| {
+                self.face_hat(face)
+                    .remote_subs
+                    .values()
+                    // FIXME(regions): HatFace::remote_subs doesn't store info (unlike HatFace::remote_qabls).
+                    // Since it is a unit type we can simply pull it out of thin air.
+                    .map(|res| (res.clone(), SubscriberInfo))
+            })
+            .collect()
     }
 }

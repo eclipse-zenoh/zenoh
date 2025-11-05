@@ -130,7 +130,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
-    // REVIEW(regions): it would be betetr if this returned a Result instead
+    // REVIEW(regions): it would be better if this returned a Result instead
     // Currently errors are logged in router::Hat::get_router.
 
     fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
@@ -140,6 +140,7 @@ pub(crate) trait HatBaseTrait: Any {
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
+        other_hats: RegionMap<&dyn HatTrait>,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()>;
@@ -339,6 +340,55 @@ pub(crate) trait HatPubSubTrait {
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
+
+    /// Register a subscriber entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn register_subscription(
+        // TOOD: pass msg
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        res: &mut Arc<Resource>,
+        nid: NodeId,
+        info: &SubscriberInfo,
+    );
+
+    /// Unregister a subscriber entity.
+    ///
+    /// Returns `false` if the subscriber could not be unregistered.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        res: &mut Arc<Resource>,
+        nid: NodeId,
+    ) -> Option<Arc<Resource>>;
+
+    /// Propagate a subscriber entity.
+    ///
+    /// The callee hat will only push the subscription if is the north hat.
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        info: &SubscriberInfo,
+    );
+
+    /// Unpropagate a subscriber entity.
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: &mut Arc<Resource>);
+
+    fn unpropagate_last_non_owned_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+    );
+
+    fn remote_subscriptions_for(&self, res: &Resource) -> Vec<SubscriberInfo>;
+
+    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo>;
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 

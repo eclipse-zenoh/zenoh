@@ -45,7 +45,11 @@ use super::{
 };
 use crate::net::{
     routing::{
-        dispatcher::{face::FaceId, interests::RemoteInterest, region::Region},
+        dispatcher::{
+            face::FaceId,
+            interests::RemoteInterest,
+            region::{Region, RegionMap},
+        },
         hat::{BaseContext, Remote},
         router::FaceContext,
     },
@@ -162,6 +166,7 @@ impl HatBaseTrait for Hat {
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
+        _other_hats: RegionMap<&dyn HatTrait>,
         _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
