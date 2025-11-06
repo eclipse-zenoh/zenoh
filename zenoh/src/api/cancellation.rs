@@ -82,7 +82,7 @@ struct CancellationTokenInner {
 /// let queryable = session
 ///     .get("key/expression")
 ///     .callback_mut(move |reply| {n += 1;})
-///     .with_cancellation_token(cancellation_token.clone())
+///     .cancellation_token(cancellation_token.clone())
 ///     .await
 ///     .unwrap();
 ///
@@ -194,5 +194,5 @@ impl fmt::Debug for CancellationTokenInner {
 }
 
 pub trait CancellationTokenBuilderTrait {
-    fn with_cancellation_token(self, cancellation_token: CancellationToken) -> Self;
+    fn cancellation_token(self, cancellation_token: CancellationToken) -> Self;
 }
