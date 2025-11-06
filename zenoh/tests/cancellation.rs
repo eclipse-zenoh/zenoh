@@ -57,7 +57,7 @@ async fn test_cancellation_get() {
 
     let replies = ztimeout!(session2
         .get("test/query_cancellation")
-        .with_cancellation_token(cancellation_token.clone()))
+        .cancellation_token(cancellation_token.clone()))
     .unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -75,7 +75,7 @@ async fn test_cancellation_get() {
     let n_clone = n.clone();
     ztimeout!(session2
         .get("test/query_cancellation")
-        .with_cancellation_token(cancellation_token.clone())
+        .cancellation_token(cancellation_token.clone())
         .callback(move |_| {
             std::thread::sleep(Duration::from_secs(5));
             n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
@@ -94,7 +94,7 @@ async fn test_cancellation_get() {
     assert!(cancellation_token.is_cancelled());
     let replies = ztimeout!(session2
         .get("test/query_cancellation")
-        .with_cancellation_token(cancellation_token.clone()))
+        .cancellation_token(cancellation_token.clone()))
     .unwrap();
     assert!(replies.is_disconnected());
 }
@@ -116,7 +116,7 @@ async fn test_cancellation_liveliness_get() {
     ztimeout!(session2
         .liveliness()
         .get("test/liveliness_query_cancellation")
-        .with_cancellation_token(cancellation_token.clone())
+        .cancellation_token(cancellation_token.clone())
         .callback(move |_| {
             std::thread::sleep(Duration::from_secs(5));
             n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
@@ -131,7 +131,7 @@ async fn test_cancellation_liveliness_get() {
     let replies = ztimeout!(session2
         .liveliness()
         .get("test/liveliness_query_cancellation")
-        .with_cancellation_token(cancellation_token.clone()))
+        .cancellation_token(cancellation_token.clone()))
     .unwrap();
     assert!(replies.is_disconnected());
 }
@@ -147,10 +147,7 @@ async fn test_cancellation_querier_get() {
 
     let cancellation_token = zenoh::cancellation::CancellationToken::default();
 
-    let replies = ztimeout!(querier
-        .get()
-        .with_cancellation_token(cancellation_token.clone()))
-    .unwrap();
+    let replies = ztimeout!(querier.get().cancellation_token(cancellation_token.clone())).unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
     cancellation_token.cancel().await.unwrap();
@@ -167,7 +164,7 @@ async fn test_cancellation_querier_get() {
     let n_clone = n.clone();
     ztimeout!(querier
         .get()
-        .with_cancellation_token(cancellation_token.clone())
+        .cancellation_token(cancellation_token.clone())
         .callback(move |_| {
             std::thread::sleep(Duration::from_secs(5));
             n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
@@ -184,9 +181,6 @@ async fn test_cancellation_querier_get() {
 
     // check that cancelled token cancels operation automatically
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(querier
-        .get()
-        .with_cancellation_token(cancellation_token.clone()))
-    .unwrap();
+    let replies = ztimeout!(querier.get().cancellation_token(cancellation_token.clone())).unwrap();
     assert!(replies.is_disconnected());
 }

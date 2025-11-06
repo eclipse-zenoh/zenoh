@@ -786,7 +786,7 @@ impl<Handler> CancellationTokenBuilderTrait for LivelinessGetBuilder<'_, '_, Han
     ///     .liveliness()
     ///     .get("key/expression")
     ///     .with(flume::bounded(32))
-    ///     .with_cancellation_token(ct.clone())
+    ///     .cancellation_token(ct.clone())
     ///     .await
     ///     .unwrap();
     /// tokio::task::spawn(async move {
@@ -799,7 +799,7 @@ impl<Handler> CancellationTokenBuilderTrait for LivelinessGetBuilder<'_, '_, Han
     /// # }
     /// ```
     #[zenoh_macros::unstable_doc]
-    fn with_cancellation_token(
+    fn cancellation_token(
         self,
         cancellation_token: crate::api::cancellation::CancellationToken,
     ) -> Self {

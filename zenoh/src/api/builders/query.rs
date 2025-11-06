@@ -147,7 +147,7 @@ impl<Handler> CancellationTokenBuilderTrait for SessionGetBuilder<'_, '_, Handle
     /// let query = session
     ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.result());})
-    ///     .with_cancellation_token(ct.clone())
+    ///     .cancellation_token(ct.clone())
     ///     .await
     ///     .unwrap();
     ///
@@ -158,7 +158,7 @@ impl<Handler> CancellationTokenBuilderTrait for SessionGetBuilder<'_, '_, Handle
     /// # }
     /// ```
     #[zenoh_macros::unstable_doc]
-    fn with_cancellation_token(
+    fn cancellation_token(
         self,
         cancellation_token: crate::api::cancellation::CancellationToken,
     ) -> Self {
