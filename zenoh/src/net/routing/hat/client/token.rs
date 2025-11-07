@@ -28,7 +28,7 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState, interests::CurrentInterest, region::RegionMap, tables::TablesData,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
+    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };

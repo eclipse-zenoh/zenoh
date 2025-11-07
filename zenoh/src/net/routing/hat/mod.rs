@@ -57,8 +57,8 @@ use crate::{
     },
 };
 
-// mod client;
 pub(crate) mod broker;
+pub(crate) mod client;
 pub(crate) mod peer;
 // mod router;
 

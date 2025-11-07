@@ -286,6 +286,25 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        assert!(self.owns(ctx.src_face));
+
+        let fid = ctx.src_face.id;
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_subs
+            .drain()
+            .map(|(_, mut res)| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).subs = None;
+                }
+
+                res
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(level = "trace", skip_all)]
     fn propagate_subscription(
         &mut self,
         ctx: BaseContext,
@@ -338,25 +357,6 @@ impl HatPubSubTrait for Hat {
                     // FIXME(regions): HatFace::remote_subs doesn't store info (unlike HatFace::remote_qabls).
                     // Since it is a unit type we can simply pull it out of thin air.
                     .map(|res| (res.clone(), SubscriberInfo))
-            })
-            .collect()
-    }
-
-    #[tracing::instrument(level = "trace", skip_all)]
-    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
-        assert!(self.owns(ctx.src_face));
-
-        let fid = ctx.src_face.id;
-
-        self.face_hat_mut(ctx.src_face)
-            .remote_subs
-            .drain()
-            .map(|(_, mut res)| {
-                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
-                    get_mut_unchecked(ctx).subs = None;
-                }
-
-                res
             })
             .collect()
     }

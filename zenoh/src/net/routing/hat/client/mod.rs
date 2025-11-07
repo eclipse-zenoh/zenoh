@@ -67,6 +67,8 @@ pub(crate) struct Hat {
 
 impl Hat {
     pub(crate) fn new(region: Region) -> Self {
+        assert!(region.bound().is_north());
+
         Self { region }
     }
 
@@ -147,25 +149,24 @@ impl HatBaseTrait for Hat {
         Some(face.clone())
     }
 
-    fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        self.interests_new_face(ctx.tables, ctx.src_face);
-        self.pubsub_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.queries_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        ctx.tables.disable_all_routes();
-        Ok(())
+    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+        bail!("Local sessions should not be bound to client hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
-        ctx: BaseContext,
-        _other_hats: RegionMap<&dyn HatTrait>,
+        mut ctx: BaseContext,
+        other_hats: RegionMap<&dyn HatTrait>,
         _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
-        self.interests_new_face(ctx.tables, ctx.src_face);
-        self.pubsub_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
+        assert!(self.owns(ctx.src_face));
+        assert!(ctx.src_face.remote_bound.is_south());
+        assert!(ctx.src_face.region.bound().is_north());
+
+        self.interests_new_face(ctx.reborrow(), &other_hats);
+        self.pubsub_new_face(ctx.reborrow(), &other_hats);
         self.queries_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
         self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
         ctx.tables.disable_all_routes();

@@ -57,6 +57,7 @@ impl Hat {
 
         for RemoteInterest { res, options, .. } in other_hats
             .values()
+            .filter(|hat| hat.region().bound().is_south())
             .flat_map(|hat| hat.remote_interests(&ctx.tables))
         {
             let id = self
@@ -170,10 +171,9 @@ impl HatInterestTrait for Hat {
                     interests_timeout,
                 );
             }
-            let wire_expr = res.as_ref().map(|res| {
-                let push = super::push_declaration_profile(&dst_face);
-                Resource::decl_key(res, &mut dst_face, push)
-            });
+            let wire_expr = res
+                .as_ref()
+                .map(|res| Resource::decl_key(res, &mut dst_face, true));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 &mut Interest {
                     id,
