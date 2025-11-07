@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
@@ -20,9 +20,9 @@ use itertools::Itertools;
 use zenoh_protocol::{
     core::WhatAmI,
     network::{
-        declare,
+        declare::{self, queryable::ext::QueryableInfoType, QueryableId},
         interest::{self, InterestId, InterestMode},
-        Declare, DeclareBody, DeclareFinal, DeclareSubscriber, Interest,
+        Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, Interest,
     },
 };
 use zenoh_sync::get_mut_unchecked;
@@ -34,6 +34,7 @@ use crate::net::routing::{
         interests::{
             CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
         },
+        local_resources::LocalResourceInfoTrait,
         region::RegionMap,
         resource::Resource,
         tables::TablesData,
@@ -53,10 +54,9 @@ impl Hat {
             return;
         }
 
-        let push = true;
-
         for RemoteInterest { res, options, .. } in other_hats
             .values()
+            .filter(|hat| hat.region().bound().is_south())
             .flat_map(|hat| hat.remote_interests(&ctx.tables))
         {
             let id = self
@@ -69,7 +69,7 @@ impl Hat {
                 .insert(id, InterestState::new(face_id, options, res.clone(), false));
             let wire_expr = res
                 .as_ref()
-                .map(|res| Resource::decl_key(res, ctx.src_face, push));
+                .map(|res| Resource::decl_key(res, ctx.src_face));
             ctx.src_face
                 .primitives
                 .send_interest(RoutingContext::with_expr(
@@ -106,8 +106,8 @@ impl HatInterestTrait for Hat {
         //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
-        assert!(self.region().bound().is_north());
-        assert!(ctx.src_face.region.bound().is_south());
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
         let interest = Arc::new(CurrentInterest {
             src: remote.clone(),
@@ -170,10 +170,9 @@ impl HatInterestTrait for Hat {
                     interests_timeout,
                 );
             }
-            let wire_expr = res.as_ref().map(|res| {
-                let push = super::push_declaration_profile(&dst_face);
-                Resource::decl_key(res, &mut dst_face, push)
-            });
+            let wire_expr = res
+                .as_ref()
+                .map(|res| Resource::decl_key(res, &mut dst_face));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 &mut Interest {
                     id,
@@ -212,8 +211,8 @@ impl HatInterestTrait for Hat {
         //   1. I need to unregister it as a remote interest in the owner (south) hat.
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-        assert!(self.region().bound().is_north());
-        assert!(ctx.src_face.region.bound().is_south());
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
         if let Some(dst_face) = self
             .owned_faces_mut(ctx.tables)
@@ -273,8 +272,8 @@ impl HatInterestTrait for Hat {
         };
 
         if interest_id == INITIAL_INTEREST_ID {
-            assert!(self.owns(&ctx.src_face));
-            assert!(ctx.src_face.remote_bound.is_north());
+            debug_assert!(self.owns(&ctx.src_face));
+            debug_assert!(ctx.src_face.remote_bound.is_north());
 
             // FIXME(regions): don't create start conditions for gateway peers
             zenoh_runtime::ZRuntime::Net.block_in_place(async move {
@@ -289,9 +288,9 @@ impl HatInterestTrait for Hat {
                 }
             });
         } else {
-            assert!(self.owns(ctx.src_face));
-            assert!(self.region().bound().is_north());
-            assert!(ctx.src_face.region.bound().is_north());
+            debug_assert!(self.owns(ctx.src_face));
+            debug_assert!(self.region().bound().is_north());
+            debug_assert!(ctx.src_face.region.bound().is_north());
 
             if ctx.src_face.remote_bound.is_north() {
                 tracing::error!(
@@ -343,13 +342,12 @@ impl HatInterestTrait for Hat {
         ctx: BaseContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
-        matches: HashSet<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
     ) {
-        assert!(self.owns(ctx.src_face));
-        assert!(ctx.src_face.region.bound().is_south());
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
-        let mut matches = matches.into_iter();
-        let push = false;
+        let mut matches = other_matches.into_keys();
 
         if msg.options.aggregate() && (msg.mode.current() || msg.mode.future()) {
             if let Some(aggregated_res) = &res {
@@ -376,7 +374,7 @@ impl HatInterestTrait for Hat {
 
                 if msg.mode.current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
-                    let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face, push);
+                    let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
                     (ctx.send_declare)(
                         &ctx.src_face.primitives,
                         RoutingContext::with_expr(
@@ -411,7 +409,7 @@ impl HatInterestTrait for Hat {
                 } else {
                     0
                 };
-                let wire_expr = Resource::decl_key(&sub, ctx.src_face, push);
+                let wire_expr = Resource::decl_key(&sub, ctx.src_face);
                 (ctx.send_declare)(
                     &ctx.src_face.primitives,
                     RoutingContext::with_expr(
@@ -426,6 +424,107 @@ impl HatInterestTrait for Hat {
                             }),
                         },
                         sub.expr().to_string(),
+                    ),
+                );
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn propagate_current_queryables(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+
+        // NOTE(regions): we don't propagate the regions's entities in peer-to-peer mode
+        let matches = other_matches;
+
+        if msg.options.aggregate() && (msg.mode.current() || msg.mode.future()) {
+            if let Some(aggregated_res) = &res {
+                let (resource_id, qabl_info) = if msg.mode.future() {
+                    for (qabl, qabl_info) in matches {
+                        let face_hat_mut = self.face_hat_mut(ctx.src_face);
+                        face_hat_mut.local_qabls.insert_simple_resource(
+                            qabl.clone(),
+                            qabl_info,
+                            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                            HashSet::new(),
+                        );
+                    }
+                    let face_hat_mut = self.face_hat_mut(ctx.src_face);
+                    face_hat_mut.local_qabls.insert_aggregated_resource(
+                        aggregated_res.clone(),
+                        || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                        HashSet::from_iter([msg.id]),
+                    )
+                } else {
+                    (
+                        QueryableId::default(),
+                        QueryableInfoType::aggregate_many(
+                            aggregated_res,
+                            matches.iter().map(|(res, info)| (res, *info)),
+                        ),
+                    )
+                };
+                if let Some(ext_info) = msg.mode.current().then_some(qabl_info).flatten() {
+                    // send declare only if there is at least one resource matching the aggregate
+                    let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
+                    (ctx.send_declare)(
+                        &ctx.src_face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: Some(msg.id),
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: resource_id,
+                                    wire_expr,
+                                    ext_info,
+                                }),
+                            },
+                            aggregated_res.expr().to_string(),
+                        ),
+                    );
+                }
+            }
+        } else if !msg.options.aggregate() && msg.mode.current() {
+            for (qabl, qabl_info) in matches {
+                let resource_id = if msg.mode.future() {
+                    let face_hat_mut = self.face_hat_mut(ctx.src_face);
+                    face_hat_mut
+                        .local_qabls
+                        .insert_simple_resource(
+                            qabl.clone(),
+                            qabl_info,
+                            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                            HashSet::from([msg.id]),
+                        )
+                        .0
+                } else {
+                    QueryableId::default()
+                };
+                let wire_expr = Resource::decl_key(&qabl, ctx.src_face);
+                (ctx.send_declare)(
+                    &ctx.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(msg.id),
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id: resource_id,
+                                wire_expr,
+                                ext_info: qabl_info,
+                            }),
+                        },
+                        qabl.expr().to_string(),
                     ),
                 );
             }
@@ -464,8 +563,8 @@ impl HatInterestTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(!self.region().bound().is_north());
-        assert!(self.owns(&ctx.src_face));
+        debug_assert!(!self.region().bound().is_north());
+        debug_assert!(self.owns(&ctx.src_face));
 
         let Some(remote_interest) = self
             .face_hat_mut(ctx.src_face)

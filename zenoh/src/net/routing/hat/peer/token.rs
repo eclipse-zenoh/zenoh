@@ -81,8 +81,7 @@ impl Hat {
             self.face_hat_mut(dst_face)
                 .local_tokens
                 .insert(res.clone(), id);
-            let key_expr =
-                Resource::decl_key(res, dst_face, super::push_declaration_profile(dst_face));
+            let key_expr = Resource::decl_key(res, dst_face);
             (ctx.send_declare)(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -416,11 +415,7 @@ impl Hat {
                     for token in self.face_hat(&src_face).remote_tokens.values() {
                         if token.ctx.is_some() && token.matches(res) {
                             let id = self.make_token_id(token, get_mut_unchecked(face), mode);
-                            let wire_expr = Resource::decl_key(
-                                token,
-                                face,
-                                super::push_declaration_profile(face),
-                            );
+                            let wire_expr = Resource::decl_key(token, face);
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -450,8 +445,7 @@ impl Hat {
                 {
                     for token in self.face_hat(&src_face).remote_tokens.values() {
                         let id = self.make_token_id(token, get_mut_unchecked(face), mode);
-                        let wire_expr =
-                            Resource::decl_key(token, face, super::push_declaration_profile(face));
+                        let wire_expr = Resource::decl_key(token, face);
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(

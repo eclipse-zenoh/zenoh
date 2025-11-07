@@ -80,6 +80,7 @@ pub(crate) struct Hat {
 }
 
 impl Hat {
+    #[tracing::instrument(level = "trace")]
     pub(crate) fn new(region: Region) -> Self {
         Self {
             region,
@@ -212,7 +213,7 @@ impl HatBaseTrait for Hat {
         _tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {
-        assert!(self.owns(ctx.src_face));
+        debug_assert!(self.owns(ctx.src_face));
 
         if let Some(net) = self.gossip.as_mut() {
             net.add_link(transport.clone());
@@ -236,7 +237,7 @@ impl HatBaseTrait for Hat {
 
         self.interests_new_face(ctx.reborrow(), &other_hats);
         self.pubsub_new_face(ctx.reborrow(), &other_hats);
-        self.queries_new_face(ctx.reborrow());
+        self.queries_new_face(ctx.reborrow(), &other_hats);
         self.token_new_face(ctx.reborrow());
         ctx.tables.disable_all_routes();
 
@@ -256,7 +257,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    fn close_face(&mut self, mut ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
+    fn close_face(&mut self, ctx: BaseContext) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -271,24 +272,6 @@ impl HatBaseTrait for Hat {
         hat_face.local_subs.clear();
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
-
-        for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.remote_mappings.clear();
-        for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.local_mappings.clear();
-
-        for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
-        }
-
-        self.faces_mut(ctx.tables).remove(&face.id);
 
         if let Some(net) = self.gossip.as_mut() {
             net.remove_link(&face.zid);
@@ -424,11 +407,6 @@ pub(crate) const INITIAL_INTEREST_ID: u32 = 0;
 #[inline]
 fn initial_interest(face: &FaceState) -> Option<&InterestState> {
     face.local_interests.get(&INITIAL_INTEREST_ID)
-}
-
-#[inline]
-pub(super) fn push_declaration_profile(face: &FaceState) -> bool {
-    face.whatami != WhatAmI::Client
 }
 
 type HatRemote = FaceState;

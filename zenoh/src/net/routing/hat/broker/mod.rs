@@ -67,8 +67,9 @@ pub(crate) struct Hat {
 }
 
 impl Hat {
+    #[tracing::instrument(level = "trace")]
     pub(crate) fn new(region: Region) -> Self {
-        assert!(region.bound().is_south());
+        debug_assert!(region.bound().is_south());
         Self { region }
     }
 
@@ -105,7 +106,7 @@ impl Hat {
         &'a self,
         res: &'a Resource,
     ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
-        // TODO(regions): move this method to a Hat trait
+        // FIXME(regions): make this return values only
         res.face_ctxs
             .iter()
             .filter(move |(_, ctx)| self.owns(&ctx.face))
@@ -150,8 +151,8 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        assert!(self.owns(ctx.src_face));
-        assert!(ctx.src_face.region.bound().is_south());
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
         // NOTE:
         // - The broker hat is never the north hat, thus there are no interests to re-propagate
@@ -170,19 +171,19 @@ impl HatBaseTrait for Hat {
         _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
-        assert!(self.owns(ctx.src_face));
-        assert!(ctx.src_face.region.bound().is_south());
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
         // NOTE:
         // - The broker hat is never the north hat, thus there are no interests to re-propagate
-        // - The broker hat doesn't re-propagate entities to between clients
+        // - The broker hat doesn't re-propagate entities between clients
 
         ctx.tables.disable_all_routes();
 
         Ok(())
     }
 
-    fn close_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
+    fn close_face(&mut self, ctx: BaseContext) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -197,19 +198,6 @@ impl HatBaseTrait for Hat {
         hat_face.local_subs.clear();
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
-
-        for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.remote_mappings.clear();
-        for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.local_mappings.clear();
-
-        self.faces_mut(ctx.tables).remove(&face.id);
     }
 
     fn handle_oam(
