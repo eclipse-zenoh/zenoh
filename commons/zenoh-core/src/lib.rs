@@ -175,3 +175,22 @@ where
 }
 
 pub use zenoh_result::{likely, unlikely};
+
+/// Re-definitions of inaccessible [`std`] items for MSRV compatibility.
+pub mod compat {
+    // TODO: use rustversion?
+
+    // NOTE: `Option::is_none_or` was stablized in 1.82.0 > 1.75.0
+    pub trait OptionExt<T>: Sized {
+        fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
+    }
+
+    impl<T> OptionExt<T> for Option<T> {
+        fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool {
+            match self {
+                None => true,
+                Some(x) => f(x),
+            }
+        }
+    }
+}

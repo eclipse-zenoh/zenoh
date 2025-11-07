@@ -166,6 +166,10 @@ impl Hat {
         self.routers_net.as_ref().unwrap()
     }
 
+    pub(crate) fn net_mut(&mut self) -> &mut Network {
+        self.routers_net.as_mut().unwrap()
+    }
+
     pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
         res.context().hats[self.region].ctx.downcast_ref().unwrap()
     }
@@ -291,6 +295,7 @@ impl Hat {
     }
 
     /// Sends a network message to the router identified by `dst_node_id`.
+    #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn send_point_to_point(
         &self,
         ctx: BaseContext,
@@ -351,11 +356,6 @@ impl Hat {
             }
         }
     }
-
-    #[inline]
-    pub(super) fn push_declaration_profile(&self, face: &FaceState) -> bool {
-        face.whatami == WhatAmI::Router
-    }
 }
 
 impl HatBaseTrait for Hat {
@@ -411,8 +411,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        // Nothing to do
-        Ok(())
+        bail!("Local sessions should not be bound to client hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
@@ -440,7 +439,9 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    fn close_face(&mut self, mut ctx: BaseContext, tables_ref: &Arc<TablesLock>) {
+    fn close_face(&mut self, ctx: BaseContext) {
+        debug_assert!(self.owns(ctx.src_face));
+
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -456,79 +457,7 @@ impl HatBaseTrait for Hat {
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
 
-        for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.remote_mappings.clear();
-        for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.local_mappings.clear();
-
-        let mut subs_matches = vec![];
-        for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-                subs_matches.push(res);
-            }
-        }
-
-        let mut qabls_matches = vec![];
-        for (_, (mut res, _)) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-                qabls_matches.push(res);
-            }
-        }
-
-        for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_token(ctx.reborrow(), &mut res);
-        }
-
-        for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-            Resource::clean(&mut res);
-        }
-        self.faces_mut(ctx.tables).remove(&face.id);
-
-        if face.whatami == WhatAmI::Router {
-            for (_, removed_node) in self.routers_net.as_mut().unwrap().remove_link(&face.zid) {
-                self.pubsub_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
-                self.queries_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
-                self.token_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
-            }
-
-            self.schedule_compute_trees(tables_ref.clone());
-        }
+        self.schedule_compute_trees(ctx.tables_lock.clone());
     }
 
     #[tracing::instrument(level = "trace", skip_all)]

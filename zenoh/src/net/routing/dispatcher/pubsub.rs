@@ -41,8 +41,6 @@ use crate::{
     },
 };
 
-// FIXME(fuzzypixelz): this was added in e7f885ef due to sub reliability
-// removal. It's a ZST and should not be passed in parameters.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) struct SubscriberInfo;
 

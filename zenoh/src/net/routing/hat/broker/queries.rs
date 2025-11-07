@@ -18,6 +18,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::compat::*;
 use zenoh_keyexpr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::network::{
     declare::{self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId},
@@ -402,7 +404,7 @@ impl HatQueriesTrait for Hat {
     ) -> HashMap<Arc<Resource>, QueryableInfoType> {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_qabls.values())
-            .filter(|(qabl, _)| qabl.ctx.is_some() && res.is_none_or(|res| qabl.matches(res)))
+            .filter(|(qabl, _)| res.is_none_or(|res| res.matches(qabl)))
             .fold(HashMap::new(), |mut acc, (res, info)| {
                 acc.entry(res.clone())
                     .and_modify(|i| {

@@ -17,6 +17,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::compat::*;
 use zenoh_protocol::network::{
     declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
     interest::InterestId,

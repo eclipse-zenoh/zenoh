@@ -428,14 +428,14 @@ impl Resource {
         self.ctx.as_mut().unwrap()
     }
 
-    #[inline(always)]
     pub(crate) fn matches(&self, other: &Resource) -> bool {
-        self.ctx
-            .as_ref()
-            .unwrap()
-            .matches
-            .iter()
-            .any(|m| m.upgrade().is_some_and(|m| &*m == other))
+        debug_assert!(self.ctx.is_some());
+
+        self.ctx.as_ref().is_some_and(|ctx| {
+            ctx.matches
+                .iter()
+                .any(|m| m.upgrade().is_some_and(|m| &*m == other))
+        })
     }
 
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {

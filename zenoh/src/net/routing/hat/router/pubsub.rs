@@ -17,6 +17,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohIdProto},
@@ -72,8 +73,7 @@ impl Hat {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                            let key_expr = Resource::decl_key(res, &mut someface);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
@@ -145,11 +145,7 @@ impl Hat {
         );
 
         for update in subs_to_notify {
-            let key_expr = Resource::decl_key(
-                &update.resource,
-                dst_face,
-                self.push_declaration_profile(dst_face),
-            );
+            let key_expr = Resource::decl_key(&update.resource, dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -414,9 +410,7 @@ impl Hat {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let wire_expr =
-                                Resource::decl_key(res, &mut someface, push_declaration);
+                            let wire_expr = Resource::decl_key(res, &mut someface);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
@@ -750,11 +744,7 @@ impl Hat {
                 };
                 if mode.current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
-                    let wire_expr = Resource::decl_key(
-                        aggregated_res,
-                        face,
-                        self.push_declaration_profile(face),
-                    );
+                    let wire_expr = Resource::decl_key(aggregated_res, face);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -789,7 +779,7 @@ impl Hat {
                 } else {
                     0
                 };
-                let wire_expr = Resource::decl_key(sub, face, self.push_declaration_profile(face));
+                let wire_expr = Resource::decl_key(sub, face);
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -1145,5 +1135,178 @@ impl HatPubSubTrait for Hat {
             }
         }
         matching_subscriptions
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn register_subscription(
+        &mut self,
+        ctx: BaseContext,
+        _id: SubscriberId,
+        mut res: Arc<Resource>,
+        nid: NodeId,
+        info: &SubscriberInfo,
+    ) {
+        debug_assert!(self.owns(&ctx.src_face));
+
+        let Some(router) = self.get_router(ctx.src_face, nid) else {
+            tracing::error!(%nid, "Subscriber from unknown router");
+            return;
+        };
+
+        debug_assert_ne!(router, ctx.tables.zid);
+
+        self.res_hat_mut(&mut res).router_subs.insert(router);
+        self.router_qabls.insert(res.clone());
+
+        self.propagate_sourced_subscription(&ctx.tables, &res, info, Some(ctx.src_face), &router);
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        _id: SubscriberId,
+        res: Option<Arc<Resource>>,
+        nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        debug_assert!(self.owns(&ctx.src_face));
+
+        let Some(router) = self.get_router(ctx.src_face, nid) else {
+            tracing::error!(%nid, "Subscriber from unknown router");
+            return None;
+        };
+
+        debug_assert_ne!(router, ctx.tables.zid);
+
+        let Some(mut res) = res else {
+            tracing::error!("Subscriber undeclaration in router region with no resource");
+            return None;
+        };
+
+        self.res_hat_mut(&mut res).router_qabls.remove(&router);
+
+        if self.res_hat(&res).router_qabls.is_empty() {
+            self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
+        }
+
+        self.propagate_forget_sourced_subscription(
+            ctx.tables,
+            &mut res,
+            Some(ctx.src_face),
+            &router,
+        );
+
+        Some(res)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        let removed_routers = self
+            .net_mut()
+            .remove_link(&ctx.src_face.zid)
+            .into_iter()
+            .map(|(_, node)| node.zid)
+            .collect::<HashSet<_>>();
+
+        let mut resources = HashSet::new();
+
+        for mut res in self.router_subs.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .retain(|router| !removed_routers.contains(&router));
+
+            if self.res_hat(&res).router_subs.is_empty() {
+                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
+                resources.insert(res);
+            }
+        }
+
+        resources
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        mut res: Arc<Resource>,
+        other_info: Option<SubscriberInfo>,
+    ) {
+        let Some(other_info) = other_info else {
+            // NOTE(regions): see Hat::register_subscription
+            debug_assert!(self.owns(&ctx.src_face));
+            return;
+        };
+
+        if !self.res_hat(&res).router_subs.contains(&ctx.tables.zid) {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .insert(ctx.tables.zid);
+            self.router_subs.insert(res.clone());
+
+            self.propagate_sourced_subscription(
+                ctx.tables,
+                &res,
+                &other_info,
+                None,
+                &ctx.tables.zid,
+            );
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, mut res: Arc<Resource>) {
+        if self.owns(&ctx.src_face) {
+            // NOTE(regions): see Hat::unregister_subscription
+            return;
+        }
+
+        let was_propagated = self.res_hat(&res).router_subs.contains(&ctx.tables.zid);
+
+        debug_assert!(was_propagated);
+
+        if !was_propagated {
+            self.propagate_forget_simple_subscription(ctx.tables, &mut res, ctx.send_declare);
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+        // FIXME(regions): use TablesData::zid?
+        let net = self.net();
+        let this_router = &net.graph[net.idx].zid;
+
+        self.res_hat(res)
+            .router_subs
+            .iter()
+            .any(|router| router != this_router)
+            .then_some(SubscriberInfo)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.remote_subscriptions_matching(tables, None)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.router_qabls
+            .iter()
+            .filter(|qabl| res.is_none_or(|res| res.matches(qabl)))
+            .flat_map(|qabl| {
+                std::iter::repeat(qabl).zip(
+                    self.res_hat(qabl)
+                        .router_qabls
+                        .iter()
+                        .filter_map(|(router, info)| (router != &tables.zid).then_some(*info)),
+                )
+            })
+            .fold(HashMap::new(), |mut acc, (res, _info)| {
+                acc.insert(res.clone(), SubscriberInfo);
+                acc
+            })
     }
 }

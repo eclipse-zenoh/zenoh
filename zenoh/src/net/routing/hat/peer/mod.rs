@@ -258,6 +258,8 @@ impl HatBaseTrait for Hat {
     }
 
     fn close_face(&mut self, ctx: BaseContext) {
+        debug_assert!(self.owns(ctx.src_face));
+
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {

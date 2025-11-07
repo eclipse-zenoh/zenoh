@@ -84,20 +84,19 @@ impl<'conf> RouterBuilder<'conf> {
             .get(mode)
             .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
 
-        // REVIEW(regions): impact of using three hats at minimum
         if self.hats.is_empty() {
             self.hats
                 .extend([(Region::North, mode), (Region::Local, WhatAmI::Client)]);
 
-            for mode in [WhatAmI::Client, WhatAmI::Peer] {
+            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
                 self.hats.push((Region::Undefined { mode }, mode));
             }
         }
 
         for (index, _) in gateway_config.south.iter().enumerate() {
-            // TODO(regions): we create three hats per subregion.
+            // REVIEW(regions): we create three hats per subregion.
             // If memory usage is an issue, we should create then lazily.
-            for mode in [WhatAmI::Client, WhatAmI::Peer] {
+            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
                 self.hats
                     .push((Region::Subregion { id: index, mode }, mode));
             }
@@ -131,7 +130,7 @@ impl<'conf> RouterBuilder<'conf> {
                                     }
                                     (_, WhatAmI::Client) => Box::new(hat::broker::Hat::new(rgn)),
                                     (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(rgn)),
-                                    _ => unimplemented!("rgn={rgn} wai={wai}"),
+                                    (_, WhatAmI::Router) => Box::new(hat::router::Hat::new(rgn)),
                                 },
                             )
                         })

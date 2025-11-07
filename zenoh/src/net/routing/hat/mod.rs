@@ -60,7 +60,7 @@ use crate::{
 pub(crate) mod broker;
 pub(crate) mod client;
 pub(crate) mod peer;
-// mod router;
+pub(crate) mod router;
 
 zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
@@ -405,7 +405,9 @@ pub(crate) trait HatPubSubTrait {
     ///
     /// This implies that the callee hat owns the last remaining subscriber and that the penultimate
     /// subscriber was unregistered.
-    fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
+    fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        self.unpropagate_subscription(ctx, res);
+    }
 
     fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo>;
 
@@ -495,7 +497,9 @@ pub(crate) trait HatQueriesTrait {
     /// Unpropagate a queryable entity.
     fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>);
 
-    fn unpropagate_last_non_owned_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>);
+    fn unpropagate_last_non_owned_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        self.unpropagate_queryable(ctx, res);
+    }
 
     fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType>;
 

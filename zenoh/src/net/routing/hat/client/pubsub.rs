@@ -18,6 +18,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::compat::*;
 use zenoh_protocol::{
     core::WhatAmI,
     network::declare::{
@@ -646,11 +648,8 @@ impl HatPubSubTrait for Hat {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_subs.values())
             .filter_map(|sub| {
-                if sub.ctx.is_some() && res.is_none_or(|res| sub.matches(res)) {
-                    Some((sub.clone(), SubscriberInfo))
-                } else {
-                    None
-                }
+                res.is_none_or(|res| res.matches(sub))
+                    .then(|| (sub.clone(), SubscriberInfo))
             })
             .collect()
     }

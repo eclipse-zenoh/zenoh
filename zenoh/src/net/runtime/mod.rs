@@ -957,10 +957,13 @@ impl Closeable for Runtime {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all, fields(?peer))]
 fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult<Region> {
+    let mode = zenoh_config::unwrap_or_default!(config.mode());
+
     let gateway_config = config
         .gateway
-        .get(zenoh_config::unwrap_or_default!(config.mode()))
+        .get(mode)
         .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
 
     fn matches(peer: &TransportPeer, filter: &BoundFilterConf) -> bool {
@@ -1005,7 +1008,7 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
             .unwrap_or(true)
     });
 
-    Ok(match (north, south) {
+    let region = match (north, south) {
         (true, None) => {
             tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
             Region::North
@@ -1033,7 +1036,13 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
             );
             Region::Undefined { mode: peer.whatami }
         }
-    })
+    };
+
+    if peer.whatami.is_router() && region.bound().is_south() && !mode.is_router() {
+        bail!("Router regions cannot be subregions of non-router regions")
+    }
+
+    Ok(region)
 }
 
 #[derive(Clone)]

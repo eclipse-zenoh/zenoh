@@ -18,6 +18,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::compat::*;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
@@ -612,9 +614,7 @@ impl HatQueriesTrait for Hat {
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>> {
         let mut matching_queryables = HashMap::new();
-        if key_expr.ends_with('/') {
-            return matching_queryables;
-        }
+
         tracing::trace!(
             "get_matching_queryables({}; complete: {})",
             key_expr,
@@ -758,16 +758,6 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        // FIXME(regions): remove this
-        debug_assert!(self.remote_queryables_of(&res).is_some());
-
-        for mut face in self.owned_faces(&ctx.tables).cloned() {
-            self.maybe_unpropagate_queryable(&mut face, &res, ctx.send_declare);
-        }
-    }
-
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
         self.owned_face_contexts(res)
@@ -791,7 +781,7 @@ impl HatQueriesTrait for Hat {
     ) -> HashMap<Arc<Resource>, QueryableInfoType> {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_qabls.values())
-            .filter(|(qabl, _)| qabl.ctx.is_some() && res.is_none_or(|res| qabl.matches(res)))
+            .filter(|(qabl, _)| res.is_none_or(|res| res.matches(qabl)))
             .fold(HashMap::new(), |mut acc, (res, info)| {
                 acc.entry(res.clone())
                     .and_modify(|i| {

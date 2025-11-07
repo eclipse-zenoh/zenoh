@@ -18,6 +18,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::compat::*;
 use zenoh_protocol::{
     core::WhatAmI,
     network::{
@@ -35,6 +37,7 @@ use crate::{
     net::routing::{
         dispatcher::{
             face::FaceState,
+            local_resources::LocalResourceTrait,
             pubsub::SubscriberInfo,
             region::RegionMap,
             resource::{FaceContext, NodeId, Resource},
@@ -700,9 +703,7 @@ impl HatPubSubTrait for Hat {
         key_expr: &KeyExpr<'_>,
     ) -> HashMap<usize, Arc<FaceState>> {
         let mut matching_subscriptions = HashMap::new();
-        if key_expr.ends_with('/') {
-            return matching_subscriptions;
-        }
+
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
@@ -866,11 +867,8 @@ impl HatPubSubTrait for Hat {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_subs.values())
             .filter_map(|sub| {
-                if sub.ctx.is_some() && res.is_none_or(|res| sub.matches(res)) {
-                    Some((sub.clone(), SubscriberInfo))
-                } else {
-                    None
-                }
+                res.is_none_or(|res| res.matches(sub))
+                    .then(|| (sub.clone(), SubscriberInfo))
             })
             .collect()
     }

@@ -330,7 +330,6 @@ impl AdminSpace {
 
         primitives.send_declare(&mut Declare {
             interest_id: None,
-
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,

@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
-use itertools::Itertools;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
-    declare,
-    interest::{self, InterestId, InterestMode, InterestOptions},
-    Declare, DeclareBody, DeclareFinal, Interest,
+    declare::queryable::ext::QueryableInfoType, interest::InterestId, Interest,
 };
 use zenoh_runtime::ZRuntime;
 
@@ -26,23 +26,23 @@ use super::Hat;
 use crate::net::routing::{
     dispatcher::{
         interests::{CurrentInterest, PendingCurrentInterest, RemoteInterest},
-        region::{Region, RegionMap},
+        region::Region,
         resource::Resource,
+        tables::TablesData,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
-    router::NodeId,
-    RoutingContext,
+    hat::{BaseContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
+    router::SubscriberInfo,
 };
 
 impl HatInterestTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn route_interest(
         &mut self,
-        mut ctx: BaseContext,
-        msg: &Interest,
-        res: Option<Arc<Resource>>,
-        mut south_hats: RegionMap<&mut dyn HatTrait>,
-    ) {
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _remote: &Remote,
+    ) -> Option<CurrentInterest> {
         // I have received an interest with mode != FINAL.
         // I should be the north hat.
         // Either I own the src face, in which case msg originates in my region and I need to pass the parcel till the gateway.
@@ -53,128 +53,16 @@ impl HatInterestTrait for Hat {
 
         debug_assert!(self.region().bound().is_north());
 
-        // REVIEW(regions): mainline zenoh has a failure mode for aggregate interests from peers to routers.
-        // See: https://github.com/eclipse-zenoh/zenoh/blob/1bd82eeef7d9b2df0d96dbbaf947ac75c90571aa/zenoh/src/net/routing/hat/router/interests.rs#L53-L59
-
-        let mut msg = msg.clone();
-
-        if msg.options.aggregate() && res.is_none() {
-            tracing::warn!(
-                "Received Interest with aggregate=true with empty key expression. Not supported!"
-            );
-            msg.options -= InterestOptions::AGGREGATE;
-        }
-
-        if self.owns(ctx.src_face) {
-            let src_nid =
-                self.map_routing_context(ctx.tables, ctx.src_face, msg.ext_nodeid.node_id);
-
-            if let Some(gwy_node_id) = self.subregion_gateway() {
-                self.send_point_to_point(ctx.reborrow(), gwy_node_id, |next_hop| {
-                    next_hop.primitives.send_interest(RoutingContext::with_expr(
-                        &mut Interest {
-                            id: msg.id,
-                            mode: if msg.mode == InterestMode::Future {
-                                InterestMode::CurrentFuture
-                            } else {
-                                msg.mode
-                            },
-                            options: msg.options,
-                            wire_expr: res.as_ref().map(|res| {
-                                let push = self.push_declaration_profile(next_hop);
-                                Resource::decl_key(res, &mut next_hop.clone(), push)
-                            }),
-                            ext_qos: msg.ext_qos,
-                            ext_tstamp: msg.ext_tstamp,
-                            ext_nodeid: interest::ext::NodeIdType { node_id: src_nid },
-                        },
-                        res.as_ref()
-                            .map(|res| res.expr().to_string())
-                            .unwrap_or_default(),
-                    ));
-                });
-            } else {
-                tracing::error!(
-                    src_nid,
-                    id = msg.id,
-                    "No gateway found in router region. Cannot route interest message"
-                );
-            }
-        } else {
-            let owner_hat = &mut *south_hats[ctx.src_face.region];
-
-            if msg.mode.current() {
-                owner_hat.send_declarations(ctx.reborrow(), &msg, res.as_deref().cloned().as_mut());
-            }
-
-            if msg.mode.future() {
-                owner_hat.register_interest(ctx.reborrow(), &msg, res.as_deref().cloned().as_mut());
-            }
-
-            if let Some(gwy_node_id) = self.subregion_gateway() {
-                let id = self.next_interest_id;
-                self.next_interest_id += 1;
-
-                let src_nid = self.net().idx.index() as NodeId;
-
-                self.send_point_to_point(ctx.reborrow(), gwy_node_id, |next_hop| {
-                    next_hop.primitives.send_interest(RoutingContext::with_expr(
-                        &mut Interest {
-                            id,
-                            mode: if msg.mode == InterestMode::Future {
-                                InterestMode::CurrentFuture
-                            } else {
-                                msg.mode
-                            },
-                            options: msg.options,
-                            wire_expr: res.as_ref().map(|res| {
-                                let push = self.push_declaration_profile(next_hop);
-                                Resource::decl_key(res, &mut next_hop.clone(), push)
-                            }),
-                            ext_qos: msg.ext_qos,
-                            ext_tstamp: msg.ext_tstamp,
-                            ext_nodeid: interest::ext::NodeIdType { node_id: src_nid },
-                        },
-                        res.as_ref()
-                            .map(|res| res.expr().to_string())
-                            .unwrap_or_default(),
-                    ));
-                });
-
-                if msg.mode.current() {
-                    self.register_pending_current_interest(ctx, &msg, owner_hat, id);
-                }
-            } else {
-                tracing::debug!(
-                    id = msg.id,
-                    src = %ctx.src_face,
-                    "No gateway found in router region. Will not propagate interest"
-                );
-
-                if msg.mode.current() {
-                    tracing::debug!(
-                        id = msg.id,
-                        src = %ctx.src_face,
-                        "Finalizing current interest. It was not propagated upstream"
-                    );
-
-                    let Some(dst) = owner_hat.new_remote(ctx.src_face, msg.ext_nodeid.node_id)
-                    else {
-                        return;
-                    };
-
-                    owner_hat.send_final_declaration(ctx, msg.id, &dst);
-                }
-            }
-        }
+        tracing::warn!("Router regions do not support routing interests");
+        None
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn route_interest_final(
         &mut self,
-        mut ctx: BaseContext,
-        msg: &Interest,
-        mut south_hats: RegionMap<&mut dyn HatTrait>,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _remote_interest: &RemoteInterest,
     ) {
         // I have received an interest with mode FINAL.
         // I should be the north hat.
@@ -185,227 +73,77 @@ impl HatInterestTrait for Hat {
 
         debug_assert!(self.region().bound().is_north());
 
-        // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
-
-        // FIXME(regions): compute routing expr for interceptors from the WireExpr (currently empty).
-        // This is only relevant for the ingress case, at least in the case of ACL.
-        // See: https://github.com/eclipse-zenoh/zenoh/blob/17610bf9e090a70f4347057137bff8b952f4783a/zenoh/src/net/routing/interceptor/access_control.rs#L885-L906
-
-        if self.owns(ctx.src_face) {
-            let src_nid =
-                self.map_routing_context(ctx.tables, ctx.src_face, msg.ext_nodeid.node_id);
-
-            if let Some(gwy_node_id) = self.subregion_gateway() {
-                self.send_point_to_point(ctx, gwy_node_id, |next_hop| {
-                    next_hop.primitives.send_interest(RoutingContext::with_expr(
-                        &mut Interest {
-                            id: msg.id,
-                            mode: InterestMode::Final,
-                            // NOTE: InterestMode::Final options are undefined in the current protocol specification,
-                            // they are initialized here for internal use by local egress interceptors.
-                            options: msg.options,
-                            wire_expr: None,
-                            ext_qos: msg.ext_qos,
-                            ext_tstamp: msg.ext_tstamp,
-                            ext_nodeid: interest::ext::NodeIdType { node_id: src_nid },
-                        },
-                        "".to_string(),
-                    ));
-                });
-            } else {
-                tracing::error!(
-                    bnd = ?self.region,
-                    "No gateway found in router subregion. Will not forward interest finalization"
-                );
-            }
-        } else {
-            let owner_hat = &mut *south_hats[ctx.src_face.region];
-
-            let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
-                tracing::error!(id = msg.id, "Unknown remote interest");
-                return;
-            };
-
-            if let Some(gwy_node_id) = self.subregion_gateway() {
-                let src_nid = self.net().idx.index() as NodeId;
-
-                for id in self.router_local_interests.keys().cloned().collect_vec() {
-                    if self
-                        .router_local_interests
-                        .get(&id)
-                        .is_some_and(|local_interest| local_interest == &remote_interest)
-                    {
-                        self.router_local_interests.remove(&id);
-                        self.send_point_to_point(ctx.reborrow(), gwy_node_id, |next_hop| {
-                            next_hop.primitives.send_interest(RoutingContext::with_expr(
-                                &mut Interest {
-                                    id,
-                                    mode: InterestMode::Final,
-                                    // NOTE: InterestMode::Final options are undefined in the current protocol specification,
-                                    // they are initialized here for internal use by local egress interceptors.
-                                    options: msg.options,
-                                    wire_expr: None,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: msg.ext_tstamp,
-                                    ext_nodeid: interest::ext::NodeIdType { node_id: src_nid },
-                                },
-                                "".to_string(),
-                            ));
-                        });
-                    }
-                }
-            } else {
-                tracing::debug!(
-                    bnd = ?self.region,
-                    "No gateway found in router subregion. Will not propagate interest finalization"
-                );
-            }
-        }
+        tracing::warn!("Router regions do not support routing interests");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn route_final_declaration(
+    fn route_declare_final(
         &mut self,
         _ctx: BaseContext,
         _interest_id: InterestId,
-        _south_hats: RegionMap<&mut dyn HatTrait>,
-    ) {
-        // I have received a Declare Final.
-        // I should be the north hat.
-        // Either the msg is destined for me, in which case there should be a pending current interest with matching interest id
-        // and I should call the owner south hat with .send_final_declaration(..).
-        // Or, it is destined for another router in my region, in which case I should pass the parcel till the interest source.
-
-        debug_assert!(self.region().bound().is_north());
-
-        // TODO(regions): this requires a protocol ext for dst NIDs.
-        unimplemented!()
+    ) -> Option<CurrentInterest> {
+        unreachable!() // REVIEW(regions)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn send_declarations(
         &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<&mut Arc<Resource>>,
     ) {
-        // I have received a current or current-future interest from my subregion.
-        //   1. If the interest is current, I need to send all current declarations with the source IID
-        //   2. If the interest is future, I need to register it as a remote interest identified by ZID and IID
-
-        debug_assert!(self.region().bound().is_south());
-        debug_assert!(self.owns(&ctx.src_face));
-
-        let src_node_id = self.net().idx.index() as NodeId;
-
-        // FIXME(regions): send to the proper next-hop face in the tree centered at the source
-
-        if msg.options.subscribers() {
-            self.declare_sub_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                msg.options.aggregate(),
-                src_node_id,
-                ctx.send_declare,
-            )
-        }
-        if msg.options.queryables() {
-            self.declare_qabl_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                msg.options.aggregate(),
-                src_node_id,
-                ctx.send_declare,
-            )
-        }
-        if msg.options.tokens() {
-            // Note: aggregation is forbidden for tokens. The flag is ignored.
-            self.declare_token_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                src_node_id,
-                ctx.send_declare,
-            )
-        }
+        unimplemented!()
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn send_final_declaration(&mut self, mut ctx: BaseContext, id: InterestId, src: &Remote) {
-        // I should send a DeclareFinal to the source of the current interest identified by the given IID and ZID
-
-        let zid = self.hat_remote(src);
-
-        let Some(dst_node_id) = self.net().get_idx(zid).map(|idx| idx.index() as NodeId) else {
-            tracing::error!(zid = zid.short(), "ZID not found in router network");
-            return;
-        };
-
-        self.send_declare_point_to_point(ctx.reborrow(), dst_node_id, |send_declare, next_hop| {
-            send_declare(
-                &next_hop.primitives,
-                RoutingContext::new(Declare {
-                    interest_id: Some(id),
-                    ext_qos: declare::ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType {
-                        node_id: dst_node_id,
-                    },
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
-            );
-        });
+    fn propagate_current_subscriptions(
+        &self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
+    ) {
+        unreachable!()
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>) {
-        debug_assert!(self.region().bound().is_south());
-        debug_assert!(self.owns(&ctx.src_face));
-
-        let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
-            tracing::error!(
-                face = %ctx.src_face,
-                nid = msg.ext_nodeid.node_id,
-                "Unknown interest source"
-            );
-            return;
-        };
-
-        self.router_remote_interests.insert(
-            (zid, msg.id),
-            RemoteInterest {
-                res: res.cloned(),
-                options: msg.options,
-                mode: msg.mode,
-            },
-        );
+    fn propagate_current_queryables(
+        &self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
+    ) {
+        unreachable!()
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        debug_assert!(self.region().bound().is_south());
-        debug_assert!(self.owns(&ctx.src_face));
+    fn send_declare_final(&mut self, _ctx: BaseContext, _id: InterestId, _src: &Remote) {
+        unreachable!()
+    }
 
-        let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
-            tracing::error!(
-                face = %ctx.src_face,
-                nid = msg.ext_nodeid.node_id,
-                "Unknown interest source"
-            );
-            return None;
-        };
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn register_interest(
+        &mut self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+    ) {
+        unreachable!()
+    }
 
-        // TODO(regions): how should the simple/aggregated resource distinction apply to router regions? (see 20a95fb)
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn unregister_interest(
+        &mut self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+    ) -> Option<RemoteInterest> {
+        unreachable!()
+    }
 
-        self.router_remote_interests.remove(&(zid, msg.id))
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn remote_interests(&self, _tables: &TablesData) -> HashSet<RemoteInterest> {
+        HashSet::default()
     }
 }
 
@@ -488,7 +226,7 @@ impl Hat {
                     return;
                 };
 
-                tables.hats[interest.src_region].send_final_declaration(
+                tables.hats[interest.src_region].send_declare_final(
                     BaseContext {
                         tables_lock: &tables_lock,
                         tables: &mut tables.data,
