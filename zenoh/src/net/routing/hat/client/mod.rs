@@ -66,7 +66,10 @@ pub(crate) struct Hat {
 }
 
 impl Hat {
+    #[tracing::instrument(level = "trace")]
     pub(crate) fn new(region: Region) -> Self {
+        debug_assert!(region.bound().is_north());
+
         Self { region }
     }
 
@@ -147,32 +150,31 @@ impl HatBaseTrait for Hat {
         Some(face.clone())
     }
 
-    fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        self.interests_new_face(ctx.tables, ctx.src_face);
-        self.pubsub_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.queries_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        ctx.tables.disable_all_routes();
-        Ok(())
+    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+        bail!("Local sessions should not be bound to client hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
-        ctx: BaseContext,
-        _other_hats: RegionMap<&dyn HatTrait>,
+        mut ctx: BaseContext,
+        other_hats: RegionMap<&dyn HatTrait>,
         _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
     ) -> ZResult<()> {
-        self.interests_new_face(ctx.tables, ctx.src_face);
-        self.pubsub_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
-        self.queries_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.remote_bound.is_south());
+        debug_assert!(ctx.src_face.region.bound().is_north());
+
+        self.interests_new_face(ctx.reborrow(), &other_hats);
+        self.pubsub_new_face(ctx.reborrow(), &other_hats);
+        self.queries_new_face(ctx.reborrow(), &other_hats);
         self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
         ctx.tables.disable_all_routes();
         Ok(())
     }
 
-    fn close_face(&mut self, mut ctx: BaseContext, _tables_ref: &Arc<TablesLock>) {
+    fn close_face(&mut self, ctx: BaseContext) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -187,70 +189,6 @@ impl HatBaseTrait for Hat {
         hat_face.local_subs.clear();
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
-
-        for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.remote_mappings.clear();
-        for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.local_mappings.clear();
-
-        let mut subs_matches = vec![];
-        for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-                subs_matches.push(res);
-            }
-        }
-
-        let mut qabls_matches = vec![];
-        for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-                qabls_matches.push(res);
-            }
-        }
-
-        for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_token(ctx.reborrow(), &mut res);
-        }
-
-        for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-            Resource::clean(&mut res);
-        }
-        self.faces_mut(ctx.tables).remove(&face.id);
     }
 
     fn handle_oam(

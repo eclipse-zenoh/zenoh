@@ -89,19 +89,14 @@ impl<'conf> RouterBuilder<'conf> {
             self.hats
                 .extend([(Region::North, mode), (Region::Local, WhatAmI::Client)]);
 
-            // for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-            //     self.hats.push((Region::Undefined { mode }, mode));
-            // }
+            for mode in [WhatAmI::Client, WhatAmI::Peer] {
+                self.hats.push((Region::Undefined { mode }, mode));
+            }
         }
 
         for (index, _) in gateway_config.south.iter().enumerate() {
             // TODO(regions): we create three hats per subregion.
             // If memory usage is an issue, we should create then lazily.
-            // for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-            //     self.hats
-            //         .push((Region::Subregion { id: index, mode }, mode));
-            // }
-
             for mode in [WhatAmI::Client, WhatAmI::Peer] {
                 self.hats
                     .push((Region::Subregion { id: index, mode }, mode));
@@ -131,8 +126,8 @@ impl<'conf> RouterBuilder<'conf> {
                             (
                                 rgn,
                                 match (rgn, wai) {
-                                    (Region::North, WhatAmI::Peer) => {
-                                        Box::new(hat::peer::Hat::new(rgn))
+                                    (Region::North, WhatAmI::Client) => {
+                                        Box::new(hat::client::Hat::new(rgn))
                                     }
                                     (_, WhatAmI::Client) => Box::new(hat::broker::Hat::new(rgn)),
                                     (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(rgn)),

@@ -13,10 +13,11 @@
 //
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
+use itertools::Itertools;
 use zenoh_protocol::{
     core::WhatAmI,
     network::declare::{
@@ -33,10 +34,11 @@ use crate::{
         dispatcher::{
             face::FaceState,
             pubsub::SubscriberInfo,
+            region::RegionMap,
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources},
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
     },
@@ -64,7 +66,7 @@ impl Hat {
             self.face_hat_mut(dst_face)
                 .local_subs
                 .insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, true);
+            let key_expr = Resource::decl_key(res, dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -246,29 +248,39 @@ impl Hat {
         }
     }
 
-    pub(super) fn pubsub_new_face(
-        &self,
-        tables: &mut TablesData,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    ) {
-        let sub_info = SubscriberInfo;
-        for src_face in self
-            .faces(tables)
+    pub(super) fn pubsub_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+        for res in other_hats
             .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
+            .flat_map(|hat| hat.remote_subscriptions(&ctx.tables).into_keys())
         {
-            for sub in self.face_hat(&src_face).remote_subs.values() {
-                self.propagate_simple_subscription_to(
-                    tables,
-                    face,
-                    sub,
-                    &sub_info,
-                    &mut src_face.clone(),
-                    send_declare,
-                );
+            if self.face_hat(&ctx.src_face).local_subs.contains_key(&res) {
+                continue;
             }
+
+            let id = self
+                .face_hat(&ctx.src_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(ctx.src_face)
+                .local_subs
+                .insert(res.clone(), id);
+            let key_expr = Resource::decl_key(&res, ctx.src_face);
+            (ctx.send_declare)(
+                &ctx.src_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id,
+                            wire_expr: key_expr.clone(),
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
         }
     }
 }
@@ -442,5 +454,204 @@ impl HatPubSubTrait for Hat {
             }
         }
         matching_subscriptions
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn register_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        mut res: Arc<Resource>,
+        _nid: NodeId,
+        info: &SubscriberInfo,
+    ) {
+        debug_assert!(self.owns(&ctx.src_face));
+
+        {
+            let res = get_mut_unchecked(&mut res);
+            match res.face_ctxs.get_mut(&ctx.src_face.id) {
+                Some(ctx) => {
+                    if ctx.subs.is_none() {
+                        get_mut_unchecked(ctx).subs = Some(*info);
+                    }
+                }
+                None => {
+                    let ctx = res
+                        .face_ctxs
+                        .entry(ctx.src_face.id)
+                        .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
+                    get_mut_unchecked(ctx).subs = Some(*info);
+                }
+            }
+        }
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_subs
+            .insert(id, res.clone());
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        _res: Option<Arc<Resource>>,
+        _nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) else {
+            tracing::error!(id, "Unknown subscription");
+            return None;
+        };
+
+        if self
+            .face_hat(ctx.src_face)
+            .remote_subs
+            .values()
+            .contains(&res)
+        {
+            tracing::debug!(id, ?res, "Duplicated subscription");
+            return None;
+        };
+
+        if let Some(ctx) = get_mut_unchecked(&mut res)
+            .face_ctxs
+            .get_mut(&ctx.src_face.id)
+        {
+            get_mut_unchecked(ctx).subs = None;
+        }
+
+        Some(res)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let fid = ctx.src_face.id;
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_subs
+            .drain()
+            .map(|(_, mut res)| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).subs = None;
+                }
+
+                res
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        other_info: Option<SubscriberInfo>,
+    ) {
+        let Some(_) = other_info else {
+            debug_assert!(self.owns(&ctx.src_face));
+            return;
+        };
+
+        let Some(mut dst_face) = self.owned_faces(&ctx.tables).next().cloned() else {
+            tracing::trace!(
+                "Client region is empty; Will not propagate subscription declaration north"
+            );
+            return;
+        };
+
+        if self.face_hat(&dst_face).local_subs.contains_key(&res) {
+            return;
+        }
+
+        let id = self
+            .face_hat(&dst_face)
+            .next_id
+            .fetch_add(1, Ordering::SeqCst);
+        self.face_hat_mut(&mut dst_face)
+            .local_subs
+            .insert(res.clone(), id);
+        let key_expr = Resource::decl_key(&res, &mut dst_face);
+        (ctx.send_declare)(
+            &dst_face.primitives,
+            RoutingContext::with_expr(
+                Declare {
+                    interest_id: None,
+                    ext_qos: declare::ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                        id,
+                        wire_expr: key_expr.clone(),
+                    }),
+                },
+                res.expr().to_string(),
+            ),
+        );
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        let Some(mut dst_face) = self.owned_faces(&ctx.tables).next().cloned() else {
+            tracing::trace!(
+                "Client region is empty; Will not propagate subscription undeclaration north"
+            );
+            return;
+        };
+
+        if let Some(id) = self.face_hat_mut(&mut dst_face).local_subs.remove(&res) {
+            (ctx.send_declare)(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn unpropagate_last_non_owned_subscription(&mut self, _ctx: BaseContext, _res: Arc<Resource>) {
+        // Nothing to do
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+        self.owned_face_contexts(res)
+            .filter_map(|(_, ctx)| ctx.subs)
+            .reduce(|_, _| SubscriberInfo)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.remote_subscriptions_matching(tables, None)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.owned_faces(tables)
+            .flat_map(|f| self.face_hat(f).remote_subs.values())
+            .filter_map(|sub| {
+                if sub.ctx.is_some() && res.is_none_or(|res| sub.matches(res)) {
+                    Some((sub.clone(), SubscriberInfo))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

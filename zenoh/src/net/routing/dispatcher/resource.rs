@@ -429,13 +429,13 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(crate) fn matches(&self, other: &Arc<Resource>) -> bool {
+    pub(crate) fn matches(&self, other: &Resource) -> bool {
         self.ctx
             .as_ref()
             .unwrap()
             .matches
             .iter()
-            .any(|m| m.upgrade().is_some_and(|m| &m == other))
+            .any(|m| m.upgrade().is_some_and(|m| &*m == other))
     }
 
     pub fn nonwild_prefix(res: &Arc<Resource>) -> (Option<Arc<Resource>>, String) {
@@ -592,11 +592,7 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(
-        res: &Arc<Resource>,
-        face: &mut Arc<FaceState>,
-        push: bool,
-    ) -> WireExpr<'static> {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
         if face.is_local {
             return res.expr().to_string().into();
         }
@@ -623,7 +619,7 @@ impl Resource {
                         };
                     }
                 }
-                if push
+                if face.region.bound().is_north()
                     || face.remote_key_interests.values().any(|res| {
                         res.as_ref()
                             .map(|res| res.matches(&nonwild_prefix))

@@ -51,7 +51,7 @@ impl HatInterestTrait for Hat {
         //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
-        assert!(self.region().bound().is_north());
+        debug_assert!(self.region().bound().is_north());
 
         // REVIEW(regions): mainline zenoh has a failure mode for aggregate interests from peers to routers.
         // See: https://github.com/eclipse-zenoh/zenoh/blob/1bd82eeef7d9b2df0d96dbbaf947ac75c90571aa/zenoh/src/net/routing/hat/router/interests.rs#L53-L59
@@ -183,7 +183,7 @@ impl HatInterestTrait for Hat {
         //   1. I need to unregister it as a remote interest in the owner (south) hat.
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-        assert!(self.region().bound().is_north());
+        debug_assert!(self.region().bound().is_north());
 
         // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
 
@@ -276,7 +276,7 @@ impl HatInterestTrait for Hat {
         // and I should call the owner south hat with .send_final_declaration(..).
         // Or, it is destined for another router in my region, in which case I should pass the parcel till the interest source.
 
-        assert!(self.region().bound().is_north());
+        debug_assert!(self.region().bound().is_north());
 
         // TODO(regions): this requires a protocol ext for dst NIDs.
         unimplemented!()
@@ -293,8 +293,8 @@ impl HatInterestTrait for Hat {
         //   1. If the interest is current, I need to send all current declarations with the source IID
         //   2. If the interest is future, I need to register it as a remote interest identified by ZID and IID
 
-        assert!(self.region().bound().is_south());
-        assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.region().bound().is_south());
+        debug_assert!(self.owns(&ctx.src_face));
 
         let src_node_id = self.net().idx.index() as NodeId;
 
@@ -367,8 +367,8 @@ impl HatInterestTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>) {
-        assert!(self.region().bound().is_south());
-        assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.region().bound().is_south());
+        debug_assert!(self.owns(&ctx.src_face));
 
         let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
             tracing::error!(
@@ -391,8 +391,8 @@ impl HatInterestTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(self.region().bound().is_south());
-        assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.region().bound().is_south());
+        debug_assert!(self.owns(&ctx.src_face));
 
         let Some(zid) = self.get_router(ctx.src_face, msg.ext_nodeid.node_id) else {
             tracing::error!(

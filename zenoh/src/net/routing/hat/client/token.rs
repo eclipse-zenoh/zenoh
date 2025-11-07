@@ -28,7 +28,7 @@ use crate::net::routing::{
     dispatcher::{
         face::FaceState, interests::CurrentInterest, region::RegionMap, tables::TablesData,
     },
-    hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
+    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -53,7 +53,7 @@ impl Hat {
             self.face_hat_mut(dst_face)
                 .local_tokens
                 .insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face, true);
+            let key_expr = Resource::decl_key(res, dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -367,7 +367,7 @@ impl Hat {
                     for token in self.face_hat(&src_face).remote_tokens.values() {
                         if token.ctx.is_some() && token.matches(res) {
                             let id = self.make_token_id(token, get_mut_unchecked(face), mode);
-                            let wire_expr = Resource::decl_key(token, face, true);
+                            let wire_expr = Resource::decl_key(token, face);
                             send_declare(
                                 &face.primitives,
                                 RoutingContext::with_expr(
@@ -397,7 +397,7 @@ impl Hat {
                 {
                     for token in self.face_hat(&src_face).remote_tokens.values() {
                         let id = self.make_token_id(token, get_mut_unchecked(face), mode);
-                        let wire_expr = Resource::decl_key(token, face, true);
+                        let wire_expr = Resource::decl_key(token, face);
                         send_declare(
                             &face.primitives,
                             RoutingContext::with_expr(

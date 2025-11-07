@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::HashSet,
+    collections::HashMap,
     fmt,
     sync::{Arc, Weak},
     time::Duration,
@@ -280,13 +280,32 @@ impl Face {
         let other_sub_matches = hats
             .values()
             .filter(|hat| hat.region() != region)
-            .flat_map(|hat| hat.remote_subscriptions(&ctx.tables).into_keys())
-            .collect::<HashSet<_>>();
+            .flat_map(|hat| {
+                hat.remote_subscriptions_matching(&ctx.tables, res.as_deref())
+                    .into_iter()
+            })
+            .collect::<HashMap<_, _>>();
+
         hats[region].propagate_current_subscriptions(
             ctx.reborrow(),
             msg,
             res.clone(),
             other_sub_matches,
+        );
+
+        let other_qabl_matches = hats
+            .values()
+            .filter(|hat| hat.region() != region)
+            .flat_map(|hat| {
+                hat.remote_queryables_matching(&ctx.tables, res.as_deref())
+                    .into_iter()
+            })
+            .collect::<HashMap<_, _>>();
+        hats[region].propagate_current_queryables(
+            ctx.reborrow(),
+            msg,
+            res.clone(),
+            other_qabl_matches,
         );
 
         hats[region].register_interest(ctx.reborrow(), msg, res);

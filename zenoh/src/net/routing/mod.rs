@@ -71,3 +71,17 @@ impl<T> InterceptorContext for RoutingContext<T> {
         None
     }
 }
+
+// NOTE: `Option::is_none_or` was introduced in 1.82.0 > 1.75.0
+pub(self) trait OptionExt<T>: Sized {
+    fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
+}
+
+impl<T> OptionExt<T> for Option<T> {
+    fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool {
+        match self {
+            None => true,
+            Some(x) => f(x),
+        }
+    }
+}

@@ -45,7 +45,8 @@ use crate::net::{
         dispatcher::{
             interests::{finalize_pending_interests, RemoteInterest},
             queries::{
-                finalize_pending_queries, route_send_response, route_send_response_final, Query,
+                disable_matches_query_routes, finalize_pending_queries, merge_qabl_infos,
+                route_send_response, route_send_response_final, Query,
             },
             region::{Region, RegionMap},
         },
@@ -568,29 +569,73 @@ impl Primitives for Face {
 
         let hats = &mut tables.hats;
         let region = self.state.region;
+        let src_fid = ctx.src_face.id;
 
-        let face_subs = hats[region].unregister_face_subscriptions(ctx.reborrow());
+        for mut res in hats[region].unregister_face_subscriptions(ctx.reborrow()) {
+            disable_matches_data_routes(&mut res, &region);
 
-        for mut res in face_subs {
             let mut remaining = hats
                 .values_mut()
-                .filter(|hat| !hat.remote_subscriptions_for(&res).is_empty())
+                .filter(|hat| hat.remote_subscriptions_of(&res).is_some())
                 .collect_vec();
-            let remaining = remaining.as_mut_slice();
 
-            if let [] = remaining {
+            if let [] = &*remaining {
                 for hat in hats.values_mut() {
                     hat.unpropagate_subscription(ctx.reborrow(), res.clone());
                 }
+                get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
                 Resource::clean(&mut res);
-            } else if let [last_owner] = remaining {
+            } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_subscription(ctx.reborrow(), res.clone())
             }
-
-            disable_matches_data_routes(&mut res, &self.state.region);
         }
 
-        hats[region].close_face(ctx, &self.tables.clone());
+        for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
+            disable_matches_query_routes(&mut res, &region);
+
+            let remaining = hats
+                .iter()
+                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (*rgn, info)))
+                .collect_vec();
+
+            match &*remaining {
+                [] => {
+                    for hat in hats.values_mut() {
+                        hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                    }
+                    get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
+                    Resource::clean(&mut res);
+                }
+                [(last_owner, _)] => hats[last_owner]
+                    .unpropagate_last_non_owned_queryable(ctx.reborrow(), res.clone()),
+                _ => {
+                    for hat in hats.values_mut() {
+                        let other_info = remaining
+                            .iter()
+                            .filter_map(|(region, info)| (region != &hat.region()).then_some(*info))
+                            .reduce(|acc, info| merge_qabl_infos(acc, info));
+
+                        hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                    }
+                }
+            }
+        }
+
+        for res in get_mut_unchecked(ctx.src_face).remote_mappings.values_mut() {
+            get_mut_unchecked(res).face_ctxs.remove(&src_fid);
+            Resource::clean(res);
+        }
+        get_mut_unchecked(ctx.src_face).remote_mappings.clear();
+
+        for res in get_mut_unchecked(ctx.src_face).local_mappings.values_mut() {
+            get_mut_unchecked(res).face_ctxs.remove(&src_fid);
+            Resource::clean(res);
+        }
+        get_mut_unchecked(ctx.src_face).local_mappings.clear();
+
+        hats[region].close_face(ctx);
+
+        tables.data.faces.remove(&src_fid);
 
         drop(wtables);
         drop(ctrl_lock);

@@ -18,6 +18,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
 use zenoh_keyexpr::keyexpr;
@@ -136,8 +137,6 @@ pub(crate) fn get_matching_queryables(
 }
 
 impl Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(id = id, expr = %expr, node_id = node_id))]
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn declare_queryable(
         &self,
         tables: &TablesLock,
@@ -185,25 +184,33 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.region);
+                let hats = &mut tables.hats;
+                let region = self.state.region;
 
-                for hat in tables.hats.values_mut() {
-                    hat.declare_queryable(
-                        BaseContext {
-                            tables_lock: &self.tables,
-                            tables: &mut tables.data,
-                            src_face: &mut self.state.clone(),
-                            send_declare,
-                        },
-                        id,
-                        &mut res,
-                        node_id,
-                        qabl_info,
-                    );
-                }
+                let mut ctx = BaseContext {
+                    tables_lock: &self.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut self.state.clone(),
+                    send_declare,
+                };
 
-                for bound in tables.hats.regions() {
-                    disable_matches_query_routes(&mut res, bound);
+                hats[region].register_queryable(
+                    ctx.reborrow(),
+                    id,
+                    res.clone(),
+                    node_id,
+                    qabl_info,
+                );
+
+                for region in hats.regions().copied().collect_vec() {
+                    let other_info = hats
+                        .values()
+                        .filter(|hat| hat.region() != region)
+                        .flat_map(|hat| hat.remote_queryables_of(&res))
+                        .reduce(|acc, info| merge_qabl_infos(acc, info));
+
+                    hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                    disable_matches_query_routes(&mut res, &region);
                 }
 
                 drop(wtables);
@@ -217,7 +224,6 @@ impl Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(id = id, expr = %expr, node_id = node_id))]
     pub(crate) fn undeclare_queryable(
         &self,
         tables: &TablesLock,
@@ -260,46 +266,49 @@ impl Face {
         };
 
         let mut wtables = zwrite!(tables.tables);
-
         let tables = &mut *wtables;
 
-        tracing::trace!(?self.state.region);
+        let hats = &mut tables.hats;
+        let region = self.state.region;
 
-        let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
-            let res = hat.undeclare_queryable(
-                BaseContext {
-                    tables_lock: &self.tables,
-                    tables: &mut tables.data,
-                    src_face: &mut self.state.clone(),
-                    send_declare,
-                },
-                id,
-                res.clone(),
-                node_id,
-            );
+        let mut ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
 
-            match res {
-                Some(mut res) => {
-                    tracing::debug!(
-                        "{} Undeclare queryable {} ({})",
-                        &self.state,
-                        id,
-                        res.expr()
-                    );
-                    disable_matches_query_routes(&mut res, bound);
-                    Some(res)
+        if let Some(mut res) =
+            hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id)
+        {
+            disable_matches_query_routes(&mut res, &region);
+
+            let remaining = hats
+                .iter()
+                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (*rgn, info)))
+                .collect_vec();
+
+            match &*remaining {
+                [] => {
+                    for hat in hats.values_mut() {
+                        hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                    }
+                    Resource::clean(&mut res);
                 }
-                None => {
-                    // NOTE: This is expected behavior if queryable declarations are denied with ingress ACL interceptor.
-                    tracing::debug!("{} Undeclare unknown queryable {}", &self.state, id);
-                    None
+                [(last_owner, _)] => {
+                    hats[last_owner].unpropagate_last_non_owned_queryable(ctx, res.clone())
+                }
+                _ => {
+                    for hat in hats.values_mut() {
+                        let other_info = remaining
+                            .iter()
+                            .filter_map(|(region, info)| (region != &hat.region()).then_some(*info))
+                            .reduce(|acc, info| merge_qabl_infos(acc, info));
+
+                        hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                    }
                 }
             }
-        });
-
-        // REVIEW(regions): this is necessary if HatFace is global
-        for mut res in res_cleanup {
-            Resource::clean(&mut res);
         }
     }
 
@@ -741,7 +750,7 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
 
 pub(crate) fn merge_qabl_infos(
     mut this: QueryableInfoType,
-    info: &QueryableInfoType,
+    info: QueryableInfoType,
 ) -> QueryableInfoType {
     this.distance = match (this.complete, info.complete) {
         (true, true) | (false, false) => std::cmp::min(this.distance, info.distance),
@@ -761,7 +770,7 @@ pub(crate) fn get_remote_qabl_info(
         .fold(None, |accu, (ref r, ref qabl_info)| {
             if *r == *res {
                 match accu {
-                    Some(qi) => Some(merge_qabl_infos(qi, qabl_info)),
+                    Some(qi) => Some(merge_qabl_infos(qi, *qabl_info)),
                     None => Some(*qabl_info),
                 }
             } else {
@@ -821,7 +830,7 @@ impl LocalResourceInfoTrait<Arc<Resource>> for QueryableInfoType {
         other_val.complete = other_complete;
 
         if let Some(val) = self_val {
-            merge_qabl_infos(val, &other_val)
+            merge_qabl_infos(val, other_val)
         } else {
             other_val
         }

@@ -47,7 +47,6 @@ use crate::{
 pub(crate) struct SubscriberInfo;
 
 impl Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(id = id, expr = %expr, node_id = node_id))]
     pub(crate) fn declare_subscription(
         &self,
         id: SubscriberId,
@@ -94,6 +93,9 @@ impl Face {
 
                 let tables = &mut *wtables;
 
+                let hats = &mut tables.hats;
+                let region = self.state.region;
+
                 let mut ctx = BaseContext {
                     tables_lock: &self.tables,
                     tables: &mut tables.data,
@@ -101,7 +103,7 @@ impl Face {
                     send_declare,
                 };
 
-                tables.hats[self.state.region].register_subscription(
+                hats[region].register_subscription(
                     ctx.reborrow(),
                     id,
                     res.clone(),
@@ -109,9 +111,15 @@ impl Face {
                     sub_info,
                 );
 
-                for (bound, hat) in tables.hats.iter_mut() {
-                    hat.propagate_subscription(ctx.reborrow(), res.clone(), sub_info);
-                    disable_matches_data_routes(&mut res, bound);
+                for region in hats.regions().copied().collect_vec() {
+                    let other_info = hats
+                        .values()
+                        .filter(|hat| hat.region() != region)
+                        .flat_map(|hat| hat.remote_subscriptions_of(&res))
+                        .reduce(|_, _| SubscriberInfo);
+
+                    hats[region].propagate_subscription(ctx.reborrow(), res.clone(), other_info);
+                    disable_matches_data_routes(&mut res, &region);
                 }
 
                 drop(wtables);
@@ -125,7 +133,6 @@ impl Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(id = id, expr = %expr, node_id = node_id))]
     pub(crate) fn undeclare_subscription(
         &self,
         id: SubscriberId,
@@ -179,26 +186,22 @@ impl Face {
         if let Some(mut res) =
             hats[region].unregister_subscription(ctx.reborrow(), id, res.clone(), node_id)
         {
+            disable_matches_data_routes(&mut res, &region);
+
             let mut remaining = tables
                 .hats
                 .values_mut()
-                .filter(|hat| !hat.remote_subscriptions_for(&res).is_empty())
+                .filter(|hat| hat.remote_subscriptions_of(&res).is_some())
                 .collect_vec();
-            let remaining = remaining.as_mut_slice();
 
-            tracing::trace!(res = res.expr());
-            tracing::trace!(remaining = ?remaining.iter().map(|hat| hat.region()).collect::<Vec<_>>());
-
-            if let [] = remaining {
+            if let [] = &*remaining {
                 for hat in tables.hats.values_mut() {
                     hat.unpropagate_subscription(ctx.reborrow(), res.clone());
                 }
                 Resource::clean(&mut res);
-            } else if let [last_owner] = remaining {
+            } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_subscription(ctx, res.clone())
             }
-
-            disable_matches_data_routes(&mut res, &self.state.region);
         }
     }
 }
