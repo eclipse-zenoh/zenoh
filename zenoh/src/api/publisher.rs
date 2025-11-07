@@ -81,13 +81,14 @@ impl fmt::Debug for PublisherState {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// publisher.put("value").await.unwrap();
+/// # format!("{publisher:?}");
 /// # }
 /// ```
 ///
 ///
 /// `Publisher` implements the `Sink` trait which is useful for forwarding
 /// streams to zenoh.
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::StreamExt;
@@ -95,6 +96,11 @@ impl fmt::Debug for PublisherState {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").await.unwrap();
+/// # tokio::task::spawn(async move {
+/// #     session.put("key/expression", "value").await.unwrap();
+/// #     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+/// #     session.close().await.unwrap();
+/// # });
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # }
 /// ```
@@ -138,30 +144,90 @@ impl<'a> Publisher<'a> {
     }
 
     /// Returns the [`KeyExpr`] of this Publisher.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let key_expr = publisher.key_expr();
+    /// # }
+    /// ```
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
     /// Get the [`Encoding`] used when publishing data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let encoding = publisher.encoding();
+    /// # }
+    /// ```
     #[inline]
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
 
     /// Get the [`CongestionControl`] applied when routing the data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let congestion_control = publisher.congestion_control();
+    /// # }
+    /// ```
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.congestion_control
     }
 
     /// Get the [`Priority`] of the written data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let priority = publisher.priority();
+    /// # }
+    /// ```
     #[inline]
     pub fn priority(&self) -> Priority {
         self.priority
     }
 
     /// Get the [`Reliability`] applied when routing the data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let reliability = publisher.reliability();
+    /// # }
+    /// ```
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(&self) -> Reliability {
