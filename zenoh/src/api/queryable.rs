@@ -701,7 +701,7 @@ impl<Handler> Queryable<Handler> {
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// let mut queryable = session.declare_queryable("key/expression").await.unwrap();
     /// queryable.set_background(true);
     /// # }
     /// ```
