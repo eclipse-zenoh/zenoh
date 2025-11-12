@@ -33,7 +33,7 @@ use zenoh_sync::{event, Notifier, Waiter};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 #[cfg(feature = "stats")]
-use crate::stats::TransportStats;
+use crate::stats::{LinkStats, TransportStats};
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
@@ -375,7 +375,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
+    fn get_link_stats(&self) -> Vec<(Link, Arc<LinkStats>)> {
         zread!(self.links)
             .iter()
             .map(|l| (l.link.link(), l.stats.clone()))

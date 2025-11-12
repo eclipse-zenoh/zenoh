@@ -26,7 +26,7 @@ use zenoh_result::ZResult;
 
 use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
 #[cfg(feature = "stats")]
-use crate::stats::TransportStats;
+use crate::stats::{LinkStats, TransportStats};
 use crate::{
     unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
     TransportPeerEventHandler,
@@ -73,7 +73,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     #[cfg(feature = "stats")]
     fn stats(&self) -> Arc<TransportStats>;
     #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)>;
+    fn get_link_stats(&self) -> Vec<(Link, Arc<LinkStats>)>;
 
     /*************************************/
     /*               LINK                */
