@@ -377,21 +377,16 @@ where
         #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
         let (mut callback, receiver) = self.handler.into_handler();
         #[cfg(feature = "unstable")]
-        if self
-            .cancellation_token
-            .as_ref()
-            .map(|ct| ct.is_cancelled())
-            .unwrap_or(false)
-        {
-            return Ok(receiver);
+        let cancellation_token = if let Some(ct) = self.cancellation_token {
+            if let Some(notifier) = ct.notifier() {
+                callback.set_on_drop_notifier(notifier);
+                Some(ct)
+            } else {
+                return Ok(receiver);
+            }
+        } else {
+            None
         };
-        #[cfg(feature = "unstable")]
-        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
-            let (notifier, receiver) =
-                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
-            callback.set_on_drop_notifier(notifier);
-            (ct, receiver)
-        });
         let Selector {
             key_expr,
             parameters,
@@ -415,14 +410,13 @@ where
             )
             .map(|qid| {
                 #[cfg(feature = "unstable")]
-                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
-                {
+                if let Some(cancellation_token) = cancellation_token {
                     let session_clone = self.session.clone();
                     let on_cancel = move || {
                         let _ = session_clone.0.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
                         Ok(())
                     };
-                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
+                    cancellation_token.add_on_cancel_handler(Box::new(on_cancel));
                 }
                 receiver
             })
