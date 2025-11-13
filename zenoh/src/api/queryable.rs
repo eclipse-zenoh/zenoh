@@ -117,7 +117,7 @@ impl Query {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { query.selector(); })
+    ///     .callback(move |query| { println!("{}", query.selector()); })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -136,7 +136,7 @@ impl Query {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { query.key_expr(); })
+    ///     .callback(move |query| { println!("{}", query.key_expr()); })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -155,7 +155,7 @@ impl Query {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { query.parameters(); })
+    ///     .callback(move |query| { println!("{}", query.parameters()); })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -169,12 +169,15 @@ impl Query {
     ///
     /// # Examples
     /// ```
+    /// # use zenoh::bytes::ZBytes;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { query.payload(); })
+    ///     .callback(move |query| { 
+    ///         let payload: Option<&ZBytes> = query.payload();
+    ///     })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -188,12 +191,15 @@ impl Query {
     ///
     /// # Examples
     /// ```
+    /// # use zenoh::bytes::ZBytes;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |mut query| { query.payload_mut(); })
+    ///     .callback(move |mut query| {
+    ///         let payload: Option<&mut ZBytes> = query.payload_mut();
+    ///     })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -212,7 +218,7 @@ impl Query {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { query.encoding(); })
+    ///     .callback(move |query| { println!("{:?}", query.encoding()); })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -226,12 +232,15 @@ impl Query {
     ///
     /// # Examples
     /// ```
+    /// # use zenoh::bytes::ZBytes;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { query.attachment(); })
+    ///     .callback(move |query| {
+    ///         let attachment: Option<&ZBytes> = query.attachment();
+    ///     })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
@@ -244,12 +253,15 @@ impl Query {
     ///
     /// # Examples
     /// ```
+    /// # use zenoh::bytes::ZBytes;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |mut query| { query.attachment_mut(); })
+    ///     .callback(move |mut query| {
+    ///         let attachment: Option<&mut ZBytes> = query.attachment_mut();
+    ///     })
     ///     .await
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
