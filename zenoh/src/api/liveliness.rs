@@ -543,6 +543,24 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
 }
 
 impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handler, BACKGROUND> {
+    /// If set to true, the liveliness subscriber will receive liveliness tokens created before the subscriber was declared.
+    /// Otherwise, only newly created liveliness tokens will be received.
+    /// The default value is false.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let subscriber = session
+    ///     .liveliness()
+    ///     .declare_subscriber("key/expression")
+    ///     .history(true) // receive historical liveliness tokens
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
     #[inline]
     pub fn history(mut self, history: bool) -> Self {
         self.history = history;

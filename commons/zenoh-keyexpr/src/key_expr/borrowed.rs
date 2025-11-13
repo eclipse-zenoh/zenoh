@@ -691,11 +691,23 @@ impl Div for &keyexpr {
     }
 }
 
-/// The possible relations between two sets.
+/// The possible relations between two sets of key expressions defined by glob patterns.
+///
+/// Each glob key expression defines a set of possible concrete key expressions that it matches.
+/// This enum describes how two such sets relate to each other:
+///
+/// - [`Disjoint`](SetIntersectionLevel::Disjoint): The sets have no key expressions in common.
+///   Example: `foo/*` and `bar/*` - no overlap.
+/// - [`Intersects`](SetIntersectionLevel::Intersects): The sets have some key expressions in common, but neither fully contains the other.
+///   Example: `foo/*` and `*/bar` - `foo/bar` matches both.
+/// - [`Includes`](SetIntersectionLevel::Includes): The first set fully contains the second set.
+///   Example: `foo/**` includes `foo/*` (where `**` matches any number of sections).
+/// - [`Equals`](SetIntersectionLevel::Equals): The sets are identical.
+///   Example: `foo/*` and `foo/*`.
 ///
 /// Note that [`Equals`](SetIntersectionLevel::Equals) implies [`Includes`](SetIntersectionLevel::Includes), which itself implies [`Intersects`](SetIntersectionLevel::Intersects).
 ///
-/// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
+/// You can check for intersection with `level >= SetIntersectionLevel::Intersects` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg(feature = "unstable")]
 pub enum SetIntersectionLevel {
