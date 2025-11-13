@@ -43,7 +43,7 @@ use zenoh_result::ZResult;
 use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
-use super::{routing::dispatcher::face::Face, Runtime};
+use super::Runtime;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
@@ -55,7 +55,7 @@ use crate::{
         queryable::{Query, QueryInner},
     },
     bytes::Encoding,
-    net::primitives::Primitives,
+    net::{primitives::Primitives, runtime::IRuntime},
 };
 
 pub struct AdminContext {
@@ -68,7 +68,7 @@ type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 pub struct AdminSpace {
     zid: ZenohId,
     queryable_id: QueryableId,
-    primitives: Mutex<Option<Arc<Face>>>,
+    primitives: Mutex<Option<Arc<dyn Primitives>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
     context: Arc<AdminContext>,
@@ -333,7 +333,7 @@ impl AdminSpace {
             });
         }
 
-        let primitives = runtime.state.router.new_primitives(admin.clone());
+        let (_, primitives) = runtime.state.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(&mut Declare {
