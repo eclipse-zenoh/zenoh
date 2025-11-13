@@ -175,7 +175,7 @@ impl Query {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
-    ///     .callback(move |query| { 
+    ///     .callback(move |query| {
     ///         let payload: Option<&ZBytes> = query.payload();
     ///     })
     ///     .await
