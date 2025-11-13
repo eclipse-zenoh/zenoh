@@ -225,13 +225,14 @@ impl<'a> KeyExpr<'a> {
     ///
     /// This should be your preferred method when concatenating path segments.
     ///
-    /// This is notably useful for workspaces:
-    /// ```rust
+    /// # Examples
+    /// ```
     /// # use std::convert::TryFrom;
     /// # use zenoh::key_expr::KeyExpr;
-    /// # let get_workspace = || KeyExpr::try_from("some/workspace").unwrap();
-    /// let workspace: KeyExpr = get_workspace();
-    /// let topic = workspace.join("some/topic").unwrap();
+    /// let prefix = KeyExpr::try_from("some/prefix").unwrap();
+    /// let suffix = KeyExpr::try_from("some/suffix").unwrap();
+    /// let join = prefix.join(&suffix).unwrap();
+    /// assert_eq!(join.as_str(), "some/prefix/some/suffix");
     /// ```
     pub fn join<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let r = self.as_keyexpr().join(s)?;

@@ -109,47 +109,163 @@ pub struct Query {
 
 impl Query {
     /// The full [`Selector`] of this Query.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{}", query.selector()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector::borrowed(&self.inner.key_expr, &self.inner.parameters)
     }
 
     /// The key selector part of this Query.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{}", query.key_expr()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
     }
 
     /// This Query's selector parameters.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{}", query.parameters()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn parameters(&self) -> &Parameters<'static> {
         &self.inner.parameters
     }
 
     /// This Query's payload.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| {
+    ///         let payload: Option<&ZBytes> = query.payload();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn payload(&self) -> Option<&ZBytes> {
         self.value.as_ref().map(|v| &v.0)
     }
 
     /// This Query's payload (mutable).
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |mut query| {
+    ///         let payload: Option<&mut ZBytes> = query.payload_mut();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn payload_mut(&mut self) -> Option<&mut ZBytes> {
         self.value.as_mut().map(|v| &mut v.0)
     }
 
     /// This Query's encoding.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{:?}", query.encoding()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn encoding(&self) -> Option<&Encoding> {
         self.value.as_ref().map(|v| &v.1)
     }
 
     /// This Query's attachment.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| {
+    ///         let attachment: Option<&ZBytes> = query.attachment();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// This Query's attachment (mutable).
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |mut query| {
+    ///         let attachment: Option<&mut ZBytes> = query.attachment_mut();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
     }
@@ -157,6 +273,20 @@ impl Query {
     /// Sends a reply in the form of [`Sample`] to this Query.
     ///
     /// This api is for internal use only.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::sample::Sample;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { query.reply_sample(Sample::empty()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     #[zenoh_macros::internal]
     pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
@@ -216,6 +346,19 @@ impl Query {
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does so.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { query.accepts_replies(); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
@@ -232,6 +375,12 @@ impl Query {
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.
+    ///
+    /// # Examples
+    /// ```
+    /// # fn main() {
+    /// let query = unsafe { zenoh::query::Query::empty() };
+    /// # }
     #[zenoh_macros::internal]
     pub unsafe fn empty() -> Self {
         Query {
@@ -426,26 +575,25 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// # Examples
 ///
 /// Using callback:
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let (tx, rx) = flume::bounded(32);
-/// session
+/// let queryable = session
 ///     .declare_queryable("key/expression")
-///     .callback(move |query| tx.send(query).unwrap())
-///     .background()
+///     .callback(move |query| {
+///         use crate::zenoh::Wait;
+///         println!(">> Handling query '{}'", query.selector());
+///         query.reply("key/expression", "value").wait().unwrap();
+/// #       format!("{query}");
+/// #       format!("{query:?}");
+///     })
 ///     .await
 ///     .unwrap();
-/// // queryable runs in background until the session is closed
-/// tokio::spawn(async move {
-///     while let Ok(query) = rx.recv_async().await {
-///         println!(">> Handling query '{}'", query.selector());
-///         query.reply("key/expression", "value").await.unwrap();
-///     }
-/// });
+/// # format!("{queryable:?}");
+/// # session.get("key/expression").await.unwrap();
 /// # }
 /// ```
 ///
@@ -457,14 +605,11 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session
 ///     .declare_queryable("key/expression")
-///     .with(flume::bounded(32))
 ///     .await
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply("key/expression", "value")
-///         .await
-///         .unwrap();
+///     query.reply("key/expression", "value").await.unwrap();
 /// }
 /// // queryable is undeclared at the end of the scope
 /// # }
@@ -485,9 +630,7 @@ impl<Handler> Queryable<Handler> {
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression")
-    ///     .await
-    ///     .unwrap();
+    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
     /// let queryable_id = queryable.id();
     /// # }
     /// ```
@@ -503,6 +646,17 @@ impl<Handler> Queryable<Handler> {
     /// Returns a reference to this queryable's handler.
     /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
     /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// let handler = queryable.handler();
+    /// # }
+    /// ```
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
@@ -510,6 +664,17 @@ impl<Handler> Queryable<Handler> {
     /// Returns a mutable reference to this queryable's handler.
     /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
     /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let mut queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// let handler = queryable.handler_mut();
+    /// # }
+    /// ```
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
@@ -522,9 +687,7 @@ impl<Handler> Queryable<Handler> {
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression")
-    ///     .await
-    ///     .unwrap();
+    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
     /// queryable.undeclare().await.unwrap();
     /// # }
     /// ```
@@ -542,12 +705,37 @@ impl<Handler> Queryable<Handler> {
         self.inner.session.close_queryable(self.inner.id)
     }
 
+    /// Make queryable run in background until the session is closed.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let mut queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// queryable.set_background(true);
+    /// # }
+    /// ```
     #[zenoh_macros::internal]
     pub fn set_background(&mut self, background: bool) {
         self.inner.undeclare_on_drop = !background;
     }
 
     /// Returns the [`KeyExpr`] this queryable responds to.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let key_expr = queryable.key_expr();
+    /// # }
+    /// ```
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
