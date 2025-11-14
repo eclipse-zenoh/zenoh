@@ -21,6 +21,8 @@ use std::{
 use tracing::error;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::CancellationTokenBuilderTrait;
 use crate::{
     api::{
         handlers::{locked, DefaultHandler, IntoHandler},
@@ -210,6 +212,8 @@ impl<'a> Liveliness<'a> {
             key_expr,
             timeout,
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            cancellation_token: None,
         }
     }
 }
@@ -656,6 +660,8 @@ pub struct LivelinessGetBuilder<'a, 'b, Handler> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
 impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
@@ -741,12 +747,16 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
             key_expr,
             timeout,
             handler: _,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         } = self;
         LivelinessGetBuilder {
             session,
             key_expr,
             timeout,
             handler,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         }
     }
 }
@@ -757,6 +767,46 @@ impl<Handler> LivelinessGetBuilder<'_, '_, Handler> {
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for LivelinessGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let replies = session
+    ///     .liveliness()
+    ///     .get("key/expression")
+    ///     .with(flume::bounded(32))
+    ///     .cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     println!("Received {:?}", reply.result());
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
+            ..self
+        }
     }
 }
 
@@ -774,11 +824,41 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_handler();
+        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
+        let (mut callback, receiver) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        if self
+            .cancellation_token
+            .as_ref()
+            .map(|ct| ct.is_cancelled())
+            .unwrap_or(false)
+        {
+            return Ok(receiver);
+        };
+        #[cfg(feature = "unstable")]
+        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
+            let (notifier, receiver) =
+                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
+            callback.set_on_drop_notifier(notifier);
+            (ct, receiver)
+        });
+        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.session
             .0
             .liveliness_query(&self.key_expr?, self.timeout, callback)
-            .map(|_| receiver)
+            .map(|qid| {
+                #[cfg(feature = "unstable")]
+                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
+                {
+                    let session_clone = self.session.clone();
+                    let on_cancel = move || {
+                        let _ = session_clone.0.cancel_liveliness_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        Ok(())
+                    };
+                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
+                }
+                receiver
+            })
     }
 }
 

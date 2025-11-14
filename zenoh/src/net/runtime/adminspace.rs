@@ -197,7 +197,7 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/queriers/**")
+            format!("@/{zid_str}/{whatami_str}/querier/**")
                 .try_into()
                 .unwrap(),
             Arc::new(queriers_data),

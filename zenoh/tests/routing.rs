@@ -475,11 +475,11 @@ async fn gossip() -> Result<()> {
         mode: WhatAmI::Peer,
         con_task: ConcurrentTask::from([
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Pub(ke.clone(), msg_size),
             ]),
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Queryable(ke.clone(), msg_size),
             ]),
         ]),
@@ -492,12 +492,12 @@ async fn gossip() -> Result<()> {
         connect: vec![locator.clone()],
         con_task: ConcurrentTask::from([
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Sub(ke.clone(), msg_size),
                 Task::Checkpoint,
             ]),
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Get(ke, msg_size),
                 Task::Checkpoint,
             ]),
@@ -514,7 +514,7 @@ async fn gossip() -> Result<()> {
             mode: WhatAmI::Peer,
             listen: vec![locator.clone()],
             con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
-                Duration::from_millis(1000),
+                Duration::from_millis(3000),
             )])]),
             ..Default::default()
         };
