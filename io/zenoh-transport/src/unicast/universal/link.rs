@@ -20,7 +20,7 @@ use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 #[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
+use {crate::common::stats::LinkStats, std::sync::Arc};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -45,7 +45,7 @@ pub(super) struct TransportLinkUnicastUniversal {
     tracker: TaskTracker,
     token: CancellationToken,
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: Arc<LinkStats>,
 }
 
 impl TransportLinkUnicastUniversal {
@@ -81,7 +81,7 @@ impl TransportLinkUnicastUniversal {
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
             #[cfg(feature = "stats")]
-            stats: TransportStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
+            stats: LinkStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
         };
 
         (result, consumer)
@@ -188,7 +188,7 @@ async fn tx_task(
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: Arc<LinkStats>,
 ) -> ZResult<()> {
     loop {
         tokio::select! {
@@ -254,7 +254,7 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: Arc<LinkStats>,
 ) -> ZResult<()> {
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,

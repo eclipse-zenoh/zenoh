@@ -40,7 +40,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
+use zenoh_transport::stats::{LinkStats, TransportStats};
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
 use super::{routing::dispatcher::face::Face, Runtime};
@@ -580,7 +580,17 @@ fn local_data(context: &AdminContext, query: Query) {
         .iter()
         .any(|(k, v)| k == "_stats" && v != "false");
     #[cfg(feature = "stats")]
-    let insert_stats = |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
+    let insert_transportstats =
+        |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
+            if export_stats {
+                json.as_object_mut()
+                    .unwrap()
+                    .insert("stats".into(), json!(stats.map(|s| s.report())));
+            }
+            json
+        };
+    #[cfg(feature = "stats")]
+    let insert_linkstats = |mut json: serde_json::Value, stats: Option<&Arc<LinkStats>>| {
         if export_stats {
             json.as_object_mut()
                 .unwrap()
@@ -629,7 +639,7 @@ fn local_data(context: &AdminContext, query: Query) {
             .get_link_stats()
             .unwrap_or_default()
             .iter()
-            .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats)))
+            .map(|(link, stats)| insert_linkstats(link_to_json(link), Some(stats)))
             .collect_vec();
         #[cfg(feature = "shared-memory")]
         let shm = transport.is_shm().unwrap_or_default();
@@ -643,7 +653,7 @@ fn local_data(context: &AdminContext, query: Query) {
             "shm": shm,
         });
         #[cfg(feature = "stats")]
-        let json = insert_stats(json, transport.get_stats().ok().as_ref());
+        let json = insert_transportstats(json, transport.get_stats().ok().as_ref());
         json
     };
     let transport_multicast_peer_to_json =
@@ -667,7 +677,7 @@ fn local_data(context: &AdminContext, query: Query) {
                 "links": links,
             });
             #[cfg(feature = "stats")]
-            let json = insert_stats(json, transport.get_stats().ok().as_ref());
+            let json = insert_transportstats(json, transport.get_stats().ok().as_ref());
             json
         };
     let mut transports: Vec<serde_json::Value> = vec![];
@@ -695,7 +705,7 @@ fn local_data(context: &AdminContext, query: Query) {
         "plugins": plugins,
     });
     #[cfg(feature = "stats")]
-    let json = insert_stats(json, Some(&transport_mgr.get_stats()));
+    let json = insert_transportstats(json, Some(&transport_mgr.get_stats()));
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
     let payload = match serde_json::to_vec(&json) {
