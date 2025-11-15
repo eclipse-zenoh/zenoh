@@ -1,0 +1,29 @@
+name: Check deps for Eclipse IPDDP compliance
+
+on:
+  push:
+    branches:
+      - main
+    paths: [Cargo.toml, Cargo.lock]
+
+jobs:
+  generate-deps:
+    name: Generate ClearyDefined list of dependencies ids.
+    runs-on: ubuntu-latest
+    outputs:
+      dependencies: ${{ steps.generate-deps.outputs.dependencies }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Generate dependencies
+        id: generate-deps
+        run: |
+          cargo tree -e normal --prefix none --no-dedupe | sort -u | grep -v '^[[:space:]]*$' | grep -v zenoh | sed -E 's|([^ ]+) v([^ ]+).*|crate/cratesio/-/\1/\2|' > dependencies.txt
+          echo "dependencies=$(cat dependencies.txt)" >> $GITHUB_OUTPUT
+
+  check-ipddp-compliance:
+    name: Check Eclipse IPDDP compliance
+    needs: generate-deps
+    uses: eclipse-zenoh/ci/.github/workflows/eclipse-ipddp.yml@main
+    with:
+      dependencies: ${{ needs.generate-deps.outputs.dependencies }}
