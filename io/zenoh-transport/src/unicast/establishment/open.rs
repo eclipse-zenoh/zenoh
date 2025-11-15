@@ -22,8 +22,8 @@ use zenoh_link::{EndPoint, LinkUnicast};
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
-        batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
-        TransportSn,
+        batch_size, close, open::ext::South, BatchSize, Close, InitSyn, OpenSyn, TransportBody,
+        TransportMessage, TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -44,7 +44,7 @@ use crate::{
         },
         TransportConfigUnicast, TransportUnicast,
     },
-    TransportManager,
+    Bound, BoundCallback, TransportManager, TransportPeer,
 };
 
 type OpenError = (zenoh_result::Error, Option<u8>);
@@ -96,6 +96,7 @@ struct SendOpenSynIn {
     mine_zid: ZenohIdProto,
     mine_lease: Duration,
     other_zid: ZenohIdProto,
+    other_whatami: WhatAmI,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
@@ -109,6 +110,7 @@ struct SendOpenSynOut {
 
 // OpenAck
 struct RecvOpenAckOut {
+    other_bound: Bound,
     other_lease: Duration,
     other_initial_sn: TransportSn,
 }
@@ -126,6 +128,7 @@ struct OpenLink<'a> {
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
     ext_patch: ext::patch::PatchFsm<'a>,
+    ext_south: Option<BoundCallback>,
 }
 
 #[async_trait]
@@ -435,6 +438,22 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             None
         );
 
+        let ext_south = self.ext_south.as_ref().and_then(|f| {
+            let p = TransportPeer {
+                zid: input.other_zid,
+                whatami: input.other_whatami,
+                links: vec![zenoh_link_commons::Link::new_unicast(
+                    &link.link,
+                    link.config.priorities.clone(),
+                    link.config.reliability,
+                )],
+                is_qos: ext_qos.is_some(),
+                #[cfg(feature = "shared-memory")]
+                is_shm: ext_shm.is_some(),
+            };
+            (f(p) == Bound::South).then_some(South {})
+        });
+
         // Build and send an OpenSyn message
         let mine_initial_sn =
             compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
@@ -449,6 +468,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         }
         .into();
 
@@ -549,6 +569,11 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         let output = RecvOpenAckOut {
+            other_bound: if open_ack.ext_south.is_none() {
+                Bound::North
+            } else {
+                Bound::South
+            },
             other_initial_sn: open_ack.initial_sn,
             other_lease: open_ack.lease,
         };
@@ -591,6 +616,7 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
         ext_patch: ext::patch::PatchFsm::new(),
+        ext_south: manager.config.bound_callback.clone(),
     };
 
     // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
@@ -662,6 +688,7 @@ pub(crate) async fn open_link(
     let osyn_in = SendOpenSynIn {
         mine_zid: manager.config.zid,
         other_zid: iack_out.other_zid,
+        other_whatami: iack_out.other_whatami,
         mine_lease: manager.config.unicast.lease,
         other_cookie: iack_out.other_cookie,
         #[cfg(feature = "shared-memory")]
@@ -675,6 +702,7 @@ pub(crate) async fn open_link(
     let config = TransportConfigUnicast {
         zid: iack_out.other_zid,
         whatami: iack_out.other_whatami,
+        bound: oack_out.other_bound,
         sn_resolution: state.transport.resolution.get(Field::FrameSN),
         tx_initial_sn: osyn_out.mine_initial_sn,
         is_qos: state.transport.ext_qos.is_qos(),
