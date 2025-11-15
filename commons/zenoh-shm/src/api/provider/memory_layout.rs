@@ -24,6 +24,18 @@ pub struct MemoryLayout {
     alignment: AllocAlignment,
 }
 
+impl From<&MemoryLayout> for core::alloc::Layout {
+    fn from(value: &MemoryLayout) -> Self {
+        // SAFERY: this is safe because `MemoryLayout`'s size and alignment are already checked
+        unsafe {
+            core::alloc::Layout::from_size_align_unchecked(
+                value.size().get(),
+                value.alignment().get_alignment_value().get(),
+            )
+        }
+    }
+}
+
 impl From<&MemoryLayout> for MemoryLayout {
     fn from(other: &MemoryLayout) -> Self {
         *other
