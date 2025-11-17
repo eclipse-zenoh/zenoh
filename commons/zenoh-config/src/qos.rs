@@ -132,7 +132,7 @@ impl<'a> serde::Deserialize<'a> for PriorityUpdateConf {
     {
         struct PriorityOrIncrement<U>(std::marker::PhantomData<fn() -> U>);
 
-        impl<'de> serde::de::Visitor<'de> for PriorityOrIncrement<PriorityUpdateConf> {
+        impl serde::de::Visitor<'_> for PriorityOrIncrement<PriorityUpdateConf> {
             type Value = PriorityUpdateConf;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

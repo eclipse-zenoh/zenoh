@@ -250,7 +250,7 @@ impl<'a> serde::Deserialize<'a> for ConfRange {
     {
         struct V;
 
-        impl<'de> serde::de::Visitor<'de> for V {
+        impl serde::de::Visitor<'_> for V {
             type Value = ConfRange;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
