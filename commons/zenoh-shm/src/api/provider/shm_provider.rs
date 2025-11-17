@@ -532,14 +532,14 @@ where
     }
 }
 
-impl<'a, Backend, Layout: AllocLayout, Policy> Resolvable
-    for AllocBuilder<'a, Backend, Layout, Policy>
+impl<Backend, Layout: AllocLayout, Policy> Resolvable
+    for AllocBuilder<'_, Backend, Layout, Policy>
 {
     type To = Result<Layout::Buffer, ZLayoutAllocError>;
 }
 
-impl<'a, Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait
-    for AllocBuilder<'a, Backend, Layout, Policy>
+impl<Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait
+    for AllocBuilder<'_, Backend, Layout, Policy>
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (layout, policy) = self.layout_policy()?;
@@ -762,7 +762,7 @@ where
 {
     /// Allocates a buffer with a given memory layout.
     #[zenoh_macros::unstable_doc]
-    pub fn alloc<'a, Layout>(&'a self, layout: Layout) -> AllocBuilder<'a, Backend, Layout> {
+    pub fn alloc<Layout>(&self, layout: Layout) -> AllocBuilder<'_, Backend, Layout> {
         AllocBuilder {
             provider: self,
             layout,
@@ -772,10 +772,10 @@ where
 
     /// Precompute the actual layout for an allocation.
     #[zenoh_macros::unstable_doc]
-    pub fn alloc_layout<'a, Layout: TryInto<MemoryLayout>>(
-        &'a self,
+    pub fn alloc_layout<Layout: TryInto<MemoryLayout>>(
+        &self,
         layout: Layout,
-    ) -> Result<PrecomputedLayout<'a, Backend, Layout>, ZLayoutError>
+    ) -> Result<PrecomputedLayout<'_, Backend, Layout>, ZLayoutError>
     where
         Layout::Error: Into<ZLayoutError>,
     {
