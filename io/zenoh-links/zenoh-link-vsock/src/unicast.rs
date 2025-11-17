@@ -254,7 +254,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastVsock {
             let local_addr = stream.local_addr()?;
             let peer_addr = stream.peer_addr()?;
             let link = Arc::new(LinkUnicastVsock::new(stream, local_addr, peer_addr));
-            return Ok(LinkUnicast(link));
+            return Ok(LinkUnicast::new(link));
         }
 
         bail!("Can not create a new vsock link bound to {}", endpoint)
@@ -358,7 +358,7 @@ async fn accept_task(
                         let link = Arc::new(LinkUnicastVsock::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::new(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },

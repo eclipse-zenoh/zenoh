@@ -404,7 +404,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                         }),
                     ));
 
-                    return Ok(LinkUnicast(link));
+                    return Ok(LinkUnicast::new(link));
                 }
                 Err(e) => {
                     errs.push(e);
@@ -593,7 +593,7 @@ async fn accept_read_task(
                                         LinkUnicastUdpVariant::Unconnected(unconnected),
                                     ));
                                     // Add the new link to the set of connected peers
-                                    if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                                    if let Err(e) = manager.send_async(LinkUnicast::new(link)).await {
                                         tracing::error!("{}-{}: {}", file!(), line!(), e)
                                     }
                                 }

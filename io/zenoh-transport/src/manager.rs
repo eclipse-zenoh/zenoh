@@ -325,7 +325,11 @@ impl TransportManagerBuilder {
         Ok(self)
     }
 
-    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
+    pub fn build(
+        self,
+        handler: Arc<dyn TransportEventHandler>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
+    ) -> ZResult<TransportManager> {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
 
@@ -379,7 +383,12 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params, prng))
+        Ok(TransportManager::new(
+            params,
+            prng,
+            #[cfg(feature = "stats")]
+            stats,
+        ))
     }
 }
 
@@ -429,12 +438,16 @@ pub struct TransportManager {
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     #[cfg(feature = "stats")]
-    pub(crate) stats: Arc<crate::stats::TransportStats>,
+    pub(crate) stats: zenoh_stats::StatsRegistry,
     pub(crate) task_controller: TaskController,
 }
 
 impl TransportManager {
-    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+    pub fn new(
+        params: TransportManagerParams,
+        mut prng: PseudoRng,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
+    ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
@@ -451,7 +464,7 @@ impl TransportManager {
             locator_inspector: Default::default(),
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
-            stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            stats,
             task_controller: TaskController::default(),
         };
 
@@ -486,8 +499,8 @@ impl TransportManager {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
-        self.stats.clone()
+    pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
+        &self.stats
     }
 
     #[cfg(feature = "shared-memory")]

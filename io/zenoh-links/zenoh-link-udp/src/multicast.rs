@@ -413,7 +413,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
                         ucast_addr, ucast_sock, mcast_addr, mcast_sock,
                     ));
 
-                    return Ok(LinkMulticast(link));
+                    return Ok(LinkMulticast::new(link));
                 }
                 Err(e) => {
                     errs.push(e);

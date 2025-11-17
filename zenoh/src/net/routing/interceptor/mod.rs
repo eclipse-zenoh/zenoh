@@ -288,6 +288,14 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
     }
 }
 
+#[cfg(feature = "stats")]
+fn stats_direction(flow: InterceptorFlow) -> zenoh_stats::StatsDirection {
+    match flow {
+        InterceptorFlow::Egress => zenoh_stats::Tx,
+        InterceptorFlow::Ingress => zenoh_stats::Rx,
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::{

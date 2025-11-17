@@ -29,8 +29,9 @@ pub mod tcp;
 pub mod tls;
 mod unicast;
 
-use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 use core::{cmp::PartialEq, fmt, hash::Hash};
+use std::sync::atomic::AtomicU64;
 
 use async_trait::async_trait;
 pub use dscp::*;
@@ -54,8 +55,16 @@ pub const TCP_SO_SND_BUF: &str = "so_sndbuf";
 pub const TCP_SO_RCV_BUF: &str = "so_rcvbuf";
 pub const DSCP: &str = "dscp";
 
+pub type LinkId = u64;
+
+fn new_link_id() -> u64 {
+    static ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+    ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
+    pub id: LinkId,
     pub src: Locator,
     pub dst: Locator,
     pub group: Option<Locator>,
@@ -91,6 +100,7 @@ impl Link {
         reliability: Option<Reliability>,
     ) -> Self {
         Link {
+            id: link.id(),
             src: Self::to_patched_locator(link.get_src(), priorities.as_ref(), reliability),
             dst: Self::to_patched_locator(link.get_dst(), priorities.as_ref(), reliability),
             group: None,
@@ -105,6 +115,7 @@ impl Link {
 
     pub fn new_multicast(link: &LinkMulticast) -> Self {
         Link {
+            id: link.id(),
             src: link.get_src().to_owned(),
             dst: link.get_dst().to_owned(),
             group: Some(link.get_dst().to_owned()),

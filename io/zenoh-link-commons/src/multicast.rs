@@ -27,7 +27,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::{zerror, ZResult};
 
-use crate::LinkAuthId;
+use crate::{new_link_id, LinkAuthId, LinkId};
 
 /*************************************/
 /*             MANAGER               */
@@ -43,7 +43,22 @@ pub type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;
 /*              LINK                 */
 /*************************************/
 #[derive(Clone)]
-pub struct LinkMulticast(pub Arc<dyn LinkMulticastTrait>);
+pub struct LinkMulticast {
+    id: LinkId,
+    inner: Arc<dyn LinkMulticastTrait>,
+}
+
+impl LinkMulticast {
+    pub fn new(link: Arc<dyn LinkMulticastTrait>) -> Self {
+        Self {
+            id: new_link_id(),
+            inner: link,
+        }
+    }
+    pub fn id(&self) -> LinkId {
+        self.id
+    }
+}
 
 #[async_trait]
 pub trait LinkMulticastTrait: Send + Sync {
@@ -71,7 +86,7 @@ impl LinkMulticast {
             .map_err(|_| zerror!("Encoding error on link: {}", self))?;
 
         // Send the message on the link
-        self.0.write_all(buff.as_slice()).await?;
+        self.write_all(buff.as_slice()).await?;
 
         Ok(buff.len())
     }
@@ -97,7 +112,7 @@ impl Deref for LinkMulticast {
     type Target = Arc<dyn LinkMulticastTrait>;
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
@@ -130,11 +145,5 @@ impl fmt::Debug for LinkMulticast {
             .field("mtu", &self.get_mtu())
             .field("is_reliable", &self.is_reliable())
             .finish()
-    }
-}
-
-impl From<Arc<dyn LinkMulticastTrait>> for LinkMulticast {
-    fn from(link: Arc<dyn LinkMulticastTrait>) -> LinkMulticast {
-        LinkMulticast(link)
     }
 }

@@ -211,23 +211,23 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     }
 }
 
-pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &ShmReader) -> ZResult<()> {
-    match &mut msg.body {
-        NetworkBody::Push(Push { payload, .. }) => match payload {
+pub fn map_zmsg_to_shmbuf(msg: NetworkMessageMut, shmr: &ShmReader) -> ZResult<()> {
+    match msg.body {
+        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_shmbuf(shmr),
             PushBody::Del(_) => Ok(()),
         },
-        NetworkBody::Request(Request { payload, .. }) => match payload {
+        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shmbuf(shmr),
         },
-        NetworkBody::Response(Response { payload, .. }) => match payload {
+        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
         },
-        NetworkBody::ResponseFinal(_)
-        | NetworkBody::Interest(_)
-        | NetworkBody::Declare(_)
-        | NetworkBody::OAM(_) => Ok(()),
+        NetworkBodyMut::ResponseFinal(_)
+        | NetworkBodyMut::Interest(_)
+        | NetworkBodyMut::Declare(_)
+        | NetworkBodyMut::OAM(_) => Ok(()),
     }
 }
 

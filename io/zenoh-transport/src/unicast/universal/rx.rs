@@ -19,14 +19,12 @@ use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
     transport::{Close, Fragment, KeepAlive, TransportBody, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::transport::TransportUnicastUniversal;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     common::{
         batch::{Decode, RBatch},
@@ -44,32 +42,20 @@ impl TransportUnicastUniversal {
         &self,
         callback: &dyn TransportPeerEventHandler,
         #[allow(unused_mut)] // shared-memory feature requires mut
-        mut msg: NetworkMessage,
+        mut msg: NetworkMessageMut,
     ) -> ZResult<()> {
-        #[cfg(feature = "stats")]
-        {
-            #[cfg(feature = "shared-memory")]
-            {
-                use zenoh_protocol::network::NetworkMessageExt;
-                if msg.is_shm() {
-                    self.stats.rx_n_msgs.inc_shm(1);
-                } else {
-                    self.stats.rx_n_msgs.inc_net(1);
-                }
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            self.stats.rx_n_msgs.inc_net(1);
-        }
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
-                if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &shm_context.shm_reader) {
+                if let Err(e) =
+                    crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
+                {
                     tracing::debug!("Error receiving SHM buffer: {e}");
                     return Ok(());
                 }
             }
         }
-        callback.handle_message(msg.as_mut())
+        callback.handle_message(msg)
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
@@ -89,7 +75,11 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_frame(&self, frame: FrameReader<ZSlice>) -> ZResult<()> {
+    fn handle_frame(
+        &self,
+        frame: FrameReader<ZSlice>,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+    ) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
         let c = if self.is_qos() {
             &self.priority_rx[priority as usize]
@@ -114,8 +104,13 @@ impl TransportUnicastUniversal {
         }
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
-            for msg in frame {
-                self.trigger_callback(callback.as_ref(), msg)?;
+            for mut msg in frame {
+                #[cfg(not(feature = "stats"))]
+                self.trigger_callback(callback.as_ref(), msg.as_mut())?;
+                #[cfg(feature = "stats")]
+                stats.rx_observe_network_message(msg.as_mut(), |msg| {
+                    self.trigger_callback(callback.as_ref(), msg)
+                })?;
             }
         } else {
             tracing::debug!(
@@ -127,7 +122,11 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_fragment(&self, fragment: Fragment) -> ZResult<()> {
+    fn handle_fragment(
+        &self,
+        fragment: Fragment,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+    ) -> ZResult<()> {
         let Fragment {
             reliability,
             more,
@@ -184,10 +183,15 @@ impl TransportUnicastUniversal {
         }
         if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
-            if let Some(msg) = guard.defrag.defragment() {
+            if let Some(mut msg) = guard.defrag.defragment() {
                 let callback = zread!(self.callback).clone();
                 if let Some(callback) = callback.as_ref() {
-                    return self.trigger_callback(callback.as_ref(), msg);
+                    #[cfg(not(feature = "stats"))]
+                    return self.trigger_callback(callback.as_ref(), msg.as_mut());
+                    #[cfg(feature = "stats")]
+                    return stats.rx_observe_network_message(msg.as_mut(), |msg| {
+                        self.trigger_callback(callback.as_ref(), msg)
+                    });
                 } else {
                     tracing::debug!(
                         "Transport: {}. No callback available, dropping messages: {:?}",
@@ -228,16 +232,20 @@ impl TransportUnicastUniversal {
         &self,
         mut batch: RBatch,
         link: &Link,
-        #[cfg(feature = "stats")] stats: &TransportStats,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         while !batch.is_empty() {
             if let Ok(frame) = batch.decode() {
                 tracing::trace!("Received: {:?}", frame);
                 #[cfg(feature = "stats")]
                 {
-                    stats.inc_rx_t_msgs(1);
+                    stats.inc_transport_message(zenoh_stats::Rx, 1);
                 }
-                self.handle_frame(frame)?;
+                self.handle_frame(
+                    frame,
+                    #[cfg(feature = "stats")]
+                    stats,
+                )?;
                 continue;
             }
             let msg: TransportMessage = batch
@@ -248,12 +256,16 @@ impl TransportUnicastUniversal {
 
             #[cfg(feature = "stats")]
             {
-                stats.inc_rx_t_msgs(1);
+                stats.inc_transport_message(zenoh_stats::Rx, 1);
             }
 
             match msg.body {
                 TransportBody::Frame(_) => unreachable!(),
-                TransportBody::Fragment(fragment) => self.handle_fragment(fragment)?,
+                TransportBody::Fragment(fragment) => self.handle_fragment(
+                    fragment,
+                    #[cfg(feature = "stats")]
+                    stats,
+                )?,
                 TransportBody::Close(Close { reason, session }) => {
                     self.handle_close(link, reason, session)?
                 }

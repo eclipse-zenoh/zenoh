@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "stats")]
+use std::sync::OnceLock;
 use std::{sync::Arc, time::Duration};
 
 use tokio::sync::RwLock;
@@ -26,14 +28,12 @@ use zenoh_result::{zerror, ZResult};
 use zenoh_runtime::ZRuntime;
 
 use super::transport::TransportUnicastLowlatency;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx};
 
 pub(crate) async fn send_with_link(
     link: &LinkUnicast,
     msg: TransportMessageLowLatencyRef<'_>,
-    #[cfg(feature = "stats")] stats: &Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     let len;
     let codec = Zenoh080::new();
@@ -67,8 +67,8 @@ pub(crate) async fn send_with_link(
 
     #[cfg(feature = "stats")]
     {
-        stats.inc_tx_t_msgs(1);
-        stats.inc_tx_bytes(len as usize);
+        stats.inc_bytes(zenoh_stats::Tx, len as u64);
+        stats.inc_transport_message(zenoh_stats::Tx, 1);
     }
     Ok(())
 }
@@ -106,7 +106,7 @@ impl TransportUnicastLowlatency {
             link,
             msg,
             #[cfg(feature = "stats")]
-            &self.stats,
+            self.link_stats.get().unwrap(),
         )
         .await
     }
@@ -120,7 +120,7 @@ impl TransportUnicastLowlatency {
                 keep_alive,
                 token,
                 #[cfg(feature = "stats")]
-                c_transport.stats.clone(),
+                c_transport.link_stats.clone(),
             )
             .await;
             tracing::debug!(
@@ -153,6 +153,8 @@ impl TransportUnicastLowlatency {
             let guard = zasyncread!(c_transport.link);
             let link_rx = guard.as_ref().unwrap().rx();
             drop(guard);
+            #[cfg(feature = "stats")]
+            let stats = c_transport.link_stats.get().unwrap();
 
             let is_streamed = link_rx.link.is_streamed();
 
@@ -178,12 +180,12 @@ impl TransportUnicastLowlatency {
 
                         #[cfg(feature = "stats")] {
                             let header_bytes = if is_streamed { 2 } else { 0 };
-                            c_transport.stats.inc_rx_bytes(header_bytes + bytes); // Account for the batch len encoding (16 bits)
+                            stats.inc_bytes(zenoh_stats::Tx, header_bytes + bytes as u64)
                         }
 
                         // Deserialize all the messages from the current ZBuf
                         let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
-                        c_transport.read_messages(zslice, &link_rx.link).await?;
+                        c_transport.read_messages(zslice, &link_rx.link, #[cfg(feature = "stats")] stats).await?;
                     }
 
                     _ = token.cancelled() => {
@@ -227,7 +229,7 @@ async fn keepalive_task(
     link: Arc<RwLock<Option<TransportLinkUnicast>>>,
     keep_alive: Duration,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: Arc<OnceLock<zenoh_stats::LinkStats>>,
 ) -> ZResult<()> {
     let mut interval =
         tokio::time::interval_at(tokio::time::Instant::now() + keep_alive, keep_alive);
@@ -245,7 +247,7 @@ async fn keepalive_task(
                     link,
                     keepailve,
                     #[cfg(feature = "stats")]
-                    &stats,
+                    stats.get().unwrap(),
                 )
                 .await;
                 drop(guard);
