@@ -718,9 +718,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.10.1"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
+checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
 
 [[package]]
 name = "bzip2-sys"
@@ -3688,7 +3688,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.103.8",
+ "rustls-webpki",
  "subtle",
  "zeroize",
 ]
@@ -3738,7 +3738,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
- "rustls-webpki 0.103.8",
+ "rustls-webpki",
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
@@ -3750,17 +3750,6 @@ name = "rustls-platform-verifier-android"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
-
-[[package]]
-name = "rustls-webpki"
-version = "0.102.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
-dependencies = [
- "ring",
- "rustls-pki-types",
- "untrusted",
-]
 
 [[package]]
 name = "rustls-webpki"
@@ -3805,19 +3794,6 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "0.8.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fbf2ae1b8bc8e02df939598064d22402220cd5bbcca1c76f7d6a310974d5615"
-dependencies = [
- "dyn-clone",
- "either",
- "schemars_derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "schemars"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
@@ -3835,16 +3811,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9558e172d4e8533736ba97870c4b2cd63f84b382a3d6eb063da41b91cce17289"
 dependencies = [
  "dyn-clone",
+ "either",
  "ref-cast",
+ "schemars_derive",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "schemars_derive"
-version = "0.8.22"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32e265784ad618884abaea0600a9adf15393368d840e0222d101a072f3f7534d"
+checksum = "301858a4023d78debd2353c7426dc486001bddc91ae31a76fb1f55132f7e2633"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5407,15 +5385,6 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
-dependencies = [
- "webpki-roots 1.0.4",
-]
-
-[[package]]
-name = "webpki-roots"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2878ef029c47c6e8cf779119f20fcf52bde7ad42a731b2a304bc221df17571e"
@@ -6153,12 +6122,12 @@ version = "1.6.2"
 dependencies = [
  "ahash",
  "criterion",
- "getrandom 0.2.16",
+ "getrandom 0.3.4",
  "hashbrown 0.16.0",
  "keyed-set",
  "lazy_static",
  "rand 0.8.5",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "test-case",
  "token-cell",
@@ -6197,7 +6166,7 @@ dependencies = [
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "secrecy",
  "serde",
  "socket2 0.5.10",
@@ -6205,7 +6174,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "webpki-roots 0.26.11",
+ "webpki-roots",
  "x509-parser",
  "zenoh-buffers",
  "zenoh-codec",
@@ -6226,13 +6195,13 @@ dependencies = [
  "quinn",
  "rustls",
  "rustls-pemfile",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "secrecy",
  "time 0.3.41",
  "tokio",
  "tokio-util",
  "tracing",
- "webpki-roots 0.26.11",
+ "webpki-roots",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -6248,7 +6217,7 @@ dependencies = [
  "async-trait",
  "quinn",
  "rustls",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "time 0.3.41",
  "tokio",
  "tokio-util",
@@ -6302,7 +6271,7 @@ dependencies = [
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
- "rustls-webpki 0.102.8",
+ "rustls-webpki",
  "secrecy",
  "socket2 0.5.10",
  "time 0.3.41",
@@ -6311,7 +6280,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
- "webpki-roots 0.26.11",
+ "webpki-roots",
  "x509-parser",
  "zenoh-config",
  "zenoh-core",
@@ -6434,9 +6403,11 @@ dependencies = [
  "home",
  "icu_normalizer",
  "indexmap 2.11.4",
+ "libloading",
  "librocksdb-sys",
  "litemap",
  "lz4_flex",
+ "nonempty-collections",
  "pest",
  "pest_derive",
  "pest_generator",
@@ -6447,6 +6418,7 @@ dependencies = [
  "serde_with",
  "serde_with_macros",
  "static_init",
+ "thread-priority",
  "time 0.3.41",
  "tinystr 0.8.0",
  "toml",
@@ -6487,7 +6459,7 @@ dependencies = [
  "jsonschema",
  "lazy_static",
  "rustc_version 0.4.1",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "tide",
@@ -6511,7 +6483,7 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "rustc_version 0.4.1",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "tokio",
@@ -6680,7 +6652,7 @@ dependencies = [
  "libc",
  "libloading",
  "pnet_datalink",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "shellexpand",
@@ -6700,7 +6672,7 @@ dependencies = [
  "const_format",
  "derive_more",
  "either",
- "schemars 0.8.22",
+ "schemars 1.1.0",
  "serde_json",
  "zenoh",
  "zenoh-plugin-trait",

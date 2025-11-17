@@ -26,7 +26,6 @@ version = { workspace = true }
 [features]
 default = ["std"]
 internal = []
-js = ["getrandom/js"]
 std = ["dep:schemars", "zenoh-result/std"]
 unstable = []
 
