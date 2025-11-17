@@ -105,7 +105,7 @@ flume = "0.11.1"
 form_urlencoded = "1.2.2"
 futures = "0.3.31"
 futures-util = { version = "0.3.31", default-features = false } # Default features are disabled due to some crates' requirements
-getrandom = { version = "0.3.4" }
+getrandom = "0.2"
 git-version = "0.3.9"
 hashbrown = "0.16.0"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates

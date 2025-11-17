@@ -6122,7 +6122,7 @@ version = "1.6.2"
 dependencies = [
  "ahash",
  "criterion",
- "getrandom 0.3.4",
+ "getrandom 0.2.16",
  "hashbrown 0.16.0",
  "keyed-set",
  "lazy_static",
