@@ -915,10 +915,9 @@ pub mod scouting {
 /// ```
 pub mod liveliness {
     pub use crate::api::{
-        builders::liveliness::LivelinessTokenBuilder,
+        builders::liveliness::{LivelinessSubscriberBuilder, LivelinessTokenBuilder},
         liveliness::{
-            Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
-            LivelinessTokenUndeclaration,
+            Liveliness, LivelinessGetBuilder, LivelinessToken, LivelinessTokenUndeclaration,
         },
     };
 }
