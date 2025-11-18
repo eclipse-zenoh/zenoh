@@ -22,9 +22,7 @@ use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zerror, zlock, Wait};
 use zenoh_protocol::{
-    network::{
-        NetworkBody, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push, Request, Response,
-    },
+    network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
     zenoh::{
         err::Err,
         ext::ShmType,
