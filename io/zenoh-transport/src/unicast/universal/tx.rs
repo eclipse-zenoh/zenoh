@@ -171,7 +171,7 @@ impl TransportUnicastUniversal {
         }
         #[cfg(feature = "stats")]
         if pushed {
-            stats.tx_observe_network_message(msg);
+            stats.tx_observe_network_message_finalize(msg);
         } else {
             stats.tx_observe_congestion(msg);
         }

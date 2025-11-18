@@ -1,5 +1,6 @@
 use std::{
     array,
+    cell::Cell,
     sync::{Arc, OnceLock},
 };
 
@@ -20,31 +21,30 @@ use crate::{
 scoped_thread_local! {
     static RX_LINK: LinkStats
 }
-scoped_thread_local! {
-    static RX_MESSAGE: MessageInfo
+thread_local! {
+    pub(self) static RX_LINK_LEVEL_INFO: Cell<Option<LinkLevelInfo>> = const { Cell::new(None) };
 }
-scoped_thread_local! {
-    static TX_SPACE: SpaceLabel
-}
-
-pub fn tx_with_space<R>(is_admin: bool, f: impl FnOnce() -> R) -> R {
-    let space = if is_admin {
-        SpaceLabel::Admin
-    } else {
-        SpaceLabel::User
-    };
-    TX_SPACE.set(&space, f)
+thread_local! {
+    pub(self) static TX_ROUTER_LEVEL_INFO: Cell<Option<RouterLevelInfo>> = const { Cell::new(None) };
 }
 
-pub fn rx_set_space(is_admin: bool) {
-    let space = if is_admin {
-        SpaceLabel::Admin
-    } else {
-        SpaceLabel::User
-    };
-    if RX_LINK.is_set() {
-        RX_LINK.with(|link| {
-            RX_MESSAGE.with(|msg| link.observe_network_message_payload(Rx, msg, space))
+pub fn with_tx_observe_network_message<R>(
+    is_admin: bool,
+    payload_size: usize,
+    f: impl FnOnce() -> R,
+) -> R {
+    let r_info = RouterLevelInfo::new(is_admin, payload_size);
+    TX_ROUTER_LEVEL_INFO.set(Some(r_info));
+    let res = f();
+    TX_ROUTER_LEVEL_INFO.set(None);
+    res
+}
+
+pub fn rx_observe_network_message_finalize(is_admin: bool, payload_size: usize) {
+    if let Some(l_info) = RX_LINK_LEVEL_INFO.get() {
+        let r_info = RouterLevelInfo::new(is_admin, payload_size);
+        RX_LINK.with(|stats| {
+            stats.observe_network_message_payload(Rx, l_info, r_info);
         });
     }
 }
@@ -102,7 +102,7 @@ impl LinkStats {
         self.0.transport_message[direction as usize].inc_by(count);
     }
 
-    fn inc_network_message(&self, direction: StatsDirection, msg: &MessageInfo) {
+    fn inc_network_message(&self, direction: StatsDirection, msg: LinkLevelInfo) {
         self.0.network_message[Tx as usize][msg.priority as usize][msg.message as usize]
             [msg.shm as usize]
             .get_or_init(|| {
@@ -125,52 +125,48 @@ impl LinkStats {
     fn observe_network_message_payload(
         &self,
         direction: StatsDirection,
-        msg: &MessageInfo,
-        space: SpaceLabel,
+        l_info: LinkLevelInfo,
+        r_info: RouterLevelInfo,
     ) {
-        if let Some(payload_size) = msg.payload_size {
-            self.0.network_message_payload[Tx as usize][msg.priority as usize]
-                [msg.message as usize][msg.shm as usize][space as usize]
-                .get_or_init(|| {
-                    let remote = self.0.transport_stats.remote();
-                    let labels = NetworkMessagePayloadLabels {
-                        space,
-                        message: msg.message,
-                        priority: msg.priority.into(),
-                        shm: msg.shm,
-                        protocol: self.0.protocol.clone(),
-                    };
-                    self.0
-                        .transport_stats
-                        .registry()
-                        .network_message_payload(direction)
-                        .get_or_create_owned(remote, &labels, Some(self.0.link_id))
-                })
-                .observe(payload_size);
+        self.0.network_message_payload[Tx as usize][l_info.priority as usize]
+            [l_info.message as usize][l_info.shm as usize][r_info.space as usize]
+            .get_or_init(|| {
+                let remote = self.0.transport_stats.remote();
+                let labels = NetworkMessagePayloadLabels {
+                    space: r_info.space,
+                    message: l_info.message,
+                    priority: l_info.priority.into(),
+                    shm: l_info.shm,
+                    protocol: self.0.protocol.clone(),
+                };
+                self.0
+                    .transport_stats
+                    .registry()
+                    .network_message_payload(direction)
+                    .get_or_create_owned(remote, &labels, Some(self.0.link_id))
+            })
+            .observe(r_info.payload_size as u64);
+    }
+
+    pub fn tx_observe_network_message_finalize(&self, msg: impl NetworkMessageExt) {
+        let l_info = LinkLevelInfo::new(&msg);
+        self.inc_network_message(Tx, l_info);
+        if let Some(r_info) = TX_ROUTER_LEVEL_INFO.get() {
+            self.observe_network_message_payload(Tx, l_info, r_info);
         }
     }
 
-    pub fn tx_observe_network_message(&self, msg: impl NetworkMessageExt) {
-        let info = msg.into();
-        self.inc_network_message(Tx, &info);
-        if TX_SPACE.is_set() {
-            TX_SPACE.with(|space| self.observe_network_message_payload(Tx, &info, *space))
-        }
-    }
-
-    pub fn rx_observe_network_message<M: NetworkMessageExt, R>(
+    pub fn with_rx_observe_network_message<M: NetworkMessageExt, R>(
         &self,
         msg: M,
-        f: impl Fn(M) -> R,
+        f: impl FnOnce(M) -> R,
     ) -> R {
-        let info = msg.as_ref().into();
-        self.inc_network_message(Tx, &info);
-        if info.payload_size.is_some() {
-            RX_LINK.set(self, || RX_MESSAGE.set(&info, || f(msg)))
-        } else {
-            self.inc_network_message(Rx, &info);
-            f(msg)
-        }
+        let l_info = LinkLevelInfo::new(&msg);
+        self.inc_network_message(Tx, l_info);
+        RX_LINK_LEVEL_INFO.set(Some(l_info));
+        let res = RX_LINK.set(self, || f(msg));
+        RX_LINK_LEVEL_INFO.set(None);
+        res
     }
 
     pub fn tx_observe_congestion(&self, msg: impl NetworkMessageExt) {
@@ -206,24 +202,41 @@ impl Drop for LinkStatsInner {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct MessageInfo {
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LinkLevelInfo {
     priority: Priority,
     message: MessageLabel,
     shm: bool,
-    payload_size: Option<u64>,
 }
 
-impl<M: NetworkMessageExt> From<M> for MessageInfo {
-    fn from(value: M) -> Self {
+impl LinkLevelInfo {
+    fn new(msg: impl NetworkMessageExt) -> Self {
         Self {
-            priority: value.priority(),
-            message: value.body().into(),
+            priority: msg.priority(),
+            message: msg.body().into(),
             #[cfg(not(feature = "shared-memory"))]
             shm: false,
             #[cfg(feature = "shared-memory")]
-            shm: value.is_shm(),
-            payload_size: value.payload_size().map(|s| s as u64),
+            shm: msg.is_shm(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RouterLevelInfo {
+    space: SpaceLabel,
+    payload_size: usize,
+}
+
+impl RouterLevelInfo {
+    fn new(is_admin: bool, payload_size: usize) -> Self {
+        Self {
+            space: if is_admin {
+                SpaceLabel::Admin
+            } else {
+                SpaceLabel::User
+            },
+            payload_size,
         }
     }
 }

@@ -10,7 +10,7 @@ mod transport;
 
 pub use crate::{
     labels::{LocalityLabel, ReasonLabel, ResourceLabel},
-    link::{rx_set_space, tx_with_space, LinkStats},
+    link::{rx_observe_network_message_finalize, with_tx_observe_network_message, LinkStats},
     registry::StatsRegistry,
     transport::{DropStats, TransportStats},
     StatsDirection::*,

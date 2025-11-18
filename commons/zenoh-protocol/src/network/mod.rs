@@ -29,12 +29,10 @@ pub use oam::Oam;
 pub use push::Push;
 pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
-use zenoh_buffers::buffer::Buffer;
 
-use crate::{
-    core::{CongestionControl, Priority, Reliability, WireExpr},
-    zenoh::{PushBody, RequestBody, ResponseBody},
-};
+use crate::core::{CongestionControl, Priority, Reliability, WireExpr};
+#[cfg(feature = "shared-memory")]
+use crate::zenoh::{PushBody, RequestBody, ResponseBody};
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -232,27 +230,9 @@ pub trait NetworkMessageExt {
     #[inline]
     fn payload_size(&self) -> Option<usize> {
         match &self.body() {
-            NetworkBodyRef::Push(Push { payload, .. }) => Some(match payload {
-                PushBody::Put(p) => {
-                    p.payload.len() + p.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
-                }
-                PushBody::Del(d) => d.ext_attachment.as_ref().map_or(0, |a| a.buffer.len()),
-            }),
-            NetworkBodyRef::Request(Request { payload, .. }) => Some(match payload {
-                RequestBody::Query(q) => {
-                    q.ext_body.as_ref().map_or(0, |b| b.payload.len())
-                        + q.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
-                }
-            }),
-            NetworkBodyRef::Response(Response { payload, .. }) => Some(match payload {
-                ResponseBody::Reply(r) => match &r.payload {
-                    PushBody::Put(p) => {
-                        p.payload.len() + p.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
-                    }
-                    PushBody::Del(d) => d.ext_attachment.as_ref().map_or(0, |a| a.buffer.len()),
-                },
-                ResponseBody::Err(e) => e.payload.len(),
-            }),
+            NetworkBodyRef::Push(p) => Some(p.payload_size()),
+            NetworkBodyRef::Request(r) => Some(r.payload_size()),
+            NetworkBodyRef::Response(r) => Some(r.payload_size()),
             NetworkBodyRef::ResponseFinal(_)
             | NetworkBodyRef::Interest(_)
             | NetworkBodyRef::Declare(_)

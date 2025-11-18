@@ -269,7 +269,9 @@ pub fn route_data(
             #[cfg(feature = "stats")]
             let is_admin = expr.is_admin();
             #[cfg(feature = "stats")]
-            zenoh_stats::rx_set_space(is_admin);
+            let payload_size = msg.payload_size();
+            #[cfg(feature = "stats")]
+            zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size);
 
             if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
                 let route = get_data_route(
@@ -295,9 +297,11 @@ pub fn route_data(
                             #[cfg(not(feature = "stats"))]
                             outface.primitives.send_push(msg, reliability);
                             #[cfg(feature = "stats")]
-                            zenoh_stats::tx_with_space(is_admin, || {
-                                outface.primitives.send_push(msg, reliability)
-                            });
+                            zenoh_stats::with_tx_observe_network_message(
+                                is_admin,
+                                payload_size,
+                                || outface.primitives.send_push(msg, reliability),
+                            );
                             // Reset the wire_expr to indicate the message has been consumed
                             msg.wire_expr = WireExpr::empty();
                         }
@@ -324,9 +328,11 @@ pub fn route_data(
                             #[cfg(not(feature = "stats"))]
                             outface.primitives.send_push(msg, reliability);
                             #[cfg(feature = "stats")]
-                            zenoh_stats::tx_with_space(is_admin, || {
-                                outface.primitives.send_push(msg, reliability)
-                            });
+                            zenoh_stats::with_tx_observe_network_message(
+                                is_admin,
+                                payload_size,
+                                || outface.primitives.send_push(msg, reliability),
+                            );
                         }
                     }
                 }

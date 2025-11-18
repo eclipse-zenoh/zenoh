@@ -406,7 +406,9 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
             #[cfg(feature = "stats")]
             let is_admin = expr.is_admin();
             #[cfg(feature = "stats")]
-            zenoh_stats::rx_set_space(is_admin);
+            let payload_size = msg.payload_size();
+            #[cfg(feature = "stats")]
+            zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size);
 
             if tables_ref.hat_code.ingress_filter(&rtables, face, &expr) {
                 let route = get_query_route(
@@ -477,9 +479,11 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         #[cfg(not(feature = "stats"))]
                         outface.primitives.send_request(msg);
                         #[cfg(feature = "stats")]
-                        zenoh_stats::tx_with_space(is_admin, || {
-                            outface.primitives.send_request(msg)
-                        });
+                        zenoh_stats::with_tx_observe_network_message(
+                            is_admin,
+                            payload_size,
+                            || outface.primitives.send_request(msg),
+                        );
                     }
                 }
             } else {
@@ -523,7 +527,9 @@ pub(crate) fn route_send_response(
     #[cfg(feature = "stats")]
     let is_admin = msg.wire_expr.as_str().starts_with("@/");
     #[cfg(feature = "stats")]
-    zenoh_stats::rx_set_space(is_admin);
+    let payload_size = msg.payload_size();
+    #[cfg(feature = "stats")]
+    zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size);
 
     match face.pending_queries.get(&msg.rid) {
         Some((query, _)) => {
@@ -542,7 +548,9 @@ pub(crate) fn route_send_response(
             #[cfg(not(feature = "stats"))]
             query.src_face.primitives.send_response(msg);
             #[cfg(feature = "stats")]
-            zenoh_stats::tx_with_space(is_admin, || query.src_face.primitives.send_response(msg));
+            zenoh_stats::with_tx_observe_network_message(is_admin, payload_size, || {
+                query.src_face.primitives.send_response(msg)
+            });
         }
         None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
     }

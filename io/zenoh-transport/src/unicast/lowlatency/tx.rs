@@ -41,7 +41,7 @@ impl TransportUnicastLowlatency {
             self.link_stats
                 .get()
                 .unwrap()
-                .tx_observe_network_message(msg);
+                .tx_observe_network_message_finalize(msg);
         } else {
             self.link_stats.get().unwrap().tx_observe_congestion(msg);
         }

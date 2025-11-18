@@ -174,7 +174,9 @@ impl TransportMulticastInner {
             self.trigger_callback(msg.as_mut(), peer)?;
             #[cfg(feature = "stats")]
             peer.stats
-                .rx_observe_network_message(msg.as_mut(), |msg| self.trigger_callback(msg, peer))?;
+                .with_rx_observe_network_message(msg.as_mut(), |msg| {
+                    self.trigger_callback(msg, peer)
+                })?;
         }
 
         Ok(())
@@ -243,9 +245,11 @@ impl TransportMulticastInner {
                 #[cfg(not(feature = "stats"))]
                 return self.trigger_callback(msg.as_mut(), peer);
                 #[cfg(feature = "stats")]
-                return peer.stats.rx_observe_network_message(msg.as_mut(), |msg| {
-                    self.trigger_callback(msg, peer)
-                });
+                return peer
+                    .stats
+                    .with_rx_observe_network_message(msg.as_mut(), |msg| {
+                        self.trigger_callback(msg, peer)
+                    });
             } else {
                 tracing::trace!(
                     "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",

@@ -85,8 +85,9 @@ impl TransportUnicastLowlatency {
                     #[cfg(not(feature = "stats"))]
                     let _ = self.trigger_callback(msg.as_mut());
                     #[cfg(feature = "stats")]
-                    let _ = stats
-                        .rx_observe_network_message(msg.as_mut(), |msg| self.trigger_callback(msg));
+                    let _ = stats.with_rx_observe_network_message(msg.as_mut(), |msg| {
+                        self.trigger_callback(msg)
+                    });
                 }
             }
         }

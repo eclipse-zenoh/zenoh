@@ -108,7 +108,7 @@ impl TransportUnicastUniversal {
                 #[cfg(not(feature = "stats"))]
                 self.trigger_callback(callback.as_ref(), msg.as_mut())?;
                 #[cfg(feature = "stats")]
-                stats.rx_observe_network_message(msg.as_mut(), |msg| {
+                stats.with_rx_observe_network_message(msg.as_mut(), |msg| {
                     self.trigger_callback(callback.as_ref(), msg)
                 })?;
             }
@@ -189,7 +189,7 @@ impl TransportUnicastUniversal {
                     #[cfg(not(feature = "stats"))]
                     return self.trigger_callback(callback.as_ref(), msg.as_mut());
                     #[cfg(feature = "stats")]
-                    return stats.rx_observe_network_message(msg.as_mut(), |msg| {
+                    return stats.with_rx_observe_network_message(msg.as_mut(), |msg| {
                         self.trigger_callback(callback.as_ref(), msg)
                     });
                 } else {
