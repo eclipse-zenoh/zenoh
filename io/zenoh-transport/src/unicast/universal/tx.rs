@@ -112,13 +112,43 @@ impl TransportUnicastUniversal {
             transport_link.link.link.get_dst(),
             self.get_zid()
         );
+
+        #[cfg(feature = "unstable")]
+        if msg.congestion_control() == CongestionControl::BlockFirst {
+            let priority = msg.priority();
+            if transport_link.block_first_waiters[priority as usize]
+                .wait_timeout(self.manager.config.wait_before_drop)
+                .is_err()
+            {
+                #[cfg(feature = "stats")]
+                self.stats.inc_tx_n_dropped(1);
+                return Ok(());
+            };
+            let transport = self.clone();
+            let block_first_notifier =
+                transport_link.block_first_notifiers[priority as usize].clone();
+            let msg = NetworkMessageExt::to_owned(&msg);
+            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
+                let msg = msg.as_ref();
+                if let Ok(pushed) = pipeline.push_network_message(msg) {
+                    transport.handle_push_result(msg, pushed);
+                }
+                let _ = block_first_notifier.notify();
+            });
+            return Ok(());
+        }
+
         // Drop the guard before the push_zenoh_message since
         // the link could be congested and this operation could
         // block for fairly long time
         drop(transport_links);
-        let droppable = msg.is_droppable();
-        let push = pipeline.push_network_message(msg)?;
-        if !push && !droppable {
+
+        self.handle_push_result(msg, pipeline.push_network_message(msg)?);
+        Ok(())
+    }
+
+    fn handle_push_result(&self, msg: NetworkMessageRef, pushed: bool) {
+        if !pushed && !msg.is_droppable() {
             tracing::error!(
                 "Unable to push non droppable network message to {}. Closing transport!",
                 self.config.zid
@@ -137,7 +167,7 @@ impl TransportUnicastUniversal {
             });
         }
         #[cfg(feature = "stats")]
-        if push {
+        if pushed {
             #[cfg(feature = "shared-memory")]
             if msg.is_shm() {
                 self.stats.tx_n_msgs.inc_shm(1);
@@ -149,7 +179,6 @@ impl TransportUnicastUniversal {
         } else {
             self.stats.inc_tx_n_dropped(1);
         }
-        Ok(())
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
@@ -160,30 +189,6 @@ impl TransportUnicastUniversal {
         if let Some(shm_context) = &self.shm_context {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
-
-        #[cfg(feature = "unstable")]
-        if msg.congestion_control() == CongestionControl::BlockFirst {
-            if self
-                .block_first_waiter
-                .wait_timeout(self.manager.config.wait_before_drop)
-                .is_err()
-            {
-                #[cfg(feature = "stats")]
-                self.stats.inc_tx_n_dropped(1);
-                return Ok(());
-            };
-            let transport = self.clone();
-            let msg = msg.to_owned();
-            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
-                let _ = transport.schedule_on_link(msg.as_ref());
-                let _ = transport.block_first_notifier.notify();
-            });
-            Ok(())
-        } else {
-            self.schedule_on_link(msg.as_ref())
-        }
-
-        #[cfg(not(feature = "unstable"))]
         self.schedule_on_link(msg.as_ref())
     }
 }
