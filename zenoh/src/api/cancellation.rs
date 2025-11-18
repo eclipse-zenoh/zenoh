@@ -13,62 +13,67 @@
 //
 use core::fmt;
 use std::{
+    collections::VecDeque,
     future::IntoFuture,
-    sync::{atomic::AtomicBool, Mutex},
+    ops::DerefMut,
+    sync::{Arc, Mutex, OnceLock},
 };
 
-use flume::{Receiver, Sender};
 use futures::{future::BoxFuture, FutureExt};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 #[allow(dead_code)]
 #[derive(Clone)]
-pub(crate) struct SyncGroupNotifier(Sender<()>);
-#[derive(Clone)]
-pub(crate) struct SyncGroupReceiver(Receiver<()>);
+pub(crate) struct SyncGroupNotifier(Arc<OwnedSemaphorePermit>);
 
-impl SyncGroupReceiver {
-    pub(crate) fn wait(self) {
-        self.0.recv().unwrap_err();
-    }
-    pub(crate) async fn wait_async(self) {
-        self.0.recv_async().await.unwrap_err();
-    }
+#[derive(Clone)]
+pub(crate) struct SyncGroup {
+    semaphore: Arc<Semaphore>,
 }
 
-pub(crate) fn create_sync_group_receiver_notifier_pair() -> (SyncGroupNotifier, SyncGroupReceiver) {
-    let (notifier, receiver) = flume::bounded(0);
-    (SyncGroupNotifier(notifier), SyncGroupReceiver(receiver))
+impl Default for SyncGroup {
+    fn default() -> Self {
+        Self {
+            semaphore: Arc::new(Semaphore::new(SyncGroup::max_permits() as usize)),
+        }
+    }
+}
+impl SyncGroup {
+    fn max_permits() -> u32 {
+        Semaphore::MAX_PERMITS.try_into().unwrap_or(u32::MAX)
+    }
+
+    pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
+        self.semaphore
+            .clone()
+            .try_acquire_owned()
+            .ok()
+            .map(|p| SyncGroupNotifier(Arc::new(p)))
+    }
+
+    pub(crate) fn close(&self) {
+        self.semaphore.close();
+    }
+
+    pub(crate) fn wait(&self) {
+        let s = self.semaphore.clone();
+        let _p = futures::executor::block_on(s.acquire_many(Self::max_permits()));
+        self.close();
+    }
+    pub(crate) async fn wait_async(&self) {
+        let _p = self.semaphore.acquire_many(Self::max_permits()).await;
+        self.close();
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn is_closed(&self) -> bool {
+        self.semaphore.is_closed()
+    }
 }
 
 pub(crate) type OnCancel = Box<dyn FnOnce() -> ZResult<()> + Send + Sync>;
-
-struct OnCancelHandler {
-    receiver: SyncGroupReceiver,
-    on_cancel: OnCancel,
-}
-
-impl OnCancelHandler {
-    fn cancel(self) -> ZResult<()> {
-        (self.on_cancel)()?;
-        self.receiver.wait();
-        Ok(())
-    }
-
-    async fn cancel_async(self) -> ZResult<()> {
-        (self.on_cancel)()?;
-        self.receiver.wait_async().await;
-        Ok(())
-    }
-}
-
-#[derive(Default)]
-struct CancellationTokenInner {
-    on_cancel_handlers: Mutex<Vec<OnCancelHandler>>,
-    is_cancelled: AtomicBool,
-}
-
 /// A synchronization primitive that can be used to interrupt a get query.
 ///
 /// # Examples
@@ -92,13 +97,32 @@ struct CancellationTokenInner {
 /// # }
 /// ```
 #[zenoh_macros::unstable]
-#[derive(Clone, Default, Debug)]
+#[derive(Clone)]
 pub struct CancellationToken {
-    inner: std::sync::Arc<CancellationTokenInner>,
+    on_cancel_handlers: Arc<Mutex<Option<VecDeque<OnCancel>>>>,
+    sync_group: SyncGroup,
+    cancel_result: Arc<OnceLock<ZResult<()>>>,
+}
+
+impl Default for CancellationToken {
+    fn default() -> Self {
+        let sync_group = SyncGroup::default();
+        let notifier = sync_group.notifier();
+        let on_cancel_sync: OnCancel = Box::new(move || {
+            // fake handler for concurrent cancel synchronization
+            drop(notifier);
+            Ok(())
+        });
+        Self {
+            on_cancel_handlers: Arc::new(Mutex::new(Some(VecDeque::from([on_cancel_sync])))),
+            sync_group,
+            cancel_result: Default::default(),
+        }
+    }
 }
 
 #[derive(Default)]
-pub struct CancelResult(Vec<OnCancelHandler>);
+pub struct CancelResult(CancellationToken);
 
 impl IntoFuture for CancelResult {
     type Output = ZResult<()>;
@@ -107,12 +131,7 @@ impl IntoFuture for CancelResult {
 
     fn into_future(self) -> Self::IntoFuture {
         let v = self.0;
-        let f = async {
-            for v in v {
-                v.cancel_async().await?;
-            }
-            Ok(())
-        };
+        let f = async move { v.cancel_inner_async().await };
         f.boxed()
     }
 }
@@ -123,10 +142,7 @@ impl Resolvable for CancelResult {
 
 impl Wait for CancelResult {
     fn wait(self) -> Self::To {
-        for c in self.0 {
-            c.cancel()?;
-        }
-        Ok(())
+        self.0.cancel_inner()
     }
 }
 
@@ -139,60 +155,142 @@ impl CancellationToken {
     /// Once cancelled, all newly added get queries will cancel automatically.
     #[zenoh_macros::unstable_doc]
     pub fn cancel(&self) -> CancelResult {
-        match self.inner.is_cancelled.compare_exchange(
-            false,
-            true,
-            std::sync::atomic::Ordering::SeqCst,
-            std::sync::atomic::Ordering::SeqCst,
-        ) {
-            Ok(_) => {
-                let mut lk = self.inner.on_cancel_handlers.lock().unwrap();
-                CancelResult(std::mem::take(lk.as_mut()))
-            }
-            Err(_) => CancelResult::default(),
-        }
+        CancelResult(self.clone())
     }
 
     /// Returns true if token was cancelled. I.e. if [`CancellationToken::cancel`] was called.
     #[zenoh_macros::unstable_doc]
     pub fn is_cancelled(&self) -> bool {
-        self.inner
-            .is_cancelled
-            .load(std::sync::atomic::Ordering::SeqCst)
+        self.cancel_result.get().is_some()
     }
 
-    pub(crate) fn add_on_cancel_handler(&self, receiver: SyncGroupReceiver, on_cancel: OnCancel) {
-        let on_cancel_handler = OnCancelHandler {
-            receiver,
-            on_cancel,
+    pub(crate) fn add_on_cancel_handler(&self, on_cancel: OnCancel) {
+        let mut lk = self.on_cancel_handlers.lock().unwrap();
+        match lk.deref_mut() {
+            Some(actions) => actions.push_front(on_cancel),
+            None => {
+                if let Err(err) = (on_cancel)() {
+                    // ensure sync group does not wait indefinitely if we just failed to cancel the notifier
+                    let _ = self.cancel_result.set(Err(err));
+                    self.sync_group.close();
+                }
+            }
         };
-        // acquire lock to ensure that cancel handlers will not be moved out in the meantime by call to cancel and that we
-        // do not end up with a stale on_cancel_handler
-        let mut lk = self.inner.on_cancel_handlers.lock().unwrap();
-        if self.is_cancelled() {
-            drop(lk);
-            let _ = on_cancel_handler.cancel();
-        } else {
-            lk.push(on_cancel_handler);
+    }
+
+    pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
+        self.sync_group.notifier()
+    }
+
+    fn execute_on_cancel_handlers(&self) -> ZResult<()> {
+        let actions =
+            std::mem::take(self.on_cancel_handlers.lock().unwrap().deref_mut()).unwrap_or_default();
+        for a in actions {
+            (a)()?;
+        }
+        Ok(())
+    }
+
+    fn cancel_inner(&self) -> ZResult<()> {
+        let res = self.execute_on_cancel_handlers();
+        match res {
+            Ok(_) => self.sync_group.wait(),
+            Err(_) => self.sync_group.close(),
+        };
+        match self.cancel_result.get_or_init(|| res).as_ref() {
+            Ok(_) => Ok(()),
+            Err(e) => bail!("Cancel failed: {e}"),
+        }
+    }
+
+    async fn cancel_inner_async(&self) -> ZResult<()> {
+        let res = self.execute_on_cancel_handlers();
+        match res {
+            Ok(_) => self.sync_group.wait_async().await,
+            Err(_) => self.sync_group.close(),
+        };
+        match self.cancel_result.get_or_init(|| res).as_ref() {
+            Ok(_) => Ok(()),
+            Err(e) => bail!("Cancel failed: {e}"),
         }
     }
 }
 
-impl fmt::Debug for CancellationTokenInner {
+impl fmt::Debug for CancellationToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CancellationTokenInner")
             .field(
                 "on_cancel_handlers",
-                &self.on_cancel_handlers.lock().unwrap().len(),
+                &self
+                    .on_cancel_handlers
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|h| h.len())
+                    .unwrap_or_default(),
             )
-            .field(
-                "is_cancelled",
-                &self.is_cancelled.load(std::sync::atomic::Ordering::SeqCst),
-            )
+            .field("is_cancelled", &self.is_cancelled())
             .finish()
     }
 }
 
 pub trait CancellationTokenBuilderTrait {
     fn cancellation_token(self, cancellation_token: CancellationToken) -> Self;
+}
+
+#[cfg(test)]
+mod test {
+    use std::{sync::atomic::AtomicUsize, time::Duration};
+
+    use zenoh_core::Wait;
+
+    use crate::cancellation::CancellationToken;
+
+    #[test]
+    fn concurrent_cancel() {
+        let ct = CancellationToken::default();
+
+        let n = std::sync::Arc::new(AtomicUsize::new(0));
+        let n_clone = n.clone();
+        let f = move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        };
+        ct.add_on_cancel_handler(Box::new(f));
+
+        let ct_clone = ct.clone();
+        let n_clone = n.clone();
+        let t = std::thread::spawn(move || {
+            ct_clone.cancel().wait().unwrap();
+            n_clone.load(std::sync::atomic::Ordering::SeqCst)
+        });
+        ct.cancel().wait().unwrap();
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(t.join().unwrap(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_cancel_async() {
+        let ct = CancellationToken::default();
+
+        let n = std::sync::Arc::new(AtomicUsize::new(0));
+        let n_clone = n.clone();
+        let f = move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        };
+        ct.add_on_cancel_handler(Box::new(f));
+
+        let ct_clone = ct.clone();
+        let n_clone = n.clone();
+        let t = tokio::spawn(async move {
+            ct_clone.cancel().await.unwrap();
+            n_clone.load(std::sync::atomic::Ordering::SeqCst)
+        });
+        ct.cancel().await.unwrap();
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(t.await.unwrap(), 1);
+    }
 }
