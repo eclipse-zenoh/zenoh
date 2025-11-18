@@ -26,12 +26,9 @@ use crate::api::{
     builders::liveliness::{
         LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessTokenBuilder,
     },
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    handlers::DefaultHandler,
     key_expr::KeyExpr,
-    query::Reply,
-    sample::{Locality, Sample},
     session::{Session, UndeclarableSealed, WeakSession},
-    subscriber::{Subscriber, SubscriberInner},
     Id,
 };
 
