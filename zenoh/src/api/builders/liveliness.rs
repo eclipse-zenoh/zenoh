@@ -5,8 +5,9 @@ use std::{
 
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::CancellationTokenBuilderTrait;
 use crate::api::{
-    cancellation::CancellationTokenBuilderTrait,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     key_expr::KeyExpr,
     liveliness::LivelinessToken,

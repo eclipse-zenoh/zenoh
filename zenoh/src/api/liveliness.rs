@@ -21,7 +21,6 @@ use std::{
 use tracing::error;
 use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 
-#[cfg(feature = "unstable")]
 use crate::api::{
     builders::liveliness::{
         LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessTokenBuilder,
