@@ -914,10 +914,18 @@ pub mod scouting {
 /// # }
 /// ```
 pub mod liveliness {
-    pub use crate::api::liveliness::{
-        Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
-        LivelinessTokenBuilder, LivelinessTokenUndeclaration,
+    pub use crate::api::{
+        builders::liveliness::LivelinessTokenBuilder,
+        liveliness::{
+            Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
+            LivelinessTokenUndeclaration,
+        },
     };
+}
+
+/// Connecttilivty support
+pub mod connectivity {
+    pub use crate::api::connectivity::Connectivity;
 }
 
 /// Timestamp support

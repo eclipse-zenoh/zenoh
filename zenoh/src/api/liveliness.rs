@@ -25,6 +25,7 @@ use zenoh_core::{Resolvable, Resolve, Result as ZResult, Wait};
 use crate::api::cancellation::CancellationTokenBuilderTrait;
 use crate::{
     api::{
+        builders::liveliness::LivelinessTokenBuilder,
         handlers::{locked, DefaultHandler, IntoHandler},
         key_expr::KeyExpr,
         query::Reply,
@@ -218,58 +219,6 @@ impl<'a> Liveliness<'a> {
     }
 }
 
-/// A builder for initializing a [`LivelinessToken`](LivelinessToken)
-/// returned by the [`Liveliness::declare_token`] method.
-///
-/// # Examples
-/// ```
-/// # #[tokio::main]
-/// # async fn main() {
-///
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let liveliness = session
-///     .liveliness()
-///     .declare_token("key/expression")
-///     .await
-///     .unwrap();
-/// # }
-/// ```
-#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-#[derive(Debug)]
-pub struct LivelinessTokenBuilder<'a, 'b> {
-    pub(crate) session: &'a Session,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-}
-
-impl Resolvable for LivelinessTokenBuilder<'_, '_> {
-    type To = ZResult<LivelinessToken>;
-}
-
-impl Wait for LivelinessTokenBuilder<'_, '_> {
-    #[inline]
-    fn wait(self) -> <Self as Resolvable>::To {
-        let session = self.session;
-        let key_expr = self.key_expr?.into_owned();
-        session
-            .0
-            .declare_liveliness_inner(&key_expr)
-            .map(|id| LivelinessToken {
-                session: self.session.downgrade(),
-                id,
-                undeclare_on_drop: true,
-            })
-    }
-}
-
-impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
-    }
-}
-
 /// A token whose liveliness is tied to the Zenoh [`Session`](Session).
 ///
 /// A declared liveliness token will be seen as alive by any other Zenoh
@@ -297,9 +246,9 @@ impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
 #[must_use = "Liveliness tokens will be immediately dropped and undeclared if not bound to a variable"]
 #[derive(Debug)]
 pub struct LivelinessToken {
-    session: WeakSession,
-    id: Id,
-    undeclare_on_drop: bool,
+    pub(crate) session: WeakSession,
+    pub(crate) id: Id,
+    pub(crate) undeclare_on_drop: bool,
 }
 
 /// A [`Resolvable`] returned by [`LivelinessToken::undeclare`]
