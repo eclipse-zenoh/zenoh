@@ -41,7 +41,7 @@ use crate::{
         universal::link::TransportLinkUnicastUniversal,
         TransportConfigUnicast,
     },
-    TransportManager, TransportPeerEventHandler,
+    Bound, TransportManager, TransportPeerEventHandler,
 };
 
 /*************************************/
@@ -341,6 +341,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn is_qos(&self) -> bool {
         self.config.is_qos
+    }
+
+    fn get_bound(&self) -> Bound {
+        self.config.bound
     }
 
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {

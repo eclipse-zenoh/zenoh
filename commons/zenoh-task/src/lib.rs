@@ -104,7 +104,7 @@ impl TaskController {
     /// Spawns a task that can be cancelled via cancellation of a token obtained by [`TaskController::get_cancellation_token()`],
     /// or that can run to completion in finite amount of time, using a specified runtime.
     /// It can be later aborted by call to [`TaskController::terminate_all()`].
-    pub fn spawn_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<()>
+    pub fn spawn_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -112,7 +112,7 @@ impl TaskController {
         #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        self.tracker.spawn_on(future.map(|_f| ()), &rt)
+        self.tracker.spawn_on(future, &rt)
     }
 
     /// Attempts tp terminate all previously spawned tasks

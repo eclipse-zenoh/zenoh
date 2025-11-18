@@ -19,13 +19,13 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{any::Any, collections::HashMap, sync::Arc};
 
-use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-        interest::{InterestId, InterestMode, InterestOptions},
-        Declare, Oam,
+        interest::{InterestId, InterestMode},
+        Declare, Interest, Oam,
     },
 };
 use zenoh_result::ZResult;
@@ -33,9 +33,11 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use super::{
     dispatcher::{
-        face::{Face, FaceState},
+        face::FaceState,
         pubsub::SubscriberInfo,
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
+        tables::{
+            NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, TablesData, TablesLock,
+        },
     },
     RoutingContext,
 };
@@ -43,19 +45,23 @@ use crate::{
     key_expr::KeyExpr,
     net::{
         protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+        routing::dispatcher::{
+            interests::{CurrentInterest, RemoteInterest},
+            region::{Region, RegionMap},
+        },
         runtime::Runtime,
     },
 };
 
 mod client;
-mod linkstate_peer;
-mod p2p_peer;
+mod peer;
 mod router;
 
 zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
+// TODO(now)
 #[derive(Default, serde::Serialize)]
 pub(crate) struct Sources {
     routers: Vec<ZenohIdProto>,
@@ -80,230 +86,361 @@ pub(crate) trait HatTrait:
 {
 }
 
-pub(crate) trait HatBaseTrait {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()>;
+pub(crate) struct BaseContext<'ctx> {
+    pub(crate) tables_lock: &'ctx Arc<TablesLock>,
+    pub(crate) tables: &'ctx mut TablesData,
+    pub(crate) src_face: &'ctx mut Arc<FaceState>,
+    pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
+}
 
-    fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;
+impl BaseContext<'_> {
+    /// Reborrows [`BaseContext`] to avoid moving it.
+    pub(crate) fn reborrow(&mut self) -> BaseContext<'_> {
+        BaseContext {
+            tables_lock: self.tables_lock,
+            tables: &mut *self.tables,
+            src_face: &mut *self.src_face,
+            send_declare: &mut *self.send_declare,
+        }
+    }
+}
+
+/// A party with which a hat exchanges messages.
+///
+/// This type exists to generalize [`crate:::net::routing::dispatcher::face::Face`] ̦
+/// to nodes that don't have a face but still need to be identified in hat interfaces.
+///
+/// Named after Git remotes.
+// pub(crate) struct Remote(Box<dyn Any + Send + Sync>);
+
+// impl Deref for Remote {
+//     type Target = dyn Any;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+
+pub(crate) type Remote = Arc<dyn Any + Send + Sync>;
+
+pub(crate) trait HatBaseTrait: Any {
+    fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync>;
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
-    fn new_local_face(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
-        send_declare: &mut SendDeclare,
-    ) -> ZResult<()>;
+    // REVIEW(regions): it would be betetr if this returned a Result instead
+    // Currently errors are logged in router::Hat::get_router.
+
+    fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
+
+    fn new_local_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>) -> ZResult<()>;
 
     fn new_transport_unicast_face(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        ctx: BaseContext,
         tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
         transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn handle_oam(
-        &self,
-        tables: &mut Tables,
+        &mut self,
+        tables: &mut TablesData,
         tables_ref: &Arc<TablesLock>,
         oam: &mut Oam,
-        transport: &TransportUnicast,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
         send_declare: &mut SendDeclare,
     ) -> ZResult<()>;
 
     fn map_routing_context(
         &self,
-        tables: &Tables,
+        tables: &TablesData, // TODO(fuzzpixelz): can this be removed?
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId;
 
-    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &RoutingExpr) -> bool;
+    fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
 
     fn egress_filter(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
         expr: &RoutingExpr,
     ) -> bool;
 
-    fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
+    fn info(&self, kind: WhatAmI) -> String;
 
-    fn close_face(
-        &self,
-        tables: &TablesLock,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    );
+    fn close_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>);
 
     fn update_from_config(
-        &self,
-        _tables: &mut Tables,
+        &mut self,
         _tables_ref: &Arc<TablesLock>,
         _runtime: &Runtime,
     ) -> ZResult<()> {
         Ok(())
     }
 
-    fn links_info(&self, _tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo> {
+    fn links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         HashMap::new()
     }
 
-    fn route_successor(
-        &self,
-        _tables: &Tables,
-        _src: ZenohIdProto,
-        _dst: ZenohIdProto,
-    ) -> Option<ZenohIdProto> {
+    #[allow(dead_code)] // FIXME(regions)
+    fn route_successor(&self, _src: ZenohIdProto, _dst: ZenohIdProto) -> Option<ZenohIdProto> {
         None
     }
 
-    fn route_successors(&self, _tables: &Tables) -> Vec<SuccessorEntry> {
+    #[allow(dead_code)] // FIXME(regions)
+    fn route_successors(&self) -> Vec<SuccessorEntry> {
         Vec::new()
+    }
+
+    #[allow(dead_code)]
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn whatami(&self) -> WhatAmI;
+
+    fn region(&self) -> Region;
+
+    /// Returns `true` if the hat should route data or queries between `src` and `dst`.
+    fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
+        // REVIEW(regions): not sure
+        src.region.bound().is_south() ^ dst.region.bound().is_south()
+            || (src.whatami.is_client() && src.region.bound().is_south())
+            || (dst.whatami.is_client() && dst.region.bound().is_south())
+    }
+
+    /// Returns `true` if `face` belongs to this [`Hat`].
+    fn owns(&self, face: &FaceState) -> bool {
+        if self.region() == face.region && face.remote_bound.is_north() {
+            assert_eq!(self.whatami(), face.whatami);
+        }
+
+        self.region() == face.region
     }
 }
 
+// REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
+// REVIEW(regions): use dispatcher calls instead of passing `south_hats`?
+
+/// Hat interest protocol interface.
+///
+/// Below is the typical code-path for each message type.
+///
+/// # Interest (current and/or future)
+///   1. [`HatInterestTrait::route_interest`] on the north hat.
+///   2. [`HatInterestTrait::register_interest`] on the owner south hat, iff it owns the src face.
+///   2. [`HatInterestTrait::send_declarations`] on the owner south hat, iff it owns the src face.
+///   3. [`HatInterestTrait::send_final_declaration`] on the owner south hat,
+///      iff it owns the src face and there is no gateway in the north region.
+///
+/// # Interest (final)
+///   1. [`HatInterestTrait::route_interest_final`] on the north hat.
+///   2. [`HatInterestTrait::unregister_interest`] on the owner south hat, iff it owns the src face.
+///
+/// # Declare (final)
+///   1. [`HatInterestTrait::route_final_declaration`] on the north hat.
+///   2. [`HatInterestTrait::send_final_declaration`] on the owner south hat, iff the msg is intended for it.
 pub(crate) trait HatInterestTrait {
-    #[allow(clippy::too_many_arguments)]
-    fn declare_interest(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
+    /// Handles interest messages.
+    ///
+    /// This method is only called on the north-bound hat.
+    ///
+    /// Will use the dowstream hat reference to call
+    /// [`HatInterestTrait::propagate_declarations`].
+    fn route_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
         res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        options: InterestOptions,
-        send_declare: &mut SendDeclare,
+        south_hats: RegionMap<&mut dyn HatTrait>,
     );
-    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
-    fn declare_final(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+
+    /// Handles interest finalization messages.
+    ///
+    /// This method is only called on the north-bound hat.
+    fn route_interest_final(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        south_hats: RegionMap<&mut dyn HatTrait>,
+    );
+
+    /// Handles declaration finalization messages.
+    ///
+    /// This method is only called on the north hat.
+    fn route_final_declaration(
+        &mut self,
+        ctx: BaseContext,
+        interest_id: InterestId,
+        south_hats: RegionMap<&mut dyn HatTrait>,
+    );
+
+    // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
+    // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
+    // should be reworked.
+
+    /// Propagates current declarations to the interested subregion.
+    ///
+    /// This method is only called on the owner south hat.
+    fn send_declarations(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<&mut Arc<Resource>>,
+    );
+
+    /// Informs the interest source that all declarations have been transmitted.
+    ///
+    /// This method is only called on south hats.
+    fn send_final_declaration(
+        &mut self,
+        ctx: BaseContext,
+        id: InterestId, // TODO(regions*): change to &Interest (?)
+        src: &Remote,
+    );
+
+    /// Register remote interests.
+    ///
+    /// This method is only called on the owner south hat.
+    fn register_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<&mut Arc<Resource>>,
+    );
+
+    /// Unregister remote interests.
+    ///
+    /// This method is only called on the owner south hat.
+    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest>;
 }
 
 pub(crate) trait HatPubSubTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles subscriber declaration.
     fn declare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: BaseContext,
         id: SubscriberId,
         res: &mut Arc<Resource>,
-        sub_info: &SubscriberInfo,
         node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        sub_info: &SubscriberInfo,
     );
+
+    /// Handles subscriber undeclaration.
     fn undeclare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: BaseContext,
         id: SubscriberId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
-    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_data_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
-        source: NodeId,
-        source_type: WhatAmI,
+        node_id: NodeId,
     ) -> Arc<Route>;
 
     fn get_matching_subscriptions(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles queryable declaration.
     fn declare_queryable(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: BaseContext,
         id: QueryableId,
         res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfoType,
         node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        qabl_info: &QueryableInfoType,
     );
+
+    /// Handles queryable undeclaration.
     fn undeclare_queryable(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: BaseContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
-    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
 
     fn get_matching_queryables(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         key_expr: &KeyExpr<'_>,
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(whatami: WhatAmI, region: Region) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
-        WhatAmI::Client => Box::new(client::HatCode {}),
-        WhatAmI::Peer => {
-            if unwrap_or_default!(config.routing().peer().mode()) == *"linkstate" {
-                Box::new(linkstate_peer::HatCode {})
-            } else {
-                Box::new(p2p_peer::HatCode {})
-            }
-        }
-        WhatAmI::Router => Box::new(router::HatCode {}),
+        WhatAmI::Client => Box::new(client::Hat::new(region)),
+        WhatAmI::Peer => Box::new(peer::Hat::new(region)),
+        WhatAmI::Router => Box::new(router::Hat::new(region)),
     }
 }
 
 pub(crate) trait HatTokenTrait {
-    #[allow(clippy::too_many_arguments)]
+    /// Handles token declaration.
     fn declare_token(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: BaseContext,
         id: TokenId,
         res: &mut Arc<Resource>,
         node_id: NodeId,
         interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
     );
 
+    /// Handles token declaration.
+    fn declare_current_token(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        interest_id: InterestId,
+        downstream_hats: RegionMap<&mut dyn HatTrait>,
+    );
+
+    fn propagate_current_token(
+        &mut self,
+        ctx: BaseContext,
+        res: &mut Arc<Resource>,
+        interest: &CurrentInterest,
+    );
+
+    /// Handles token undeclaration.
     fn undeclare_token(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+        &mut self,
+        ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         node_id: NodeId,
-        send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
 }
 
