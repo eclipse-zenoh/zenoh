@@ -16,8 +16,12 @@ use std::time::Duration;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::Priority;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
+#[cfg(feature = "unstable")]
+use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 #[cfg(feature = "stats")]
 use {crate::common::stats::TransportStats, std::sync::Arc};
@@ -44,6 +48,13 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The task handling substruct
     tracker: TaskTracker,
     token: CancellationToken,
+    #[cfg(feature = "unstable")]
+    // Notifier for a BlockFirst message to be ready to be sent
+    // (after the previous one has been sent)
+    pub block_first_notifiers: [Notifier; Priority::NUM],
+    #[cfg(feature = "unstable")]
+    // Waiter for a BlockFirst message to be ready to be sent
+    pub block_first_waiters: [Waiter; Priority::NUM],
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
 }
@@ -75,11 +86,28 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
+        #[cfg(feature = "unstable")]
+        let mut block_first_notifiers = Vec::new();
+        #[cfg(feature = "unstable")]
+        let mut block_first_waiters = Vec::new();
+        #[cfg(feature = "unstable")]
+        for _ in 0..Priority::NUM {
+            let (notifier, waiter) = event::new();
+            // notify to be make the BlockFirst "slot" available
+            notifier.notify().unwrap();
+            block_first_notifiers.push(notifier);
+            block_first_waiters.push(waiter);
+        }
+
         let result = Self {
             link,
             pipeline: producer,
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
+            #[cfg(feature = "unstable")]
+            block_first_notifiers: block_first_notifiers.try_into().unwrap(),
+            #[cfg(feature = "unstable")]
+            block_first_waiters: block_first_waiters.try_into().unwrap(),
             #[cfg(feature = "stats")]
             stats: TransportStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
         };
