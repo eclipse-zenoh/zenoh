@@ -58,7 +58,6 @@ toml_datetime = "=0.7.1"
 toml_parser = "=1.0.2"
 toml_writer = "=1.0.2"
 twox-hash = "=1.6.3"
-variadics_please = "=1.0.0"
 zerofrom = "=0.1.5"
 
 [package.metadata.cargo-machete]
@@ -94,6 +93,5 @@ ignored = [
   "toml_parser",
   "toml_writer",
   "twox-hash",
-  "variadics_please",
   "zerofrom",
 ]
