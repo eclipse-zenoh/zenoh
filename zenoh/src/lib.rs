@@ -922,11 +922,6 @@ pub mod liveliness {
     };
 }
 
-/// Connecttilivty support
-pub mod connectivity {
-    pub use crate::api::connectivity::Connectivity;
-}
-
 /// Timestamp support
 ///
 /// Each [`Sample`](crate::sample::Sample) has an optional [`Timestamp`](crate::time::Timestamp) associated with it.
