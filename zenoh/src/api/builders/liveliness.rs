@@ -18,7 +18,7 @@ use crate::api::{
 };
 
 /// A builder for initializing a [`LivelinessToken`](LivelinessToken)
-/// returned by the [`Liveliness::declare_token`] method.
+/// returned by the [`Liveliness::declare_token`](crate::liveliness::Liveliness::declare_token) method.
 ///
 /// # Examples
 /// ```
@@ -71,7 +71,7 @@ impl IntoFuture for LivelinessTokenBuilder<'_, '_> {
 
 /// A builder for initializing a liveliness subscription.
 ///
-/// The builder is returned by the [`Liveliness::declare_subscriber`] method and
+/// The builder is returned by the [`Liveliness::declare_subscriber`](crate::liveliness::Liveliness::declare_subscriber) method and
 /// resolves to the [`Subscriber`] receiving the liveliness samples.
 ///
 /// # Examples
@@ -308,7 +308,7 @@ impl IntoFuture for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> 
 
 /// Builder for initializing a liveliness query.
 ///
-/// The builder is returned by the [`Liveliness::get`] method and
+/// The builder is returned by the [`Liveliness::get`](crate::liveliness::Liveliness::get) method and
 /// resolves to a handler which returns the [`Reply`]s from the liveliness tokens.
 ///
 /// # Examples

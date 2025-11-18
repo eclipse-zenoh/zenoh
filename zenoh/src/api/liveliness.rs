@@ -126,7 +126,7 @@ impl<'a> Liveliness<'a> {
         }
     }
 
-    /// Create a [`Subscriber`](Subscriber) for liveliness changes matching the given key expression.
+    /// Create a [`Subscriber`](crate::pubsub::Subscriber) for liveliness changes matching the given key expression.
     ///
     /// # Arguments
     ///
