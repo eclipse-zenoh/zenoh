@@ -104,7 +104,6 @@ impl fmt::Debug for NotifyError {
 impl std::error::Error for NotifyError {}
 
 // Inner
-#[derive(Debug)]
 struct EventInner {
     event: EventLib,
     flag: AtomicU8,
@@ -168,7 +167,6 @@ pub fn new() -> (Notifier, Waiter) {
 }
 
 /// A [`Notifier`] is used to notify and wake up one and only one [`Waiter`].
-#[derive(Debug)]
 #[repr(transparent)]
 pub struct Notifier(Arc<EventInner>);
 
@@ -207,7 +205,6 @@ impl Drop for Notifier {
     }
 }
 
-#[derive(Debug)]
 #[repr(transparent)]
 pub struct Waiter(Arc<EventInner>);
 

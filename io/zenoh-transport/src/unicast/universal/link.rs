@@ -105,9 +105,9 @@ impl TransportLinkUnicastUniversal {
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
             #[cfg(feature = "unstable")]
-            block_first_notifiers: block_first_notifiers.try_into().unwrap(),
+            block_first_notifiers: block_first_notifiers.try_into().ok().unwrap(),
             #[cfg(feature = "unstable")]
-            block_first_waiters: block_first_waiters.try_into().unwrap(),
+            block_first_waiters: block_first_waiters.try_into().ok().unwrap(),
             #[cfg(feature = "stats")]
             stats: TransportStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
         };
