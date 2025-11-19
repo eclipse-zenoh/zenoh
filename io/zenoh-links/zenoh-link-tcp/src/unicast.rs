@@ -264,7 +264,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             match socket_config.new_link(&da).await {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
-                    return Ok(LinkUnicast::new(link));
+                    return Ok(LinkUnicast(link));
                 }
                 Err(e) => {
                     errs.push(e);
@@ -409,7 +409,7 @@ async fn accept_task(
                         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast::new(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },

@@ -87,7 +87,7 @@ impl TransportLinkUnicastUniversal {
         #[cfg(feature = "stats")]
         let stats = transport
             .stats
-            .link_stats(link.link.id(), link.link.get_dst().protocol().as_str());
+            .link_stats(link.link.get_src(), link.link.get_dst());
 
         #[cfg(feature = "unstable")]
         let mut block_first_notifiers = Vec::new();

@@ -27,8 +27,6 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{new_link_id, LinkId};
-
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
 pub trait LinkManagerUnicastTrait: Send + Sync {
@@ -45,22 +43,7 @@ pub trait ConstructibleLinkManagerUnicast<T>: Sized {
 }
 
 #[derive(Clone)]
-pub struct LinkUnicast {
-    id: u64,
-    inner: Arc<dyn LinkUnicastTrait>,
-}
-
-impl LinkUnicast {
-    pub fn new(link: Arc<dyn LinkUnicastTrait>) -> Self {
-        Self {
-            id: new_link_id(),
-            inner: link,
-        }
-    }
-    pub fn id(&self) -> LinkId {
-        self.id
-    }
-}
+pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
@@ -83,7 +66,7 @@ impl Deref for LinkUnicast {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        &self.0
     }
 }
 
@@ -117,6 +100,12 @@ impl fmt::Debug for LinkUnicast {
             .field("is_reliable", &self.is_reliable())
             .field("is_streamed", &self.is_streamed())
             .finish()
+    }
+}
+
+impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
+    fn from(link: Arc<dyn LinkUnicastTrait>) -> LinkUnicast {
+        LinkUnicast(link)
     }
 }
 

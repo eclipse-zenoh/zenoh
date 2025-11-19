@@ -1,12 +1,11 @@
-use std::{fmt, fmt::Write};
+use std::{fmt, fmt::Write, ops::Deref};
 
 use prometheus_client::{
     encoding::{EncodeLabelSet, EncodeLabelValue, LabelValueEncoder},
     metrics::counter::Counter,
 };
-use zenoh_link_commons::LinkId;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Locator, Priority, WhatAmI, ZenohIdProto},
     network::NetworkBodyRef,
     zenoh::{PushBody, ResponseBody},
 };
@@ -141,8 +140,8 @@ impl EncodeLabelValue for ReasonLabel {
 }
 
 macro_rules! wrap_label {
-    ($label:ident, $ty:ty) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    ($ty:ty, $label:ident $(, $derive:ty)*) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, $($derive),*)]
         pub(crate) struct $label(pub(crate) $ty);
 
         impl EncodeLabelValue for $label {
@@ -156,48 +155,69 @@ macro_rules! wrap_label {
                 Self(value.into())
             }
         }
+
+        impl Deref for $label {
+            type Target = $ty;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
     };
 }
 
-wrap_label!(ZidLabel, ZenohIdProto);
-wrap_label!(WhatAmILabel, WhatAmI);
-wrap_label!(PriorityLabel, Priority);
+wrap_label!(ZenohIdProto, ZidLabel, Copy);
+wrap_label!(WhatAmI, WhatAmILabel, Copy);
+wrap_label!(Priority, PriorityLabel, Copy);
+wrap_label!(Locator, LocatorLabel);
 
 pub(crate) trait StatsPath<M: PerRemoteMetric> {
     fn incr_stats(
         direction: StatsDirection,
         remote: Option<&RemoteLabels>,
+        link: Option<&LinkLabels>,
         labels: &Self,
-        link_id: Option<LinkId>,
         collected: M::Collected,
         json: &mut serde_json::Value,
     );
 
     fn incr_counters(
         remote: Option<&RemoteLabels>,
-        link_id: Option<LinkId>,
+        link: Option<&LinkLabels>,
         json: &mut serde_json::Value,
         incr_stats_counter: impl Fn(&mut serde_json::Value),
     ) {
         if let Some(remote) = remote {
-            let incr_session_counters = |json: &mut serde_json::Value| {
-                incr_stats_counter(json.get_field("stats"));
-                if let Some(link) = link_id {
-                    if let Some(json) = json.get_field("links").get_item("id", &link.to_string()) {
-                        incr_stats_counter(json.get_field("stats"));
+            for json in json
+                .get_field("sessions")
+                .as_array_mut()
+                .expect("sessions should be an array")
+            {
+                if remote
+                    .remote_zid
+                    .is_some_and(|peer| json.get_field("peer") == &peer.0.to_string())
+                    || remote.remote_zid.is_none()
+                {
+                    incr_stats_counter(json.get_field("stats"));
+                    if let Some(LinkLabels {
+                        src_locator: Some(src),
+                        dst_locator: Some(dst),
+                    }) = link
+                    {
+                        for json in json
+                            .get_field("links")
+                            .as_array_mut()
+                            .expect("links should be an array")
+                        {
+                            if json.get_field("src") == src.as_str()
+                                && json.get_field("dst") == dst.as_str()
+                            {
+                                incr_stats_counter(json.get_field("stats"));
+                            }
+                        }
                     }
-                }
-            };
-            let sessions = json.get_field("sessions");
-            match remote.remote_zid {
-                Some(peer) => {
-                    if let Some(item) = sessions.get_item("peer", &peer.0.to_string()) {
-                        incr_session_counters(item)
-                    }
-                }
-                None => {
-                    for item in sessions.as_array_mut().expect("json should be an array") {
-                        incr_session_counters(item)
+                    if remote.remote_zid.is_some() {
+                        break;
                     }
                 }
             }
@@ -212,6 +232,21 @@ pub(crate) struct RemoteLabels {
     pub(crate) remote_whatami: Option<WhatAmILabel>,
     pub(crate) remote_group: Option<String>,
     pub(crate) remote_cn: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]
+pub(crate) struct LinkLabels {
+    pub(crate) src_locator: Option<LocatorLabel>,
+    pub(crate) dst_locator: Option<LocatorLabel>,
+}
+
+impl From<(&Locator, &Locator)> for LinkLabels {
+    fn from(value: (&Locator, &Locator)) -> Self {
+        Self {
+            src_locator: Some(value.0.clone().into()),
+            dst_locator: Some(value.1.clone().into()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]
@@ -229,8 +264,8 @@ impl StatsPath<Counter> for BytesLabels {
     fn incr_stats(
         direction: StatsDirection,
         remote: Option<&RemoteLabels>,
+        link: Option<&LinkLabels>,
         _labels: &Self,
-        link_id: Option<LinkId>,
         collected: <Counter as PerRemoteMetric>::Collected,
         json: &mut serde_json::Value,
     ) {
@@ -238,7 +273,7 @@ impl StatsPath<Counter> for BytesLabels {
             Tx => "tx_bytes",
             Rx => "rx_bytes",
         };
-        Self::incr_counters(remote, link_id, json, |stats| {
+        Self::incr_counters(remote, link, json, |stats| {
             stats.incr_counter(counter, collected)
         });
     }
@@ -253,8 +288,8 @@ impl StatsPath<Counter> for TransportMessageLabels {
     fn incr_stats(
         direction: StatsDirection,
         remote: Option<&RemoteLabels>,
+        link: Option<&LinkLabels>,
         _labels: &Self,
-        link_id: Option<LinkId>,
         collected: <Counter as PerRemoteMetric>::Collected,
         json: &mut serde_json::Value,
     ) {
@@ -262,7 +297,7 @@ impl StatsPath<Counter> for TransportMessageLabels {
             Tx => "tx_t_msgs",
             Rx => "rx_t_msgs",
         };
-        Self::incr_counters(remote, link_id, json, |stats| {
+        Self::incr_counters(remote, link, json, |stats| {
             stats.incr_counter(counter, collected)
         });
     }
@@ -280,8 +315,8 @@ impl StatsPath<Counter> for NetworkMessageLabels {
     fn incr_stats(
         direction: StatsDirection,
         remote: Option<&RemoteLabels>,
+        link: Option<&LinkLabels>,
         labels: &Self,
-        link_id: Option<LinkId>,
         collected: <Counter as PerRemoteMetric>::Collected,
         json: &mut serde_json::Value,
     ) {
@@ -290,7 +325,7 @@ impl StatsPath<Counter> for NetworkMessageLabels {
             Rx => "rx_n_msgs",
         };
         let medium = if labels.shm { "shm" } else { "net" };
-        Self::incr_counters(remote, link_id, json, |stats| {
+        Self::incr_counters(remote, link, json, |stats| {
             stats.get_field(counter).incr_counter(medium, collected)
         });
     }
@@ -309,8 +344,8 @@ impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
     fn incr_stats(
         direction: StatsDirection,
         remote: Option<&RemoteLabels>,
+        link: Option<&LinkLabels>,
         labels: &Self,
-        link_id: Option<LinkId>,
         collected: <Histogram as PerRemoteMetric>::Collected,
         json: &mut serde_json::Value,
     ) {
@@ -324,7 +359,7 @@ impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
         };
         let msgs = format!("{direction}_z_{msg}_msgs");
         let pl_bytes = format!("{direction}_z_{msg}_pl_bytes");
-        Self::incr_counters(remote, link_id, json, |stats| {
+        Self::incr_counters(remote, link, json, |stats| {
             let space = match labels.space {
                 SpaceLabel::Admin => "admin",
                 SpaceLabel::User => "user",
@@ -349,14 +384,14 @@ impl StatsPath<Histogram> for NetworkMessageDroppedPayloadLabels {
     fn incr_stats(
         direction: StatsDirection,
         remote: Option<&RemoteLabels>,
+        link: Option<&LinkLabels>,
         labels: &Self,
-        link_id: Option<LinkId>,
         collected: <Histogram as PerRemoteMetric>::Collected,
         json: &mut serde_json::Value,
     ) {
         let (sum, count, _) = collected;
         let mut incr_counters = |field, by| {
-            Self::incr_counters(remote, link_id, json, |stats| stats.incr_counter(field, by))
+            Self::incr_counters(remote, link, json, |stats| stats.incr_counter(field, by))
         };
         match (direction, &labels.reason) {
             (Tx, ReasonLabel::Congestion) => {

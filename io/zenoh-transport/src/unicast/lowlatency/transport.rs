@@ -267,7 +267,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.link_stats
             .set(
                 self.stats
-                    .link_stats(0, link.link.get_dst().protocol().as_str()),
+                    .link_stats(link.link.get_src(), link.link.get_dst()),
             )
             .unwrap();
         *guard = Some(link);

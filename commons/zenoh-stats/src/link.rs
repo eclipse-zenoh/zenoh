@@ -6,14 +6,13 @@ use std::{
 
 use prometheus_client::metrics::counter::Counter;
 use scoped_tls::scoped_thread_local;
-use zenoh_link_commons::LinkId;
 use zenoh_protocol::{core::Priority, network::NetworkMessageExt};
 
 use crate::{
     histogram::Histogram,
     labels::{
-        BytesLabels, MessageLabel, NetworkMessageLabels, NetworkMessagePayloadLabels, ReasonLabel,
-        SpaceLabel, TransportMessageLabels,
+        BytesLabels, LinkLabels, MessageLabel, NetworkMessageLabels, NetworkMessagePayloadLabels,
+        ReasonLabel, SpaceLabel, TransportMessageLabels,
     },
     DropStats, Rx, StatsDirection, TransportStats, Tx,
 };
@@ -53,16 +52,17 @@ pub fn rx_observe_network_message_finalize(is_admin: bool, payload_size: usize) 
 pub struct LinkStats(Arc<LinkStatsInner>);
 
 impl LinkStats {
-    pub(crate) fn new(transport_stats: TransportStats, link_id: LinkId, protocol: String) -> Self {
+    pub(crate) fn new(transport_stats: TransportStats, link: LinkLabels) -> Self {
         let registry = transport_stats.registry();
         let remote = transport_stats.remote();
+        let protocol = link.dst_locator.as_ref().unwrap().protocol().to_string();
         let bytes = array::from_fn(|dir| {
             let labels = BytesLabels {
                 protocol: protocol.clone(),
             };
             registry
                 .bytes(StatsDirection::from_index(dir))
-                .get_or_create_owned(remote, &labels, Some(link_id))
+                .get_or_create_owned(remote, &labels, &link)
         });
         let transport_message = array::from_fn(|dir| {
             let labels = TransportMessageLabels {
@@ -70,13 +70,13 @@ impl LinkStats {
             };
             registry
                 .transport_message(StatsDirection::from_index(dir))
-                .get_or_create_owned(remote, &labels, Some(link_id))
+                .get_or_create_owned(remote, &labels, &link)
         });
         let tx_congestion =
             DropStats::new(registry.clone(), remote.clone(), ReasonLabel::Congestion);
         Self(Arc::new(LinkStatsInner {
             transport_stats,
-            link_id,
+            link,
             protocol,
             bytes,
             transport_message,
@@ -86,12 +86,8 @@ impl LinkStats {
         }))
     }
 
-    pub(crate) fn id(&self) -> LinkId {
-        self.0.link_id
-    }
-
-    pub(crate) fn protocol(&self) -> &str {
-        &self.0.protocol
+    pub(crate) fn link(&self) -> &LinkLabels {
+        &self.0.link
     }
 
     pub fn inc_bytes(&self, direction: StatsDirection, bytes: u64) {
@@ -117,7 +113,7 @@ impl LinkStats {
                     .transport_stats
                     .registry()
                     .network_message(direction)
-                    .get_or_create_owned(remote, &labels, Some(self.0.link_id))
+                    .get_or_create_owned(remote, &labels, self.link())
             })
             .inc();
     }
@@ -143,7 +139,7 @@ impl LinkStats {
                     .transport_stats
                     .registry()
                     .network_message_payload(direction)
-                    .get_or_create_owned(remote, &labels, Some(self.0.link_id))
+                    .get_or_create_owned(remote, &labels, self.link())
             })
             .observe(r_info.payload_size as u64);
     }
@@ -162,7 +158,7 @@ impl LinkStats {
         f: impl FnOnce(M) -> R,
     ) -> R {
         let l_info = LinkLevelInfo::new(&msg);
-        self.inc_network_message(Tx, l_info);
+        self.inc_network_message(Rx, l_info);
         RX_LINK_LEVEL_INFO.set(Some(l_info));
         let res = RX_LINK.set(self, || f(msg));
         RX_LINK_LEVEL_INFO.set(None);
@@ -181,7 +177,7 @@ const SHM_NUM: usize = 2;
 #[derive(Debug)]
 struct LinkStatsInner {
     transport_stats: TransportStats,
-    link_id: LinkId,
+    link: LinkLabels,
     protocol: String,
     bytes: [Counter; StatsDirection::NUM],
     transport_message: [Counter; StatsDirection::NUM],
@@ -198,7 +194,7 @@ impl Drop for LinkStatsInner {
     fn drop(&mut self) {
         self.transport_stats
             .registry()
-            .remove_link(self.transport_stats.remote(), self.link_id);
+            .remove_link(self.transport_stats.remote(), &self.link);
     }
 }
 

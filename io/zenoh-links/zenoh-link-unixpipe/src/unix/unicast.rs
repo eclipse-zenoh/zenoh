@@ -281,7 +281,7 @@ async fn handle_incoming_connections(
     });
 
     // send newly established link to manager
-    manager.send_async(LinkUnicast::new(link)).await?;
+    manager.send_async(LinkUnicast(link)).await?;
 
     ZResult::Ok(())
 }
@@ -571,7 +571,7 @@ impl ConstructibleLinkManagerUnicast<()> for LinkManagerUnicastPipe {
 impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let pipe = UnicastPipeClient::connect_to(endpoint).await?;
-        Ok(LinkUnicast::new(Arc::new(pipe)))
+        Ok(LinkUnicast(Arc::new(pipe)))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {

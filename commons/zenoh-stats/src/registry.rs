@@ -16,15 +16,14 @@ use prometheus_client::{
     },
     registry::{Registry, Unit},
 };
-use zenoh_link_commons::LinkId;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 
 use crate::{
     histogram::{Histogram, HistogramBuckets, PAYLOAD_SIZE_BUCKETS},
     labels::{
-        BytesLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels, NetworkMessageLabels,
-        NetworkMessagePayloadLabels, RemoteLabels, ResourceDeclaredLabels, ResourceLabel,
-        StatsPath, TransportMessageLabels,
+        BytesLabels, LinkLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels,
+        NetworkMessageLabels, NetworkMessagePayloadLabels, RemoteLabels, ResourceDeclaredLabels,
+        ResourceLabel, StatsPath, TransportMessageLabels,
     },
     per_remote::{PerRemoteFamily, PerRemoteFamilyCollector, PerRemoteMetric},
     stats::init_stats,
@@ -212,9 +211,9 @@ impl StatsRegistry {
         }
     }
 
-    pub(crate) fn remove_link(&self, remote: &RemoteLabels, link_id: LinkId) {
+    pub(crate) fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels) {
         for (_, family) in self.families() {
-            family.remove_link(remote, link_id);
+            family.remove_link(remote, link);
         }
     }
 }
@@ -236,7 +235,7 @@ struct StatsRegistryInner {
 }
 
 pub(crate) trait PerRemoteFamilyAny {
-    fn remove_link(&self, remote: &RemoteLabels, link_id: LinkId);
+    fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels);
     fn remove_transport(&self, remote: &RemoteLabels);
     fn merge_stats(&self, direction: StatsDirection, json: &mut serde_json::Value);
 }
@@ -244,8 +243,8 @@ pub(crate) trait PerRemoteFamilyAny {
 impl<S: StatsPath<M> + Clone + Hash + Eq, M: PerRemoteMetric + Clone, C: MetricConstructor<M>>
     PerRemoteFamilyAny for PerRemoteFamily<S, M, C>
 {
-    fn remove_link(&self, remote: &RemoteLabels, link_id: LinkId) {
-        self.remove_link(remote, link_id);
+    fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels) {
+        self.remove_link(remote, link);
     }
 
     fn remove_transport(&self, remote: &RemoteLabels) {

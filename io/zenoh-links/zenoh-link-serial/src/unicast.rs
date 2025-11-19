@@ -315,7 +315,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             release_on_close,
         ));
 
-        Ok(LinkUnicast::new(link))
+        Ok(LinkUnicast(link))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -473,7 +473,7 @@ async fn accept_read_task(
                     match res {
                         Ok(link) => {
                             // Communicate the new link to the initial transport manager
-                            if let Err(e) = manager.send_async(LinkUnicast::new(link.clone())).await {
+                            if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
                                 tracing::debug!("{}-{}: {}", file!(), line!(), e)
                             }
 

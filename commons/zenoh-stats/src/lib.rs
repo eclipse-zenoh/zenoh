@@ -16,6 +16,8 @@ pub use crate::{
     StatsDirection::*,
 };
 
+pub const CONTENT_TYPE: &str = "application/openmetrics-text; version=1.0.0; charset=utf-8";
+
 #[derive(Debug, Clone, Copy)]
 pub enum StatsDirection {
     Tx,

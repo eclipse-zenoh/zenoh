@@ -1,14 +1,13 @@
 use std::sync::{Arc, OnceLock};
 
-use zenoh_link_commons::LinkId;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Locator, Priority, WhatAmI, ZenohIdProto},
     network::{NetworkMessageExt, NetworkMessageRef},
 };
 
 use crate::{
     histogram::Histogram,
-    labels::{MessageLabel, NetworkMessageDroppedPayloadLabels, RemoteLabels},
+    labels::{LinkLabels, MessageLabel, NetworkMessageDroppedPayloadLabels, RemoteLabels},
     LinkStats, ReasonLabel, StatsDirection, StatsRegistry, Tx,
 };
 
@@ -45,8 +44,8 @@ impl TransportStats {
         &self.0.remote
     }
 
-    pub fn link_stats(&self, link_id: LinkId, protocol: impl Into<String>) -> LinkStats {
-        LinkStats::new(self.clone(), link_id, protocol.into())
+    pub fn link_stats(&self, src: &Locator, dst: &Locator) -> LinkStats {
+        LinkStats::new(self.clone(), (src, dst).into())
     }
 
     pub fn peer_link_stats(
@@ -56,14 +55,14 @@ impl TransportStats {
         link_stats: &LinkStats,
     ) -> LinkStats {
         assert!(self.remote().remote_group.is_some());
-        Self::new(
+        let stats = Self::new(
             self.registry().clone(),
             Some(peer_zid),
             Some(peer_whatami),
             None,
             self.remote().remote_group.clone(),
-        )
-        .link_stats(link_stats.id(), link_stats.protocol())
+        );
+        LinkStats::new(stats, link_stats.link().clone())
     }
 
     pub fn drop_stats(&self, reason: ReasonLabel) -> DropStats {
@@ -115,7 +114,7 @@ impl DropStats {
         self.0
             .registry
             .network_message_dropped_payload(direction)
-            .get_or_create_owned(&self.0.remote, &labels, None)
+            .get_or_create_owned(&self.0.remote, &labels, &LinkLabels::default())
     }
 
     pub fn observe_network_message_dropped(

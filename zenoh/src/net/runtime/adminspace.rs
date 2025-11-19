@@ -595,7 +595,6 @@ fn local_data(context: &AdminContext, query: Query) {
     let transport_unicast_to_json = |transport: &TransportUnicast| {
         let link_to_json = |link: &Link| {
             json!({
-                "id": link.id.to_string(),
                 "src": link.src.to_string(),
                 "dst": link.dst.to_string()
             })
@@ -623,7 +622,6 @@ fn local_data(context: &AdminContext, query: Query) {
         |transport: &TransportMulticast, mcast_peer: &TransportPeer| {
             let link_to_json = |link: &Link| {
                 json!({
-                    "id": link.id.to_string(),
                     "src": link.src.to_string(),
                     "dst": link.dst.to_string()
                 })
@@ -702,20 +700,16 @@ fn metrics(context: &AdminContext, query: Query) {
     .try_into()
     .unwrap();
     #[cfg(not(feature = "stats"))]
-    let metrics = "# EOF\n".to_string();
+    let (metrics, encoding) = ("# EOF\n", Encoding::TEXT_PLAIN);
     #[cfg(feature = "stats")]
-    let mut metrics = String::new();
+    let (mut metrics, encoding) = (String::new(), zenoh_stats::CONTENT_TYPE);
     #[cfg(feature = "stats")]
     context
         .runtime
         .stats()
         .encode_metrics(&mut metrics)
         .expect("metrics should be encodable");
-    if let Err(e) = query
-        .reply(reply_key, metrics)
-        .encoding(Encoding::TEXT_PLAIN)
-        .wait()
-    {
+    if let Err(e) = query.reply(reply_key, metrics).encoding(encoding).wait() {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }

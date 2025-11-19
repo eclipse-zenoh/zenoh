@@ -1,7 +1,6 @@
 pub(crate) trait JsonExt {
     fn has_field(&self, field: &str) -> bool;
     fn get_field(&mut self, field: &str) -> &mut Self;
-    fn get_item(&mut self, field: &str, id: &str) -> Option<&mut Self>;
     fn incr_counter(&mut self, field: &str, by: u64);
 }
 impl JsonExt for serde_json::Value {
@@ -16,18 +15,6 @@ impl JsonExt for serde_json::Value {
             .expect("json should be an object")
             .get_mut(field)
             .expect("field should exist")
-    }
-
-    fn get_item(&mut self, field: &str, id: &str) -> Option<&mut Self> {
-        let arr = self.as_array_mut().expect("json should be an array");
-        for item in arr {
-            let obj = item.as_object_mut().expect("array items should be object");
-            let id_field = obj.get(field).expect("object should contains id key");
-            if id_field.as_str().expect("id value should be string") == id {
-                return Some(item);
-            }
-        }
-        None
     }
 
     fn incr_counter(&mut self, field: &str, by: u64) {
