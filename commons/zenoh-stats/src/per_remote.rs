@@ -25,21 +25,21 @@ pub(crate) struct PerRemoteFamily<S, M, C = fn() -> M>(Arc<RwLock<PerRemoteFamil
 
 #[derive(Debug)]
 struct PerRemoteFamilyInner<S, M, C> {
-    connected: HashMap<RemoteLabels, RemoteFamily<S, M>>,
+    per_remote: HashMap<RemoteLabels, RemoteFamily<S, M>>,
     disconnected: HashMap<S, M>,
     constructor: C,
 }
 
 #[derive(Debug)]
 struct RemoteFamily<S, M> {
-    family: HashMap<S, HashMap<Option<LinkLabels>, M>>,
+    per_link: HashMap<Option<LinkLabels>, HashMap<S, M>>,
     disconnection: Option<Instant>,
 }
 
 impl<S, M> Default for RemoteFamily<S, M> {
     fn default() -> Self {
         Self {
-            family: HashMap::new(),
+            per_link: HashMap::new(),
             disconnection: None,
         }
     }
@@ -60,7 +60,7 @@ impl<S: Clone + Hash + Eq, M: Default> Default for PerRemoteFamily<S, M> {
 impl<S: Clone + Hash + Eq, M, C: MetricConstructor<M>> PerRemoteFamily<S, M, C> {
     pub fn new_with_constructor(constructor: C) -> Self {
         Self(Arc::new(RwLock::new(PerRemoteFamilyInner {
-            connected: Default::default(),
+            per_remote: Default::default(),
             disconnected: Default::default(),
             constructor,
         })))
@@ -72,24 +72,25 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: PerRemoteMetric + Clone, C: MetricC
 {
     pub fn get_or_create_owned(&self, remote: &RemoteLabels, labels: &S, link: &LinkLabels) -> M {
         let inner = &mut *self.0.write().unwrap();
-        let family_entry = inner.connected.entry(remote.clone()).or_default();
+        let family_entry = inner.per_remote.entry(remote.clone()).or_default();
         family_entry.disconnection = None;
         let link_entry = family_entry
-            .family
-            .entry(labels.clone())
+            .per_link
+            .entry(Some(link.clone()))
             .or_default()
-            .entry(Some(link.clone()));
+            .entry(labels.clone());
         let new_metric = || inner.constructor.new_metric();
         link_entry.or_insert_with(new_metric).clone()
     }
 
     pub(crate) fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels) {
         let inner = &mut *self.0.write().unwrap();
-        if let Some(family_entry) = inner.connected.get_mut(remote) {
-            for links in family_entry.family.values_mut() {
-                if let Some(metric) = links.remove(&Some(link.clone())) {
+        if let Some(family) = inner.per_remote.get_mut(remote) {
+            if let Some(metrics) = family.per_link.remove(&Some(link.clone())) {
+                for (labels, metric) in metrics {
+                    let no_link_metrics = family.per_link.entry(None).or_default();
                     let new_metric = || inner.constructor.new_metric();
-                    metric.drain_into(links.entry(None).or_insert_with(new_metric));
+                    metric.drain_into(no_link_metrics.entry(labels).or_insert_with(new_metric));
                 }
             }
         }
@@ -97,7 +98,7 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: PerRemoteMetric + Clone, C: MetricC
 
     pub(crate) fn remove_transport(&self, remote: &RemoteLabels) {
         let inner = &mut *self.0.write().unwrap();
-        if let Some(family_entry) = inner.connected.get_mut(remote) {
+        if let Some(family_entry) = inner.per_remote.get_mut(remote) {
             family_entry.disconnection = Some(Instant::now());
         }
     }
@@ -113,42 +114,40 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: PerRemoteMetric + Clone, C: MetricC
             .map(|(s, m)| (s.clone(), m.collect()))
             .collect::<HashMap<_, _>>();
         let mut per_remotes = Vec::new();
-        for (remote, family) in inner.connected.iter() {
+        for (remote, family) in inner.per_remote.iter() {
             has_disconnection |= is_disconnected(family.disconnection);
-            for (labels, links) in family.family.iter() {
-                for (link, metric) in links {
+            for (link, metrics) in family.per_link.iter() {
+                for (labels, metric) in metrics {
+                    let collected = metric.collect();
                     if let Some(link) = link {
                         per_remotes.push((
                             ((remote.clone(), link.clone()), labels.clone()),
-                            metric.collect(),
+                            collected.clone(),
                         ));
                     }
-                }
-                let collected = M::merge_collected(
-                    per_remotes[per_remotes.len() - links.len()..per_remotes.len()]
-                        .iter()
-                        .map(|(_, c)| c.clone())
-                        .chain(links.get(&None).map(|m| m.collect())),
-                );
-                if let Some(c) = all.get_mut(labels) {
-                    *c = M::merge_collected([c.clone(), collected]);
-                } else {
-                    all.insert(labels.clone(), collected);
+                    if let Some(c) = all.get_mut(labels) {
+                        *c = M::merge_collected([c.clone(), collected]);
+                    } else {
+                        all.insert(labels.clone(), collected);
+                    }
                 }
             }
         }
         drop(inner);
         if has_disconnection {
             let inner = &mut *self.0.write().unwrap();
-            inner.connected.retain(|_, family| {
+            inner.per_remote.retain(|_, family| {
                 if is_disconnected(family.disconnection) {
-                    for (labels, mut links) in family.family.drain() {
-                        if let Some(metric) = links.remove(&None) {
-                            let new_metric = || inner.constructor.new_metric();
-                            metric.drain_into(
-                                inner.disconnected.entry(labels).or_insert_with(new_metric),
-                            );
-                        }
+                    for (labels, metric) in family
+                        .per_link
+                        .get_mut(&None)
+                        .into_iter()
+                        .flat_map(HashMap::drain)
+                    {
+                        let new_metric = || inner.constructor.new_metric();
+                        metric.drain_into(
+                            inner.disconnected.entry(labels).or_insert_with(new_metric),
+                        );
                     }
                     return false;
                 }
@@ -163,9 +162,9 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: PerRemoteMetric + Clone, C: MetricC
         for (labels, metric) in inner.disconnected.iter() {
             S::incr_stats(direction, None, None, labels, metric.collect(), json);
         }
-        for (remote, family) in inner.connected.iter() {
-            for (labels, links) in family.family.iter() {
-                for (link, metric) in links {
+        for (remote, family) in inner.per_remote.iter() {
+            for (link, metrics) in family.per_link.iter() {
+                for (labels, metric) in metrics {
                     S::incr_stats(
                         direction,
                         Some(remote),
