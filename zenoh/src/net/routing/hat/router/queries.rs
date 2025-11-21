@@ -1146,9 +1146,7 @@ impl HatQueriesTrait for Hat {
         complete: bool,
     ) -> HashMap<FaceId, Arc<FaceState>> {
         let mut matching_queryables = HashMap::new();
-        if key_expr.ends_with('/') {
-            return matching_queryables;
-        }
+
         tracing::trace!(
             "get_matching_queryables({}; complete: {})",
             key_expr,
