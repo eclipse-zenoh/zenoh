@@ -116,7 +116,7 @@ impl TransportMulticast {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<Arc<common::stats::TransportStats>> {
+    pub fn get_stats(&self) -> ZResult<zenoh_stats::TransportStats> {
         Ok(self.get_transport()?.stats.clone())
     }
 }

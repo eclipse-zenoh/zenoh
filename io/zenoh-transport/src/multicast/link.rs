@@ -31,8 +31,6 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     common::{
         batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
@@ -336,7 +334,7 @@ impl TransportLinkMulticastUniversal {
                     config,
                     initial_sns,
                     #[cfg(feature = "stats")]
-                    c_transport.stats.clone(),
+                    c_transport.link_stats.get().unwrap().clone(),
                 )
                 .await;
                 if let Err(e) = res {
@@ -418,7 +416,7 @@ async fn tx_task(
     mut link: TransportLinkMulticastTx,
     config: TransportLinkMulticastConfigUniversal,
     mut last_sns: Vec<PrioritySn>,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     async fn join(last_join: Instant, join_interval: Duration) {
         let now = Instant::now();
@@ -446,8 +444,8 @@ async fn tx_task(
                         }
                         #[cfg(feature = "stats")]
                         {
-                            stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                            stats.inc_tx_bytes(batch.len() as usize);
+                            stats.inc_bytes(zenoh_stats::Tx,  batch.len() as u64);
+                            stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
                         }
                         // Reinsert the batch into the queue
                         pipeline.refill(batch, priority);
@@ -468,8 +466,8 @@ async fn tx_task(
 
                             #[cfg(feature = "stats")]
                             {
-                                stats.inc_tx_t_msgs(b.stats.t_msgs);
-                                stats.inc_tx_bytes(b.len() as usize);
+                                stats.inc_bytes(zenoh_stats::Tx,  b.len() as u64);
+                                stats.inc_transport_message(zenoh_stats::Tx,  b.stats.t_msgs as u64);
                             }
                         }
                         break;
@@ -511,8 +509,8 @@ async fn tx_task(
                 let n = link.send(&message).await?;
                 #[cfg(feature = "stats")]
                 {
-                    stats.inc_tx_t_msgs(1);
-                    stats.inc_tx_bytes(n);
+                    stats.inc_bytes(zenoh_stats::Tx, n as u64);
+                    stats.inc_transport_message(zenoh_stats::Tx,  1);
                 }
 
                 last_join = Instant::now();
@@ -554,6 +552,9 @@ async fn rx_task(
         n = 1;
     }
 
+    #[cfg(feature = "stats")]
+    let stats = transport.link_stats.get().unwrap();
+
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     loop {
         tokio::select! {
@@ -562,7 +563,7 @@ async fn rx_task(
                 let (batch, locator) = res?;
 
                 #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(batch.len());
+                stats.inc_bytes(zenoh_stats::Rx, batch.len() as u64);
 
                 // Deserialize all the messages from the current ZBuf
                 transport.read_messages(
@@ -570,7 +571,7 @@ async fn rx_task(
                     locator,
                     batch_size,
                     #[cfg(feature = "stats")]
-                    &transport,
+                    transport.link_stats.get().unwrap(),
                 )?;
             }
         }

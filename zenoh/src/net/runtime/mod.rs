@@ -82,7 +82,7 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
-    GIT_VERSION, LONG_VERSION,
+    GIT_VERSION,
 };
 
 /// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
@@ -122,6 +122,8 @@ pub(crate) struct RuntimeState {
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
     namespace: Option<OwnedNonWildKeyExpr>,
+    #[cfg(feature = "stats")]
+    stats: zenoh_stats::StatsRegistry,
 }
 
 #[allow(private_interfaces)]
@@ -466,7 +468,14 @@ impl RuntimeBuilder {
         let transport_manager_builder =
             transport_manager_builder.shm_reader(shm_clients.map(ShmReader::new));
 
-        let transport_manager = transport_manager_builder.build(handler.clone())?;
+        #[cfg(feature = "stats")]
+        let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
+
+        let transport_manager = transport_manager_builder.build(
+            handler.clone(),
+            #[cfg(feature = "stats")]
+            stats.clone(),
+        )?;
 
         // Plugins manager
         #[cfg(feature = "plugins")]
@@ -499,6 +508,8 @@ impl RuntimeBuilder {
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
                 namespace,
+                #[cfg(feature = "stats")]
+                stats,
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -506,7 +517,7 @@ impl RuntimeBuilder {
 
         // Admin space
         if start_admin_space {
-            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+            AdminSpace::start(&runtime).await;
         }
 
         // Start plugins
@@ -653,6 +664,11 @@ impl Runtime {
 
     pub(crate) async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.state.remove_pending_connection(zid).await
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
+        &self.state.stats
     }
 }
 

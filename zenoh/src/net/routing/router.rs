@@ -86,8 +86,6 @@ impl Router {
                     fid,
                     zid,
                     WhatAmI::Client,
-                    #[cfg(feature = "stats")]
-                    None,
                     primitives.clone(),
                     None,
                     None,
@@ -125,8 +123,6 @@ impl Router {
         let fid = tables.face_counter;
         tables.face_counter += 1;
         let zid = transport.get_zid()?;
-        #[cfg(feature = "stats")]
-        let stats = transport.get_stats()?;
 
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
@@ -138,8 +134,6 @@ impl Router {
                     fid,
                     zid,
                     whatami,
-                    #[cfg(feature = "stats")]
-                    Some(stats),
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
@@ -188,8 +182,6 @@ impl Router {
             fid,
             ZenohIdProto::from_str("1").unwrap(),
             WhatAmI::Peer,
-            #[cfg(feature = "stats")]
-            None,
             mux.clone(),
             Some(transport),
             None,
@@ -224,8 +216,6 @@ impl Router {
             fid,
             peer.zid,
             WhatAmI::Client, // Quick hack
-            #[cfg(feature = "stats")]
-            Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),

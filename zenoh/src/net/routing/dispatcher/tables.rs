@@ -95,6 +95,16 @@ impl<'a> RoutingExpr<'a> {
             None => self.prefix.get_best_key(self.suffix, sid),
         }
     }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn is_admin(&self) -> bool {
+        let admin_prefix = "@/";
+        if self.prefix.parent.is_none() {
+            self.suffix.starts_with(admin_prefix)
+        } else {
+            self.prefix.expr().starts_with(admin_prefix)
+        }
+    }
 }
 
 pub struct Tables {

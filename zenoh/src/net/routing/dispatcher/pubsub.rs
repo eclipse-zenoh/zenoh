@@ -249,40 +249,6 @@ pub(crate) fn get_matching_subscriptions(
     hat_code.get_matching_subscriptions(tables, key_expr)
 }
 
-#[cfg(feature = "stats")]
-macro_rules! inc_stats {
-    (
-        $face:expr,
-        $txrx:ident,
-        $space:ident,
-        $body:expr
-    ) => {
-        paste::paste! {
-            if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::buffer::Buffer;
-                match &$body {
-                    PushBody::Put(p) => {
-                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        let mut n =  p.payload.len();
-                        if let Some(a) = p.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
-                    }
-                    PushBody::Del(d) => {
-                        stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
-                        let mut n = 0;
-                        if let Some(a) = d.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_del_pl_bytes>].[<inc_ $space>](n);
-                    }
-                }
-            }
-        }
-    };
-}
-
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
@@ -301,13 +267,11 @@ pub fn route_data(
             let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
+            let is_admin = expr.is_admin();
             #[cfg(feature = "stats")]
-            if !admin {
-                inc_stats!(face, rx, user, msg.payload);
-            } else {
-                inc_stats!(face, rx, admin, msg.payload);
-            }
+            let payload_size = msg.payload_size();
+            #[cfg(feature = "stats")]
+            zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size);
 
             if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
                 let route = get_data_route(
@@ -328,15 +292,16 @@ pub fn route_data(
                             .egress_filter(&tables, face, outface, &expr)
                         {
                             drop(tables);
-                            #[cfg(feature = "stats")]
-                            if !admin {
-                                inc_stats!(outface, tx, user, msg.payload);
-                            } else {
-                                inc_stats!(outface, tx, admin, msg.payload);
-                            }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
+                            #[cfg(not(feature = "stats"))]
                             outface.primitives.send_push(msg, reliability);
+                            #[cfg(feature = "stats")]
+                            zenoh_stats::with_tx_observe_network_message(
+                                is_admin,
+                                payload_size,
+                                || outface.primitives.send_push(msg, reliability),
+                            );
                             // Reset the wire_expr to indicate the message has been consumed
                             msg.wire_expr = WireExpr::empty();
                         }
@@ -353,23 +318,21 @@ pub fn route_data(
 
                         drop(tables);
                         for (outface, key_expr, context) in route {
+                            let msg = &mut Push {
+                                wire_expr: key_expr,
+                                ext_qos: msg.ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: context },
+                                payload: msg.payload.clone(),
+                            };
+                            #[cfg(not(feature = "stats"))]
+                            outface.primitives.send_push(msg, reliability);
                             #[cfg(feature = "stats")]
-                            if !admin {
-                                inc_stats!(outface, tx, user, msg.payload)
-                            } else {
-                                inc_stats!(outface, tx, admin, msg.payload)
-                            }
-
-                            outface.primitives.send_push(
-                                &mut Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
-                                },
-                                reliability,
-                            )
+                            zenoh_stats::with_tx_observe_network_message(
+                                is_admin,
+                                payload_size,
+                                || outface.primitives.send_push(msg, reliability),
+                            );
                         }
                     }
                 }

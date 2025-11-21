@@ -30,8 +30,6 @@ use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
@@ -69,7 +67,7 @@ pub(crate) struct TransportUnicastUniversal {
     pub(super) alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::TransportStats,
 }
 
 impl TransportUnicastUniversal {
@@ -77,7 +75,7 @@ impl TransportUnicastUniversal {
         manager: TransportManager,
         config: TransportConfigUnicast,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -352,16 +350,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> Arc<TransportStats> {
+    fn stats(&self) -> zenoh_stats::TransportStats {
         self.stats.clone()
-    }
-
-    #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
-        zread!(self.links)
-            .iter()
-            .map(|l| (l.link.link(), l.stats.clone()))
-            .collect()
     }
 
     /*************************************/

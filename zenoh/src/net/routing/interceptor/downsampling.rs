@@ -37,8 +37,6 @@ use zenoh_protocol::{
     zenoh::PushBody,
 };
 use zenoh_result::ZResult;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 
 use crate::net::routing::interceptor::*;
 
@@ -132,6 +130,13 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
             },
             transport
         );
+        #[cfg(feature = "stats")]
+        let Ok(stats) = transport
+            .get_stats()
+            .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::LowPass))
+        else {
+            return (None, None);
+        };
         (
             self.flows.ingress.then(|| {
                 Box::new(DownsamplingInterceptor::new(
@@ -140,7 +145,7 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                     #[cfg(feature = "stats")]
                     InterceptorFlow::Ingress,
                     #[cfg(feature = "stats")]
-                    transport.get_stats().unwrap_or_default(),
+                    stats.clone(),
                 )) as IngressInterceptor
             }),
             self.flows.egress.then(|| {
@@ -150,7 +155,7 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
                     #[cfg(feature = "stats")]
                     InterceptorFlow::Egress,
                     #[cfg(feature = "stats")]
-                    transport.get_stats().unwrap_or_default(),
+                    stats.clone(),
                 )) as EgressInterceptor
             }),
         )
@@ -208,7 +213,7 @@ pub(crate) struct DownsamplingInterceptor {
     #[cfg(feature = "stats")]
     flow: InterceptorFlow,
     #[cfg(feature = "stats")]
-    stats: Arc<TransportStats>,
+    stats: zenoh_stats::DropStats,
 }
 
 impl DownsamplingInterceptor {
@@ -279,14 +284,8 @@ impl InterceptorTrait for DownsamplingInterceptor {
                 ctx.face().map(|f| f.to_string()).unwrap_or_default(),
             );
             #[cfg(feature = "stats")]
-            match self.flow {
-                InterceptorFlow::Egress => {
-                    self.stats.inc_tx_downsampler_dropped_msgs(1);
-                }
-                InterceptorFlow::Ingress => {
-                    self.stats.inc_rx_downsampler_dropped_msgs(1);
-                }
-            }
+            self.stats
+                .observe_network_message_dropped(stats_direction(self.flow), msg);
             false
         }
     }
@@ -299,7 +298,7 @@ impl DownsamplingInterceptor {
         messages: Arc<DownsamplingFilters>,
         rules: &NEVec<DownsamplingRuleConf>,
         #[cfg(feature = "stats")] flow: InterceptorFlow,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::DropStats,
     ) -> Self {
         let mut ke_id = KeBoxTree::default();
         let mut ke_state = HashMap::default();
