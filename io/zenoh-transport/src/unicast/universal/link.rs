@@ -24,7 +24,7 @@ use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 #[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
+use {crate::common::stats::LinkStats, std::sync::Arc};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -56,7 +56,7 @@ pub(super) struct TransportLinkUnicastUniversal {
     // Waiter for a BlockFirst message to be ready to be sent
     pub block_first_waiters: [Waiter; Priority::NUM],
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: Arc<LinkStats>,
 }
 
 impl TransportLinkUnicastUniversal {
@@ -109,7 +109,7 @@ impl TransportLinkUnicastUniversal {
             #[cfg(feature = "unstable")]
             block_first_waiters: block_first_waiters.try_into().ok().unwrap(),
             #[cfg(feature = "stats")]
-            stats: TransportStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
+            stats: LinkStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
         };
 
         (result, consumer)
@@ -216,7 +216,7 @@ async fn tx_task(
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: Arc<LinkStats>,
 ) -> ZResult<()> {
     loop {
         tokio::select! {
@@ -282,7 +282,7 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: Arc<LinkStats>,
 ) -> ZResult<()> {
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
