@@ -83,6 +83,9 @@
   ///
   /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
   /// E.g. tcp/192.168.0.1:7447#dscp=0x08
+  ///
+  /// When using an unspecified IP address, it is possible to manually choose the locator address:
+  /// E.g. tls/0.0.0.0:7447#loc_addr=192.168.0.200, to use 192.168.0.200 as the locator
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
