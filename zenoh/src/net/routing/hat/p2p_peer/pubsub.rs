@@ -605,9 +605,7 @@ impl HatPubSubTrait for HatCode {
         key_expr: &KeyExpr<'_>,
     ) -> HashMap<usize, Arc<FaceState>> {
         let mut matching_subscriptions = HashMap::new();
-        if key_expr.ends_with('/') {
-            return matching_subscriptions;
-        }
+
         tracing::trace!("get_matching_subscriptions({})", key_expr,);
         let res = Resource::get_resource(&tables.root_res, key_expr);
         let matches = res
