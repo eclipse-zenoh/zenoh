@@ -391,11 +391,16 @@ jobs:
           - name: Checkout sources
             uses: actions/checkout@v4
 
-          - name: Remove zenoh-pinned-deps-1-75 dependency
-            run: sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
-
-          - name: Remove Cargo.lock
-            run: rm -f Cargo.lock
+          #
+          # Temporary workaround to remmove transitive dependency
+          # of static-init 1.0.3 which fails with nigtly Rust.
+          # This allows Rust to automatically pick a compatible version 1.0.4
+          # where the issue is fixed.
+          #
+          - name: Remove zenoh-pinned-deps-1-75 dependency and Cargo.lock
+            run: | 
+              sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
+              rm -f Cargo.lock
 
           - name: Install ${{ matrix.rust }} Rust toolchain
             run: |
