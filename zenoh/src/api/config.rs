@@ -24,12 +24,23 @@ use zenoh_result::{bail, ZResult};
 
 /// Zenoh configuration.
 ///
+/// The zenoh configuration is unstable, so no direct access to the fields is provided.
+/// The only way to change the configuration is to load the JSON configuration from a file or a string,
+/// with [`Config::from_file`](crate::config::Config::from_file) or
+/// [`Config::from_json5`](crate::config::Config::from_json5),
+/// or to use the [`Config::insert_json5`](crate::config::Config::insert_json5)
+/// and [`Config::remove`](crate::config::Config::remove) methods to modify the configuration tree.
+///
+/// Example configuration file:
+#[doc = concat!(
+    "```json5\n",
+    include_str!("../../DEFAULT_CONFIG.json5"),
+    "\n```"
+)]
+///
 /// Most options are optional as a way to keep defaults flexible. Some of the options have different
 /// default values depending on the rest of the configuration.
 ///
-/// To construct a configuration, we advise that you use a configuration file (JSON, JSON5 and YAML
-/// are currently supported, please use the proper extension for your format as the deserializer
-/// will be picked according to it).
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Config(pub(crate) zenoh_config::Config);
 
@@ -54,7 +65,7 @@ impl Config {
         match zenoh_config::Config::from_deserializer(&mut json5::Deserializer::from_str(input)?) {
             Ok(config) => Ok(Config(config)),
             Err(Ok(_)) => {
-                Err(zerror!("The config was correctly deserialized but it is invalid").into())
+                Err(zerror!("The config was correctly deserialized, but it is invalid").into())
             }
             Err(Err(err)) => Err(err.into()),
         }
@@ -177,6 +188,9 @@ struct NotifierInner<T> {
     subscribers: Mutex<Vec<flume::Sender<Notification>>>,
 }
 
+/// The wrapper for a [`Config`] that allows to subscribe to changes.
+/// This type is returned by [`Session::config`](crate::Session::config) and allows
+/// the `Session` to immediately react to changes applied to the configuration.
 pub struct Notifier<T> {
     inner: Arc<NotifierInner<T>>,
 }
@@ -199,6 +213,7 @@ impl Notifier<Config> {
         }
     }
 
+    #[cfg(feature = "plugins")]
     pub fn subscribe(&self) -> flume::Receiver<Notification> {
         let (tx, rx) = flume::unbounded();
         self.lock_subscribers().push(tx);
@@ -247,6 +262,13 @@ impl Notifier<Config> {
     }
 
     pub fn insert_json5(&self, key: &str, value: &str) -> ZResult<()> {
+        if !key.starts_with("plugins/") {
+            bail!(
+                "Error inserting conf value {} : updating config is only \
+                    supported for keys starting with `plugins/`",
+                key
+            );
+        }
         self.lock_config().insert_json5(key, value)?;
         self.notify(key);
         Ok(())

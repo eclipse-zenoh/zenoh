@@ -16,10 +16,12 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroupNotifier;
 use crate::api::handlers::IntoHandler;
 
-/// A function that can transform a [`FnMut`]`(T)` to
-/// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
+/// A function that can transform an [`FnMut`]`(T)` into
+/// an [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
 pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)
@@ -46,11 +48,21 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
 }
 
 /// Callback type used by zenoh entities.
-pub struct Callback<T: CallbackParameter>(Arc<dyn CallbackImpl<T>>);
+///
+/// This type stores the callback function passed to zenoh entities.
+pub struct Callback<T: CallbackParameter> {
+    callable: Arc<dyn CallbackImpl<T>>,
+    #[cfg(feature = "unstable")]
+    on_drop_notifier: Option<SyncGroupNotifier>,
+}
 
 impl<T: CallbackParameter> Clone for Callback<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self {
+            callable: self.callable.clone(),
+            #[cfg(feature = "unstable")]
+            on_drop_notifier: self.on_drop_notifier.clone(),
+        }
     }
 }
 
@@ -64,17 +76,26 @@ impl<T: CallbackParameter> Callback<T> {
     /// Call the inner callback.
     #[inline]
     pub fn call(&self, arg: T) {
-        self.0.call(arg)
+        self.callable.call(arg)
     }
 
     pub(crate) fn call_with_message(&self, msg: T::Message<'_>) {
-        self.0.call_with_message(msg)
+        self.callable.call_with_message(msg)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn set_on_drop_notifier(&mut self, notifier: SyncGroupNotifier) {
+        self.on_drop_notifier = Some(notifier);
     }
 }
 
 impl<T: CallbackParameter, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
     fn from(value: F) -> Self {
-        Self(Arc::new(value))
+        Self {
+            callable: Arc::new(value),
+            #[cfg(feature = "unstable")]
+            on_drop_notifier: None,
+        }
     }
 }
 
@@ -122,14 +143,14 @@ impl<T: CallbackParameter + Send + 'static> IntoHandler<T>
     }
 }
 
-/// A handler containing 2 callback functions:
+/// A handler containing two callback functions:
 ///  - `callback`: the typical callback function. `context` will be passed as its last argument.
-///  - `drop`: a callback called when this handler is dropped.
+///  - `drop`: a callback invoked when this handler is dropped.
 ///
 /// It is guaranteed that:
 ///
 ///   - `callback` will never be called once `drop` has started.
-///   - `drop` will only be called **once**, and **after every** `callback` has ended.
+///   - `drop` will only be called **once**, and **after** every `callback` has ended.
 ///   - The two previous guarantees imply that `call` and `drop` are never called concurrently.
 pub struct CallbackDrop<Callback, DropFn>
 where

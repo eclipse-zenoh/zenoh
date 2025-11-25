@@ -34,7 +34,7 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 /// A zenoh **resource** is represented by a pair composed by a **key** and a
 /// **value**, such as, ```(car/telemetry/speed, 320)```.  A **resource key**
 /// is an arbitrary array of characters, with the exclusion of the symbols
-/// ```*```, ```**```, ```?```, ```[```, ```]```, and ```#```,
+/// ```*```, ```**```, ```?```, ```[``, ``]```, and ```#```,
 /// which have special meaning in the context of zenoh.
 ///
 /// A key including any number of the wildcard symbols, ```*``` and ```**```,
@@ -230,6 +230,7 @@ impl<'a> From<&'a String> for WireExpr<'a> {
 
 impl WireExpr<'_> {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

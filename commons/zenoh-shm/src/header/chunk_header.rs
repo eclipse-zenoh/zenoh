@@ -24,7 +24,7 @@ use crate::api::provider::chunk::ChunkDescriptor;
 #[derive(Debug)]
 pub struct ChunkHeaderType {
     /*
-    TODO: We don't really need 32 bits here, but access to 16-bit felds with 1 byte alignment is less performant on most of the platforms.
+    TODO: We don't really need 32 bits here, but access to 16-bit fields with 1 byte alignment is less performant on most of the platforms.
     We need to bench and select reasonable integer sizes here once we have an implementation to bench
     */
     pub refcount: AtomicU32,

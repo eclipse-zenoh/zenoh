@@ -29,7 +29,7 @@ use zenoh::{
     internal::{
         bail,
         plugins::{RunningPluginTrait, ZenohPlugin},
-        runtime::Runtime,
+        runtime::DynamicRuntime,
         zlock,
     },
     key_expr::{keyexpr, KeyExpr},
@@ -37,6 +37,7 @@ use zenoh::{
     Result as ZResult,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
+use zenoh_util::ffi::JsonKeyValueMap;
 
 const WORKER_THREAD_NUM: usize = 2;
 const MAX_BLOCK_THREAD_NUM: usize = 50;
@@ -77,7 +78,7 @@ const DEFAULT_SELECTOR: &str = "demo/example/**";
 
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
-    type StartArgs = Runtime;
+    type StartArgs = DynamicRuntime;
     type Instance = zenoh::internal::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
@@ -87,10 +88,10 @@ impl Plugin for ExamplePlugin {
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
-        let config = runtime.config().lock();
-        let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
+        let config = runtime.get_config().get_plugin_config(name).unwrap();
+        let map_cfg = config.as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
-        let selector: KeyExpr = match self_cfg.get("storage-selector") {
+        let selector: KeyExpr = match map_cfg.get("storage-selector") {
             Some(serde_json::Value::String(s)) => KeyExpr::try_from(s)?,
             None => KeyExpr::try_from(DEFAULT_SELECTOR).unwrap(),
             _ => {
@@ -99,7 +100,6 @@ impl Plugin for ExamplePlugin {
         }
         .clone()
         .into_owned();
-        std::mem::drop(config);
 
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
@@ -119,7 +119,7 @@ impl Plugin for ExamplePlugin {
 struct RunningPluginInner {
     flag: Arc<AtomicBool>,
     name: String,
-    runtime: Runtime,
+    runtime: DynamicRuntime,
 }
 // The RunningPlugin struct implementing the RunningPluginTrait trait
 #[derive(Clone)]
@@ -131,9 +131,11 @@ impl RunningPluginTrait for RunningPlugin {
     fn config_checker(
         &self,
         path: &str,
-        old: &serde_json::Map<String, serde_json::Value>,
-        new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        old: &JsonKeyValueMap,
+        new: &JsonKeyValueMap,
+    ) -> ZResult<Option<JsonKeyValueMap>> {
+        let old: serde_json::Map<String, serde_json::Value> = old.into();
+        let new: serde_json::Map<String, serde_json::Value> = new.into();
         let mut guard = zlock!(&self.0);
         const STORAGE_SELECTOR: &str = "storage-selector";
         if path == STORAGE_SELECTOR || path.is_empty() {
@@ -170,7 +172,7 @@ impl Drop for RunningPlugin {
     }
 }
 
-async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
+async fn run(runtime: DynamicRuntime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     zenoh_util::init_log_from_env_or("error");
 
     // create a zenoh Session that shares the same Runtime than zenohd

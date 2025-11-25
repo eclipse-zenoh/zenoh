@@ -77,6 +77,13 @@ async fn test_acl_liveliness() {
     test_liveliness_deny_allow_query(27450).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_acl_interface_names() {
+    zenoh::init_log_from_env_or("error");
+
+    test_pub_sub_network_interface(27451).await;
+}
+
 async fn get_basic_router_config(port: u16) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -1972,4 +1979,90 @@ async fn test_acl_liveliness_query_egress_deny() {
         .unwrap();
 
     assert!(replies.recv_timeout(Duration::from_secs(1)).is_err());
+}
+
+async fn test_pub_sub_network_interface(port: u16) {
+    println!("test_pub_sub_network_interface");
+
+    let mut config_router = Config::default();
+    config_router.set_mode(Some(WhatAmI::Router)).unwrap();
+    config_router
+        .listen
+        .endpoints
+        .set(vec![format!("tcp/[::]:{port}").parse().unwrap()])
+        .unwrap();
+    config_router
+        .scouting
+        .multicast
+        .set_enabled(Some(false))
+        .unwrap();
+
+    config_router
+        .insert_json5(
+            "access_control",
+            r#"{
+                    "enabled": true,
+                    "default_permission": "deny",
+                    "rules": [
+                        {
+                            id: "allow pub/sub",
+                            permission: "allow",
+                            messages: ["put", "delete", "declare_subscriber"],
+                            flows: ["ingress", "egress"],
+                            key_exprs: ["**"],
+                        },
+                    ],
+                    "subjects": [
+                        {
+                            id: "loopback",
+                            interfaces: ["lo", "lo0"],
+                        }
+                    ],
+                    "policies": [
+                        {
+                            rules: ["allow pub/sub"],
+                            subjects: ["loopback"],
+                        }
+                    ],
+                }"#,
+        )
+        .unwrap();
+    println!("Opening router session");
+
+    let session = ztimeout!(zenoh::open(config_router)).unwrap();
+
+    let (sub_session, pub_session) = get_client_sessions(port).await;
+    {
+        let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
+        let received_value = Arc::new(Mutex::new(String::new()));
+        let deleted = Arc::new(Mutex::new(false));
+
+        let temp_recv_value = received_value.clone();
+        let deleted_clone = deleted.clone();
+        let subscriber = sub_session
+            .declare_subscriber(KEY_EXPR)
+            .callback(move |sample| {
+                if sample.kind() == SampleKind::Put {
+                    let mut temp_value = zlock!(temp_recv_value);
+                    *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+                } else if sample.kind() == SampleKind::Delete {
+                    let mut deleted = zlock!(deleted_clone);
+                    *deleted = true;
+                }
+            })
+            .await
+            .unwrap();
+
+        tokio::time::sleep(SLEEP).await;
+        publisher.put(VALUE).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert_eq!(*zlock!(received_value), VALUE);
+
+        publisher.delete().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(*zlock!(deleted));
+        ztimeout!(subscriber.undeclare()).unwrap();
+    }
+    close_sessions(sub_session, pub_session).await;
+    close_router_session(session).await;
 }

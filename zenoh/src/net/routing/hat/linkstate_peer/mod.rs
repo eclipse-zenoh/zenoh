@@ -62,6 +62,7 @@ use crate::net::{
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
+        router::{LocalQueryables, LocalSubscribers},
     },
     runtime::Runtime,
 };
@@ -340,7 +341,7 @@ impl HatBaseTrait for HatCode {
         }
 
         let mut qabls_matches = vec![];
-        for (_, mut res) in hat_face.remote_qabls.drain() {
+        for (_, (mut res, _)) in hat_face.remote_qabls.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
@@ -538,12 +539,12 @@ struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, SubscriberId>,
     remote_tokens: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
-    remote_qabls: HashMap<QueryableId, Arc<Resource>>,
+    local_qabls: LocalQueryables,
+    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
 }
 
 impl HatFace {
@@ -552,9 +553,9 @@ impl HatFace {
             link_id: 0,
             next_id: AtomicU32::new(0),
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
-            local_qabls: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),

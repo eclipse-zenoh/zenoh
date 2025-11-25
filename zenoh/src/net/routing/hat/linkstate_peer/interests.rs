@@ -70,13 +70,13 @@ impl HatInterestTrait for HatCode {
             )
         }
         if options.tokens() {
+            // Note: aggregation is forbidden for tokens. The flag is ignored.
             declare_token_interest(
                 tables,
                 face,
                 id,
                 res.as_ref().map(|r| (*r).clone()).as_mut(),
                 mode,
-                options.aggregate(),
                 send_declare,
             )
         }
@@ -105,7 +105,34 @@ impl HatInterestTrait for HatCode {
     }
 
     fn undeclare_interest(&self, _tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
-        face_hat_mut!(face).remote_interests.remove(&id);
+        if let Some(i) = face_hat_mut!(face).remote_interests.remove(&id) {
+            if i.options.subscribers() {
+                if i.options.aggregate() {
+                    if let Some(ires) = &i.res {
+                        face_hat_mut!(face)
+                            .local_subs
+                            .remove_aggregated_resource_interest(ires, id);
+                    }
+                } else {
+                    face_hat_mut!(face)
+                        .local_subs
+                        .remove_simple_resource_interest(id);
+                }
+            }
+            if i.options.queryables() {
+                if i.options.aggregate() {
+                    if let Some(ires) = &i.res {
+                        face_hat_mut!(face)
+                            .local_qabls
+                            .remove_aggregated_resource_interest(ires, id);
+                    }
+                } else {
+                    face_hat_mut!(face)
+                        .local_qabls
+                        .remove_simple_resource_interest(id);
+                }
+            }
+        }
     }
 
     fn declare_final(&self, _tables: &mut Tables, _face: &mut Arc<FaceState>, _id: InterestId) {

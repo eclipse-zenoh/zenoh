@@ -25,6 +25,8 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
+use crate::api::cancellation::CancellationTokenBuilderTrait;
+#[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
@@ -46,7 +48,9 @@ use crate::{
     Session,
 };
 
-/// A builder for initializing a `querier`.
+/// A builder for initializing a [`Querier`](crate::query::Querier).
+/// Returned by the
+/// [`Session::declare_querier`](crate::Session::declare_querier) method.
 ///
 /// # Examples
 /// ```
@@ -102,13 +106,29 @@ impl QoSBuilderTrait for QuerierBuilder<'_, '_> {
 }
 
 impl QuerierBuilder<'_, '_> {
-    /// Change the target of the querier queries.
+    /// Change the target(s) of the querier's queries.
+    ///
+    /// This method allows to specify whether the request should just return the
+    /// data available in the network which matches the key expression
+    /// ([QueryTarget::BestMatching], default) or if it should arrive to
+    /// all queryables matching the key expression ([QueryTarget::All],
+    /// [QueryTarget::AllComplete]).
+    ///
+    /// See also the [`complete`](crate::query::QueryableBuilder::complete) setting
+    /// of the [`Queryable`](crate::query::Queryable)
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
         Self { target, ..self }
     }
 
-    /// Change the consolidation mode of the querier queries.
+    /// Change the consolidation mode of the querier's queries.
+    ///
+    /// The multiple replies to a query may arrive from the network. The
+    /// [`ConsolidationMode`](crate::query::ConsolidationMode) enum defines
+    /// the strategies of filtering and reordering these replies.
+    /// The wrapper struct [`QueryConsolidation`](crate::query::QueryConsolidation)
+    /// allows to set an [`ConsolidationMode::AUTO`](crate::query::QueryConsolidation::AUTO)
+    /// mode, which lets the implementation choose the best strategy.
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
         Self {
@@ -127,17 +147,15 @@ impl QuerierBuilder<'_, '_> {
         }
     }
 
-    /// Set queries timeout.
+    /// Set the query timeout.
     #[inline]
     pub fn timeout(self, timeout: Duration) -> Self {
         Self { timeout, ..self }
     }
 
-    /// By default, only replies whose key expressions intersect
-    /// with the querier key expression will be received by calls to [`Querier::get`](crate::query::Querier::get) method.
-    ///
-    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
-    /// expressions that don't intersect with the querier's queries.
+    /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This setter allows you to define whether this querier accepts such disjoint replies.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
@@ -187,7 +205,10 @@ impl IntoFuture for QuerierBuilder<'_, '_> {
     }
 }
 
-/// A builder for initializing a `query` to be sent from the querier.
+/// A builder for configuring a [`get`](crate::query::Querier::get)
+/// operation from a [`Querier`](crate::query::Querier).
+/// The builder resolves to a [`handler`](crate::handlers) generating a series of
+/// [`Reply`](crate::api::query::Reply) for each response received.
 ///
 /// # Examples
 /// ```
@@ -221,6 +242,51 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
+}
+
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt GET operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::{query::{ConsolidationMode, QueryTarget}};
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let querier = session.declare_querier("key/expression")
+    ///     .target(QueryTarget::All)
+    ///     .consolidation(ConsolidationMode::None)
+    ///     .await
+    ///     .unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let _ = querier
+    ///     .get()
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
+    ///     .cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
+            ..self
+        }
+    }
 }
 
 #[zenoh_macros::internal_trait]
@@ -354,6 +420,8 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler: _,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         } = self;
         QuerierGetBuilder {
             querier,
@@ -363,6 +431,8 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         }
     }
 }
@@ -404,8 +474,24 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_handler();
-
+        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
+        let (mut callback, receiver) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        if self
+            .cancellation_token
+            .as_ref()
+            .map(|ct| ct.is_cancelled())
+            .unwrap_or(false)
+        {
+            return Ok(receiver);
+        };
+        #[cfg(feature = "unstable")]
+        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
+            let (notifier, receiver) =
+                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
+            callback.set_on_drop_notifier(notifier);
+            (ct, receiver)
+        });
         #[allow(unused_mut)]
         // mut is only needed when building with "unstable" feature, which might add extra internal parameters on top of the user-provided ones
         let mut parameters = self.parameters.clone();
@@ -413,6 +499,7 @@ where
         if self.querier.accept_replies() == ReplyKeyExpr::Any {
             parameters.set_reply_key_expr_any();
         }
+        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.querier
             .session
             .query(
@@ -429,7 +516,19 @@ where
                 self.source_info,
                 callback,
             )
-            .map(|_| receiver)
+            .map(|qid| {
+                #[cfg(feature = "unstable")]
+                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
+                {
+                    let session_clone = self.querier.session.clone();
+                    let on_cancel = move || {
+                        let _ = session_clone.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        Ok(())
+                    };
+                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
+                }
+                receiver
+            })
     }
 }
 

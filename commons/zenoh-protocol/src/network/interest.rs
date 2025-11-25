@@ -163,6 +163,7 @@ pub enum InterestMode {
 
 impl InterestMode {
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -201,15 +202,22 @@ impl Interest {
             interest += InterestOptions::RESTRICTED;
             if we.has_suffix() {
                 interest += InterestOptions::NAMED;
+            } else {
+                interest -= InterestOptions::NAMED;
             }
             if let Mapping::Sender = we.mapping {
                 interest += InterestOptions::MAPPING;
+            } else {
+                interest -= InterestOptions::MAPPING;
             }
+        } else {
+            interest -= InterestOptions::RESTRICTED;
         }
         interest.options
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -302,6 +310,7 @@ impl InterestOptions {
     }
 
     #[cfg(feature = "test")]
+    #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();

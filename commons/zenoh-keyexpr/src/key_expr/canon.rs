@@ -13,6 +13,8 @@
 //
 use alloc::string::String;
 
+/// Helper trait implemented for types that can be canonized in place
+/// by `KeyExpr::autocanonize()`.
 pub trait Canonize {
     fn canonize(&mut self);
 }

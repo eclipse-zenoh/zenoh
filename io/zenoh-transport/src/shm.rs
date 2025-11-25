@@ -11,11 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashSet, fmt::Debug, num::NonZeroUsize, sync::Mutex, thread::JoinHandle};
+use std::{
+    collections::HashSet,
+    fmt::Debug,
+    num::NonZeroUsize,
+    sync::{Arc, Mutex},
+};
 
 use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, Zenoh080};
-use zenoh_core::{zerror, Wait};
+use zenoh_core::{zerror, zlock, Wait};
 use zenoh_protocol::{
     network::{
         NetworkBody, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push, Request, Response,
@@ -28,11 +33,14 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 use zenoh_shm::{
     api::{
         common::types::ProtocolID,
         protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
-        provider::shm_provider::{Defragment, GarbageCollect, ShmProvider, ShmProviderBuilder},
+        provider::shm_provider::{
+            ConstBool, Defragment, GarbageCollect, JustAlloc, ShmProvider, ShmProviderBuilder,
+        },
     },
     reader::ShmReader,
     ShmBufInfo, ShmBufInner,
@@ -44,33 +52,80 @@ struct ProviderInitCfg {
     shm_size: NonZeroUsize,
 }
 
-enum ProviderInitState {
-    Disabled,
+pub enum ProviderInitState {
+    Initializing,
+    Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
+    Error,
+}
+
+enum ProviderInitStateInner {
     Enabled(ProviderInitCfg),
-    Initializing(Option<JoinHandle<Option<ShmProvider<PosixShmProviderBackend>>>>),
-    Ready(ShmProvider<PosixShmProviderBackend>),
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
+    Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
+    Error,
 }
 
 pub struct LazyShmProvider {
     message_size_threshold: usize,
-    state: Mutex<ProviderInitState>,
+    state: Mutex<ProviderInitStateInner>,
 }
 
 impl LazyShmProvider {
     pub fn new(shm_size: NonZeroUsize, message_size_threshold: usize) -> Self {
         let cfg = ProviderInitCfg { shm_size };
-        let state = Mutex::new(ProviderInitState::Enabled(cfg));
+        let state = Mutex::new(ProviderInitStateInner::Enabled(cfg));
         Self {
             message_size_threshold,
             state,
         }
     }
 
-    pub fn new_disabled() -> Self {
-        let state = Mutex::new(ProviderInitState::Disabled);
-        Self {
-            message_size_threshold: 0,
-            state,
+    pub fn try_get_provider(&self) -> ProviderInitState {
+        let mut lock = zlock!(self.state);
+        match &mut *lock {
+            ProviderInitStateInner::Enabled(cfg) => {
+                let shm_size = cfg.shm_size.get();
+                let (sender, receiver) = flume::bounded(1);
+
+                ZRuntime::Application.spawn_blocking(move || {
+                    // todo: this is supported since 1.76
+                    // let _ = sender.send(
+                    //     ShmProviderBuilder::default_backend(shm_size)
+                    //         .wait()
+                    //         .inspect_err(|err| {
+                    //             tracing::error!("Error creating lazy ShmProvider: {err}")
+                    //         })
+                    //         .map(Arc::new)
+                    //         .ok(),
+                    // );
+                    let _ =
+                        sender.send(match ShmProviderBuilder::default_backend(shm_size).wait() {
+                            Ok(backend) => Some(Arc::new(backend)),
+                            Result::Err(err) => {
+                                tracing::error!("Error creating lazy ShmProvider: {err}");
+                                None
+                            }
+                        });
+                });
+
+                *lock = ProviderInitStateInner::Initializing(receiver);
+                ProviderInitState::Initializing
+            }
+            ProviderInitStateInner::Initializing(join_handle) => match join_handle.try_recv() {
+                Ok(Some(shm_provider)) => {
+                    *lock = ProviderInitStateInner::Ready(shm_provider.clone());
+                    ProviderInitState::Ready(shm_provider)
+                }
+                Ok(None) => {
+                    *lock = ProviderInitStateInner::Error;
+                    ProviderInitState::Error
+                }
+                Err(_) => ProviderInitState::Initializing,
+            },
+            ProviderInitStateInner::Ready(shm_provider) => {
+                ProviderInitState::Ready(shm_provider.clone())
+            }
+            ProviderInitStateInner::Error => ProviderInitState::Error,
         }
     }
 
@@ -79,38 +134,8 @@ impl LazyShmProvider {
             return;
         }
 
-        let mut lock = match self.state.try_lock() {
-            Ok(lock) => lock,
-            Result::Err(_) => {
-                return;
-            }
-        };
-
-        match &mut *lock {
-            ProviderInitState::Disabled => {}
-            ProviderInitState::Enabled(cfg) => {
-                let shm_size = cfg.shm_size.get();
-                let task = std::thread::spawn(move || {
-                    ShmProviderBuilder::default_backend(shm_size).wait().ok()
-                });
-                *lock = ProviderInitState::Initializing(Some(task));
-            }
-            ProviderInitState::Initializing(join_handle) => {
-                if unsafe { join_handle.as_ref().unwrap_unchecked().is_finished() } {
-                    let handle = unsafe { join_handle.take().unwrap_unchecked() };
-                    let state = handle.join().unwrap();
-                    *lock = match state {
-                        Some(shm_provider) => {
-                            Self::_wrap_in_place(&shm_provider, ext_shm, slice);
-                            ProviderInitState::Ready(shm_provider)
-                        }
-                        None => ProviderInitState::Disabled,
-                    };
-                }
-            }
-            ProviderInitState::Ready(shm_provider) => {
-                Self::_wrap_in_place(shm_provider, ext_shm, slice);
-            }
+        if let ProviderInitState::Ready(provider) = self.try_get_provider() {
+            Self::_wrap_in_place(&provider, ext_shm, slice)
         }
     }
 
@@ -119,11 +144,12 @@ impl LazyShmProvider {
         ext_shm: &mut Option<ShmType<ID>>,
         slice: &mut ZSlice,
     ) {
-        if let Ok(mut shmbuf) = shm_provider
+        if let Ok(mut shmbuf) = unsafe {
+            shm_provider
             .alloc(slice.len())
-            .with_policy::<Defragment<GarbageCollect>>()
+            .with_unsafe_policy::<Defragment<GarbageCollect<JustAlloc, JustAlloc, ConstBool<false>>>>()
             .wait()
-        {
+        } {
             shmbuf.as_mut().copy_from_slice(slice);
             *slice = shmbuf.into();
             slice.kind = ZSliceKind::ShmPtr;
@@ -164,7 +190,7 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
 pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
-    shm_provider: &LazyShmProvider,
+    shm_provider: &Option<Arc<LazyShmProvider>>,
 ) {
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
@@ -227,7 +253,7 @@ trait MapShm {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     );
 }
 
@@ -235,13 +261,15 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
     zbuf: &mut ZBuf,
     ext_shm: &mut Option<ShmType<ID>>,
     partner_shm_cfg: &ShmCfg,
-    shm_provider: &LazyShmProvider,
+    shm_provider: &Option<Arc<LazyShmProvider>>,
 ) {
     for zs in zbuf.zslices_mut() {
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
-                // Implicit SHM optimization: try to convert to SHM buffer
-                shm_provider.wrap_in_place(ext_shm, zs);
+                if let Some(shm_provider) = shm_provider {
+                    // Implicit SHM optimization: try to convert to SHM buffer
+                    shm_provider.wrap_in_place(ext_shm, zs);
+                }
             }
             Some(shmb) => {
                 if partner_shm_cfg.supports_protocol(shmb.protocol()) {
@@ -274,7 +302,7 @@ impl MapShm for Put {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         let Self {
             payload, ext_shm, ..
@@ -295,7 +323,7 @@ impl MapShm for Query {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         if let Self {
             ext_body: Some(QueryBodyType {
@@ -327,7 +355,7 @@ impl MapShm for Reply {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         if let PushBody::Put(Put {
             payload, ext_shm, ..
@@ -353,7 +381,7 @@ impl MapShm for Err {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
-        shm_provider: &LazyShmProvider,
+        shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
         let Self {
             payload, ext_shm, ..

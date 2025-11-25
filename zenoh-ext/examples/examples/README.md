@@ -2,7 +2,7 @@
 
 ## Start instructions
 
-   When zenoh is built in release mode:
+   When Zenoh is built in release mode:
 
    ```bash
    ./target/release/example/<example_name>
@@ -10,16 +10,16 @@
 
    Each example accepts the `-h` or `--help` option that provides a description of its arguments and their default values.
 
-   If you run the tests against the zenoh router running in a Docker container, you need to add the
+   If you run the tests against the Zenoh router running in a Docker container, you need to add the
    `-e tcp/localhost:7447` option to your examples. That's because Docker doesn't support UDP multicast
-   transport, and therefore the zenoh scouting and discrovery mechanism cannot work with.
+   transport, and therefore the Zenoh scouting and discovery mechanism cannot work with it.
 
 ## Examples description
 
 ### z_advanced_pub
 
    Declares an AdvancedPublisher with a given key expression.  
-   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for hsitory
+   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for history
    or retransmission.
 
    Typical usage:

@@ -26,16 +26,16 @@ use crate::api::{
     session::API_DATA_RECEPTION_CHANNEL_SIZE,
 };
 
-/// A synchronous ring channel with a limited size that allows users to keep the last N data.
+/// A synchronous ring channel with a limited size that allows users to keep the last N data items.
 ///
 /// [`RingChannel`] implements FIFO semantics with a dropping strategy when full.
-/// The oldest elements will be dropped when newer arrive.
+/// The oldest elements will be dropped when newer ones arrive.
 pub struct RingChannel {
     capacity: usize,
 }
 
 impl RingChannel {
-    /// Initialize the RingBuffer with the capacity size.
+    /// Initialize the RingBuffer with the given capacity.
     pub fn new(capacity: usize) -> Self {
         Self { capacity }
     }

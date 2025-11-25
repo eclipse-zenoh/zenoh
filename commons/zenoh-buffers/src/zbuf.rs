@@ -238,18 +238,6 @@ impl Reader for ZBufReader<'_> {
         }
     }
 
-    fn read_u8(&mut self) -> Result<u8, DidntRead> {
-        let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
-
-        let byte = *slice.get(self.cursor.byte).ok_or(DidntRead)?;
-        self.cursor.byte += 1;
-        if self.cursor.byte == slice.len() {
-            self.cursor.slice += 1;
-            self.cursor.byte = 0;
-        }
-        Ok(byte)
-    }
-
     fn remaining(&self) -> usize {
         // SAFETY: self.cursor.slice validity is ensured by the reader
         let s = crate::unsafe_slice!(self.inner.slices.as_ref(), self.cursor.slice..);
@@ -292,6 +280,18 @@ impl Reader for ZBufReader<'_> {
                 slice.subslice(start..self.cursor.byte).ok_or(DidntRead)
             }
         }
+    }
+
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
+        let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
+
+        let byte = *slice.get(self.cursor.byte).ok_or(DidntRead)?;
+        self.cursor.byte += 1;
+        if self.cursor.byte == slice.len() {
+            self.cursor.slice += 1;
+            self.cursor.byte = 0;
+        }
+        Ok(byte)
     }
 
     fn can_read(&self) -> bool {
@@ -588,6 +588,7 @@ impl io::Write for ZBufWriter<'_> {
 
 #[cfg(feature = "test")]
 impl ZBuf {
+    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         let mut zbuf = ZBuf::empty();
         zbuf.push_zslice(ZSlice::rand(len));

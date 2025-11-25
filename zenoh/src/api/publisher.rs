@@ -69,7 +69,7 @@ impl fmt::Debug for PublisherState {
     }
 }
 
-/// A publisher that allows to send data through a stream.
+/// A publisher that allows sending data through a stream.
 ///
 /// Publishers are automatically undeclared when dropped.
 ///
@@ -81,13 +81,14 @@ impl fmt::Debug for PublisherState {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// publisher.put("value").await.unwrap();
+/// # format!("{publisher:?}");
 /// # }
 /// ```
 ///
 ///
-/// `Publisher` implements the `Sink` trait which is useful to forward
+/// `Publisher` implements the `Sink` trait which is useful for forwarding
 /// streams to zenoh.
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::StreamExt;
@@ -95,6 +96,11 @@ impl fmt::Debug for PublisherState {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").await.unwrap();
+/// # tokio::task::spawn(async move {
+/// #     session.put("key/expression", "value").await.unwrap();
+/// #     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+/// #     session.close().await.unwrap();
+/// # });
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # }
 /// ```
@@ -121,7 +127,6 @@ impl<'a> Publisher<'a> {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression")
     ///     .await
@@ -139,43 +144,107 @@ impl<'a> Publisher<'a> {
     }
 
     /// Returns the [`KeyExpr`] of this Publisher.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let key_expr = publisher.key_expr();
+    /// # }
+    /// ```
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
     /// Get the [`Encoding`] used when publishing data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let encoding = publisher.encoding();
+    /// # }
+    /// ```
     #[inline]
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
 
-    /// Get the `congestion_control` applied when routing the data.
+    /// Get the [`CongestionControl`] applied when routing the data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let congestion_control = publisher.congestion_control();
+    /// # }
+    /// ```
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.congestion_control
     }
 
-    /// Get the priority of the written data.
+    /// Get the [`Priority`] of the written data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let priority = publisher.priority();
+    /// # }
+    /// ```
     #[inline]
     pub fn priority(&self) -> Priority {
         self.priority
     }
 
-    /// Get the reliability applied when routing the data
+    /// Get the [`Reliability`] applied when routing the data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let reliability = publisher.reliability();
+    /// # }
+    /// ```
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(&self) -> Reliability {
         self.reliability
     }
 
-    /// Put data.
+    /// Publish the data. The subscribers matching the Publisher's key expression will receive the
+    /// [`Sample`] with [`kind`](crate::sample::Sample::kind) [SampleKind::Put](crate::sample::SampleKind::Put).
+    ///
+    /// The builder allows customizing the publication: add the timestamp,
+    /// attachment, etc. Some fields are pre-filled with the Publisher's configuration and can
+    /// be overridden.
     ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").await.unwrap();
     /// publisher.put("value").await.unwrap();
@@ -199,7 +268,11 @@ impl<'a> Publisher<'a> {
         }
     }
 
-    /// Delete data.
+    /// Declare that the data associated with the Publisher's key expression is deleted.
+    /// The subscribers will receive the [`Sample`] with
+    /// [`kind`](crate::sample::Sample::kind) [SampleKind::Delete](crate::sample::SampleKind::Delete).
+    ///
+    /// The builder allows customizing the publication: add the timestamp, attachment, etc.
     ///
     /// # Examples
     /// ```
@@ -253,7 +326,7 @@ impl<'a> Publisher<'a> {
 
     /// Return a [`MatchingListener`](crate::api::matching::MatchingListener) for this Publisher.
     ///
-    /// The [`MatchingListener`](crate::api::matching::MatchingListener) that will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
+    /// The [`MatchingListener`](crate::api::matching::MatchingListener) will send a notification each time the [`MatchingStatus`](crate::api::matching::MatchingStatus) of
     /// the Publisher changes.
     ///
     /// # Examples
@@ -301,7 +374,7 @@ impl<'a> Publisher<'a> {
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
-        // set the flag first to avoid double panic if this function panic
+        // set the flag first to avoid double panic if this function panics
         self.undeclare_on_drop = false;
         let ids: Vec<Id> = zlock!(self.matching_listeners).drain().collect();
         for id in ids {
@@ -324,7 +397,7 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
     }
 }
 
-/// A [`Resolvable`] returned when undeclaring a publisher.
+/// A [`Resolvable`] returned by [`Publisher::undeclare`]
 ///
 /// # Examples
 /// ```
@@ -416,8 +489,10 @@ impl Sink<Sample> for Publisher<'_> {
 
 /// Message priority.
 ///
-/// If QoS is enabled, Zenoh keeps one transmission queue per [`Priority`] P, where all messages in
-/// the queue have [`Priority`] P. These queues are serviced in the order of their assigned
+/// If QoS is enabled in the [`Config`](crate::config::Config) (see the boolean
+/// `transport.<transport_type>.qos` parameter),
+/// Zenoh keeps one transmission queue per [`Priority`], where all messages in
+/// the queue have the same [`Priority`]. These queues are serviced in the order of their assigned
 /// [`Priority`] (i.e. from [`Priority::RealTime`] to [`Priority::Background`]).
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[repr(u8)]
@@ -452,10 +527,10 @@ impl TryFrom<u8> for Priority {
     type Error = zenoh_result::Error;
 
     /// A Priority is identified by a numeric value.
-    /// Lower the value, higher the priority.
-    /// Higher the value, lower the priority.
+    /// The lower the value, the higher the priority.
+    /// The higher the value, the lower the priority.
     ///
-    /// Admitted values are: 1-7.
+    /// Allowed values are: 1-7.
     ///
     /// Highest priority: 1
     /// Lowest priority: 7
@@ -509,13 +584,13 @@ impl From<Priority> for PriorityConf {
 type ProtocolPriority = zenoh_protocol::core::Priority;
 impl From<Priority> for ProtocolPriority {
     fn from(prio: Priority) -> Self {
-        // The Priority in the prelude differs from the Priority in the core protocol only from
-        // the missing Control priority. The Control priority is reserved for zenoh internal use
+        // The Priority in the prelude differs from the Priority in the core protocol only by
+        // the missing Control priority. The Control priority is reserved for zenoh's internal use
         // and as such it is not exposed by the zenoh API. Nevertheless, the values of the
         // priorities which are common to the internal and public Priority enums are the same. Therefore,
         // it is possible to safely transmute from the public Priority enum toward the internal
-        // Priority enum without risking to be in an invalid state.
-        // For better robusteness, the correctness of the unsafe transmute operation is covered
+        // Priority enum without risking being in an invalid state.
+        // For better robustness, the correctness of the unsafe transmute operation is covered
         // by the unit test below.
         unsafe { std::mem::transmute::<Priority, zenoh_protocol::core::Priority>(prio) }
     }

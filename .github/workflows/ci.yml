@@ -116,7 +116,9 @@ jobs:
         run: rustup update stable
 
       - name: Make sure necessary tools are installed
-        run: rustup component add clippy rustfmt
+        run: |
+          rustup component add clippy --toolchain stable
+          rustup component add rustfmt --toolchain nightly
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
@@ -134,9 +136,9 @@ jobs:
         
       - name: Install latest taplo
         uses: taiki-e/install-action@taplo
-
+  
       - name: Code format check
-        run: rustfmt --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
+        run: rustfmt +nightly --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
       - name: Clippy zenoh no-default-features
         run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
@@ -268,7 +270,9 @@ jobs:
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$ 
+          cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -329,6 +333,24 @@ jobs:
           config: '.markdownlint.yaml'
           globs: '**/README.md'
 
+  doc:
+    name: Generate documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      # Use a similar command than docs.rs build: rustdoc with nightly toolchain
+      - name: Install Rust toolchain nightly for docs gen
+        run: rustup toolchain install nightly
+
+      - name: Run rustdoc using Nightly Rust and Zenoh unstable
+        # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
+        run: |
+          cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
+            -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples \
+            --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
+
   coverage:
         name: Coverage
         strategy:
@@ -338,8 +360,22 @@ jobs:
             rust: [nightly]
         runs-on: ${{ matrix.os }}
         steps:
-          - name: Uninstall pre-installed packages
-            run: sudo apt remove dotnet* azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox temurin-8-jdk powershell mysql-server-core-8.0 mono-devel -y
+          - name: Free Disk Space (Ubuntu)
+            uses: jlumbroso/free-disk-space@main
+            with:
+              tool-cache: false
+              android: true
+              dotnet: true
+              haskell: true
+              large-packages: true
+              docker-images: true
+              swap-storage: true
+
+          - name: Install build-essential (Ubuntu)
+            if: ${{ matrix.os == 'ubuntu-latest' }}
+            run: |
+              sudo apt-get update
+              sudo apt-get install -y build-essential clang libc6-dev
 
           - name: Checkout sources
             uses: actions/checkout@v4
@@ -359,6 +395,7 @@ jobs:
 
           - name: Generate code coverage
             run: |
+              sudo prlimit --memlock=unlimited --pid=$$
               cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
               ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
               --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
@@ -367,7 +404,10 @@ jobs:
               --skip three_node_combination  \
               --skip three_node_combination_multicast \
               --skip two_node_combination \
-              --skip test_gossip
+              --skip test_gossip \
+              --skip metadata_alloc_concurrent \
+              --skip metadata_link_concurrent \
+              --skip metadata_link_failure_concurrent
             env:
               RUST_LOG: None
 
@@ -392,7 +432,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check, test, valgrind, typos, markdown_lint, coverage]
+    needs: [check_rust, check, test, valgrind, typos, markdown_lint, doc, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass

@@ -35,7 +35,7 @@ pub(crate) fn get_mask(resolution: Bits) -> TransportSn {
 ///
 /// The [`SeqNum`][SeqNum] encapsulates the sequence numbers along with a
 /// the comparison operators that check whether two sequence numbers are
-/// less, equeal or greater of each other.
+/// less, equal or greater of each other.
 ///
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SeqNum {

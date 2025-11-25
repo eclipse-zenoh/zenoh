@@ -21,6 +21,8 @@ use zenoh_protocol::{core::CongestionControl, network::request::ext::QueryTarget
 use zenoh_result::ZResult;
 
 #[cfg(feature = "unstable")]
+use crate::api::cancellation::CancellationTokenBuilderTrait;
+#[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
 use crate::api::{sample::SourceInfo, selector::ZenohParameters};
@@ -39,7 +41,10 @@ use crate::{
     query::{QueryConsolidation, Reply},
 };
 
-/// A builder for initializing a `query`.
+/// A builder for configuring a [`get`](crate::Session::get)
+/// operation from a [`Session`](crate::Session).
+/// The builder resolves to a [`handler`](crate::handlers) generating a series of
+/// [`Reply`](crate::api::query::Reply) for each response received.
 ///
 /// # Examples
 /// ```
@@ -74,6 +79,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: SourceInfo,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
 #[zenoh_macros::internal_trait]
@@ -96,7 +103,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
 }
 
 #[zenoh_macros::internal_trait]
-impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+impl<Handler> QoSBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
@@ -120,6 +127,43 @@ impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         value.1 = encoding.into();
         Self {
             value: Some(value),
+            ..self
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt GET operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let query = session
+    ///     .get("key/expression")
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
+    ///     .cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
             ..self
         }
     }
@@ -212,6 +256,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler: _,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         } = self;
         SessionGetBuilder {
             session,
@@ -226,6 +272,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         }
     }
 }
@@ -241,13 +289,29 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         self
     }
 
-    /// Change the target of the query.
+    /// Change the target(s) of the query.
+    ///
+    /// This method allows to specify whether the request should just return the
+    /// data available in the network which matches the key expression
+    /// ([QueryTarget::BestMatching], default) or if it should arrive to
+    /// all queryables matching the key expression ([QueryTarget::All],
+    /// [QueryTarget::AllComplete]).
+    ///
+    /// See also the [`complete`](crate::query::QueryableBuilder::complete) setting
+    /// of the [`Queryable`](crate::query::Queryable)
     #[inline]
     pub fn target(self, target: QueryTarget) -> Self {
         Self { target, ..self }
     }
 
     /// Change the consolidation mode of the query.
+    ///
+    /// The multiple replies to a query may arrive from the network. The
+    /// [`ConsolidationMode`](crate::query::ConsolidationMode) enum defines
+    /// the strategies of filtering and reordering these replies.
+    /// The wrapper struct [`QueryConsolidation`](crate::query::QueryConsolidation)
+    /// allows to set an [`ConsolidationMode::AUTO`](crate::query::QueryConsolidation::AUTO)
+    /// mode, which lets the implementation choose the best strategy.
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(self, consolidation: QC) -> Self {
         Self {
@@ -256,8 +320,6 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    ///
-    ///
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
@@ -269,19 +331,15 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Set query timeout.
+    /// Set the query timeout.
     #[inline]
     pub fn timeout(self, timeout: Duration) -> Self {
         Self { timeout, ..self }
     }
 
-    ///
-    ///
-    /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
-    /// with the queried key expression.
-    ///
-    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
-    /// expressions that don't intersect with the query's.
+    /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This setter allows you to define whether this get operation accepts such disjoint replies.
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {
@@ -316,11 +374,29 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let (callback, receiver) = self.handler.into_handler();
+        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
+        let (mut callback, receiver) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        if self
+            .cancellation_token
+            .as_ref()
+            .map(|ct| ct.is_cancelled())
+            .unwrap_or(false)
+        {
+            return Ok(receiver);
+        };
+        #[cfg(feature = "unstable")]
+        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
+            let (notifier, receiver) =
+                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
+            callback.set_on_drop_notifier(notifier);
+            (ct, receiver)
+        });
         let Selector {
             key_expr,
             parameters,
         } = self.selector?;
+        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.session
             .0
             .query(
@@ -337,7 +413,19 @@ where
                 self.source_info,
                 callback,
             )
-            .map(|_| receiver)
+            .map(|qid| {
+                #[cfg(feature = "unstable")]
+                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
+                {
+                    let session_clone = self.session.clone();
+                    let on_cancel = move || {
+                        let _ = session_clone.0.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        Ok(())
+                    };
+                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
+                }
+                receiver
+            })
     }
 }
 

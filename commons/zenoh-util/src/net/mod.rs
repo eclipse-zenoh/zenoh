@@ -328,6 +328,7 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
                 .map(|iface| iface.name.clone())
                 .collect::<Vec<String>>())
         } else {
+            let addr = addr.to_canonical();
             Ok(zread!(IFACES)
                 .iter()
                 .filter(|iface| iface.ips.iter().any(|ipnet| ipnet.ip() == addr))
@@ -352,6 +353,7 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
                     next_iface = iface.Next.as_ref();
                 }
             } else {
+                let addr = addr.to_canonical();
                 let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
                 while let Some(iface) = next_iface {
                     let mut next_ucast_addr = iface.FirstUnicastAddress.as_ref();
