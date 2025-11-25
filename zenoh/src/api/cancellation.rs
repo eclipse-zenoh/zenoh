@@ -24,6 +24,11 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
+#[zenoh_macros::internal]
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct SyncGroupNotifier(Arc<OwnedSemaphorePermit>);
+#[cfg(not(feature = "internal"))]
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct SyncGroupNotifier(Arc<OwnedSemaphorePermit>);
@@ -164,7 +169,7 @@ impl CancellationToken {
         self.cancel_result.get().is_some()
     }
 
-    pub(crate) fn add_on_cancel_handler(&self, on_cancel: OnCancel) {
+    fn add_on_cancel_handler_inner(&self, on_cancel: OnCancel) {
         let mut lk = self.on_cancel_handlers.lock().unwrap();
         match lk.deref_mut() {
             Some(actions) => actions.push_front(on_cancel),
@@ -178,6 +183,20 @@ impl CancellationToken {
         };
     }
 
+    #[zenoh_macros::internal]
+    pub fn add_on_cancel_handler(&self, on_cancel: OnCancel) {
+        self.add_on_cancel_handler_inner(on_cancel)
+    }
+    #[cfg(not(feature = "internal"))]
+    pub(crate) fn add_on_cancel_handler(&self, on_cancel: OnCancel) {
+        self.add_on_cancel_handler_inner(on_cancel)
+    }
+
+    #[zenoh_macros::internal]
+    pub fn notifier(&self) -> Option<SyncGroupNotifier> {
+        self.sync_group.notifier()
+    }
+    #[cfg(not(feature = "internal"))]
     pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
         self.sync_group.notifier()
     }
