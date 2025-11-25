@@ -26,26 +26,10 @@ use zenoh_sync::get_mut_unchecked;
 use super::{face_hat, face_hat_mut, HatCode, HatFace, INITIAL_INTEREST_ID};
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
-    hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
+    hat::{is_fresh_token, CurrentFutureTrait, HatTokenTrait, SendDeclare},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
 };
-
-fn new_token(
-    tables: &Tables,
-    res: &Arc<Resource>,
-    src_face: &Arc<FaceState>,
-    dst_face: &mut Arc<FaceState>,
-) -> bool {
-    // Is there any face that
-    !res.session_ctxs.values().any(|ctx| {
-        ctx.token // declared the token
-            && (ctx.face.id != src_face.id) // is not the face that just registered it
-            && (ctx.face.id != dst_face.id || dst_face.zid == tables.zid) // is not the face we are propagating to (except for local)
-            && (ctx.face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
-        // don't forward from/to router/peers
-    })
-}
 
 #[inline]
 fn propagate_simple_token_to(
@@ -60,7 +44,7 @@ fn propagate_simple_token_to(
     if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
         && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
-        && new_token(tables, res, src_face, dst_face)
+        && is_fresh_token(tables, res, src_face, dst_face)
         && (dst_face.whatami != WhatAmI::Client
             || dst_face.is_local
             || face_hat!(dst_face).remote_interests.values().any(|i| {

@@ -37,7 +37,7 @@ use crate::net::{
     protocol::{linkstate::LinkEdgeWeight, network::Network},
     routing::{
         dispatcher::{face::FaceState, tables::Tables},
-        hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
+        hat::{is_fresh_token, CurrentFutureTrait, HatTokenTrait, SendDeclare},
         router::{NodeId, Resource, SessionContext},
         RoutingContext,
     },
@@ -97,6 +97,7 @@ fn propagate_simple_token_to(
 ) {
     if (src_face.id != dst_face.id || dst_face.zid == tables.zid)
         && !face_hat!(dst_face).local_tokens.contains_key(res)
+        && is_fresh_token(tables, res, src_face, dst_face)
         && if full_peer_net {
             dst_face.whatami == WhatAmI::Client
         } else {
