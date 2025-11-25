@@ -36,12 +36,6 @@ libloading = "=0.8.9"
 litemap = "=0.7.4"
 lz4_flex = "=0.11.3"
 nonempty-collections = "=0.3.1"
-ntex = { version = "=2.7.0", features = ["rustls", "tokio"] }
-ntex-bytes = "=0.1.28"
-ntex-io = "=2.14.0"
-ntex-mqtt = "=3.1.0"
-ntex-net = "=2.8.1"
-ntex-tls = "=2.2.0"
 pest = "=2.8.0"
 pest_derive = "=2.8.0"
 pest_generator = "=2.8.0"
@@ -73,12 +67,6 @@ ignored = [
   "litemap",
   "lz4_flex",
   "nonempty-collections",
-  "ntex",
-  "ntex-bytes",
-  "ntex-io",
-  "ntex-mqtt",
-  "ntex-net",
-  "ntex-tls",
   "pest",
   "pest_derive",
   "pest_generator",
