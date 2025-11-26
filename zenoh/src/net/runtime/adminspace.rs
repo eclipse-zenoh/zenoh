@@ -728,6 +728,17 @@ fn metrics(context: &AdminContext, query: Query) {
             .filter(|l| !l.split('{').next().is_some_and(|n| n.ends_with("_bucket")))
             .collect();
     }
+    #[cfg(feature = "stats")]
+    if query.parameters().get("compress") == Some("true") {
+        if let Err(e) = query
+            .reply(reply_key, lz4_flex::compress(metrics.as_bytes()))
+            .encoding(encoding)
+            .wait()
+        {
+            tracing::error!("Error sending AdminSpace reply: {:?}", e);
+        }
+        return;
+    }
     if let Err(e) = query.reply(reply_key, metrics).encoding(encoding).wait() {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }

@@ -94,6 +94,7 @@ git-version = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
+lz4_flex = { workspace = true }
 nonempty-collections = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
