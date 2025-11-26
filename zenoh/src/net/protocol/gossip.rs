@@ -43,12 +43,12 @@ struct Details {
 }
 
 #[derive(Clone)]
-pub(super) struct Node {
-    pub(super) zid: ZenohIdProto,
-    pub(super) whatami: Option<WhatAmI>,
-    pub(super) locators: Option<Vec<Locator>>,
-    pub(super) sn: u64,
-    pub(super) links: Vec<ZenohIdProto>,
+pub(crate) struct Node {
+    pub(crate) zid: ZenohIdProto,
+    pub(crate) whatami: Option<WhatAmI>,
+    pub(crate) locators: Option<Vec<Locator>>,
+    pub(crate) sn: u64,
+    pub(crate) links: Vec<ZenohIdProto>,
 }
 
 impl std::fmt::Debug for Node {
@@ -57,8 +57,8 @@ impl std::fmt::Debug for Node {
     }
 }
 
-pub(super) struct Link {
-    pub(super) transport: TransportUnicast,
+pub(crate) struct Link {
+    pub(crate) transport: TransportUnicast,
     zid: ZenohIdProto,
     mappings: VecMap<ZenohIdProto>,
     local_mappings: VecMap<u64>,
@@ -76,39 +76,39 @@ impl Link {
     }
 
     #[inline]
-    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohIdProto) {
+    pub(crate) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohIdProto) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohIdProto> {
+    pub(crate) fn get_zid(&self, psid: &u64) -> Option<&ZenohIdProto> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
     #[inline]
-    pub(super) fn set_local_psid_mapping(&mut self, psid: u64, local_psid: u64) {
+    pub(crate) fn set_local_psid_mapping(&mut self, psid: u64, local_psid: u64) {
         self.local_mappings
             .insert(psid.try_into().unwrap(), local_psid);
     }
 }
 
-pub(super) struct Network {
-    pub(super) name: String,
-    pub(super) router_peers_failover_brokering: bool,
-    pub(super) gossip: bool,
-    pub(super) gossip_multihop: bool,
-    pub(super) gossip_target: WhatAmIMatcher,
-    pub(super) autoconnect: AutoConnect,
-    pub(super) wait_declares: bool,
-    pub(super) idx: NodeIndex,
-    pub(super) links: VecMap<Link>,
-    pub(super) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    pub(super) runtime: WeakRuntime,
+pub(crate) struct Gossip {
+    pub(crate) name: String,
+    pub(crate) router_peers_failover_brokering: bool,
+    pub(crate) gossip: bool,
+    pub(crate) gossip_multihop: bool,
+    pub(crate) gossip_target: WhatAmIMatcher,
+    pub(crate) autoconnect: AutoConnect,
+    pub(crate) wait_declares: bool,
+    pub(crate) idx: NodeIndex,
+    pub(crate) links: VecMap<Link>,
+    pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
+    pub(crate) runtime: WeakRuntime,
 }
 
-impl Network {
+impl Gossip {
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn new(
+    pub(crate) fn new(
         name: String,
         zid: ZenohIdProto,
         runtime: Runtime,
@@ -128,7 +128,7 @@ impl Network {
             sn: 1,
             links: vec![],
         });
-        Network {
+        Gossip {
             name,
             router_peers_failover_brokering,
             gossip,
@@ -144,7 +144,7 @@ impl Network {
     }
 
     //noinspection ALL
-    // pub(super) fn dot(&self) -> String {
+    // pub(crate) fn dot(&self) -> String {
     //     std::format!(
     //         "{:?}",
     //         petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
@@ -152,14 +152,14 @@ impl Network {
     // }
 
     #[inline]
-    pub(super) fn get_idx(&self, zid: &ZenohIdProto) -> Option<NodeIndex> {
+    pub(crate) fn get_idx(&self, zid: &ZenohIdProto) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].zid == *zid)
     }
 
     #[inline]
-    pub(super) fn get_link_from_zid(&self, zid: &ZenohIdProto) -> Option<&Link> {
+    pub(crate) fn get_link_from_zid(&self, zid: &ZenohIdProto) -> Option<&Link> {
         self.links.values().find(|link| link.zid == *zid)
     }
 
@@ -215,6 +215,7 @@ impl Network {
             },
             links,
             link_weights: None,
+            is_gateway: false, // REVIEW(regions): the gossip network doesn't track gateways
         }
     }
 
@@ -290,7 +291,7 @@ impl Network {
                 }))
     }
 
-    pub(super) fn link_states(
+    pub(crate) fn link_states(
         &mut self,
         link_states: Vec<LinkState>,
         src: ZenohIdProto,
@@ -475,7 +476,7 @@ impl Network {
         }
     }
 
-    pub(super) fn add_link(&mut self, transport: TransportUnicast) -> usize {
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -579,7 +580,7 @@ impl Network {
         free_index
     }
 
-    pub(super) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
+    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);

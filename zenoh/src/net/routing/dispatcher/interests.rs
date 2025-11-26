@@ -20,30 +20,27 @@ use std::{
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
+use zenoh_config::WhatAmI;
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::{
-    core::WireExpr,
-    network::{
-        declare::ext,
-        interest::{InterestId, InterestMode, InterestOptions},
-        Declare, DeclareBody, DeclareFinal,
-    },
+use zenoh_protocol::network::{
+    declare::{self},
+    interest::{InterestId, InterestMode, InterestOptions},
+    Declare, DeclareBody, DeclareFinal, Interest,
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
 
-use super::{
-    face::FaceState,
-    tables::{register_expr_interest, Tables, TablesLock},
-};
+use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::{unregister_expr_interest, Resource},
+    dispatcher::{face::Face, region::Region, tables::Tables},
+    hat::{BaseContext, HatTrait, Remote, SendDeclare},
+    router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,
 };
 
 pub(crate) struct CurrentInterest {
-    pub(crate) src_face: Arc<FaceState>,
+    pub(crate) src: Remote,
+    pub(crate) src_region: Region,
     pub(crate) src_interest_id: InterestId,
     pub(crate) mode: InterestMode,
 }
@@ -76,23 +73,6 @@ impl RemoteInterest {
     }
 }
 
-pub(crate) fn declare_final(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    wtables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    send_declare: &mut SendDeclare,
-) {
-    if let Some(interest) = get_mut_unchecked(face)
-        .pending_current_interests
-        .remove(&id)
-    {
-        finalize_pending_interest(interest, send_declare);
-    }
-
-    hat_code.declare_final(wtables, face, id);
-}
-
 pub(crate) fn finalize_pending_interests(
     _tables_ref: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -110,18 +90,23 @@ pub(crate) fn finalize_pending_interest(
     let interest = pending_interest.interest;
     pending_interest.cancellation_token.cancel();
     if let Some(interest) = Arc::into_inner(interest) {
+        // FIXME(regions): this code is specific to peer/client hats
+
+        let src_face = interest.src.downcast_ref::<FaceState>().unwrap();
+
         tracing::debug!(
             "{}:{} Propagate DeclareFinal",
-            interest.src_face,
+            src_face,
             interest.src_interest_id
         );
+
         send_declare(
-            &interest.src_face.primitives,
+            &src_face.primitives,
             RoutingContext::new(Declare {
                 interest_id: Some(interest.src_interest_id),
-                ext_qos: ext::QoSType::DECLARE,
+                ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::DEFAULT,
+                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareFinal(DeclareFinal),
             }),
         );
@@ -173,10 +158,10 @@ impl CurrentInterestCleanup {
                 drop(ctrl_lock);
                 if print_warning {
                     tracing::warn!(
-                        "{}:{} Didn't receive DeclareFinal for interest {}:{}: Timeout({:#?})!",
+                        "{}:{} Didn't receive DeclareFinal for interest {:?}:{}: Timeout({:#?})!",
                         face,
                         self.id,
-                        interest.interest.src_face,
+                        interest.interest.src.downcast_ref::<FaceState>().unwrap(),
                         interest.interest.src_interest_id,
                         self.interests_timeout,
                     );
@@ -194,101 +179,161 @@ impl Timed for CurrentInterestCleanup {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn declare_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables_ref: &Arc<TablesLock>,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-    expr: Option<&WireExpr>,
-    mode: InterestMode,
-    options: InterestOptions,
-    send_declare: &mut SendDeclare,
-) {
-    if options.keyexprs() && mode != InterestMode::Current {
-        register_expr_interest(tables_ref, face, id, expr);
-    }
-
-    if let Some(expr) = expr {
-        let rtables = zread!(tables_ref.tables);
-        match rtables
-            .get_mapping(face, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                tracing::debug!(
-                    "{} Declare interest {} ({}{})",
-                    face,
-                    id,
-                    prefix.expr(),
-                    expr.suffix
-                );
-                let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) =
-                    if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+impl Face {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn declare_interest(
+        &self,
+        tables_lock: &Arc<TablesLock>,
+        msg: &mut Interest,
+        send_declare: &mut SendDeclare,
+    ) {
+        let Interest {
+            id,
+            mode,
+            options,
+            wire_expr,
+            ..
+        } = msg;
+        if options.keyexprs() && mode != &InterestMode::Current {
+            register_expr_interest(
+                tables_lock,
+                &mut self.state.clone(),
+                *id,
+                wire_expr.as_ref(),
+            );
+        }
+        let (mut res, mut wtables) = if let Some(expr) = wire_expr {
+            let rtables = zread!(tables_lock.tables);
+            match rtables
+                .data
+                .get_mapping(&self.state, &expr.scope, expr.mapping)
+                .cloned()
+            {
+                Some(mut prefix) => {
+                    tracing::debug!(
+                        "{} Declare interest {} ({}{})",
+                        &self.state,
+                        id,
+                        prefix.expr(),
+                        expr.suffix
+                    );
+                    let res = Resource::get_resource(&prefix, &expr.suffix);
+                    if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                         drop(rtables);
-                        let wtables = zwrite!(tables_ref.tables);
-                        (res.unwrap(), wtables)
+                        let wtables = zwrite!(tables_lock.tables);
+                        (Some(res.unwrap()), wtables)
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
                         fullexpr.push_str(expr.suffix.as_ref());
                         let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
+                            .map(|ke| Resource::get_matches(&rtables.data, ke))
                             .unwrap_or_default();
                         drop(rtables);
-                        let mut wtables = zwrite!(tables_ref.tables);
-                        let mut res = Resource::make_resource(
-                            hat_code,
-                            &mut wtables,
-                            &mut prefix,
-                            expr.suffix.as_ref(),
-                        );
+                        let mut wtables = zwrite!(tables_lock.tables);
+                        let tables = &mut *wtables;
+                        let mut res =
+                            Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
                         matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
-                        (res, wtables)
-                    };
-
-                hat_code.declare_interest(
-                    &mut wtables,
-                    tables_ref,
-                    face,
-                    id,
-                    Some(&mut res),
-                    mode,
-                    options,
-                    send_declare,
-                );
+                        Resource::match_resource(&tables.data, &mut res, matches);
+                        (Some(res), wtables)
+                    }
+                }
+                None => {
+                    tracing::error!(
+                        "{} Declare interest {} for unknown scope {}!",
+                        &self.state,
+                        id,
+                        expr.scope
+                    );
+                    return;
+                }
             }
-            None => tracing::error!(
-                "{} Declare interest {} for unknown scope {}!",
-                face,
-                id,
-                expr.scope
-            ),
-        }
-    } else {
-        let mut wtables = zwrite!(tables_ref.tables);
-        hat_code.declare_interest(
-            &mut wtables,
-            tables_ref,
-            face,
-            id,
-            None,
-            mode,
-            options,
+        } else {
+            (None, zwrite!(tables_lock.tables))
+        };
+
+        let tables = &mut *wtables;
+
+        let (north_hat, south_hats) = tables.hats.partition_north_mut();
+
+        let ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
             send_declare,
+        };
+
+        north_hat.route_interest(
+            ctx,
+            msg,
+            res.as_mut(),
+            south_hats.map(|d| &mut **d as &mut dyn HatTrait),
         );
     }
-}
 
-pub(crate) fn undeclare_interest(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
-    tracing::debug!("{} Undeclare interest {}", face, id,);
-    unregister_expr_interest(tables, face, id);
-    let mut wtables = zwrite!(tables.tables);
-    hat_code.undeclare_interest(&mut wtables, face, id);
+    pub(crate) fn undeclare_interest(&self, tables: &TablesLock, msg: &Interest) {
+        tracing::debug!("{} Undeclare interest {}", &self.state, msg.id);
+        unregister_expr_interest(tables, &mut self.state.clone(), msg.id);
+
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
+
+        let (north_hat, south_hats) = tables.hats.partition_north_mut();
+
+        let ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare: &mut |_, _| unreachable!(),
+        };
+
+        north_hat.route_interest_final(ctx, msg, south_hats.map(|d| &mut **d as &mut dyn HatTrait));
+    }
+
+    pub(crate) fn declare_final(
+        &self,
+        wtables: &mut Tables,
+        interest_id: InterestId,
+        node_id: NodeId,
+        send_declare: &mut SendDeclare,
+    ) {
+        let tables = &mut *wtables;
+
+        let ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
+
+        // REVIEW(regions): peer initial interest
+        if self.state.whatami == WhatAmI::Peer && interest_id == 0 {
+            tracing::debug!(dst = %ctx.src_face, "Finalizing (peer-to-peer) initial interest");
+
+            let peer_owner_hat = &mut tables.hats[self.state.region];
+            let Some(src) = peer_owner_hat.new_remote(ctx.src_face, node_id) else {
+                return;
+            };
+
+            peer_owner_hat.send_final_declaration(ctx, interest_id, &src);
+            return;
+        }
+
+        if self.state.region.bound().is_south() {
+            tracing::error!(
+                interest_id,
+                "Received current interest finalization from south/eastwest-bound face. \
+                This message should only flow downstream"
+            );
+            return;
+        }
+
+        let (north_hat, south_hats) = tables.hats.partition_north_mut();
+
+        north_hat.route_final_declaration(
+            ctx,
+            interest_id,
+            south_hats.map(|d| &mut **d as &mut dyn HatTrait),
+        );
+    }
 }

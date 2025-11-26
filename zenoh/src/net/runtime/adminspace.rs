@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use std::{
     collections::HashMap,
-    convert::{TryFrom, TryInto},
+    convert::TryInto,
     mem,
     sync::{Arc, Mutex},
 };
@@ -21,16 +21,15 @@ use itertools::Itertools;
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
+use zenoh_config::{wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
-use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, ZenohIdProto, EMPTY_EXPR_ID},
+    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, EMPTY_EXPR_ID},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
@@ -55,7 +54,7 @@ use crate::{
         queryable::{Query, QueryInner},
     },
     bytes::Encoding,
-    net::primitives::Primitives,
+    net::{primitives::Primitives, routing::dispatcher::region::Region},
 };
 
 pub struct AdminContext {
@@ -173,20 +172,10 @@ impl AdminSpace {
         );
         if runtime.state.whatami == WhatAmI::Router {
             handlers.insert(
-                format!("@/{zid_str}/{whatami_str}/linkstate/routers")
+                format!("@/{zid_str}/{whatami_str}/linkstate/*")
                     .try_into()
                     .unwrap(),
-                Arc::new(routers_linkstate_data),
-            );
-        }
-        if runtime.state.whatami != WhatAmI::Client
-            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
-        {
-            handlers.insert(
-                format!("@/{zid_str}/{whatami_str}/linkstate/peers")
-                    .try_into()
-                    .unwrap(),
-                Arc::new(peers_linkstate_data),
+                Arc::new(linkstate_data),
             );
         }
         handlers.insert(
@@ -333,7 +322,10 @@ impl AdminSpace {
             });
         }
 
-        let primitives = runtime.state.router.new_primitives(admin.clone());
+        let primitives = runtime
+            .state
+            .router
+            .new_primitives(admin.clone(), Region::Local);
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(&mut Declare {
@@ -564,6 +556,7 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn local_data(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}",
@@ -714,6 +707,7 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn metrics(context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/metrics",
@@ -749,194 +743,180 @@ zenoh_build{{version="{}"}} 1
     }
 }
 
-fn routers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}/linkstate/routers",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
-
+#[tracing::instrument(level = "trace", skip_all)]
+fn linkstate_data(context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
 
-    if let Err(e) = query
-        .reply(reply_key, tables.hat_code.info(&rtables, WhatAmI::Router))
-        .encoding(Encoding::TEXT_PLAIN)
-        .wait()
-    {
-        tracing::error!("Error sending AdminSpace reply: {:?}", e);
-    }
-}
-
-fn peers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}/linkstate/peers",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
-
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-
-    if let Err(e) = query
-        .reply(reply_key, tables.hat_code.info(&rtables, WhatAmI::Peer))
-        .encoding(Encoding::TEXT_PLAIN)
-        .wait()
-    {
-        tracing::error!("Error sending AdminSpace reply: {:?}", e);
-    }
-}
-
-fn subscribers_data(context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.get_subscriptions(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/subscriber/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            sub.0.expr()
-        ))
-        .unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
+    for (bnd, hat) in rtables.hats.iter() {
+        if rtables.data.hats[bnd].whatami != WhatAmI::Router {
+            continue;
         }
-    }
-}
 
-fn publishers_data(context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.get_publications(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/publisher/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            sub.0.expr()
-        ))
+        let reply_key: OwnedKeyExpr = format!(
+            "@/{}/{}/linkstate/{}",
+            context.runtime.state.zid, context.runtime.state.whatami, bnd
+        )
+        .try_into()
         .unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
-}
 
-fn queryables_data(context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for qabl in tables.hat_code.get_queryables(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/queryable/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            qabl.0.expr()
-        ))
-        .unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
-}
-
-fn queriers_data(context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.get_queriers(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/querier/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            sub.0.expr()
-        ))
-        .unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
-}
-
-fn route_successor(context: &AdminContext, query: Query) {
-    let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
         if let Err(e) = query
-            .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
-            .encoding(Encoding::APPLICATION_JSON)
+            .reply(reply_key, hat.info(WhatAmI::Router))
+            .encoding(Encoding::TEXT_PLAIN)
             .wait()
         {
             tracing::error!("Error sending AdminSpace reply: {:?}", e);
         }
-    };
-    let prefix = format!("@/{}/router/route/successor", context.runtime.zid());
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all)]
+fn subscribers_data(context: &AdminContext, query: Query) {
+    // FIXME(regions): merge entities
+
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
 
-    let suffix = query.key_expr().as_str().strip_prefix(&prefix);
-    if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
-        if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
-            if let Some(successor) = tables.hat_code.route_successor(&rtables, src_zid, dst_zid) {
-                reply(query.key_expr(), successor);
-                return;
+    for (bnd, hat) in rtables.hats.iter() {
+        for sub in hat.get_subscriptions(&rtables.data) {
+            let key = KeyExpr::try_from(format!(
+                "@/{}/{}/subscriber/{}/{}",
+                context.runtime.state.zid,
+                context.runtime.state.whatami,
+                bnd,
+                sub.0.expr(),
+            ))
+            .unwrap();
+            if query.key_expr().intersects(&key) {
+                let payload = ZBytes::from(
+                    serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()),
+                );
+                if let Err(e) = query
+                    .reply(key, payload)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait()
+                {
+                    tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                }
             }
-        }
-    }
-    // Reply with every successor suffix matching the keyexpr.
-    let successors = tables.hat_code.route_successors(&rtables);
-    drop(rtables);
-    for entry in successors.iter() {
-        let keyexpr = KeyExpr::new(format!(
-            "{prefix}/src/{src}/dst/{dst}",
-            src = entry.source,
-            dst = entry.destination
-        ))
-        .unwrap();
-        if query.key_expr().intersects(&keyexpr) {
-            reply(&keyexpr, entry.successor);
         }
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
+fn publishers_data(context: &AdminContext, query: Query) {
+    // FIXME(regions): merge entities
+
+    let tables = &context.runtime.state.router.tables;
+    let rtables = zread!(tables.tables);
+    for (bnd, hat) in rtables.hats.iter() {
+        for sub in hat.get_publications(&rtables.data) {
+            let key = KeyExpr::try_from(format!(
+                "@/{}/{}/publisher/{}/{}",
+                context.runtime.state.zid,
+                context.runtime.state.whatami,
+                bnd,
+                sub.0.expr()
+            ))
+            .unwrap();
+            if query.key_expr().intersects(&key) {
+                let payload = ZBytes::from(
+                    serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()),
+                );
+                if let Err(e) = query
+                    .reply(key, payload)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait()
+                {
+                    tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                }
+            }
+        }
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all)]
+fn queryables_data(context: &AdminContext, query: Query) {
+    // FIXME(regions): merge entities
+
+    let tables = &context.runtime.state.router.tables;
+    let rtables = zread!(tables.tables);
+
+    for (bnd, hat) in rtables.hats.iter() {
+        for qabl in hat.get_queryables(&rtables.data) {
+            let key = KeyExpr::try_from(format!(
+                "@/{}/{}/queryable/{}/{}",
+                context.runtime.state.zid,
+                context.runtime.state.whatami,
+                bnd,
+                qabl.0.expr()
+            ))
+            .unwrap();
+            tracing::trace!(%bnd, %key, query_keyexpr = %query.key_expr());
+            if query.key_expr().intersects(&key) {
+                let payload = ZBytes::from(
+                    serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()),
+                );
+                if let Err(e) = query
+                    .reply(key, payload)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait()
+                {
+                    tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                }
+            }
+        }
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all)]
+fn queriers_data(context: &AdminContext, query: Query) {
+    // FIXME(regions): merge entities
+
+    let tables = &context.runtime.state.router.tables;
+    let rtables = zread!(tables.tables);
+
+    for (bnd, hat) in rtables.hats.iter() {
+        for sub in hat.get_queriers(&rtables.data) {
+            let key = KeyExpr::try_from(format!(
+                "@/{}/{}/querier/{}/{}",
+                context.runtime.state.zid,
+                context.runtime.state.whatami,
+                bnd,
+                sub.0.expr()
+            ))
+            .unwrap();
+            if query.key_expr().intersects(&key) {
+                let payload = ZBytes::from(
+                    serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()),
+                );
+                if let Err(e) = query
+                    .reply(key, payload)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait()
+                {
+                    tracing::error!("Error sending AdminSpace reply: {:?}", e);
+                }
+            }
+        }
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all)]
+fn route_successor(_context: &AdminContext, _query: Query) {
+    // FIXME(regions): route successor
+    tracing::error!("stub");
+}
+
 #[cfg(feature = "plugins")]
+#[tracing::instrument(level = "trace", skip_all)]
 fn plugins_data(context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
         "@/{}/{}/plugins",
         &context.runtime.state.zid, context.runtime.state.whatami
     );
-    let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
+    let root_key = unsafe { zenoh_keyexpr::keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
     if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
         let statuses = guard.plugins_status(names);
@@ -960,6 +940,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
 }
 
 #[cfg(feature = "plugins")]
+#[tracing::instrument(level = "trace", skip_all)]
 fn plugins_status(context: &AdminContext, query: Query) {
     let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
