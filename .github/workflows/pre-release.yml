@@ -111,6 +111,17 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
+      #
+      # Temporary workaround to remmove transitive dependency
+      # of static-init 1.0.3 which fails with nigtly Rust.
+      # This allows Rust to automatically pick a compatible version 1.0.4
+      # where the issue is fixed.
+      #
+      - name: Remove zenoh-pinned-deps-1-75 dependency and Cargo.lock
+        run: | 
+          sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
+          rm -f Cargo.lock
+
       # Use a similar command than docs.rs build: rustdoc with nightly toolchain
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
