@@ -166,8 +166,6 @@ impl Network {
             is_gateway: region.bound().is_south(),
         });
 
-        tracing::trace!(idx = idx.index(), "New network");
-
         Network {
             name,
             gossip,

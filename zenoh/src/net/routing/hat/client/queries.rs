@@ -18,6 +18,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
@@ -413,7 +415,7 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                if self.should_route_between(src_face, &ctx.face) {
+                if !self.owns(src_face) {
                     if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.region)
                     {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
@@ -595,8 +597,8 @@ impl HatQueriesTrait for Hat {
         };
 
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
-            tracing::trace!(
-                "Client region is empty; Will not propagate queryable declaration north"
+            tracing::debug!(
+                "Client region is empty; Will not propagate queryable declaration upstream"
             );
             return;
         };
@@ -635,8 +637,8 @@ impl HatQueriesTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all)]
     fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
-            tracing::trace!(
-                "Client region is empty; Will not propagate queryable undeclaration north"
+            tracing::debug!(
+                "Client region is empty; Will not propagate queryable undeclaration upstream"
             );
             return;
         };
@@ -661,21 +663,11 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_queryable(&mut self, _ctx: BaseContext, _res: Arc<Resource>) {
-        // Nothing to do
-    }
-
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
         self.owned_face_contexts(res)
             .filter_map(|(_, ctx)| ctx.qabl)
             .reduce(merge_qabl_infos)
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, QueryableInfoType> {
-        self.remote_queryables_matching(tables, None)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
@@ -686,7 +678,7 @@ impl HatQueriesTrait for Hat {
     ) -> HashMap<Arc<Resource>, QueryableInfoType> {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_qabls.values())
-            .filter(|(qabl, _)| qabl.ctx.is_some() && res.is_none_or(|res| qabl.matches(res)))
+            .filter(|(qabl, _)| res.is_none_or(|res| res.matches(qabl)))
             .fold(HashMap::new(), |mut acc, (res, info)| {
                 acc.entry(res.clone())
                     .and_modify(|i| {

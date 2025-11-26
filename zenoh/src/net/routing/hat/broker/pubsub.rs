@@ -19,7 +19,7 @@ use std::{
 
 use itertools::Itertools;
 #[allow(unused_imports)]
-use zenoh_core::compat::*;
+use zenoh_core::polyfill::*;
 use zenoh_protocol::network::declare::{
     self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
     UndeclareSubscriber,
@@ -311,37 +311,42 @@ impl HatPubSubTrait for Hat {
         res: Arc<Resource>,
         other_info: Option<SubscriberInfo>,
     ) {
-        for dst_face in self.owned_faces_mut(ctx.tables) {
-            if !self.owns(ctx.src_face) || ctx.src_face.id != dst_face.id {
-                if let Some(info) = self
-                    .owned_face_contexts(&res)
-                    .filter(|(_, face_ctx)| face_ctx.face.id != dst_face.id)
-                    .flat_map(|(_, face_ctx)| face_ctx.subs)
-                    .chain(other_info.into_iter())
-                    .reduce(|_, _| SubscriberInfo)
-                {
-                    self.maybe_propagate_subscription(&res, &info, dst_face, ctx.send_declare);
-                }
+        for dst_face in self
+            .owned_faces_mut(ctx.tables)
+            .filter(|f| f.id != ctx.src_face.id)
+        {
+            if let Some(info) = self
+                .owned_face_contexts(&res)
+                .filter(|(_, face_ctx)| face_ctx.face.id != dst_face.id)
+                .flat_map(|(_, face_ctx)| face_ctx.subs)
+                .chain(other_info.into_iter())
+                .reduce(|_, _| SubscriberInfo)
+            {
+                self.maybe_propagate_subscription(&res, &info, dst_face, ctx.send_declare);
             }
         }
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        for mut face in self.owned_faces(ctx.tables).cloned() {
+        for mut face in self
+            .owned_faces(ctx.tables)
+            .filter(|f| f.id != ctx.src_face.id)
+            .cloned()
+        {
             self.maybe_unpropagate_subscription(&mut face, &res, ctx.send_declare);
         }
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        // FIXME(regions): remove this
         debug_assert!(self.remote_subscriptions_of(&res).is_some());
 
         if let Ok(face) = self
             .owned_face_contexts(&res)
-            .filter_map(|(_, ctx)| ctx.subs.map(|_| ctx.face.clone()))
+            .filter_map(|(_, ctx)| ctx.subs.map(|_| &ctx.face))
             .exactly_one()
+            .cloned()
             .as_mut()
         {
             self.maybe_unpropagate_subscription(face, &res, ctx.send_declare)
@@ -353,11 +358,6 @@ impl HatPubSubTrait for Hat {
         self.owned_face_contexts(res)
             .filter_map(|(_, ctx)| ctx.subs)
             .reduce(|_, _| SubscriberInfo)
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
-        self.remote_subscriptions_matching(tables, None)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]

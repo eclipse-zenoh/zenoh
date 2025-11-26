@@ -20,6 +20,7 @@
 use std::{
     any::Any,
     collections::HashMap,
+    fmt::Debug,
     mem,
     sync::{atomic::AtomicU32, Arc},
 };
@@ -77,6 +78,12 @@ use crate::net::common::AutoConnect;
 pub(crate) struct Hat {
     region: Region,
     gossip: Option<Gossip>,
+}
+
+impl Debug for Hat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.region)
+    }
 }
 
 impl Hat {
@@ -220,7 +227,7 @@ impl HatBaseTrait for Hat {
         }
 
         // NOTE(regions): we only send/recv initial interests between peers that are mutually north-bound,
-        // otherwise we are in PULL mode. In particular, the `open.return_conditions.declares` configuration
+        // otherwise we are in PULL mode. In particular, the `open.return_conditions.delcares` configuration
         // option doesn't apply to region gateways.
         let do_initial_interest =
             ctx.src_face.region.bound().is_north() && ctx.src_face.remote_bound.is_north();
@@ -238,7 +245,7 @@ impl HatBaseTrait for Hat {
         self.interests_new_face(ctx.reborrow(), &other_hats);
         self.pubsub_new_face(ctx.reborrow(), &other_hats);
         self.queries_new_face(ctx.reborrow(), &other_hats);
-        self.token_new_face(ctx.reborrow());
+        self.tokens_new_face(ctx.reborrow(), &other_hats);
         ctx.tables.disable_all_routes();
 
         if do_initial_interest {

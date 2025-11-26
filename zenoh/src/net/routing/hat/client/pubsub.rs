@@ -18,6 +18,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::WhatAmI,
     network::declare::{
@@ -382,7 +384,7 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for (sid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && self.should_route_between(src_face, &ctx.face) {
+                if ctx.subs.is_some() && !self.owns(src_face) {
                     route.insert(*sid, || {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(*sid);
@@ -553,9 +555,7 @@ impl HatPubSubTrait for Hat {
         };
 
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
-            tracing::trace!(
-                "Client region is empty; Will not propagate subscription declaration north"
-            );
+            tracing::debug!("Client region is empty; won't unpropagate subscription upstream");
             return;
         };
 
@@ -592,9 +592,7 @@ impl HatPubSubTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
-            tracing::trace!(
-                "Client region is empty; Will not propagate subscription undeclaration north"
-            );
+            tracing::debug!("Client region is empty; won't unpropagate subscription upstream");
             return;
         };
 
@@ -618,21 +616,11 @@ impl HatPubSubTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn unpropagate_last_non_owned_subscription(&mut self, _ctx: BaseContext, _res: Arc<Resource>) {
-        // Nothing to do
-    }
-
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
         self.owned_face_contexts(res)
             .filter_map(|(_, ctx)| ctx.subs)
             .reduce(|_, _| SubscriberInfo)
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
-        self.remote_subscriptions_matching(tables, None)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
@@ -643,13 +631,8 @@ impl HatPubSubTrait for Hat {
     ) -> HashMap<Arc<Resource>, SubscriberInfo> {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_subs.values())
-            .filter_map(|sub| {
-                if sub.ctx.is_some() && res.is_none_or(|res| sub.matches(res)) {
-                    Some((sub.clone(), SubscriberInfo))
-                } else {
-                    None
-                }
-            })
+            .filter(|&sub| res.is_none_or(|res| res.matches(sub)))
+            .map(|sub| (sub.clone(), SubscriberInfo))
             .collect()
     }
 }

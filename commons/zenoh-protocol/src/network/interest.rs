@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::{
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
     hash::{Hash, Hasher},
     ops::{Add, AddAssign, Sub, SubAssign},
     sync::atomic::AtomicU32,
@@ -177,6 +177,14 @@ impl InterestMode {
             3 => InterestMode::CurrentFuture,
             _ => unreachable!(),
         }
+    }
+
+    pub fn is_future(&self) -> bool {
+        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    }
+
+    pub fn is_current(&self) -> bool {
+        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
     }
 }
 
@@ -383,6 +391,34 @@ impl Debug for InterestOptions {
         }
         write!(f, " }}")?;
         Ok(())
+    }
+}
+
+impl Display for InterestOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut option_strs = Vec::with_capacity(5);
+
+        if self.keyexprs() {
+            option_strs.push("K");
+        }
+
+        if self.subscribers() {
+            option_strs.push("S");
+        }
+
+        if self.queryables() {
+            option_strs.push("Q");
+        }
+
+        if self.tokens() {
+            option_strs.push("T");
+        }
+
+        if self.aggregate() {
+            option_strs.push("A");
+        }
+
+        write!(f, "{{{}}}", option_strs.join(" "))
     }
 }
 

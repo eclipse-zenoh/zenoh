@@ -19,7 +19,7 @@ use std::{
 
 use itertools::Itertools;
 #[allow(unused_imports)]
-use zenoh_core::compat::*;
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
@@ -352,7 +352,7 @@ impl Hat {
 
     pub(super) fn queries_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
         if ctx.src_face.region.bound().is_south() {
-            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote. Not propagating queryables");
+            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote; not propagating queryables");
             return;
         }
 
@@ -753,6 +753,10 @@ impl HatQueriesTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        if self.owns(ctx.src_face) {
+            return;
+        }
+
         for mut face in self.owned_faces(ctx.tables).cloned() {
             self.maybe_unpropagate_queryable(&mut face, &res, ctx.send_declare);
         }

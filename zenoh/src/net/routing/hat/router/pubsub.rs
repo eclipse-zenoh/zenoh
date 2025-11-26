@@ -17,6 +17,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohIdProto},
@@ -42,10 +43,8 @@ use crate::{
                 resource::{FaceContext, NodeId, Resource},
                 tables::{Route, RoutingExpr, TablesData},
             },
-            hat::{
-                BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources,
-            },
-            router::{disable_matches_data_routes, Direction, RouteBuilder, DEFAULT_NODE_ID},
+            hat::{BaseContext, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources},
+            router::{disable_matches_data_routes, Direction, RouteBuilder},
             RoutingContext,
         },
     },
@@ -57,7 +56,7 @@ impl Hat {
     fn send_sourced_subscription_to_net_children(
         &self,
         tables: &TablesData,
-        net: &Network,
+        net: &Network, // TODO(regions): remove this
         children: &[NodeIndex],
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
@@ -72,8 +71,7 @@ impl Hat {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                            let key_expr = Resource::decl_key(res, &mut someface);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
@@ -84,7 +82,7 @@ impl Hat {
                                         node_id: routing_context,
                                     },
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id: 0, // Sourced subscriptions do not use ids
+                                        id: SubscriberId::default(), // Sourced subscriptions do not use ids
                                         wire_expr: key_expr,
                                     }),
                                 },
@@ -145,11 +143,7 @@ impl Hat {
         );
 
         for update in subs_to_notify {
-            let key_expr = Resource::decl_key(
-                &update.resource,
-                dst_face,
-                self.push_declaration_profile(dst_face),
-            );
+            let key_expr = Resource::decl_key(&update.resource, dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -414,9 +408,7 @@ impl Hat {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let wire_expr =
-                                Resource::decl_key(res, &mut someface, push_declaration);
+                            let wire_expr = Resource::decl_key(res, &mut someface);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
@@ -427,7 +419,7 @@ impl Hat {
                                         node_id: routing_context.unwrap_or(0),
                                     },
                                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id: 0, // Sourced subscriptions do not use ids
+                                        id: SubscriberId::default(), // Sourced subscriptions do not use ids
                                         ext_wire_expr: WireExprType { wire_expr },
                                     }),
                                 },
@@ -649,7 +641,7 @@ impl Hat {
         tables: &mut TablesData,
         new_children: &[Vec<NodeIndex>],
     ) {
-        let net = self.routers_net.as_ref().unwrap();
+        let net = self.net();
         // propagate subs to new children
         for (tree_sid, tree_children) in new_children.iter().enumerate() {
             if !tree_children.is_empty() {
@@ -727,9 +719,9 @@ impl Hat {
         let matching_subs = self.get_subscribers_matching_resource(tables, face, res.as_ref());
         let mut matching_subs = matching_subs.iter();
 
-        if aggregate && (mode.current() || mode.future()) {
+        if aggregate && (mode.is_current() || mode.is_future()) {
             if let Some(aggregated_res) = &res {
-                let (resource_id, sub_info) = if mode.future() {
+                let (resource_id, sub_info) = if mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(face);
                     for sub in matching_subs {
                         face_hat_mut.local_subs.insert_simple_resource(
@@ -748,13 +740,9 @@ impl Hat {
                 } else {
                     (0, matching_subs.next().map(|_| SubscriberInfo))
                 };
-                if mode.current() && sub_info.is_some() {
+                if mode.is_current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
-                    let wire_expr = Resource::decl_key(
-                        aggregated_res,
-                        face,
-                        self.push_declaration_profile(face),
-                    );
+                    let wire_expr = Resource::decl_key(aggregated_res, face);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -773,9 +761,9 @@ impl Hat {
                     );
                 }
             }
-        } else if !aggregate && mode.current() {
+        } else if !aggregate && mode.is_current() {
             for sub in matching_subs {
-                let resource_id = if mode.future() {
+                let resource_id = if mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(face);
                     face_hat_mut
                         .local_subs
@@ -789,7 +777,7 @@ impl Hat {
                 } else {
                     0
                 };
-                let wire_expr = Resource::decl_key(sub, face, self.push_declaration_profile(face));
+                let wire_expr = Resource::decl_key(sub, face);
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -1032,47 +1020,8 @@ impl HatPubSubTrait for Hat {
                 router_source,
                 &self.res_hat(&mres).router_subs,
             );
-
-            for (fid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && self.should_route_between(src_face, &ctx.face) {
-                    route.insert(*fid, || {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
-                        let wire_expr = expr.get_best_key(*fid);
-                        Direction {
-                            dst_face: ctx.face.clone(),
-                            wire_expr: wire_expr.to_owned(),
-                            node_id: DEFAULT_NODE_ID,
-                        }
-                    });
-                }
-            }
         }
 
-        // FIXME(regions): track gateway current interest finalization
-        // FIXME(regions): add extension to request forwarding to the gateway
-        if let Some(gwy_node_id) = self.subregion_gateway() {
-            if let Some(next_hop) = self.point_to_point_hop(tables, gwy_node_id) {
-                route.insert(next_hop.id, || {
-                    tracing::trace!(dst = %next_hop, reason = "unfinalized subscriber interest");
-                    let wire_expr = expr.get_best_key(next_hop.id);
-                    Direction {
-                        dst_face: next_hop,
-                        wire_expr: wire_expr.to_owned(),
-                        node_id: DEFAULT_NODE_ID,
-                    }
-                });
-            } else {
-                tracing::error!("Unable to find first hop face in point-to-point route");
-            }
-        }
-
-        for mcast_group in self.mcast_groups(tables) {
-            route.insert(mcast_group.id, || Direction {
-                dst_face: mcast_group.clone(),
-                wire_expr: key_expr.to_string().into(),
-                node_id: DEFAULT_NODE_ID,
-            });
-        }
         Arc::new(route.build())
     }
 
@@ -1143,5 +1092,169 @@ impl HatPubSubTrait for Hat {
             }
         }
         matching_subscriptions
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn register_subscription(
+        &mut self,
+        ctx: BaseContext,
+        _id: SubscriberId,
+        mut res: Arc<Resource>,
+        nid: NodeId,
+        info: &SubscriberInfo,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let Some(router) = self.get_router(ctx.src_face, nid) else {
+            tracing::error!(%nid, "Subscriber from unknown router");
+            return;
+        };
+
+        debug_assert_ne!(router, ctx.tables.zid);
+
+        self.res_hat_mut(&mut res).router_subs.insert(router);
+        self.router_subs.insert(res.clone());
+
+        self.propagate_sourced_subscription(ctx.tables, &res, info, Some(ctx.src_face), &router);
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        _id: SubscriberId,
+        res: Option<Arc<Resource>>,
+        nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let Some(router) = self.get_router(ctx.src_face, nid) else {
+            tracing::error!(%nid, "Subscriber from unknown router");
+            return None;
+        };
+
+        debug_assert_ne!(router, ctx.tables.zid);
+
+        let Some(mut res) = res else {
+            tracing::error!("Subscriber undeclaration in router region with no resource");
+            return None;
+        };
+
+        self.res_hat_mut(&mut res).router_subs.remove(&router);
+
+        if self.res_hat(&res).router_subs.is_empty() {
+            self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
+        }
+
+        self.propagate_forget_sourced_subscription(ctx.tables, &res, Some(ctx.src_face), &router);
+
+        Some(res)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        let removed_routers = self
+            .net_mut()
+            .remove_link(&ctx.src_face.zid)
+            .into_iter()
+            .map(|(_, node)| node.zid)
+            .collect::<HashSet<_>>();
+
+        let mut resources = HashSet::new();
+
+        for mut res in self.router_subs.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .retain(|router| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_subs.is_empty() {
+                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
+                resources.insert(res);
+            }
+        }
+
+        resources
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        mut res: Arc<Resource>,
+        other_info: Option<SubscriberInfo>,
+    ) {
+        let Some(other_info) = other_info else {
+            // NOTE(regions): see Hat::register_subscription
+            debug_assert!(self.owns(ctx.src_face));
+            return;
+        };
+
+        if !self.res_hat(&res).router_subs.contains(&ctx.tables.zid) {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .insert(ctx.tables.zid);
+            self.router_subs.insert(res.clone());
+
+            self.propagate_sourced_subscription(
+                ctx.tables,
+                &res,
+                &other_info,
+                None,
+                &ctx.tables.zid,
+            );
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        if self.owns(ctx.src_face) {
+            // NOTE(regions): see Hat::unregister_subscription
+            return;
+        }
+
+        let was_propagated = self.res_hat(&res).router_subs.contains(&ctx.tables.zid);
+
+        debug_assert!(was_propagated);
+
+        if was_propagated {
+            self.propagate_forget_sourced_subscription(ctx.tables, &res, None, &ctx.tables.zid);
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+        // FIXME(regions): use TablesData::zid?
+        let net = self.net();
+        let this_router = &net.graph[net.idx].zid;
+
+        self.res_hat(res)
+            .router_subs
+            .iter()
+            .any(|router| router != this_router)
+            .then_some(SubscriberInfo)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_subscriptions_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.router_subs
+            .iter()
+            .filter_map(|sub| {
+                if self
+                    .res_hat(sub)
+                    .router_subs
+                    .iter()
+                    .any(|router| router != &tables.zid)
+                    && res.is_none_or(|res| res.matches(sub))
+                {
+                    Some((sub.clone(), SubscriberInfo))
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }

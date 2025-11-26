@@ -17,7 +17,10 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
@@ -40,7 +43,7 @@ use crate::{
         protocol::network::Network,
         routing::{
             dispatcher::{
-                face::FaceState,
+                face::{FaceId, FaceState},
                 local_resources::LocalResourceInfoTrait,
                 queries::{
                     disable_matches_query_routes, get_remote_qabl_info, merge_qabl_infos,
@@ -49,10 +52,7 @@ use crate::{
                 resource::{FaceContext, NodeId, Resource},
                 tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
             },
-            hat::{
-                BaseContext, CurrentFutureTrait, HatBaseTrait, HatQueriesTrait, SendDeclare,
-                Sources,
-            },
+            hat::{BaseContext, HatBaseTrait, HatQueriesTrait, SendDeclare, Sources},
             router::Direction,
             RoutingContext,
         },
@@ -70,7 +70,7 @@ impl Hat {
             .fold(None, |accu, ctx| {
                 if let Some(info) = ctx.qabl.as_ref() {
                     Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
+                        Some(accu) => merge_qabl_infos(accu, *info),
                         None => *info,
                     })
                 } else {
@@ -93,7 +93,7 @@ impl Hat {
                 .fold(None, |accu, (zid, info)| {
                     if *zid != tables.zid {
                         Some(match accu {
-                            Some(accu) => merge_qabl_infos(accu, info),
+                            Some(accu) => merge_qabl_infos(accu, *info),
                             None => *info,
                         })
                     } else {
@@ -111,7 +111,7 @@ impl Hat {
                 {
                     if let Some(info) = ctx.qabl.as_ref() {
                         Some(match accu {
-                            Some(accu) => merge_qabl_infos(accu, info),
+                            Some(accu) => merge_qabl_infos(accu, *info),
                             None => *info,
                         })
                     } else {
@@ -145,8 +145,7 @@ impl Hat {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let key_expr = Resource::decl_key(res, &mut someface, push_declaration);
+                            let key_expr = Resource::decl_key(res, &mut someface);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
@@ -157,7 +156,7 @@ impl Hat {
                                         node_id: routing_context,
                                     },
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // Sourced queryables do not use ids
+                                        id: QueryableId::default(), // Sourced queryables do not use ids
                                         wire_expr: key_expr,
                                         ext_info: *qabl_info,
                                     }),
@@ -215,11 +214,7 @@ impl Hat {
         );
 
         for update in qabls_to_notify {
-            let key_expr = Resource::decl_key(
-                &update.resource,
-                dst_face,
-                self.push_declaration_profile(dst_face),
-            );
+            let key_expr = Resource::decl_key(&update.resource, dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -263,11 +258,7 @@ impl Hat {
             };
             match update.update {
                 Some(new_qabl_info) => {
-                    let key_expr = Resource::decl_key(
-                        &update.resource,
-                        face,
-                        self.push_declaration_profile(face),
-                    );
+                    let key_expr = Resource::decl_key(&update.resource, face);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -332,6 +323,7 @@ impl Hat {
         }
     }
 
+    // FIXME(regions): use a different word for "propagate"
     fn propagate_sourced_queryable(
         &self,
         tables: &TablesData,
@@ -492,9 +484,7 @@ impl Hat {
                             .map(|src_face| someface.id != src_face.id)
                             .unwrap_or(true)
                         {
-                            let push_declaration = self.push_declaration_profile(&someface);
-                            let wire_expr =
-                                Resource::decl_key(res, &mut someface, push_declaration);
+                            let wire_expr = Resource::decl_key(res, &mut someface);
 
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
@@ -505,7 +495,7 @@ impl Hat {
                                         node_id: routing_context,
                                     },
                                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                        id: 0, // Sourced queryables do not use ids
+                                        id: QueryableId::default(), // Sourced queryables do not use ids
                                         ext_wire_expr: WireExprType { wire_expr },
                                     }),
                                 },
@@ -572,8 +562,8 @@ impl Hat {
 
     fn propagate_forget_sourced_queryable(
         &self,
-        tables: &mut TablesData,
-        res: &mut Arc<Resource>,
+        tables: &TablesData,
+        res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
     ) {
@@ -854,9 +844,9 @@ impl Hat {
         let matching_qabls = self.get_queryables_matching_resource(tables, face, res.as_ref());
         let matching_qabls = matching_qabls.iter();
 
-        if aggregate && (mode.current() || mode.future()) {
+        if aggregate && (mode.is_current() || mode.is_future()) {
             if let Some(aggregated_res) = &res {
-                let (resource_id, qabl_info) = if mode.future() {
+                let (resource_id, qabl_info) = if mode.is_future() {
                     for qabl in matching_qabls {
                         let qabl_info = self.local_qabl_info(tables, qabl, face);
                         let face_hat_mut = self.face_hat_mut(face);
@@ -882,13 +872,9 @@ impl Hat {
                         ),
                     )
                 };
-                if let Some(ext_info) = mode.current().then_some(qabl_info).flatten() {
+                if let Some(ext_info) = mode.is_current().then_some(qabl_info).flatten() {
                     // send declare only if there is at least one resource matching the aggregate
-                    let wire_expr = Resource::decl_key(
-                        aggregated_res,
-                        face,
-                        self.push_declaration_profile(face),
-                    );
+                    let wire_expr = Resource::decl_key(aggregated_res, face);
                     send_declare(
                         &face.primitives,
                         RoutingContext::with_expr(
@@ -908,10 +894,10 @@ impl Hat {
                     );
                 }
             }
-        } else if !aggregate && mode.current() {
+        } else if !aggregate && mode.is_current() {
             for qabl in matching_qabls {
                 let qabl_info = self.local_qabl_info(tables, qabl, face);
-                let resource_id = if mode.future() {
+                let resource_id = if mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(face);
                     face_hat_mut
                         .local_qabls
@@ -925,7 +911,7 @@ impl Hat {
                 } else {
                     0
                 };
-                let wire_expr = Resource::decl_key(qabl, face, self.push_declaration_profile(face));
+                let wire_expr = Resource::decl_key(qabl, face);
                 send_declare(
                     &face.primitives,
                     RoutingContext::with_expr(
@@ -1134,20 +1120,7 @@ impl HatQueriesTrait for Hat {
                 &self.res_hat(&mres).router_qabls,
                 complete,
             );
-
-            for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
-                if self.should_route_between(src_face, &ctx.face) {
-                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.region)
-                    {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
-                        route.push(qabl);
-                    }
-                }
-            }
         }
-
-        // FIXME(regions): track gateway current interest finalization
-        // otherwise send request point-to-point/broadcast
 
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
@@ -1158,7 +1131,7 @@ impl HatQueriesTrait for Hat {
         tables: &TablesData,
         key_expr: &KeyExpr<'_>,
         complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>> {
+    ) -> HashMap<FaceId, Arc<FaceState>> {
         let mut matching_queryables = HashMap::new();
 
         tracing::trace!(
@@ -1201,6 +1174,177 @@ impl HatQueriesTrait for Hat {
             }
         }
         matching_queryables
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn register_queryable(
+        &mut self,
+        ctx: BaseContext,
+        _id: QueryableId,
+        mut res: Arc<Resource>,
+        nid: NodeId,
+        info: &QueryableInfoType,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let Some(router) = self.get_router(ctx.src_face, nid) else {
+            tracing::error!(%nid, "Queryable from unknown router");
+            return;
+        };
+
+        debug_assert_ne!(router, ctx.tables.zid);
+
+        self.res_hat_mut(&mut res)
+            .router_qabls
+            .insert(router, *info);
+        self.router_qabls.insert(res.clone());
+
+        self.propagate_sourced_queryable(ctx.tables, &res, info, Some(ctx.src_face), &router);
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_queryable(
+        &mut self,
+        ctx: BaseContext,
+        _id: QueryableId,
+        res: Option<Arc<Resource>>,
+        nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let Some(router) = self.get_router(ctx.src_face, nid) else {
+            tracing::error!(%nid, "Queryable from unknown router");
+            return None;
+        };
+
+        debug_assert_ne!(router, ctx.tables.zid);
+
+        let Some(mut res) = res else {
+            tracing::error!("Queryable undeclaration in router region with no resource");
+            return None;
+        };
+
+        self.res_hat_mut(&mut res).router_qabls.remove(&router);
+
+        if self.res_hat(&res).router_qabls.is_empty() {
+            self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
+        }
+
+        self.propagate_forget_sourced_queryable(ctx.tables, &res, Some(ctx.src_face), &router);
+
+        Some(res)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        let removed_routers = self
+            .net_mut()
+            .remove_link(&ctx.src_face.zid)
+            .into_iter()
+            .map(|(_, node)| node.zid)
+            .collect::<HashSet<_>>();
+
+        let mut resources = HashSet::new();
+
+        for mut res in self.router_qabls.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_qabls
+                .retain(|router, _| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_qabls.is_empty() {
+                self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
+                resources.insert(res);
+            }
+        }
+
+        resources
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn propagate_queryable(
+        &mut self,
+        ctx: BaseContext,
+        mut res: Arc<Resource>,
+        other_info: Option<QueryableInfoType>,
+    ) {
+        let Some(other_info) = other_info else {
+            // NOTE(regions): see Hat::register_queryable
+            debug_assert!(self.owns(ctx.src_face));
+            return;
+        };
+
+        if self
+            .res_hat(&res)
+            .router_qabls
+            .get(&ctx.tables.zid)
+            .is_none_or(|info| info != &other_info)
+        {
+            self.res_hat_mut(&mut res)
+                .router_qabls
+                .insert(ctx.tables.zid, other_info);
+            self.router_qabls.insert(res.clone());
+
+            self.propagate_sourced_queryable(ctx.tables, &res, &other_info, None, &ctx.tables.zid);
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        if self.owns(ctx.src_face) {
+            // NOTE(regions): see Hat::unregister_queryable
+            return;
+        }
+
+        let was_propagated = self
+            .res_hat(&res)
+            .router_qabls
+            .contains_key(&ctx.tables.zid);
+
+        debug_assert!(was_propagated);
+
+        if was_propagated {
+            self.propagate_forget_sourced_queryable(ctx.tables, &res, None, &ctx.tables.zid);
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
+        // FIXME(regions): use TablesData::zid?
+        let net = self.net();
+        let this_router = &net.graph[net.idx].zid;
+
+        self.res_hat(res)
+            .router_qabls
+            .iter()
+            .filter_map(|(router, info)| (router != this_router).then_some(*info))
+            .reduce(merge_qabl_infos)
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    fn remote_queryables_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, QueryableInfoType> {
+        self.router_qabls
+            .iter()
+            .filter(|qabl| res.is_none_or(|res| res.matches(qabl)))
+            .flat_map(|qabl| {
+                std::iter::repeat(qabl).zip(
+                    self.res_hat(qabl)
+                        .router_qabls
+                        .iter()
+                        .filter_map(|(router, info)| (router != &tables.zid).then_some(*info)),
+                )
+            })
+            .fold(HashMap::new(), |mut acc, (res, info)| {
+                acc.entry(res.clone())
+                    .and_modify(|i| {
+                        *i = merge_qabl_infos(*i, info);
+                    })
+                    .or_insert(info);
+                acc
+            })
     }
 }
 

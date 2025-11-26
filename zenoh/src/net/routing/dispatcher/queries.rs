@@ -153,13 +153,15 @@ impl Face {
             .cloned()
         {
             Some(mut prefix) => {
-                tracing::debug!(
-                    "{} Declare queryable {} ({}{})",
-                    &self.state,
+                let _span = tracing::debug_span!(
+                    "declare_queryable",
                     id,
-                    prefix.expr(),
-                    expr.suffix
-                );
+                    expr = [prefix.expr(), expr.suffix.as_ref()].concat(),
+                    info.complete = qabl_info.complete,
+                    info.distance = qabl_info.distance
+                )
+                .entered();
+
                 let res = Resource::get_resource(&prefix, &expr.suffix);
                 let (mut res, mut wtables) =
                     if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
@@ -264,6 +266,13 @@ impl Face {
                 }
             }
         };
+
+        let _span = tracing::debug_span!(
+            "undeclare_queryable",
+            id,
+            expr = res.as_ref().map(|res| res.expr())
+        )
+        .entered();
 
         let mut wtables = zwrite!(tables.tables);
         let tables = &mut *wtables;

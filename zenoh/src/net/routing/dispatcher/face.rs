@@ -391,7 +391,6 @@ impl Face {
 }
 
 impl Primitives for Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self, mode = ?msg.mode))]
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
@@ -406,7 +405,6 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
@@ -521,13 +519,12 @@ impl Primitives for Face {
         }
     }
 
-    #[inline]
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(reliability))]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         route_data(&self.tables, &self.state, msg, reliability);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(id = msg.id))]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -536,17 +533,17 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
+    #[tracing::instrument(level = "trace", skip_all)]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
+    #[tracing::instrument(level = "trace", skip_all)]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
+    #[tracing::instrument(level = "trace", skip_all)]
     fn send_close(&self) {
         tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
@@ -632,6 +629,13 @@ impl Primitives for Face {
             Resource::clean(res);
         }
         get_mut_unchecked(ctx.src_face).local_mappings.clear();
+
+        for interest in get_mut_unchecked(ctx.src_face).local_interests.values_mut() {
+            if let Some(mut res) = interest.res.take() {
+                Resource::clean(&mut res);
+            }
+        }
+        get_mut_unchecked(ctx.src_face).local_interests.clear();
 
         hats[region].close_face(ctx);
 

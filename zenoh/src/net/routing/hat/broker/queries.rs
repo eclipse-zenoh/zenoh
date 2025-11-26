@@ -19,7 +19,7 @@ use std::{
 
 use itertools::Itertools;
 #[allow(unused_imports)]
-use zenoh_core::compat::*;
+use zenoh_core::polyfill::*;
 use zenoh_keyexpr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::network::{
     declare::{self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId},
@@ -345,24 +345,29 @@ impl HatQueriesTrait for Hat {
         res: Arc<Resource>,
         other_info: Option<QueryableInfoType>,
     ) {
-        for dst_face in self.owned_faces_mut(ctx.tables) {
-            if !self.owns(ctx.src_face) || ctx.src_face.id != dst_face.id {
-                if let Some(info) = self
-                    .owned_face_contexts(&res)
-                    .filter(|(_, face_ctx)| face_ctx.face.id != dst_face.id)
-                    .flat_map(|(_, face_ctx)| face_ctx.qabl)
-                    .chain(other_info.into_iter())
-                    .reduce(merge_qabl_infos)
-                {
-                    self.maybe_propagate_queryable(&res, &info, dst_face, ctx.send_declare);
-                }
+        for dst_face in self
+            .owned_faces_mut(ctx.tables)
+            .filter(|f| f.id != ctx.src_face.id)
+        {
+            if let Some(info) = self
+                .owned_face_contexts(&res)
+                .filter(|(_, face_ctx)| face_ctx.face.id != dst_face.id)
+                .flat_map(|(_, face_ctx)| face_ctx.qabl)
+                .chain(other_info.into_iter())
+                .reduce(merge_qabl_infos)
+            {
+                self.maybe_propagate_queryable(&res, &info, dst_face, ctx.send_declare);
             }
         }
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        for mut face in self.owned_faces(ctx.tables).cloned() {
+        for mut face in self
+            .owned_faces(ctx.tables)
+            .filter(|f| f.id != ctx.src_face.id)
+            .cloned()
+        {
             self.maybe_unpropagate_queryable(&mut face, &res, ctx.send_declare);
         }
     }
@@ -387,11 +392,6 @@ impl HatQueriesTrait for Hat {
         self.owned_face_contexts(res)
             .filter_map(|(_, ctx)| ctx.qabl)
             .reduce(merge_qabl_infos)
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, QueryableInfoType> {
-        self.remote_queryables_matching(tables, None)
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]

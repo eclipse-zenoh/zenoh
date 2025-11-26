@@ -12,11 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    collections::HashSet,
+    sync::{atomic::Ordering, Arc},
+};
 
+use itertools::Itertools;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
-    declare::{common::ext::WireExprType, TokenId},
+    declare::{self, common::ext::WireExprType, TokenId},
     ext,
     interest::{InterestId, InterestMode},
     Declare, DeclareBody, DeclareToken, UndeclareToken,
@@ -25,10 +29,8 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{Hat, INITIAL_INTEREST_ID};
 use crate::net::routing::{
-    dispatcher::{
-        face::FaceState, interests::CurrentInterest, region::RegionMap, tables::TablesData,
-    },
-    hat::{BaseContext, CurrentFutureTrait, HatTokenTrait, HatTrait, SendDeclare},
+    dispatcher::{face::FaceState, region::RegionMap, tables::TablesData},
+    hat::{BaseContext, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -70,7 +72,7 @@ impl Hat {
                 || dst_face.is_local
                 || self.face_hat(dst_face).remote_interests.values().any(|i| {
                     i.options.tokens()
-                        && (i.mode.current() || src_interest_id.is_none())
+                        && (i.mode.is_current() || src_interest_id.is_none())
                         && i.matches(res)
                 }))
         {
@@ -340,32 +342,24 @@ impl Hat {
         }
     }
 
-    pub(super) fn token_new_face(&self, mut ctx: BaseContext) {
-        if ctx.src_face.whatami != WhatAmI::Client {
-            for mut face in self
-                .faces(ctx.tables)
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
-                for token in self.face_hat(&face.clone()).remote_tokens.values() {
-                    let dst_face = &mut ctx.src_face.clone();
-                    self.propagate_simple_token_to(
-                        ctx.reborrow(),
-                        &mut face,
-                        dst_face,
-                        token,
-                        None,
-                        Some(INITIAL_INTEREST_ID),
-                    );
-                }
-            }
+    pub(super) fn tokens_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+        if ctx.src_face.region.bound().is_south() {
+            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote; not propagating tokens");
+            return;
+        }
+
+        for res in other_hats
+            .values()
+            .flat_map(|hat| hat.remote_tokens(ctx.tables).into_iter())
+        {
+            // FIXME(regions): We always propagate entities in this codepath; the method name is misleading
+            self.maybe_propagate_token(&res, ctx.src_face, ctx.send_declare);
         }
     }
 
     #[inline]
     fn make_token_id(&self, res: &Arc<Resource>, face: &mut FaceState, mode: InterestMode) -> u32 {
-        if mode.future() {
+        if mode.is_future() {
             if let Some(id) = face.hats[self.region]
                 .downcast_ref::<super::HatFace>()
                 .unwrap()
@@ -402,7 +396,7 @@ impl Hat {
         mode: InterestMode,
         send_declare: &mut SendDeclare,
     ) {
-        if mode.current() {
+        if mode.is_current() {
             let interest_id = Some(id);
             if let Some(res) = res.as_ref() {
                 for src_face in tables
@@ -464,6 +458,105 @@ impl Hat {
             }
         }
     }
+
+    fn maybe_propagate_token(
+        &self,
+        res: &Arc<Resource>,
+        dst_face: &mut Arc<FaceState>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if self.face_hat(dst_face).local_tokens.contains_key(res) {
+            return;
+        };
+
+        if dst_face.region.bound().is_north()
+            || self
+                .face_hat(dst_face)
+                .remote_interests
+                .values()
+                .any(|i| i.options.tokens() && i.matches(res))
+        {
+            let id = self
+                .face_hat(dst_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(dst_face)
+                .local_tokens
+                .insert(res.clone(), id);
+            let key_expr = Resource::decl_key(res, dst_face);
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareToken(DeclareToken {
+                            id,
+                            wire_expr: key_expr,
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        }
+    }
+
+    fn maybe_unpropagate_token(
+        &self,
+        dst_face: &mut Arc<FaceState>,
+        res: &Arc<Resource>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if let Some(id) = self.face_hat_mut(dst_face).local_tokens.remove(res) {
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareToken(UndeclareToken {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        } else if self
+            .face_hat(dst_face)
+            .remote_interests
+            .values()
+            .any(|i| i.options.tokens() && i.matches(res))
+        {
+            // Token has never been declared on this face.
+            // Send an Undeclare with a one shot generated id and a WireExpr ext.
+            send_declare(
+                &dst_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareToken(UndeclareToken {
+                            id: self
+                                .face_hat(dst_face)
+                                .next_id
+                                .fetch_add(1, Ordering::SeqCst),
+                            ext_wire_expr: WireExprType {
+                                wire_expr: Resource::get_best_key(res, "", dst_face.id),
+                            },
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        }
+    }
 }
 
 impl HatTokenTrait for Hat {
@@ -491,68 +584,129 @@ impl HatTokenTrait for Hat {
         self.forget_simple_token(ctx.tables, ctx.src_face, id, res, ctx.send_declare)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region, interest_id))]
-    fn declare_current_token(
+    #[tracing::instrument(level = "trace", skip(ctx))]
+    fn register_token(
         &mut self,
         ctx: BaseContext,
-        res: &mut Arc<Resource>,
-        interest_id: InterestId,
-        mut downstream_hats: RegionMap<&mut dyn HatTrait>,
+        id: TokenId,
+        mut res: Arc<Resource>,
+        _nid: NodeId,
     ) {
-        debug_assert!(self.region.bound().is_north());
+        debug_assert!(self.owns(ctx.src_face));
 
-        if let Some(interest) = ctx
-            .src_face
-            .clone()
-            .pending_current_interests
-            .get(&interest_id)
-            .map(|p| &p.interest)
         {
-            let hat = &mut downstream_hats[interest.src_region];
-            hat.propagate_current_token(ctx, res, interest);
-        } else {
-            tracing::error!(
-                id = interest_id,
-                keyexpr = res.expr(),
-                src = %ctx.src_face,
-                "Received current token with unknown interest id"
-            );
+            let res = get_mut_unchecked(&mut res);
+            match res.face_ctxs.get_mut(&ctx.src_face.id) {
+                Some(ctx) => {
+                    if !ctx.token {
+                        get_mut_unchecked(ctx).token = true;
+                    }
+                }
+                None => {
+                    let ctx = res
+                        .face_ctxs
+                        .entry(ctx.src_face.id)
+                        .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
+                    get_mut_unchecked(ctx).token = true;
+                }
+            }
+        }
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_tokens
+            .insert(id, res.clone());
+    }
+
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    fn unregister_token(
+        &mut self,
+        ctx: BaseContext,
+        id: TokenId,
+        _res: Option<Arc<Resource>>,
+        _nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_tokens.remove(&id) else {
+            tracing::error!(id, "Unknown token");
+            return None;
+        };
+
+        if self
+            .face_hat(ctx.src_face)
+            .remote_tokens
+            .values()
+            .contains(&res)
+        {
+            tracing::debug!(id, ?res, "Duplicated token");
+            return None;
+        };
+
+        if let Some(ctx) = get_mut_unchecked(&mut res)
+            .face_ctxs
+            .get_mut(&ctx.src_face.id)
+        {
+            get_mut_unchecked(ctx).token = false;
+        }
+
+        Some(res)
+    }
+
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let fid = ctx.src_face.id;
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_tokens
+            .drain()
+            .map(|(_, mut res)| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).token = false;
+                }
+
+                res
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(level = "trace", skip(ctx))]
+    fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool) {
+        if !other_tokens {
+            debug_assert!(self.owns(ctx.src_face));
+            return;
+        };
+
+        for dst_face in self.owned_faces_mut(ctx.tables) {
+            self.maybe_propagate_token(&res, dst_face, ctx.send_declare);
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region, interest_id = interest.src_interest_id))]
-    fn propagate_current_token(
-        &mut self,
-        mut ctx: BaseContext,
-        res: &mut Arc<Resource>,
-        interest: &CurrentInterest,
-    ) {
-        debug_assert!(self.region.bound().is_south());
-
-        if interest.mode == InterestMode::CurrentFuture {
-            self.register_simple_token(ctx.reborrow(), interest.src_interest_id, res);
+    #[tracing::instrument(level = "trace", skip(ctx))]
+    fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        if self.owns(ctx.src_face) {
+            return;
         }
 
-        // FIXME(regions): router subregions don't support the interest protocol
-        let src_face =
-            unsafe { &mut (*(std::sync::Arc::as_ptr(&interest.src) as *mut dyn std::any::Any)) }
-                .downcast_mut::<FaceState>()
-                .unwrap();
+        for mut face in self.owned_faces(ctx.tables).cloned() {
+            self.maybe_unpropagate_token(&mut face, &res, ctx.send_declare);
+        }
+    }
 
-        let id = self.make_token_id(res, src_face, interest.mode);
-        let wire_expr = Resource::get_best_key(res, "", src_face.id);
-        (ctx.send_declare)(
-            &src_face.primitives,
-            RoutingContext::with_expr(
-                Declare {
-                    interest_id: Some(interest.src_interest_id),
-                    ext_qos: ext::QoSType::default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                },
-                res.expr().to_string(),
-            ),
-        );
+    #[tracing::instrument(level = "trace", ret)]
+    fn remote_tokens_of(&self, res: &Resource) -> bool {
+        self.owned_face_contexts(res).any(|(_, ctx)| ctx.token)
+    }
+
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    fn remote_tokens_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashSet<Arc<Resource>> {
+        self.owned_faces(tables)
+            .flat_map(|f| self.face_hat(f).remote_tokens.values())
+            .filter(|token| res.is_none_or(|res| res.matches(token)))
+            .cloned()
+            .collect()
     }
 }

@@ -19,7 +19,7 @@ use std::{
 
 use itertools::Itertools;
 #[allow(unused_imports)]
-use zenoh_core::compat::*;
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::WhatAmI,
     network::{
@@ -45,8 +45,7 @@ use crate::{
         },
         hat::{
             peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
-            BaseContext, CurrentFutureTrait, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare,
-            Sources,
+            BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources,
         },
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
@@ -120,7 +119,6 @@ impl Hat {
         }
     }
 
-    #[inline]
     fn maybe_unpropagate_subscription(
         &self,
         face: &mut Arc<FaceState>,
@@ -353,7 +351,7 @@ impl Hat {
 
     pub(super) fn pubsub_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
         if ctx.src_face.region.bound().is_south() {
-            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote. Not propagating subscriptions");
+            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote; not propagating subscriptions");
             return;
         }
 
@@ -389,9 +387,9 @@ impl Hat {
             .get_subscribers_matching_resource(tables, face, res.as_ref())
             .into_iter();
 
-        if aggregate && (mode.current() || mode.future()) {
+        if aggregate && (mode.is_current() || mode.is_future()) {
             if let Some(aggregated_res) = &res {
-                let (resource_id, sub_info) = if mode.future() {
+                let (resource_id, sub_info) = if mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(face);
                     for sub in matching_subs {
                         face_hat_mut.local_subs.insert_simple_resource(
@@ -410,7 +408,7 @@ impl Hat {
                 } else {
                     (0, matching_subs.next().map(|_| SubscriberInfo))
                 };
-                if mode.current() && sub_info.is_some() {
+                if mode.is_current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
                     let wire_expr = Resource::decl_key(aggregated_res, face);
                     send_declare(
@@ -431,9 +429,9 @@ impl Hat {
                     );
                 }
             }
-        } else if !aggregate && mode.current() {
+        } else if !aggregate && mode.is_current() {
             for sub in matching_subs {
-                let resource_id = if mode.future() {
+                let resource_id = if mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(face);
                     face_hat_mut
                         .local_subs
@@ -824,15 +822,9 @@ impl HatPubSubTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        for mut face in self.owned_faces(ctx.tables).cloned() {
-            self.maybe_unpropagate_subscription(&mut face, &res, ctx.send_declare);
+        if self.owns(ctx.src_face) {
+            return;
         }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        // FIXME(regions): remove this
-        debug_assert!(self.remote_subscriptions_of(&res).is_some());
 
         for mut face in self.owned_faces(ctx.tables).cloned() {
             self.maybe_unpropagate_subscription(&mut face, &res, ctx.send_declare);
@@ -847,11 +839,6 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
-        self.remote_subscriptions_matching(tables, None)
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_subscriptions_matching(
         &self,
         tables: &TablesData,
@@ -859,8 +846,7 @@ impl HatPubSubTrait for Hat {
     ) -> HashMap<Arc<Resource>, SubscriberInfo> {
         self.owned_faces(tables)
             .flat_map(|f| self.face_hat(f).remote_subs.values())
-            .filter(|&sub| res.is_none_or(|res| res.matches(sub)))
-            .map(|sub| (sub.clone(), SubscriberInfo))
+            .filter(|&sub| res.is_none_or(|res| res.matches(sub))).map(|sub| (sub.clone(), SubscriberInfo))
             .collect()
     }
 }

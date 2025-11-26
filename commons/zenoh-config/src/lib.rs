@@ -1321,6 +1321,21 @@ impl Config {
             LibLoader::empty()
         }
     }
+
+    /// Expands the config with missing but required fields.
+    ///
+    /// This method should be called before a user-supplied config is used in the runtime.
+    pub fn expanded(mut self) -> Self {
+        if let None = self.id {
+            self.set_id(Some(ZenohId::default())).unwrap();
+        }
+
+        if let None = self.mode {
+            self.set_mode(Some(WhatAmI::default())).unwrap();
+        }
+
+        self
+    }
 }
 
 impl std::fmt::Display for Config {

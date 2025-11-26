@@ -25,7 +25,7 @@ use once_cell::sync::OnceCell;
 #[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, span::EnteredSpan, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
@@ -42,7 +42,7 @@ use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
         AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
-        EMPTY_EXPR_ID,
+        ZenohIdProto, EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -142,6 +142,7 @@ pub(crate) struct SessionState {
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
+    span: tracing::span::Span,
 }
 
 impl SessionState {
@@ -149,6 +150,7 @@ impl SessionState {
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
         publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
+        runtime: &GenericRuntime,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -171,17 +173,37 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
+            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()),
         }
+    }
+}
+
+pub(crate) struct SpannedPrimitives(Arc<dyn Primitives>, EnteredSpan);
+
+impl Deref for SpannedPrimitives {
+    type Target = Arc<dyn Primitives>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl SpannedPrimitives {
+    pub(crate) fn into_primitives(self) -> Arc<dyn Primitives> {
+        self.0
     }
 }
 
 impl SessionState {
     #[inline]
-    pub(crate) fn primitives(&self) -> ZResult<Arc<dyn Primitives>> {
-        self.primitives
+    pub(crate) fn primitives(&self) -> ZResult<SpannedPrimitives> {
+        let primitives = self
+            .primitives
             .as_ref()
             .cloned()
-            .ok_or_else(|| SessionClosedError.into())
+            .ok_or(SessionClosedError)?;
+
+        Ok(SpannedPrimitives(primitives, self.span.clone().entered()))
     }
 
     #[inline]
@@ -708,6 +730,7 @@ impl Session {
                 aggregated_subscribers,
                 aggregated_publishers,
                 publisher_qos.into(),
+                &runtime,
             ));
             let session = Session(Arc::new(SessionInner {
                 weak_counter: Mutex::new(0),
@@ -2491,7 +2514,7 @@ impl SessionInner {
             primitives: if local {
                 Arc::new(WeakSession::new(self))
             } else {
-                primitives
+                primitives.into_primitives()
             },
         });
         if !queryables.is_empty() {

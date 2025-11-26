@@ -105,8 +105,7 @@ impl InterceptorContext for DeMuxContext<'_> {
 }
 
 impl TransportPeerEventHandler for DeMux {
-    #[tracing::instrument(name = "demux", level = "trace", skip_all, fields(zid = %self.face.tables.zid.short(), src = %self.face))]
-    #[inline]
+    #[tracing::instrument(name = "demux", level = "debug", skip_all, fields(zid = %self.face.tables.zid.short(), src = %self.face))]
     fn handle_message(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         let interceptor = self.interceptor.load();
         if !interceptor.interceptors.is_empty() {

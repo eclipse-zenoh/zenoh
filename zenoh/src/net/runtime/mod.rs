@@ -418,7 +418,7 @@ pub struct RuntimeBuilder {
 impl RuntimeBuilder {
     pub fn new(config: Config) -> Self {
         Self {
-            config: config.0,
+            config: config.0.expanded(),
             #[cfg(feature = "plugins")]
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
@@ -448,7 +448,7 @@ impl RuntimeBuilder {
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = (*config.id()).unwrap_or_default().into();
+        let zid = ZenohIdProto::from(config.id().expect("Config should be expanded"));
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
@@ -469,7 +469,6 @@ impl RuntimeBuilder {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .zid(zid)
             .bound_callback({
                 let config = config.clone();
                 move |p| {
@@ -957,10 +956,13 @@ impl Closeable for Runtime {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all, fields(?peer))]
 fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult<Region> {
+    let mode = zenoh_config::unwrap_or_default!(config.mode());
+
     let gateway_config = config
         .gateway
-        .get(zenoh_config::unwrap_or_default!(config.mode()))
+        .get(mode)
         .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
 
     fn matches(peer: &TransportPeer, filter: &BoundFilterConf) -> bool {
@@ -1005,7 +1007,7 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
             .unwrap_or(true)
     });
 
-    Ok(match (north, south) {
+    let region = match (north, south) {
         (true, None) => {
             tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
             Region::North
@@ -1033,7 +1035,13 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
             );
             Region::Undefined { mode: peer.whatami }
         }
-    })
+    };
+
+    if peer.whatami.is_router() && region.bound().is_south() && !mode.is_router() {
+        bail!("Router regions cannot be subregions of non-router regions")
+    }
+
+    Ok(region)
 }
 
 #[derive(Clone)]

@@ -20,6 +20,7 @@
 use std::{
     any::Any,
     collections::HashMap,
+    fmt::Debug,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -64,6 +65,12 @@ mod token;
 
 pub(crate) struct Hat {
     region: Region,
+}
+
+impl Debug for Hat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.region)
+    }
 }
 
 impl Hat {
@@ -154,7 +161,7 @@ impl HatBaseTrait for Hat {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        // NOTE:
+        // NOTE(regions):
         // - The broker hat is never the north hat, thus there are no interests to re-propagate
         // - The broker hat doesn't re-propagate entities to between clients
 
@@ -174,7 +181,7 @@ impl HatBaseTrait for Hat {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        // NOTE:
+        // NOTE(regions):
         // - The broker hat is never the north hat, thus there are no interests to re-propagate
         // - The broker hat doesn't re-propagate entities between clients
 

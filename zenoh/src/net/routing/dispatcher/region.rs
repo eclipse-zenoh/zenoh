@@ -45,8 +45,11 @@ pub(crate) struct RegionMap<D>(hashbrown::HashMap<Region, D>);
 
 impl<D> RegionMap<D> {
     #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn get_many_mut<const N: usize>(&mut self, ks: [&Region; N]) -> [Option<&mut D>; N] {
-        self.0.get_many_mut(ks)
+    pub(crate) fn get_disjoint_mut<const N: usize>(
+        &mut self,
+        ks: [&Region; N],
+    ) -> [Option<&mut D>; N] {
+        self.0.get_disjoint_mut(ks)
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&Region, &D)> {

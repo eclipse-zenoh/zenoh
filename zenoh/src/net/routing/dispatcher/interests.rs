@@ -14,14 +14,13 @@
 
 use std::{
     collections::HashMap,
-    fmt,
+    fmt::{self, Debug},
     sync::{Arc, Weak},
     time::Duration,
 };
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use zenoh_config::WhatAmI;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::network::{
     declare::{self},
@@ -44,6 +43,17 @@ pub(crate) struct CurrentInterest {
     pub(crate) src_region: Region,
     pub(crate) src_interest_id: InterestId,
     pub(crate) mode: InterestMode,
+}
+
+// FIXME(regions): impl Debug for `Remote`
+impl Debug for CurrentInterest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CurrentInterest")
+            .field("src_region", &self.src_region)
+            .field("src_interest_id", &self.src_interest_id)
+            .field("mode", &self.mode)
+            .finish()
+    }
 }
 
 pub(crate) struct PendingCurrentInterest {
@@ -187,8 +197,24 @@ impl Face {
         msg: &mut Interest,
         send_declare: &mut SendDeclare,
     ) {
-        if msg.options.aggregate() && self.state.whatami == WhatAmI::Peer {
+        let region = self.state.region;
+
+        if region.bound().is_north() {
+            tracing::error!(
+                src = %self.state,
+                "Received interest from north-bound face. \
+                This message should only flow upstream"
+            );
+            return;
+        }
+
+        if msg.options.aggregate() && self.state.whatami.is_peer() {
             tracing::warn!("Ignoring aggregate interest option from peer (unsupported)");
+            msg.options -= InterestOptions::AGGREGATE;
+        }
+
+        if msg.options.aggregate() && msg.options.tokens() {
+            tracing::error!("Ignoring aggregate interest option for tokens (illegal)");
             msg.options -= InterestOptions::AGGREGATE;
         }
 
@@ -208,6 +234,7 @@ impl Face {
                 wire_expr.as_ref(),
             );
         }
+
         let (res, mut wtables) = if let Some(expr) = wire_expr {
             let rtables = zread!(tables_lock.tables);
             match rtables
@@ -216,13 +243,6 @@ impl Face {
                 .cloned()
             {
                 Some(mut prefix) => {
-                    tracing::debug!(
-                        "{} Declare interest {} ({}{})",
-                        &self.state,
-                        id,
-                        prefix.expr(),
-                        expr.suffix
-                    );
                     let res = Resource::get_resource(&prefix, &expr.suffix);
                     if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                         drop(rtables);
@@ -258,6 +278,15 @@ impl Face {
             (None, zwrite!(tables_lock.tables))
         };
 
+        let _span = tracing::debug_span!(
+            "interest",
+            id,
+            mode = ?msg.mode,
+            opts = %msg.options,
+            expr = res.as_ref().map(|res| res.expr())
+        )
+        .entered();
+
         let tables = &mut *wtables;
 
         let mut ctx = BaseContext {
@@ -268,7 +297,6 @@ impl Face {
         };
 
         let hats = &mut tables.hats;
-        let region = ctx.src_face.region;
 
         let Some(remote) = hats[region].new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
             return;
@@ -277,36 +305,38 @@ impl Face {
         let resolved_interest_opt =
             hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &remote);
 
-        let other_sub_matches = hats
-            .values()
-            .filter(|hat| hat.region() != region)
-            .flat_map(|hat| {
-                hat.remote_subscriptions_matching(ctx.tables, res.as_deref())
-                    .into_iter()
-            })
-            .collect::<HashMap<_, _>>();
+        if msg.mode.is_current() {
+            let other_sub_matches = hats
+                .values()
+                .filter(|hat| hat.region() != region)
+                .flat_map(|hat| {
+                    hat.remote_subscriptions_matching(ctx.tables, res.as_deref())
+                        .into_iter()
+                })
+                .collect::<HashMap<_, _>>();
 
-        hats[region].propagate_current_subscriptions(
-            ctx.reborrow(),
-            msg,
-            res.clone(),
-            other_sub_matches,
-        );
+            hats[region].send_current_subscriptions(
+                ctx.reborrow(),
+                msg,
+                res.clone(),
+                other_sub_matches,
+            );
 
-        let other_qabl_matches = hats
-            .values()
-            .filter(|hat| hat.region() != region)
-            .flat_map(|hat| {
-                hat.remote_queryables_matching(ctx.tables, res.as_deref())
-                    .into_iter()
-            })
-            .collect::<HashMap<_, _>>();
-        hats[region].propagate_current_queryables(
-            ctx.reborrow(),
-            msg,
-            res.clone(),
-            other_qabl_matches,
-        );
+            let other_qabl_matches = hats
+                .values()
+                .filter(|hat| hat.region() != region)
+                .flat_map(|hat| {
+                    hat.remote_queryables_matching(ctx.tables, res.as_deref())
+                        .into_iter()
+                })
+                .collect::<HashMap<_, _>>();
+            hats[region].send_current_queryables(
+                ctx.reborrow(),
+                msg,
+                res.clone(),
+                other_qabl_matches,
+            );
+        }
 
         hats[region].register_interest(ctx.reborrow(), msg, res);
 
@@ -323,7 +353,13 @@ impl Face {
     }
 
     pub(crate) fn undeclare_interest(&self, tables: &TablesLock, msg: &Interest) {
-        tracing::debug!("{} Undeclare interest {}", &self.state, msg.id);
+        let _span = tracing::debug_span!(
+            "interest",
+            id = msg.id,
+            mode = ?InterestMode::Final,
+        )
+        .entered();
+
         unregister_expr_interest(tables, &mut self.state.clone(), msg.id);
 
         let mut wtables = zwrite!(self.tables.tables);
@@ -355,6 +391,8 @@ impl Face {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
+        let _span = tracing::debug_span!("declare_final", interest_id).entered();
+
         let tables = &mut *wtables;
 
         let mut ctx = BaseContext {
@@ -384,11 +422,14 @@ impl Face {
                 %region,
                 "Resolving current interest"
             );
-            hats[resolved_interest.src_region].send_declare_final(
-                ctx,
-                resolved_interest.src_interest_id,
-                &resolved_interest.src,
-            );
+
+            if resolved_interest.mode.is_current() {
+                hats[resolved_interest.src_region].send_declare_final(
+                    ctx,
+                    resolved_interest.src_interest_id,
+                    &resolved_interest.src,
+                );
+            }
         }
     }
 }

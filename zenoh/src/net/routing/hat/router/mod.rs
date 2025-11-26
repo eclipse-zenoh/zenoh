@@ -99,7 +99,7 @@ impl TreesComputationWorker {
                         .unwrap();
 
                     tracing::trace!("Compute trees");
-                    let new_children = hat.routers_net.as_mut().unwrap().compute_trees();
+                    let new_children = hat.net_mut().compute_trees();
 
                     tracing::trace!("Compute routes");
                     hat.pubsub_tree_change(&mut tables.data, &new_children);
@@ -135,12 +135,7 @@ pub(crate) struct Hat {
 
 impl Debug for Hat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Hat")
-            .field("bound", &self.region)
-            .field("subs", &self.router_subs)
-            .field("qabls", &self.router_qabls)
-            .field("tokens", &self.router_tokens)
-            .finish()
+        write!(f, "{}", self.region)
     }
 }
 
@@ -164,6 +159,10 @@ impl Hat {
 
     pub(crate) fn net(&self) -> &Network {
         self.routers_net.as_ref().unwrap()
+    }
+
+    pub(crate) fn net_mut(&mut self) -> &mut Network {
+        self.routers_net.as_mut().unwrap()
     }
 
     pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
@@ -291,6 +290,7 @@ impl Hat {
     }
 
     /// Sends a network message to the router identified by `dst_node_id`.
+    #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn send_point_to_point(
         &self,
         ctx: BaseContext,
@@ -322,7 +322,9 @@ impl Hat {
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
         tracing::trace!("Schedule trees computation");
-        let _ = self.routers_trees_worker.tx.try_send(tables_ref);
+        if let Err(err) = self.routers_trees_worker.tx.try_send(tables_ref) {
+            tracing::trace!(%err, "Failed to schedule routing tree computation");
+        }
     }
 
     fn get_router(&self, face: &FaceState, nodeid: NodeId) -> Option<ZenohIdProto> {
@@ -350,11 +352,6 @@ impl Hat {
                 None
             }
         }
-    }
-
-    #[inline]
-    pub(super) fn push_declaration_profile(&self, face: &FaceState) -> bool {
-        face.whatami == WhatAmI::Router
     }
 }
 
@@ -411,8 +408,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        // Nothing to do
-        Ok(())
+        bail!("Local sessions should not be bound to router hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
@@ -423,24 +419,19 @@ impl HatBaseTrait for Hat {
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {
-        let link_id = if ctx.src_face.whatami == WhatAmI::Router {
-            self.routers_net
-                .as_mut()
-                .unwrap()
-                .add_link(transport.clone())
-        } else {
-            0
-        };
+        debug_assert!(self.owns(ctx.src_face));
+
+        let link_id = self.net_mut().add_link(transport.clone());
 
         self.face_hat_mut(ctx.src_face).link_id = link_id;
+        self.schedule_compute_trees(tables_ref.clone());
 
-        if ctx.src_face.whatami == WhatAmI::Router {
-            self.schedule_compute_trees(tables_ref.clone())
-        }
         Ok(())
     }
 
-    fn close_face(&mut self, mut ctx: BaseContext, tables_ref: &Arc<TablesLock>) {
+    fn close_face(&mut self, ctx: BaseContext) {
+        debug_assert!(self.owns(ctx.src_face));
+
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -456,79 +447,7 @@ impl HatBaseTrait for Hat {
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
 
-        for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.remote_mappings.clear();
-        for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).face_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.local_mappings.clear();
-
-        let mut subs_matches = vec![];
-        for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-                subs_matches.push(res);
-            }
-        }
-
-        let mut qabls_matches = vec![];
-        for (_, (mut res, _)) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-                qabls_matches.push(res);
-            }
-        }
-
-        for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_token(ctx.reborrow(), &mut res);
-        }
-
-        for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-            Resource::clean(&mut res);
-        }
-        self.faces_mut(ctx.tables).remove(&face.id);
-
-        if face.whatami == WhatAmI::Router {
-            for (_, removed_node) in self.routers_net.as_mut().unwrap().remove_link(&face.zid) {
-                self.pubsub_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
-                self.queries_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
-                self.token_remove_node(ctx.tables, &removed_node.zid, ctx.send_declare);
-            }
-
-            self.schedule_compute_trees(tables_ref.clone());
-        }
+        self.schedule_compute_trees(ctx.tables_lock.clone());
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -709,6 +628,8 @@ impl HatContext {
 
 struct HatFace {
     link_id: usize,
+
+    // FIXME(regions): remove this
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
     local_subs: LocalSubscribers,

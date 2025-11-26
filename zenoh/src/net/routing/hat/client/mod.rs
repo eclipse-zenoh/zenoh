@@ -20,6 +20,7 @@
 use std::{
     any::Any,
     collections::HashMap,
+    fmt::Debug,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -63,6 +64,12 @@ mod token;
 
 pub(crate) struct Hat {
     region: Region,
+}
+
+impl Debug for Hat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.region)
+    }
 }
 
 impl Hat {
@@ -165,16 +172,19 @@ impl HatBaseTrait for Hat {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.remote_bound.is_south());
         debug_assert!(ctx.src_face.region.bound().is_north());
+        debug_assert_eq!(self.owned_faces(ctx.tables).count(), 1);
 
         self.interests_new_face(ctx.reborrow(), &other_hats);
         self.pubsub_new_face(ctx.reborrow(), &other_hats);
         self.queries_new_face(ctx.reborrow(), &other_hats);
-        self.token_new_face(ctx.tables, ctx.src_face, ctx.send_declare);
+        self.tokens_new_face(ctx.reborrow(), &other_hats);
         ctx.tables.disable_all_routes();
         Ok(())
     }
 
     fn close_face(&mut self, ctx: BaseContext) {
+        debug_assert!(self.owns(ctx.src_face));
+
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
