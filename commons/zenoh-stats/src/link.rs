@@ -11,9 +11,8 @@ use zenoh_protocol::{core::Priority, network::NetworkMessageExt};
 use crate::{
     histogram::Histogram,
     labels::{
-        match_protocol, BytesLabels, LinkLabels, MessageLabel, NetworkMessageLabels,
-        NetworkMessagePayloadLabels, ProtocolLabel, ReasonLabel, SpaceLabel,
-        TransportMessageLabels,
+        BytesLabels, LinkLabels, MessageLabel, NetworkMessageLabels, NetworkMessagePayloadLabels,
+        ProtocolLabel, ReasonLabel, SpaceLabel, TransportMessageLabels,
     },
     DropStats, Rx, StatsDirection, TransportStats, Tx,
 };
@@ -56,7 +55,7 @@ impl LinkStats {
     pub(crate) fn new(transport_stats: TransportStats, link: LinkLabels) -> Self {
         let registry = transport_stats.registry();
         let transport = transport_stats.transport();
-        let protocol = match_protocol(link.dst_locator.protocol());
+        let protocol = link.protocol();
         let bytes = array::from_fn(|dir| {
             let labels = BytesLabels {
                 protocol: protocol.clone(),

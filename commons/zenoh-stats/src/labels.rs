@@ -10,7 +10,7 @@ use prometheus_client::{
     metrics::counter::Counter,
 };
 use zenoh_protocol::{
-    core::{Locator, Priority, Protocol, WhatAmI, ZenohIdProto},
+    core::{Locator, Priority, WhatAmI, ZenohIdProto},
     network::NetworkBodyRef,
     zenoh::{PushBody, ResponseBody},
 };
@@ -186,24 +186,6 @@ wrap_label!(Locator, LocatorLabel);
 
 pub(crate) type ProtocolLabel = Cow<'static, str>;
 
-pub(crate) fn match_protocol(protocol: Protocol) -> ProtocolLabel {
-    static KNOWN_PROTOCOLS: &[&str] = &[
-        "tcp",
-        "udp",
-        "tls",
-        "quic",
-        "unixsock-stream",
-        "ws",
-        "serial",
-        "unixpipe",
-        "vsock",
-    ];
-    match KNOWN_PROTOCOLS.iter().find(|p| **p == protocol.as_str()) {
-        Some(p) => Cow::Borrowed(*p),
-        None => Cow::Owned(protocol.as_str().into()),
-    }
-}
-
 pub(crate) trait StatsPath<M: TransportMetric> {
     fn incr_stats(
         direction: StatsDirection,
@@ -263,6 +245,11 @@ pub(crate) struct TransportLabels {
     pub(crate) remote_cn: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]
+pub(crate) struct ProtocolLabels {
+    pub(crate) protocol: ProtocolLabel,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EncodeLabelSet)]
 pub(crate) struct DisconnectedLabels {
     pub(crate) disconnected: bool,
@@ -272,6 +259,27 @@ pub(crate) struct DisconnectedLabels {
 pub(crate) struct LinkLabels {
     pub(crate) src_locator: LocatorLabel,
     pub(crate) dst_locator: LocatorLabel,
+}
+
+impl LinkLabels {
+    pub(crate) fn protocol(&self) -> ProtocolLabel {
+        static KNOWN_PROTOCOLS: &[&str] = &[
+            "tcp",
+            "udp",
+            "tls",
+            "quic",
+            "unixsock-stream",
+            "ws",
+            "serial",
+            "unixpipe",
+            "vsock",
+        ];
+        let protocol = self.dst_locator.protocol().as_str();
+        match KNOWN_PROTOCOLS.iter().find(|p| **p == protocol) {
+            Some(p) => Cow::Borrowed(*p),
+            None => Cow::Owned(self.dst_locator.to_string()),
+        }
+    }
 }
 
 impl From<(&Locator, &Locator)> for LinkLabels {
@@ -291,7 +299,7 @@ pub(crate) struct ResourceDeclaredLabels {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]
 pub(crate) struct BytesLabels {
-    pub(crate) protocol: Cow<'static, str>,
+    pub(crate) protocol: ProtocolLabel,
 }
 
 impl StatsPath<Counter> for BytesLabels {
@@ -315,7 +323,7 @@ impl StatsPath<Counter> for BytesLabels {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]
 pub(crate) struct TransportMessageLabels {
-    pub(crate) protocol: Cow<'static, str>,
+    pub(crate) protocol: ProtocolLabel,
 }
 
 impl StatsPath<Counter> for TransportMessageLabels {
@@ -342,7 +350,7 @@ pub(crate) struct NetworkMessageLabels {
     pub(crate) priority: PriorityLabel,
     pub(crate) message: MessageLabel,
     pub(crate) shm: bool,
-    pub(crate) protocol: Cow<'static, str>,
+    pub(crate) protocol: ProtocolLabel,
 }
 
 impl StatsPath<Counter> for NetworkMessageLabels {
@@ -371,7 +379,7 @@ pub(crate) struct NetworkMessagePayloadLabels {
     pub(crate) priority: PriorityLabel,
     pub(crate) message: MessageLabel,
     pub(crate) shm: bool,
-    pub(crate) protocol: Cow<'static, str>,
+    pub(crate) protocol: ProtocolLabel,
 }
 
 impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
@@ -410,7 +418,7 @@ impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
 pub(crate) struct NetworkMessageDroppedPayloadLabels {
     pub(crate) priority: PriorityLabel,
     pub(crate) message: MessageLabel,
-    pub(crate) protocol: Option<String>,
+    pub(crate) protocol: Option<ProtocolLabel>,
     pub(crate) reason: ReasonLabel,
 }
 

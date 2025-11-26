@@ -45,7 +45,9 @@ impl TransportStats {
     }
 
     pub fn link_stats(&self, src: &Locator, dst: &Locator) -> LinkStats {
-        LinkStats::new(self.clone(), (src, dst).into())
+        let link = (src, dst).into();
+        self.registry().add_link(self.transport(), &link);
+        LinkStats::new(self.clone(), link)
     }
 
     pub fn peer_link_stats(

@@ -23,8 +23,8 @@ use crate::{
     histogram::{Histogram, HistogramBuckets, PAYLOAD_SIZE_BUCKETS},
     labels::{
         BytesLabels, LinkLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels,
-        NetworkMessageLabels, NetworkMessagePayloadLabels, ResourceDeclaredLabels, ResourceLabel,
-        StatsPath, TransportLabels, TransportMessageLabels,
+        NetworkMessageLabels, NetworkMessagePayloadLabels, ProtocolLabels, ResourceDeclaredLabels,
+        ResourceLabel, StatsPath, TransportLabels, TransportMessageLabels,
     },
     stats::init_stats,
     Rx, StatsDirection, TransportStats, Tx,
@@ -48,17 +48,23 @@ impl StatsRegistry {
             "Zenoh build version",
             Info::new([("version", build_version.into())]),
         );
-        let transport_opened = Gauge::default();
+        let transports_opened = Gauge::default();
         registry.register(
-            "transport_opened",
+            "transports_opened",
             "Count of transports currently opened",
-            transport_opened.clone(),
+            transports_opened.clone(),
         );
-        let resource_declared = Family::default();
+        let links_opened = Family::default();
         registry.register(
-            "resource_declared",
+            "links_opened",
+            "Count of transports currently opened",
+            links_opened.clone(),
+        );
+        let resources_declared = Family::default();
+        registry.register(
+            "resources_declared",
             "Count of resources currently declared",
-            resource_declared.clone(),
+            resources_declared.clone(),
         );
         let bytes = array::from_fn(|_dir| TransportFamily::default());
         let transport_message = array::from_fn(|_dir| TransportFamily::default());
@@ -105,8 +111,9 @@ impl StatsRegistry {
         }
         Self(Arc::new(StatsRegistryInner {
             registry: RwLock::new(registry),
-            transport_opened,
-            resource_declared,
+            transports_opened,
+            links_opened,
+            resources_declared,
             bytes,
             transport_message,
             network_message,
@@ -115,22 +122,14 @@ impl StatsRegistry {
         }))
     }
 
-    pub fn inc_transport_opened(&self) {
-        self.0.transport_opened.inc();
-    }
-
-    pub fn dec_transport_opened(&self) {
-        self.0.transport_opened.dec();
-    }
-
     pub fn inc_resource_declared(&self, resource: ResourceLabel, locality: LocalityLabel) {
         let labels = ResourceDeclaredLabels { resource, locality };
-        self.0.resource_declared.get_or_create(&labels).inc();
+        self.0.resources_declared.get_or_create(&labels).inc();
     }
 
     pub fn dec_resource_declared(&self, resource: ResourceLabel, locality: LocalityLabel) {
         let labels = ResourceDeclaredLabels { resource, locality };
-        self.0.resource_declared.get_or_create(&labels).dec();
+        self.0.resources_declared.get_or_create(&labels).dec();
     }
 
     pub fn encode_metrics(&self, writer: &mut impl Write) -> fmt::Result {
@@ -198,31 +197,46 @@ impl StatsRegistry {
         whatami: WhatAmI,
         cn: Option<String>,
     ) -> TransportStats {
+        self.0.transports_opened.inc();
         TransportStats::new(self.clone(), Some(zid), Some(whatami), cn, None)
     }
 
     pub fn multicast_transport_stats(&self, group: String) -> TransportStats {
+        self.0.transports_opened.inc();
         TransportStats::new(self.clone(), None, None, None, Some(group))
+    }
+
+    pub fn add_link(&self, transport: &TransportLabels, link: &LinkLabels) {
+        let protocol = ProtocolLabels {
+            protocol: link.protocol(),
+        };
+        self.0.links_opened.get_or_create(&protocol).inc();
     }
 
     pub(crate) fn remove_transport(&self, transport: &TransportLabels) {
         for (_, family) in self.families() {
             family.remove_transport(transport);
         }
+        self.0.transports_opened.dec();
     }
 
     pub(crate) fn remove_link(&self, transport: &TransportLabels, link: &LinkLabels) {
         for (_, family) in self.families() {
             family.remove_link(transport, link);
         }
+        let protocol = ProtocolLabels {
+            protocol: link.protocol(),
+        };
+        self.0.links_opened.get_or_create(&protocol).dec();
     }
 }
 
 #[derive(Debug)]
 struct StatsRegistryInner {
     registry: RwLock<Registry>,
-    transport_opened: Gauge,
-    resource_declared: Family<ResourceDeclaredLabels, Gauge>,
+    transports_opened: Gauge,
+    links_opened: Family<ProtocolLabels, Gauge>,
+    resources_declared: Family<ResourceDeclaredLabels, Gauge>,
     bytes: [TransportFamily<BytesLabels, Counter>; StatsDirection::NUM],
     transport_message: [TransportFamily<TransportMessageLabels, Counter>; StatsDirection::NUM],
     network_message: [TransportFamily<NetworkMessageLabels, Counter>; StatsDirection::NUM],
