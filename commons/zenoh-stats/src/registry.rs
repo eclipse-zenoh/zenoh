@@ -19,13 +19,13 @@ use prometheus_client::{
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 
 use crate::{
+    family::{TransportFamily, TransportFamilyCollector, TransportMetric},
     histogram::{Histogram, HistogramBuckets, PAYLOAD_SIZE_BUCKETS},
     labels::{
         BytesLabels, LinkLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels,
-        NetworkMessageLabels, NetworkMessagePayloadLabels, RemoteLabels, ResourceDeclaredLabels,
-        ResourceLabel, StatsPath, TransportMessageLabels,
+        NetworkMessageLabels, NetworkMessagePayloadLabels, ResourceDeclaredLabels, ResourceLabel,
+        StatsPath, TransportLabels, TransportMessageLabels,
     },
-    per_remote::{PerRemoteFamily, PerRemoteFamilyCollector, PerRemoteMetric},
     stats::init_stats,
     Rx, StatsDirection, TransportStats, Tx,
 };
@@ -60,43 +60,43 @@ impl StatsRegistry {
             "Count of resources currently declared",
             resource_declared.clone(),
         );
-        let bytes = array::from_fn(|_dir| PerRemoteFamily::default());
-        let transport_message = array::from_fn(|_dir| PerRemoteFamily::default());
-        let network_message = array::from_fn(|_dir| PerRemoteFamily::default());
+        let bytes = array::from_fn(|_dir| TransportFamily::default());
+        let transport_message = array::from_fn(|_dir| TransportFamily::default());
+        let network_message = array::from_fn(|_dir| TransportFamily::default());
         let network_message_payload =
-            array::from_fn(|_dir| PerRemoteFamily::new_with_constructor(PAYLOAD_SIZE_BUCKETS));
+            array::from_fn(|_dir| TransportFamily::new_with_constructor(PAYLOAD_SIZE_BUCKETS));
         let network_message_dropped_payload =
-            array::from_fn(|_dir| PerRemoteFamily::new_with_constructor(PAYLOAD_SIZE_BUCKETS));
+            array::from_fn(|_dir| TransportFamily::new_with_constructor(PAYLOAD_SIZE_BUCKETS));
         for dir in [Tx, Rx] {
             let action = match dir {
                 Tx => "sent",
                 Rx => "received",
             };
-            registry.register_collector(Box::new(PerRemoteFamilyCollector {
+            registry.register_collector(Box::new(TransportFamilyCollector {
                 name: format!("{dir}"),
                 help: format!("Count of transport messages bytes {action}"),
                 unit: Some(Unit::Bytes),
                 family: bytes[dir as usize].clone(),
             }));
-            registry.register_collector(Box::new(PerRemoteFamilyCollector {
+            registry.register_collector(Box::new(TransportFamilyCollector {
                 name: format!("{dir}_transport_message"),
                 help: format!("Count of transport messages {action}"),
                 unit: None,
                 family: transport_message[dir as usize].clone(),
             }));
-            registry.register_collector(Box::new(PerRemoteFamilyCollector {
+            registry.register_collector(Box::new(TransportFamilyCollector {
                 name: format!("{dir}_network_message"),
                 help: format!("Count of network messages {action}"),
                 unit: None,
                 family: network_message[dir as usize].clone(),
             }));
-            registry.register_collector(Box::new(PerRemoteFamilyCollector {
+            registry.register_collector(Box::new(TransportFamilyCollector {
                 name: format!("{dir}_network_message_payload"),
                 help: format!("Histogram of network messages payload {action}"),
                 unit: Some(Unit::Bytes),
                 family: network_message_payload[dir as usize].clone(),
             }));
-            registry.register_collector(Box::new(PerRemoteFamilyCollector {
+            registry.register_collector(Box::new(TransportFamilyCollector {
                 name: format!("{dir}_network_message_payload_dropped"),
                 help: format!("Histogram of network messages payload dropped while {action}"),
                 unit: Some(Unit::Bytes),
@@ -141,42 +141,42 @@ impl StatsRegistry {
     pub(crate) fn bytes(
         &self,
         direction: StatsDirection,
-    ) -> &PerRemoteFamily<BytesLabels, Counter> {
+    ) -> &TransportFamily<BytesLabels, Counter> {
         &self.0.bytes[direction as usize]
     }
 
     pub(crate) fn transport_message(
         &self,
         direction: StatsDirection,
-    ) -> &PerRemoteFamily<TransportMessageLabels, Counter> {
+    ) -> &TransportFamily<TransportMessageLabels, Counter> {
         &self.0.transport_message[direction as usize]
     }
 
     pub(crate) fn network_message(
         &self,
         direction: StatsDirection,
-    ) -> &PerRemoteFamily<NetworkMessageLabels, Counter> {
+    ) -> &TransportFamily<NetworkMessageLabels, Counter> {
         &self.0.network_message[direction as usize]
     }
 
     pub(crate) fn network_message_payload(
         &self,
         direction: StatsDirection,
-    ) -> &PerRemoteFamily<NetworkMessagePayloadLabels, Histogram, HistogramBuckets> {
+    ) -> &TransportFamily<NetworkMessagePayloadLabels, Histogram, HistogramBuckets> {
         &self.0.network_message_payload[direction as usize]
     }
 
     pub(crate) fn network_message_dropped_payload(
         &self,
         direction: StatsDirection,
-    ) -> &PerRemoteFamily<NetworkMessageDroppedPayloadLabels, Histogram, HistogramBuckets> {
+    ) -> &TransportFamily<NetworkMessageDroppedPayloadLabels, Histogram, HistogramBuckets> {
         &self.0.network_message_dropped_payload[direction as usize]
     }
 
-    fn families(&self) -> impl Iterator<Item = (StatsDirection, &dyn PerRemoteFamilyAny)> {
+    fn families(&self) -> impl Iterator<Item = (StatsDirection, &dyn TransportFamilyAny)> {
         [Tx, Rx].into_iter().flat_map(|dir| {
             iter::repeat(dir).zip([
-                &self.0.bytes[dir as usize] as &dyn PerRemoteFamilyAny,
+                &self.0.bytes[dir as usize] as &dyn TransportFamilyAny,
                 &self.0.transport_message[dir as usize],
                 &self.0.network_message[dir as usize],
                 &self.0.network_message_payload[dir as usize],
@@ -205,15 +205,15 @@ impl StatsRegistry {
         TransportStats::new(self.clone(), None, None, None, Some(group))
     }
 
-    pub(crate) fn remove_transport(&self, remote: &RemoteLabels) {
+    pub(crate) fn remove_transport(&self, transport: &TransportLabels) {
         for (_, family) in self.families() {
-            family.remove_transport(remote);
+            family.remove_transport(transport);
         }
     }
 
-    pub(crate) fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels) {
+    pub(crate) fn remove_link(&self, transport: &TransportLabels, link: &LinkLabels) {
         for (_, family) in self.families() {
-            family.remove_link(remote, link);
+            family.remove_link(transport, link);
         }
     }
 }
@@ -223,32 +223,32 @@ struct StatsRegistryInner {
     registry: RwLock<Registry>,
     transport_opened: Gauge,
     resource_declared: Family<ResourceDeclaredLabels, Gauge>,
-    bytes: [PerRemoteFamily<BytesLabels, Counter>; StatsDirection::NUM],
-    transport_message: [PerRemoteFamily<TransportMessageLabels, Counter>; StatsDirection::NUM],
-    network_message: [PerRemoteFamily<NetworkMessageLabels, Counter>; StatsDirection::NUM],
+    bytes: [TransportFamily<BytesLabels, Counter>; StatsDirection::NUM],
+    transport_message: [TransportFamily<TransportMessageLabels, Counter>; StatsDirection::NUM],
+    network_message: [TransportFamily<NetworkMessageLabels, Counter>; StatsDirection::NUM],
     network_message_payload:
-        [PerRemoteFamily<NetworkMessagePayloadLabels, Histogram, HistogramBuckets>;
+        [TransportFamily<NetworkMessagePayloadLabels, Histogram, HistogramBuckets>;
             StatsDirection::NUM],
     network_message_dropped_payload:
-        [PerRemoteFamily<NetworkMessageDroppedPayloadLabels, Histogram, HistogramBuckets>;
+        [TransportFamily<NetworkMessageDroppedPayloadLabels, Histogram, HistogramBuckets>;
             StatsDirection::NUM],
 }
 
-pub(crate) trait PerRemoteFamilyAny {
-    fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels);
-    fn remove_transport(&self, remote: &RemoteLabels);
+pub(crate) trait TransportFamilyAny {
+    fn remove_link(&self, transport: &TransportLabels, link: &LinkLabels);
+    fn remove_transport(&self, transport: &TransportLabels);
     fn merge_stats(&self, direction: StatsDirection, json: &mut serde_json::Value);
 }
 
-impl<S: StatsPath<M> + Clone + Hash + Eq, M: PerRemoteMetric + Clone, C: MetricConstructor<M>>
-    PerRemoteFamilyAny for PerRemoteFamily<S, M, C>
+impl<S: StatsPath<M> + Clone + Hash + Eq, M: TransportMetric + Clone, C: MetricConstructor<M>>
+    TransportFamilyAny for TransportFamily<S, M, C>
 {
-    fn remove_link(&self, remote: &RemoteLabels, link: &LinkLabels) {
-        self.remove_link(remote, link);
+    fn remove_link(&self, transport: &TransportLabels, link: &LinkLabels) {
+        self.remove_link(transport, link);
     }
 
-    fn remove_transport(&self, remote: &RemoteLabels) {
-        self.remove_transport(remote);
+    fn remove_transport(&self, transport: &TransportLabels) {
+        self.remove_transport(transport);
     }
 
     fn merge_stats(&self, direction: StatsDirection, json: &mut serde_json::Value) {

@@ -7,7 +7,7 @@ use zenoh_protocol::{
 
 use crate::{
     histogram::Histogram,
-    labels::{LinkLabels, MessageLabel, NetworkMessageDroppedPayloadLabels, RemoteLabels},
+    labels::{MessageLabel, NetworkMessageDroppedPayloadLabels, TransportLabels},
     LinkStats, ReasonLabel, StatsDirection, StatsRegistry, Tx,
 };
 
@@ -22,16 +22,16 @@ impl TransportStats {
         cn: Option<String>,
         group: Option<String>,
     ) -> Self {
-        let remote = RemoteLabels {
+        let transport = TransportLabels {
             remote_zid: zid.map(Into::into),
             remote_whatami: whatami.map(Into::into),
             remote_group: group,
             remote_cn: cn,
         };
-        let tx_no_link = DropStats::new(registry.clone(), remote.clone(), ReasonLabel::NoLink);
+        let tx_no_link = DropStats::new(registry.clone(), transport.clone(), ReasonLabel::NoLink);
         Self(Arc::new(TransportStatsInner {
             registry,
-            remote,
+            transport,
             tx_no_link,
         }))
     }
@@ -40,8 +40,8 @@ impl TransportStats {
         &self.0.registry
     }
 
-    pub(crate) fn remote(&self) -> &RemoteLabels {
-        &self.0.remote
+    pub(crate) fn transport(&self) -> &TransportLabels {
+        &self.0.transport
     }
 
     pub fn link_stats(&self, src: &Locator, dst: &Locator) -> LinkStats {
@@ -54,19 +54,19 @@ impl TransportStats {
         peer_whatami: WhatAmI,
         link_stats: &LinkStats,
     ) -> LinkStats {
-        assert!(self.remote().remote_group.is_some());
+        assert!(self.transport().remote_group.is_some());
         let stats = Self::new(
             self.registry().clone(),
             Some(peer_zid),
             Some(peer_whatami),
             None,
-            self.remote().remote_group.clone(),
+            self.transport().remote_group.clone(),
         );
         LinkStats::new(stats, link_stats.link().clone())
     }
 
     pub fn drop_stats(&self, reason: ReasonLabel) -> DropStats {
-        DropStats::new(self.0.registry.clone(), self.0.remote.clone(), reason)
+        DropStats::new(self.0.registry.clone(), self.0.transport.clone(), reason)
     }
 
     pub fn tx_observe_no_link(&self, msg: NetworkMessageRef) {
@@ -77,13 +77,13 @@ impl TransportStats {
 #[derive(Debug)]
 pub struct TransportStatsInner {
     registry: StatsRegistry,
-    remote: RemoteLabels,
+    transport: TransportLabels,
     tx_no_link: DropStats,
 }
 
 impl Drop for TransportStatsInner {
     fn drop(&mut self) {
-        self.registry.remove_transport(&self.remote)
+        self.registry.remove_transport(&self.transport)
     }
 }
 
@@ -91,10 +91,14 @@ impl Drop for TransportStatsInner {
 pub struct DropStats(Arc<DropStatsInner>);
 
 impl DropStats {
-    pub(crate) fn new(registry: StatsRegistry, remote: RemoteLabels, reason: ReasonLabel) -> Self {
+    pub(crate) fn new(
+        registry: StatsRegistry,
+        transport: TransportLabels,
+        reason: ReasonLabel,
+    ) -> Self {
         Self(Arc::new(DropStatsInner {
             registry,
-            remote,
+            transport,
             reason,
             histograms: Default::default(),
         }))
@@ -114,7 +118,7 @@ impl DropStats {
         self.0
             .registry
             .network_message_dropped_payload(direction)
-            .get_or_create_owned(&self.0.remote, &labels, &LinkLabels::default())
+            .get_or_create_owned(&self.0.transport, None, &labels)
     }
 
     pub fn observe_network_message_dropped(
@@ -132,7 +136,7 @@ impl DropStats {
 #[derive(Debug)]
 struct DropStatsInner {
     registry: StatsRegistry,
-    remote: RemoteLabels,
+    transport: TransportLabels,
     reason: ReasonLabel,
     histograms: [[[OnceLock<Histogram>; MessageLabel::NUM]; Priority::NUM]; StatsDirection::NUM],
 }

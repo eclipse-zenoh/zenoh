@@ -1,5 +1,5 @@
 use std::{
-    fmt,
+    fmt, iter,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -11,7 +11,7 @@ use prometheus_client::{
     metrics::{family::MetricConstructor, MetricType, TypedMetric},
 };
 
-use crate::per_remote::PerRemoteMetric;
+use crate::family::TransportMetric;
 
 pub const PAYLOAD_SIZE_BUCKETS: HistogramBuckets =
     HistogramBuckets(&[0, 1 << 5, 1 << 10, 1 << 15, 1 << 20, 1 << 25, 1 << 30]);
@@ -58,7 +58,7 @@ impl TypedMetric for Histogram {
     const TYPE: MetricType = MetricType::Histogram;
 }
 
-impl PerRemoteMetric for Histogram {
+impl TransportMetric for Histogram {
     type Collected = (f64, u64, Vec<(f64, u64)>);
 
     fn drain_into(&self, other: &Self) {
@@ -77,30 +77,27 @@ impl PerRemoteMetric for Histogram {
         (sum, count, buckets)
     }
 
-    fn merge_collected(
-        collected_iter: impl IntoIterator<Item = Self::Collected>,
-    ) -> Self::Collected {
-        let add_buckets = |b1: Vec<(f64, u64)>, b2: Vec<(f64, u64)>| -> Vec<_> {
-            b1.into_iter()
-                .zip(b2)
-                .map(|((b1, c1), (_, c2))| (b1, c1 + c2))
-                .collect()
-        };
-        collected_iter
-            .into_iter()
-            .reduce(|(s1, c1, b1), (s2, c2, b2)| (s1 + s2, c1 + c2, add_buckets(b1, b2)))
-            .unwrap_or_default()
+    fn sum_collected(
+        (sum, count, buckets): &mut Self::Collected,
+        (other_sum, other_count, other_buckets): &Self::Collected,
+    ) {
+        *sum += other_sum;
+        *count += other_count;
+        for ((b, c), (other_b, other_c)) in iter::zip(buckets, other_buckets) {
+            debug_assert_eq!(b, other_b);
+            *c += other_c;
+        }
     }
 
-    fn encode(mut encoder: MetricEncoder, collected: Self::Collected) -> fmt::Result {
+    fn encode(mut encoder: MetricEncoder, collected: &Self::Collected) -> fmt::Result {
         let (sum, count, buckets) = collected;
-        encoder.encode_histogram::<NoLabelSet>(sum, count, &buckets, None)
+        encoder.encode_histogram::<NoLabelSet>(*sum, *count, buckets, None)
     }
 }
 
 impl EncodeMetric for Histogram {
     fn encode(&self, encoder: MetricEncoder) -> Result<(), fmt::Error> {
-        <Self as PerRemoteMetric>::encode(encoder, self.collect())
+        <Self as TransportMetric>::encode(encoder, &self.collect())
     }
 
     fn metric_type(&self) -> MetricType {

@@ -1,0 +1,294 @@
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt,
+    hash::Hash,
+    sync::{Arc, RwLock},
+    time::{Duration, Instant},
+};
+
+use prometheus_client::{
+    collector::Collector,
+    encoding::{DescriptorEncoder, EncodeLabelSet, MetricEncoder, NoLabelSet},
+    metrics::{counter::Counter, family::MetricConstructor, TypedMetric},
+    registry::Unit,
+};
+
+use crate::{
+    labels::{DisconnectedLabels, LabelsSetRef, LinkLabels, StatsPath, TransportLabels},
+    StatsDirection,
+};
+
+const GARBAGE_COLLECTION_DELAY: Duration = Duration::from_secs(60);
+
+#[derive(Debug)]
+pub(crate) struct TransportFamily<S, M, C = fn() -> M>(Arc<RwLock<TransportFamilyInner<S, M, C>>>);
+
+#[derive(Debug)]
+struct TransportFamilyInner<S, M, C> {
+    transports: HashMap<TransportLabels, TransportState<S, M>>,
+    disconnected: HashMap<S, M>,
+    constructor: C,
+}
+
+#[derive(Debug)]
+struct TransportState<S, M> {
+    links: HashMap<Option<LinkLabels>, HashMap<S, M>>,
+    disconnection: Option<Instant>,
+}
+
+impl<S, M> Default for TransportState<S, M> {
+    fn default() -> Self {
+        Self {
+            links: HashMap::new(),
+            disconnection: None,
+        }
+    }
+}
+
+impl<S, M, C> Clone for TransportFamily<S, M, C> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<S: Clone + Hash + Eq, M: Default> Default for TransportFamily<S, M> {
+    fn default() -> Self {
+        Self::new_with_constructor(Default::default)
+    }
+}
+
+impl<S: Clone + Hash + Eq, M, C: MetricConstructor<M>> TransportFamily<S, M, C> {
+    pub fn new_with_constructor(constructor: C) -> Self {
+        Self(Arc::new(RwLock::new(TransportFamilyInner {
+            transports: Default::default(),
+            disconnected: Default::default(),
+            constructor,
+        })))
+    }
+}
+
+impl<S: StatsPath<M> + Clone + Hash + Eq, M: TransportMetric + Clone, C: MetricConstructor<M>>
+    TransportFamily<S, M, C>
+{
+    pub fn get_or_create_owned(
+        &self,
+        transport: &TransportLabels,
+        link: Option<&LinkLabels>,
+        labels: &S,
+    ) -> M {
+        let inner = &mut *self.0.write().unwrap();
+        let family_entry = inner.transports.entry(transport.clone()).or_default();
+        family_entry.disconnection = None;
+        let link_entry = family_entry
+            .links
+            .entry(link.cloned())
+            .or_default()
+            .entry(labels.clone());
+        let new_metric = || inner.constructor.new_metric();
+        link_entry.or_insert_with(new_metric).clone()
+    }
+
+    pub(crate) fn remove_link(&self, transport: &TransportLabels, link: &LinkLabels) {
+        let inner = &mut *self.0.write().unwrap();
+        if let Some(family) = inner.transports.get_mut(transport) {
+            if let Some(metrics) = family.links.remove(&Some(link.clone())) {
+                for (labels, metric) in metrics {
+                    let no_link_metrics = family.links.entry(None).or_default();
+                    let new_metric = || inner.constructor.new_metric();
+                    metric.drain_into(no_link_metrics.entry(labels).or_insert_with(new_metric));
+                }
+            }
+        }
+    }
+
+    pub(crate) fn remove_transport(&self, transport: &TransportLabels) {
+        let inner = &mut *self.0.write().unwrap();
+        if let Some(family_entry) = inner.transports.get_mut(transport) {
+            family_entry.disconnection = Some(Instant::now());
+        }
+    }
+
+    fn collect(&self) -> HashMap<S, (M::Collected, Vec<TransportCollected<M>>)> {
+        let inner = self.0.read().unwrap();
+        let now = Instant::now();
+        let is_disconnected = |disconnection: Option<Instant>| matches!(disconnection, Some(instant) if now.duration_since(instant) > GARBAGE_COLLECTION_DELAY);
+        let mut has_disconnection: bool = false;
+        let mut results = inner
+            .disconnected
+            .iter()
+            .map(|(s, m)| (s.clone(), (m.collect(), Vec::new())))
+            .collect::<HashMap<S, (M::Collected, Vec<TransportCollected<M>>)>>();
+        for (transport, state) in inner.transports.iter() {
+            let disconnected = is_disconnected(state.disconnection);
+            has_disconnection |= disconnected;
+            for (link, metrics) in state.links.iter() {
+                for (labels, metric) in metrics {
+                    let collected = metric.collect();
+                    let transports = match results.entry(labels.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            M::sum_collected(&mut entry.get_mut().0, &collected);
+                            &mut entry.into_mut().1
+                        }
+                        Entry::Vacant(entry) => {
+                            &mut entry.insert((collected.clone(), Vec::new())).1
+                        }
+                    };
+                    let links = match transports.last_mut() {
+                        Some(t) if t.transport == *transport => {
+                            M::sum_collected(&mut t.collected, &collected);
+                            &mut t.links
+                        }
+                        _ => {
+                            transports.push(TransportCollected {
+                                transport: transport.clone(),
+                                disconnected: DisconnectedLabels { disconnected },
+                                collected: collected.clone(),
+                                links: Vec::new(),
+                            });
+                            &mut transports.last_mut().unwrap().links
+                        }
+                    };
+                    if let Some(link) = link {
+                        links.push((link.clone(), collected));
+                    }
+                }
+            }
+        }
+        drop(inner);
+        if has_disconnection {
+            let inner = &mut *self.0.write().unwrap();
+            inner.transports.retain(|_, family| {
+                if is_disconnected(family.disconnection) {
+                    for (labels, metric) in family
+                        .links
+                        .get_mut(&None)
+                        .into_iter()
+                        .flat_map(HashMap::drain)
+                    {
+                        let new_metric = || inner.constructor.new_metric();
+                        metric.drain_into(
+                            inner.disconnected.entry(labels).or_insert_with(new_metric),
+                        );
+                    }
+                    return false;
+                }
+                true
+            });
+        }
+        results
+    }
+
+    pub(crate) fn merge_stats(&self, direction: StatsDirection, json: &mut serde_json::Value) {
+        let inner = self.0.read().unwrap();
+        for (labels, metric) in inner.disconnected.iter() {
+            S::incr_stats(direction, None, None, labels, metric.collect(), json);
+        }
+        for (transport, family) in inner.transports.iter() {
+            for (link, metrics) in family.links.iter() {
+                for (labels, metric) in metrics {
+                    S::incr_stats(
+                        direction,
+                        Some(transport),
+                        link.as_ref(),
+                        labels,
+                        metric.collect(),
+                        json,
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub(crate) trait TransportMetric: 'static {
+    type Collected: Clone;
+    fn drain_into(&self, other: &Self);
+    fn collect(&self) -> Self::Collected;
+    fn sum_collected(collected: &mut Self::Collected, other: &Self::Collected);
+    fn encode(encoder: MetricEncoder, collected: &Self::Collected) -> fmt::Result;
+}
+
+impl TransportMetric for Counter {
+    type Collected = u64;
+
+    fn drain_into(&self, other: &Self) {
+        other.inc_by(self.get());
+    }
+
+    fn collect(&self) -> Self::Collected {
+        self.get()
+    }
+
+    fn sum_collected(collected: &mut Self::Collected, other: &Self::Collected) {
+        *collected += other;
+    }
+
+    fn encode(mut encoder: MetricEncoder, collected: &Self::Collected) -> fmt::Result {
+        encoder.encode_counter::<NoLabelSet, _, u64>(collected, None)
+    }
+}
+
+struct TransportCollected<M: TransportMetric> {
+    transport: TransportLabels,
+    disconnected: DisconnectedLabels,
+    collected: M::Collected,
+    links: Vec<(LinkLabels, M::Collected)>,
+}
+
+#[derive(Debug)]
+pub(crate) struct TransportFamilyCollector<S, M, C> {
+    pub(crate) name: String,
+    pub(crate) help: String,
+    pub(crate) unit: Option<Unit>,
+    pub(crate) family: TransportFamily<S, M, C>,
+}
+
+impl<
+        S: EncodeLabelSet + StatsPath<M> + Clone + Hash + Eq + fmt::Debug + Send + Sync + 'static,
+        M: TypedMetric + TransportMetric + Clone + fmt::Debug + Send + Sync + 'static,
+        C: MetricConstructor<M> + fmt::Debug + Send + Sync + 'static,
+    > Collector for TransportFamilyCollector<S, M, C>
+{
+    fn encode(&self, mut encoder: DescriptorEncoder) -> fmt::Result {
+        let collected = self.family.collect();
+        let mut metric_encoder =
+            encoder.encode_descriptor(&self.name, &self.help, self.unit.as_ref(), M::TYPE)?;
+        for (labels, (collected, _)) in collected.iter() {
+            M::encode(metric_encoder.encode_family(labels)?, collected)?
+        }
+        let per_remote_name = format!("{name}_per_transport", name = self.name);
+        let mut metric_encoder = encoder.encode_descriptor(
+            &per_remote_name,
+            &format!("{help} (per transport)", help = self.help),
+            self.unit.as_ref(),
+            M::TYPE,
+        )?;
+        for (labels, (_, transports)) in collected.iter() {
+            for transport in transports {
+                let labels = (
+                    LabelsSetRef(labels),
+                    (LabelsSetRef(&transport.transport), transport.disconnected),
+                );
+                M::encode(metric_encoder.encode_family(&labels)?, &transport.collected)?
+            }
+        }
+        let mut metric_encoder = encoder.encode_descriptor(
+            &per_remote_name,
+            &format!("{help} (per link)", help = self.help),
+            self.unit.as_ref(),
+            M::TYPE,
+        )?;
+        for (labels, (_, transports)) in collected.iter() {
+            for transport in transports {
+                for (link, collected) in transport.links.iter() {
+                    let labels = (
+                        LabelsSetRef(labels),
+                        (LabelsSetRef(&transport.transport), LabelsSetRef(link)),
+                    );
+                    M::encode(metric_encoder.encode_family(&labels)?, collected)?
+                }
+            }
+        }
+        Ok(())
+    }
+}

@@ -1,9 +1,9 @@
 use std::fmt;
 
+mod family;
 mod histogram;
 mod labels;
 mod link;
-mod per_remote;
 mod registry;
 mod stats;
 mod transport;

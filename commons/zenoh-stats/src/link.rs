@@ -11,8 +11,9 @@ use zenoh_protocol::{core::Priority, network::NetworkMessageExt};
 use crate::{
     histogram::Histogram,
     labels::{
-        BytesLabels, LinkLabels, MessageLabel, NetworkMessageLabels, NetworkMessagePayloadLabels,
-        ReasonLabel, SpaceLabel, TransportMessageLabels,
+        match_protocol, BytesLabels, LinkLabels, MessageLabel, NetworkMessageLabels,
+        NetworkMessagePayloadLabels, ProtocolLabel, ReasonLabel, SpaceLabel,
+        TransportMessageLabels,
     },
     DropStats, Rx, StatsDirection, TransportStats, Tx,
 };
@@ -54,15 +55,15 @@ pub struct LinkStats(Arc<LinkStatsInner>);
 impl LinkStats {
     pub(crate) fn new(transport_stats: TransportStats, link: LinkLabels) -> Self {
         let registry = transport_stats.registry();
-        let remote = transport_stats.remote();
-        let protocol = link.dst_locator.as_ref().unwrap().protocol().to_string();
+        let transport = transport_stats.transport();
+        let protocol = match_protocol(link.dst_locator.protocol());
         let bytes = array::from_fn(|dir| {
             let labels = BytesLabels {
                 protocol: protocol.clone(),
             };
             registry
                 .bytes(StatsDirection::from_index(dir))
-                .get_or_create_owned(remote, &labels, &link)
+                .get_or_create_owned(transport, Some(&link), &labels)
         });
         let transport_message = array::from_fn(|dir| {
             let labels = TransportMessageLabels {
@@ -70,10 +71,10 @@ impl LinkStats {
             };
             registry
                 .transport_message(StatsDirection::from_index(dir))
-                .get_or_create_owned(remote, &labels, &link)
+                .get_or_create_owned(transport, Some(&link), &labels)
         });
         let tx_congestion =
-            DropStats::new(registry.clone(), remote.clone(), ReasonLabel::Congestion);
+            DropStats::new(registry.clone(), transport.clone(), ReasonLabel::Congestion);
         Self(Arc::new(LinkStatsInner {
             transport_stats,
             link,
@@ -102,7 +103,7 @@ impl LinkStats {
         self.0.network_message[Tx as usize][msg.priority as usize][msg.message as usize]
             [msg.shm as usize]
             .get_or_init(|| {
-                let remote = self.0.transport_stats.remote();
+                let transport = self.0.transport_stats.transport();
                 let labels = NetworkMessageLabels {
                     message: msg.message,
                     priority: msg.priority.into(),
@@ -113,7 +114,7 @@ impl LinkStats {
                     .transport_stats
                     .registry()
                     .network_message(direction)
-                    .get_or_create_owned(remote, &labels, self.link())
+                    .get_or_create_owned(transport, Some(self.link()), &labels)
             })
             .inc();
     }
@@ -127,7 +128,7 @@ impl LinkStats {
         self.0.network_message_payload[Tx as usize][l_info.priority as usize]
             [l_info.message as usize][l_info.shm as usize][r_info.space as usize]
             .get_or_init(|| {
-                let remote = self.0.transport_stats.remote();
+                let transport = self.0.transport_stats.transport();
                 let labels = NetworkMessagePayloadLabels {
                     space: r_info.space,
                     message: l_info.message,
@@ -139,7 +140,7 @@ impl LinkStats {
                     .transport_stats
                     .registry()
                     .network_message_payload(direction)
-                    .get_or_create_owned(remote, &labels, self.link())
+                    .get_or_create_owned(transport, Some(self.link()), &labels)
             })
             .observe(r_info.payload_size as u64);
     }
@@ -178,7 +179,7 @@ const SHM_NUM: usize = 2;
 struct LinkStatsInner {
     transport_stats: TransportStats,
     link: LinkLabels,
-    protocol: String,
+    protocol: ProtocolLabel,
     bytes: [Counter; StatsDirection::NUM],
     transport_message: [Counter; StatsDirection::NUM],
     #[allow(clippy::type_complexity)]
@@ -194,7 +195,7 @@ impl Drop for LinkStatsInner {
     fn drop(&mut self) {
         self.transport_stats
             .registry()
-            .remove_link(self.transport_stats.remote(), &self.link);
+            .remove_link(self.transport_stats.transport(), &self.link);
     }
 }
 
