@@ -46,7 +46,7 @@ impl TransportStats {
 
     pub fn link_stats(&self, src: &Locator, dst: &Locator) -> LinkStats {
         let link = (src, dst).into();
-        self.registry().add_link(self.transport(), &link);
+        self.registry().add_link(&link);
         LinkStats::new(self.clone(), link)
     }
 

@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     collections::{hash_map::Entry, HashMap},
     fmt,
     hash::Hash,
@@ -235,6 +236,13 @@ struct TransportCollected<M: TransportMetric> {
     links: Vec<(LinkLabels, M::Collected)>,
 }
 
+thread_local! {
+    pub(crate) static COLLECT_PER_TRANSPORT: Cell<bool> = const { Cell::new(false) };
+}
+thread_local! {
+    pub(crate) static COLLECT_PER_LINK: Cell<bool> = const { Cell::new(false) };
+}
+
 #[derive(Debug)]
 pub(crate) struct TransportFamilyCollector<S, M, C> {
     pub(crate) name: String,
@@ -256,36 +264,41 @@ impl<
         for (labels, (collected, _)) in collected.iter() {
             M::encode(metric_encoder.encode_family(labels)?, collected)?
         }
-        let per_remote_name = format!("{name}_per_transport", name = self.name);
-        let mut metric_encoder = encoder.encode_descriptor(
-            &per_remote_name,
-            &format!("{help} (per transport)", help = self.help),
-            self.unit.as_ref(),
-            M::TYPE,
-        )?;
-        for (labels, (_, transports)) in collected.iter() {
-            for transport in transports {
-                let labels = (
-                    LabelsSetRef(labels),
-                    (LabelsSetRef(&transport.transport), transport.disconnected),
-                );
-                M::encode(metric_encoder.encode_family(&labels)?, &transport.collected)?
-            }
-        }
-        let mut metric_encoder = encoder.encode_descriptor(
-            &per_remote_name,
-            &format!("{help} (per link)", help = self.help),
-            self.unit.as_ref(),
-            M::TYPE,
-        )?;
-        for (labels, (_, transports)) in collected.iter() {
-            for transport in transports {
-                for (link, collected) in transport.links.iter() {
+        if COLLECT_PER_TRANSPORT.get() {
+            let per_transport = format!("{name}_per_transport", name = self.name);
+            let mut metric_encoder = encoder.encode_descriptor(
+                &per_transport,
+                &format!("{help} (per transport)", help = self.help),
+                self.unit.as_ref(),
+                M::TYPE,
+            )?;
+            for (labels, (_, transports)) in collected.iter() {
+                for transport in transports {
                     let labels = (
                         LabelsSetRef(labels),
-                        (LabelsSetRef(&transport.transport), LabelsSetRef(link)),
+                        (LabelsSetRef(&transport.transport), transport.disconnected),
                     );
-                    M::encode(metric_encoder.encode_family(&labels)?, collected)?
+                    M::encode(metric_encoder.encode_family(&labels)?, &transport.collected)?
+                }
+            }
+        }
+        if COLLECT_PER_LINK.get() {
+            let per_link = format!("{name}_per_link", name = self.name);
+            let mut metric_encoder = encoder.encode_descriptor(
+                &per_link,
+                &format!("{help} (per link)", help = self.help),
+                self.unit.as_ref(),
+                M::TYPE,
+            )?;
+            for (labels, (_, transports)) in collected.iter() {
+                for transport in transports {
+                    for (link, collected) in transport.links.iter() {
+                        let labels = (
+                            LabelsSetRef(labels),
+                            (LabelsSetRef(&transport.transport), LabelsSetRef(link)),
+                        );
+                        M::encode(metric_encoder.encode_family(&labels)?, collected)?
+                    }
                 }
             }
         }

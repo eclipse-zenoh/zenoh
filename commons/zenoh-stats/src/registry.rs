@@ -19,7 +19,10 @@ use prometheus_client::{
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 
 use crate::{
-    family::{TransportFamily, TransportFamilyCollector, TransportMetric},
+    family::{
+        TransportFamily, TransportFamilyCollector, TransportMetric, COLLECT_PER_LINK,
+        COLLECT_PER_TRANSPORT,
+    },
     histogram::{Histogram, HistogramBuckets, PAYLOAD_SIZE_BUCKETS},
     labels::{
         BytesLabels, LinkLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels,
@@ -132,8 +135,16 @@ impl StatsRegistry {
         self.0.resources_declared.get_or_create(&labels).dec();
     }
 
-    pub fn encode_metrics(&self, writer: &mut impl Write) -> fmt::Result {
-        encode(writer, &self.0.registry.read().unwrap())?;
+    pub fn encode_metrics(
+        &self,
+        writer: &mut impl Write,
+        per_transport: bool,
+        per_link: bool,
+    ) -> fmt::Result {
+        let registry = self.0.registry.read().unwrap();
+        COLLECT_PER_TRANSPORT.set(per_transport);
+        COLLECT_PER_LINK.set(per_link);
+        encode(writer, &registry)?;
         Ok(())
     }
 
@@ -206,7 +217,7 @@ impl StatsRegistry {
         TransportStats::new(self.clone(), None, None, None, Some(group))
     }
 
-    pub fn add_link(&self, transport: &TransportLabels, link: &LinkLabels) {
+    pub(crate) fn add_link(&self, link: &LinkLabels) {
         let protocol = ProtocolLabels {
             protocol: link.protocol(),
         };
@@ -224,10 +235,12 @@ impl StatsRegistry {
         for (_, family) in self.families() {
             family.remove_link(transport, link);
         }
-        let protocol = ProtocolLabels {
-            protocol: link.protocol(),
-        };
-        self.0.links_opened.get_or_create(&protocol).dec();
+        if transport.remote_group.is_none() || transport.remote_zid.is_none() {
+            let protocol = ProtocolLabels {
+                protocol: link.protocol(),
+            };
+            self.0.links_opened.get_or_create(&protocol).dec();
+        }
     }
 }
 

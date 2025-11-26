@@ -707,8 +707,27 @@ fn metrics(context: &AdminContext, query: Query) {
     context
         .runtime
         .stats()
-        .encode_metrics(&mut metrics)
+        .encode_metrics(
+            &mut metrics,
+            query.parameters().get("per_transport") != Some("false"),
+            query.parameters().get("per_link") != Some("false"),
+        )
         .expect("metrics should be encodable");
+    #[cfg(feature = "stats")]
+    if query.parameters().get("descriptors") == Some("false") {
+        metrics = metrics
+            .split_inclusive("\n")
+            .filter(|l| !l.starts_with('#'))
+            .chain(["# EOF\n"])
+            .collect();
+    }
+    #[cfg(feature = "stats")]
+    if query.parameters().get("buckets") == Some("false") {
+        metrics = metrics
+            .split_inclusive("\n")
+            .filter(|l| !l.split('{').next().is_some_and(|n| n.ends_with("_bucket")))
+            .collect();
+    }
     if let Err(e) = query.reply(reply_key, metrics).encoding(encoding).wait() {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
