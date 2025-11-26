@@ -61,7 +61,7 @@ use crate::net::{
             interests::{PendingCurrentInterest, RemoteInterest},
             pubsub::LocalSubscribers,
             queries::LocalQueryables,
-            region::Region,
+            region::{Region, RegionMap},
             resource::FaceContext,
         },
         hat::{BaseContext, Remote, TREES_COMPUTATION_DELAY_MS},
@@ -222,12 +222,6 @@ impl Hat {
         // TODO(regions): move `face.whatami == WhatAmI::Router` out of here
         // TODO(regions): move this method to a Hat trait
         self.region == face.region && face.whatami == WhatAmI::Router
-    }
-
-    /// Returns `true` if `face` belongs to this [`Hat`].
-    pub(crate) fn owns(&self, face: &FaceState) -> bool {
-        // TODO(regions): move this method to a Hat trait
-        self.region == face.region
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -421,10 +415,11 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
+        _other_hats: RegionMap<&dyn HatTrait>,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {

@@ -685,6 +685,7 @@ struct RuntimeTransportEventHandler {
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
+    #[tracing::instrument(level = "trace", skip_all)]
     fn new_unicast(
         &self,
         peer: TransportPeer,
@@ -701,7 +702,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                let bound = compute_region(&peer, &runtime.config().lock().0)?;
+                let region = compute_region(&peer, &runtime.config().lock().0)?;
 
                 fn north_bound_transport_peer_count(
                     runtime: &Runtime,
@@ -747,12 +748,18 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                     })
                 }
 
-                if bound.bound().is_north()
+                if region.bound().is_north()
                     && runtime.whatami() == WhatAmI::Client
                     && north_bound_transport_peer_count(runtime, &peer) > 0
                 {
                     bail!("Client runtimes only accept one north-bound transport");
                 }
+
+                tracing::trace!(
+                    peer.zid = %peer.zid.short(),
+                    peer.wai = %peer.whatami.short(),
+                    peer.rgn = %region
+                );
 
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
@@ -760,7 +767,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                     main_handler: runtime
                         .state
                         .router
-                        .new_transport_unicast(transport, bound)
+                        .new_transport_unicast(transport, region)
                         .unwrap(),
                     slave_handlers,
                 }))

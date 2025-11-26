@@ -14,6 +14,7 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use itertools::Itertools;
 use zenoh_core::zread;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
@@ -93,22 +94,23 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                tracing::trace!(?self.state.region);
+                let mut ctx = BaseContext {
+                    tables_lock: &self.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut self.state.clone(),
+                    send_declare,
+                };
+
+                tables.hats[self.state.region].register_subscription(
+                    ctx.reborrow(),
+                    id,
+                    res.clone(),
+                    node_id,
+                    sub_info,
+                );
 
                 for (bound, hat) in tables.hats.iter_mut() {
-                    hat.declare_subscription(
-                        BaseContext {
-                            tables_lock: &self.tables,
-                            tables: &mut tables.data,
-                            src_face: &mut self.state.clone(),
-                            send_declare,
-                        },
-                        id,
-                        &mut res,
-                        node_id,
-                        sub_info,
-                    );
-
+                    hat.propagate_subscription(ctx.reborrow(), res.clone(), sub_info);
                     disable_matches_data_routes(&mut res, bound);
                 }
 
@@ -164,41 +166,39 @@ impl Face {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let res_cleanup = tables.hats.iter_mut().filter_map(|(bound, hat)| {
-            let res = hat.undeclare_subscription(
-                BaseContext {
-                    tables_lock: &self.tables,
-                    tables: &mut tables.data,
-                    src_face: &mut self.state.clone(),
-                    send_declare,
-                },
-                id,
-                res.clone(),
-                node_id,
-            );
+        let hats = &mut tables.hats;
+        let region = self.state.region;
 
-            match res {
-                Some(mut res) => {
-                    tracing::debug!(
-                        "{} Undeclare subscriber {} ({})",
-                        &self.state,
-                        id,
-                        res.expr()
-                    );
-                    disable_matches_data_routes(&mut res, bound);
-                    Some(res)
+        let mut ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
+
+        if let Some(mut res) =
+            hats[region].unregister_subscription(ctx.reborrow(), id, res.clone(), node_id)
+        {
+            let mut remaining = tables
+                .hats
+                .values_mut()
+                .filter(|hat| !hat.remote_subscriptions_for(&res).is_empty())
+                .collect_vec();
+            let remaining = remaining.as_mut_slice();
+
+            tracing::trace!(res = res.expr());
+            tracing::trace!(remaining = ?remaining.iter().map(|hat| hat.region()).collect::<Vec<_>>());
+
+            if let [] = remaining {
+                for hat in tables.hats.values_mut() {
+                    hat.unpropagate_subscription(ctx.reborrow(), res.clone());
                 }
-                None => {
-                    // NOTE: This is expected behavior if subscriber declarations are denied with ingress ACL interceptor.
-                    tracing::debug!("{} Undeclare unknown subscriber {}", self.state, id);
-                    None
-                }
+                Resource::clean(&mut res);
+            } else if let [last_owner] = remaining {
+                last_owner.unpropagate_last_non_owned_subscription(ctx, res.clone())
             }
-        });
 
-        // REVIEW(regions): this is necessary if HatFace is global
-        for mut res in res_cleanup {
-            Resource::clean(&mut res);
+            disable_matches_data_routes(&mut res, &self.state.region);
         }
     }
 }

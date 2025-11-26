@@ -21,6 +21,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
+use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
 use zenoh_protocol::{
@@ -42,11 +43,11 @@ use crate::net::{
     primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
         dispatcher::{
-            region::{Region, RegionMap},
             interests::{finalize_pending_interests, RemoteInterest},
             queries::{
                 finalize_pending_queries, route_send_response, route_send_response_final, Query,
             },
+            region::{Region, RegionMap},
         },
         hat::BaseContext,
         interceptor::{
@@ -56,6 +57,7 @@ use crate::net::{
     },
 };
 
+#[derive(Debug)]
 pub(crate) struct InterestState {
     face: FaceId,
     pub(crate) options: InterestOptions,
@@ -388,7 +390,7 @@ impl Face {
 }
 
 impl Primitives for Face {
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self, mode = ?msg.mode))]
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
@@ -403,7 +405,7 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
@@ -500,11 +502,6 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
                 if let Some(id) = msg.interest_id {
-                    get_mut_unchecked(&mut self.state.clone())
-                        .local_interests
-                        .entry(id)
-                        .and_modify(|interest| interest.set_finalized());
-
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
                     self.declare_final(&mut wtables, id, msg.ext_nodeid.node_id, &mut |p, m| {
@@ -524,12 +521,12 @@ impl Primitives for Face {
     }
 
     #[inline]
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         route_data(&self.tables, &self.state, msg, reliability);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -538,17 +535,17 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), face = %self))]
+    #[tracing::instrument(level = "trace", skip_all, fields(zid = %self.tables.zid.short(), src = %self))]
     fn send_close(&self) {
         tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
@@ -561,15 +558,40 @@ impl Primitives for Face {
         });
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
-        tables.hats[self.state.region].close_face(
-            BaseContext {
-                tables_lock: &self.tables,
-                tables: &mut tables.data,
-                src_face: &mut state,
-                send_declare: &mut |p, m| declares.push((p.clone(), m)),
-            },
-            &self.tables.clone(),
-        );
+
+        let mut ctx = BaseContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut state,
+            send_declare: &mut |p, m| declares.push((p.clone(), m)),
+        };
+
+        let hats = &mut tables.hats;
+        let region = self.state.region;
+
+        let face_subs = hats[region].unregister_face_subscriptions(ctx.reborrow());
+
+        for mut res in face_subs {
+            let mut remaining = hats
+                .values_mut()
+                .filter(|hat| !hat.remote_subscriptions_for(&res).is_empty())
+                .collect_vec();
+            let remaining = remaining.as_mut_slice();
+
+            if let [] = remaining {
+                for hat in hats.values_mut() {
+                    hat.unpropagate_subscription(ctx.reborrow(), res.clone());
+                }
+                Resource::clean(&mut res);
+            } else if let [last_owner] = remaining {
+                last_owner.unpropagate_last_non_owned_subscription(ctx.reborrow(), res.clone())
+            }
+
+            disable_matches_data_routes(&mut res, &self.state.region);
+        }
+
+        hats[region].close_face(ctx, &self.tables.clone());
+
         drop(wtables);
         drop(ctrl_lock);
         for (p, m) in declares {

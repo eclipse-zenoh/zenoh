@@ -13,6 +13,12 @@
 //
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// FIXME(regions)
+#![allow(dead_code)]
+// NOTE(fuzzypixelz): `clippy::incompatible_msrv` can have false positives (e.g. due to zenoh_core::polyfill).
+// This is acceptable thanks to MSRV tests in CI.
+// See https://github.com/rust-lang/rust-clippy/issues/12280.
+#![allow(clippy::incompatible_msrv)]
 
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest, and computations. It elegantly blends traditional pub/sub with geo-distributed
@@ -22,7 +28,7 @@
 //! # Components and concepts
 //!
 //! The main Zenoh components and concepts are described below.
-//!  
+//!
 //! ## Session
 //!
 //! The root element of the Zenoh API is the [session].

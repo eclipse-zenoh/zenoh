@@ -17,7 +17,11 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -53,9 +57,10 @@ use crate::{
     },
 };
 
-mod client;
-mod peer;
-mod router;
+// mod client;
+pub(crate) mod broker;
+pub(crate) mod peer;
+// mod router;
 
 zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
@@ -111,16 +116,6 @@ impl BaseContext<'_> {
 /// to nodes that don't have a face but still need to be identified in hat interfaces.
 ///
 /// Named after Git remotes.
-// pub(crate) struct Remote(Box<dyn Any + Send + Sync>);
-
-// impl Deref for Remote {
-//     type Target = dyn Any;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
 pub(crate) type Remote = Arc<dyn Any + Send + Sync>;
 
 pub(crate) trait HatBaseTrait: Any {
@@ -130,7 +125,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
-    // REVIEW(regions): it would be betetr if this returned a Result instead
+    // REVIEW(regions): it would be better if this returned a Result instead
     // Currently errors are logged in router::Hat::get_router.
 
     fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
@@ -140,6 +135,7 @@ pub(crate) trait HatBaseTrait: Any {
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
+        other_hats: RegionMap<&dyn HatTrait>,
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()>;
@@ -218,6 +214,10 @@ pub(crate) trait HatBaseTrait: Any {
     fn owns(&self, face: &FaceState) -> bool {
         if self.region() == face.region && face.remote_bound.is_north() {
             assert_eq!(self.whatami(), face.whatami);
+
+            if self.region() == Region::Local {
+                assert!(face.is_local);
+            }
         }
 
         self.region() == face.region
@@ -250,15 +250,17 @@ pub(crate) trait HatInterestTrait {
     ///
     /// This method is only called on the north-bound hat.
     ///
+    /// Returns `Some` iff the pending current interest is resolved.
+    ///
     /// Will use the dowstream hat reference to call
     /// [`HatInterestTrait::propagate_declarations`].
     fn route_interest(
         &mut self,
         ctx: BaseContext,
         msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-        south_hats: RegionMap<&mut dyn HatTrait>,
-    );
+        res: Option<Arc<Resource>>,
+        remote: &Remote,
+    ) -> Option<CurrentInterest>;
 
     /// Handles interest finalization messages.
     ///
@@ -267,18 +269,19 @@ pub(crate) trait HatInterestTrait {
         &mut self,
         ctx: BaseContext,
         msg: &Interest,
-        south_hats: RegionMap<&mut dyn HatTrait>,
+        remote_interest: &RemoteInterest,
     );
 
     /// Handles declaration finalization messages.
     ///
+    /// Returns `Some` iff the pending current interest is resolved.
+    ///
     /// This method is only called on the north hat.
-    fn route_final_declaration(
+    fn route_declare_final(
         &mut self,
         ctx: BaseContext,
         interest_id: InterestId,
-        south_hats: RegionMap<&mut dyn HatTrait>,
-    );
+    ) -> Option<CurrentInterest>;
 
     // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
     // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
@@ -294,10 +297,21 @@ pub(crate) trait HatInterestTrait {
         res: Option<&mut Arc<Resource>>,
     );
 
+    /// Propagates current subscriptions to the interested subregion.
+    ///
+    /// This method is only called on the owner south hat.
+    fn propagate_current_subscriptions(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashSet<Arc<Resource>>,
+    );
+
     /// Informs the interest source that all declarations have been transmitted.
     ///
     /// This method is only called on south hats.
-    fn send_final_declaration(
+    fn send_declare_final(
         &mut self,
         ctx: BaseContext,
         id: InterestId, // TODO(regions*): change to &Interest (?)
@@ -307,17 +321,14 @@ pub(crate) trait HatInterestTrait {
     /// Register remote interests.
     ///
     /// This method is only called on the owner south hat.
-    fn register_interest(
-        &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-    );
+    fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>);
 
     /// Unregister remote interests.
     ///
     /// This method is only called on the owner south hat.
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest>;
+
+    fn remote_interests(&self, tables: &TablesData) -> HashSet<RemoteInterest>;
 }
 
 pub(crate) trait HatPubSubTrait {
@@ -339,6 +350,53 @@ pub(crate) trait HatPubSubTrait {
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
+
+    /// Register a subscriber entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn register_subscription(
+        // TOOD: pass msg
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        res: Arc<Resource>,
+        nid: NodeId,
+        info: &SubscriberInfo,
+    );
+
+    /// Unregister a subscriber entity.
+    ///
+    /// Returns `false` if the subscriber could not be unregistered.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        res: Option<Arc<Resource>>,
+        nid: NodeId,
+    ) -> Option<Arc<Resource>>;
+
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
+
+    /// Propagate a subscriber entity.
+    ///
+    /// The callee hat will only push the subscription if is the north hat.
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        info: &SubscriberInfo,
+    );
+
+    /// Unpropagate a subscriber entity.
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    fn remote_subscriptions_for(&self, res: &Resource) -> Vec<SubscriberInfo>;
+
+    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo>;
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
@@ -397,14 +455,6 @@ pub(crate) trait HatQueriesTrait {
         key_expr: &KeyExpr<'_>,
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>>;
-}
-
-pub(crate) fn new_hat(whatami: WhatAmI, region: Region) -> Box<dyn HatTrait + Send + Sync> {
-    match whatami {
-        WhatAmI::Client => Box::new(client::Hat::new(region)),
-        WhatAmI::Peer => Box::new(peer::Hat::new(region)),
-        WhatAmI::Router => Box::new(router::Hat::new(region)),
-    }
 }
 
 pub(crate) trait HatTokenTrait {

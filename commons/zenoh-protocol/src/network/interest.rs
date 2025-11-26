@@ -13,6 +13,7 @@
 //
 use core::{
     fmt::{self, Debug},
+    hash::{Hash, Hasher},
     ops::{Add, AddAssign, Sub, SubAssign},
     sync::atomic::AtomicU32,
 };
@@ -153,7 +154,7 @@ pub struct Interest {
 pub type DeclareRequestId = u32;
 pub type AtomicDeclareRequestId = AtomicU32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InterestMode {
     Final,
     Current,
@@ -339,6 +340,16 @@ impl PartialEq for InterestOptions {
             && self.queryables() == other.queryables()
             && self.tokens() == other.tokens()
             && self.aggregate() == other.aggregate()
+    }
+}
+
+impl Hash for InterestOptions {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.keyexprs().hash(state);
+        self.subscribers().hash(state);
+        self.queryables().hash(state);
+        self.tokens().hash(state);
+        self.aggregate().hash(state);
     }
 }
 

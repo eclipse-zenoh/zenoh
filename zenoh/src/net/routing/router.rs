@@ -43,7 +43,7 @@ use crate::net::{
             region::Region,
             tables::{self, Tables},
         },
-        hat::BaseContext,
+        hat::{BaseContext, HatTrait},
     },
 };
 
@@ -89,18 +89,20 @@ impl<'conf> RouterBuilder<'conf> {
             self.hats
                 .extend([(Region::North, mode), (Region::Local, WhatAmI::Client)]);
 
-            self.hats.push((Region::North, mode));
-            self.hats.push((Region::Local, WhatAmI::Client));
-
-            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-                self.hats.push((Region::Undefined { mode }, mode));
-            }
+            // for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+            //     self.hats.push((Region::Undefined { mode }, mode));
+            // }
         }
 
         for (index, _) in gateway_config.south.iter().enumerate() {
             // TODO(regions): we create three hats per subregion.
             // If memory usage is an issue, we should create then lazily.
-            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+            // for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+            //     self.hats
+            //         .push((Region::Subregion { id: index, mode }, mode));
+            // }
+
+            for mode in [WhatAmI::Client, WhatAmI::Peer] {
                 self.hats
                     .push((Region::Subregion { id: index, mode }, mode));
             }
@@ -125,7 +127,19 @@ impl<'conf> RouterBuilder<'conf> {
                         .hats
                         .iter()
                         .copied()
-                        .map(|(b, wai)| (b, hat::new_hat(wai, b)))
+                        .map(|(rgn, wai)| -> (Region, Box<dyn HatTrait + Send + Sync>) {
+                            (
+                                rgn,
+                                match (rgn, wai) {
+                                    (Region::North, WhatAmI::Peer) => {
+                                        Box::new(hat::peer::Hat::new(rgn))
+                                    }
+                                    (_, WhatAmI::Client) => Box::new(hat::broker::Hat::new(rgn)),
+                                    (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(rgn)),
+                                    _ => unimplemented!("rgn={rgn} wai={wai}"),
+                                },
+                            )
+                        })
                         .collect(),
                 }),
                 ctrl_lock: Mutex::new(()),
@@ -283,13 +297,16 @@ impl Router {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        tables.hats[region].new_transport_unicast_face(
-            BaseContext {
-                tables_lock: &face.tables,
-                tables: &mut tables.data,
-                src_face: &mut face.state,
-                send_declare: &mut |p, m| declares.push((p.clone(), m)),
-            },
+        let (owner_hat, other_hats) = tables.hats.partition_mut(&region);
+        let ctx = BaseContext {
+            tables_lock: &face.tables,
+            tables: &mut tables.data,
+            src_face: &mut face.state,
+            send_declare: &mut |p, m| declares.push((p.clone(), m)),
+        };
+        owner_hat.new_transport_unicast_face(
+            ctx,
+            other_hats.map(|hat| &**hat as &dyn HatTrait),
             &self.tables,
             &transport,
         )?;

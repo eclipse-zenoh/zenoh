@@ -58,7 +58,7 @@ use crate::net::{
             face::{FaceId, InterestState},
             interests::RemoteInterest,
             queries::LocalQueryables,
-            region::Region,
+            region::{Region, RegionMap},
         },
         hat::{BaseContext, Remote},
         router::{FaceContext, LocalSubscribers},
@@ -200,33 +200,33 @@ impl HatBaseTrait for Hat {
         Some(face.clone())
     }
 
-    fn new_local_face(
-        &mut self,
-        mut ctx: BaseContext,
-        _tables_ref: &Arc<TablesLock>,
-    ) -> ZResult<()> {
-        self.interests_new_face(ctx.reborrow());
-
-        self.pubsub_new_face(ctx.reborrow());
-        self.queries_new_face(ctx.reborrow());
-        self.token_new_face(ctx.reborrow());
-        ctx.tables.disable_all_routes();
-        Ok(())
+    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+        bail!("Local sessions should not be bound to peer hats");
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, wai = %self.whatami().short(), bnd = %self.region))]
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
         mut ctx: BaseContext,
+        other_hats: RegionMap<&dyn HatTrait>,
         _tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()> {
-        if ctx.src_face.whatami != WhatAmI::Client {
-            if let Some(net) = self.gossip.as_mut() {
-                net.add_link(transport.clone());
-            }
+        assert!(self.owns(ctx.src_face));
+
+        if let Some(net) = self.gossip.as_mut() {
+            net.add_link(transport.clone());
         }
-        if ctx.src_face.whatami == WhatAmI::Peer {
+
+        // NOTE(regions): we only send/recv initial interests between peers that are mutually north-bound,
+        // otherwise we are in PULL mode. In particular, the `open.return_conditions.delcares` configuration
+        // option doesn't apply to region gateways.
+        let do_initial_interest =
+            ctx.src_face.region.bound().is_north() && ctx.src_face.remote_bound.is_north();
+
+        tracing::trace!(do_initial_interest);
+
+        if do_initial_interest {
             let face_id = ctx.src_face.id;
             get_mut_unchecked(ctx.src_face).local_interests.insert(
                 INITIAL_INTEREST_ID,
@@ -234,13 +234,13 @@ impl HatBaseTrait for Hat {
             );
         }
 
-        self.interests_new_face(ctx.reborrow());
-        self.pubsub_new_face(ctx.reborrow());
+        self.interests_new_face(ctx.reborrow(), &other_hats);
+        self.pubsub_new_face(ctx.reborrow(), &other_hats);
         self.queries_new_face(ctx.reborrow());
         self.token_new_face(ctx.reborrow());
         ctx.tables.disable_all_routes();
 
-        if ctx.src_face.whatami == WhatAmI::Peer {
+        if do_initial_interest {
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::new(Declare {
@@ -252,6 +252,7 @@ impl HatBaseTrait for Hat {
                 }),
             );
         }
+
         Ok(())
     }
 
@@ -282,64 +283,16 @@ impl HatBaseTrait for Hat {
         }
         face.local_mappings.clear();
 
-        let mut subs_matches = vec![];
-        for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_subscription(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-                subs_matches.push(res);
-            }
-        }
-
-        let mut qabls_matches = vec![];
-        for (_id, (mut res, _)) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
-            self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
-
-            if res.ctx.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_).context_mut().hats[self.region]
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-                qabls_matches.push(res);
-            }
-        }
-
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).face_ctxs.remove(&face.id);
             self.undeclare_simple_queryable(ctx.reborrow(), &mut res);
         }
 
-        for mut res in subs_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_data_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in qabls_matches {
-            get_mut_unchecked(&mut res).context_mut().hats[self.region].disable_query_routes();
-            Resource::clean(&mut res);
-        }
         self.faces_mut(ctx.tables).remove(&face.id);
 
-        if face.whatami != WhatAmI::Client {
-            if let Some(net) = self.gossip.as_mut() {
-                net.remove_link(&face.zid);
-            }
-        };
+        if let Some(net) = self.gossip.as_mut() {
+            net.remove_link(&face.zid);
+        }
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -370,29 +323,6 @@ impl HatBaseTrait for Hat {
                     }
                 };
             }
-            // } else if oam.id == OAM_IS_GATEWAY {
-            //     let Some(face) = self.face(tables, zid) else {
-            //         bail!("Could not find transport face for ZID {zid}")
-            //     };
-
-            //     tracing::trace!(id = %"OAM_IS_GATEWAY");
-
-            //     self.face_hat_mut(&mut face.clone()).is_gateway = true;
-
-            //     let gwy_count = self
-            //         .faces(tables)
-            //         .iter()
-            //         .filter(|(_, f)| self.face_hat(f).is_gateway)
-            //         .count();
-
-            //     if gwy_count > 1 {
-            //         tracing::error!(
-            //             bound = ?self.bound,
-            //             total = gwy_count,
-            //             "Multiple gateways found in peer subregion. \
-            //             Only one gateway per subregion is supported."
-            //         );
-            //     }
         }
 
         Ok(())
