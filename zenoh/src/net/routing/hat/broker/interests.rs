@@ -12,19 +12,25 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
 use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::compat::*;
 use zenoh_protocol::network::{
-    declare, interest::InterestId, Declare, DeclareBody, DeclareFinal, DeclareSubscriber, Interest,
+    declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+    interest::InterestId,
+    Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, Interest,
 };
 
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
         interests::{CurrentInterest, RemoteInterest},
+        local_resources::LocalResourceInfoTrait,
+        queries::merge_qabl_infos,
         resource::Resource,
         tables::TablesData,
     },
@@ -84,18 +90,29 @@ impl HatInterestTrait for Hat {
         ctx: BaseContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
-        mut matches: HashSet<Arc<Resource>>,
+        mut other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
     ) {
-        assert!(self.owns(ctx.src_face));
-        assert!(ctx.src_face.region.bound().is_south());
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
-        matches.extend(
-            self.owned_faces(ctx.tables)
-                .filter(|face| face.id != ctx.src_face.id)
-                .flat_map(|face| self.face_hat(face).remote_subs.values().cloned()),
-        );
-        let mut matches = matches.into_iter();
-        let push = false;
+        let src_fid = ctx.src_face.id;
+
+        let matches = {
+            other_matches.extend(
+                self.owned_faces(ctx.tables)
+                    .filter(|face| face.id != src_fid)
+                    .flat_map(|face| {
+                        self.face_hat(face)
+                            .remote_subs
+                            .values()
+                            .cloned()
+                            .zip(std::iter::repeat(SubscriberInfo))
+                    }),
+            );
+
+            other_matches
+        };
+        let mut matches = matches.into_keys();
 
         if msg.options.aggregate() && (msg.mode.current() || msg.mode.future()) {
             if let Some(aggregated_res) = &res {
@@ -117,12 +134,15 @@ impl HatInterestTrait for Hat {
                         HashSet::from_iter([msg.id]),
                     )
                 } else {
-                    (0, matches.next().map(|_| SubscriberInfo))
+                    (
+                        SubscriberId::default(),
+                        matches.next().map(|_| SubscriberInfo),
+                    )
                 };
 
                 if msg.mode.current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
-                    let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face, push);
+                    let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
                     (ctx.send_declare)(
                         &ctx.src_face.primitives,
                         RoutingContext::with_expr(
@@ -155,9 +175,9 @@ impl HatInterestTrait for Hat {
                         )
                         .0
                 } else {
-                    0
+                    SubscriberId::default()
                 };
-                let wire_expr = Resource::decl_key(&sub, ctx.src_face, push);
+                let wire_expr = Resource::decl_key(&sub, ctx.src_face);
                 (ctx.send_declare)(
                     &ctx.src_face.primitives,
                     RoutingContext::with_expr(
@@ -172,6 +192,123 @@ impl HatInterestTrait for Hat {
                             }),
                         },
                         sub.expr().to_string(),
+                    ),
+                );
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn propagate_current_queryables(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+
+        let matches: HashMap<Arc<Resource>, QueryableInfoType> = other_matches
+            .into_iter()
+            .chain(
+                self.owned_faces(ctx.tables)
+                    .filter(|f| f.id != ctx.src_face.id)
+                    .flat_map(|f| self.face_hat(f).remote_qabls.values().cloned())
+                    .filter(|(r, _)| {
+                        r.ctx.is_some() && res.as_ref().is_none_or(|res| res.matches(r))
+                    }),
+            )
+            .fold(HashMap::new(), |mut acc, (res, info)| {
+                acc.entry(res)
+                    .and_modify(|i| {
+                        *i = merge_qabl_infos(*i, info);
+                    })
+                    .or_insert(info);
+                acc
+            });
+
+        if msg.options.aggregate() && (msg.mode.current() || msg.mode.future()) {
+            if let Some(aggregated_res) = &res {
+                let (resource_id, qabl_info) = if msg.mode.future() {
+                    for (qabl, qabl_info) in matches {
+                        let face_hat_mut = self.face_hat_mut(ctx.src_face);
+                        face_hat_mut.local_qabls.insert_simple_resource(
+                            qabl.clone(),
+                            qabl_info,
+                            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                            HashSet::new(),
+                        );
+                    }
+                    let face_hat_mut = self.face_hat_mut(ctx.src_face);
+                    face_hat_mut.local_qabls.insert_aggregated_resource(
+                        aggregated_res.clone(),
+                        || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                        HashSet::from_iter([msg.id]),
+                    )
+                } else {
+                    (
+                        QueryableId::default(),
+                        QueryableInfoType::aggregate_many(
+                            aggregated_res,
+                            matches.iter().map(|(res, info)| (res, *info)),
+                        ),
+                    )
+                };
+                if let Some(ext_info) = msg.mode.current().then_some(qabl_info).flatten() {
+                    // send declare only if there is at least one resource matching the aggregate
+                    let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
+                    (ctx.send_declare)(
+                        &ctx.src_face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: Some(msg.id),
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: resource_id,
+                                    wire_expr,
+                                    ext_info,
+                                }),
+                            },
+                            aggregated_res.expr().to_string(),
+                        ),
+                    );
+                }
+            }
+        } else if !msg.options.aggregate() && msg.mode.current() {
+            for (qabl, qabl_info) in matches {
+                let resource_id = if msg.mode.future() {
+                    let face_hat_mut = self.face_hat_mut(ctx.src_face);
+                    face_hat_mut
+                        .local_qabls
+                        .insert_simple_resource(
+                            qabl.clone(),
+                            qabl_info,
+                            || face_hat_mut.next_id.fetch_add(1, Ordering::SeqCst),
+                            HashSet::from([msg.id]),
+                        )
+                        .0
+                } else {
+                    QueryableId::default()
+                };
+                let wire_expr = Resource::decl_key(&qabl, ctx.src_face);
+                (ctx.send_declare)(
+                    &ctx.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: Some(msg.id),
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                id: resource_id,
+                                wire_expr,
+                                ext_info: qabl_info,
+                            }),
+                        },
+                        qabl.expr().to_string(),
                     ),
                 );
             }
@@ -210,8 +347,8 @@ impl HatInterestTrait for Hat {
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(self.region().bound().is_south());
-        assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.region().bound().is_south());
+        debug_assert!(self.owns(ctx.src_face));
 
         let Some(remote_interest) = self
             .face_hat_mut(ctx.src_face)

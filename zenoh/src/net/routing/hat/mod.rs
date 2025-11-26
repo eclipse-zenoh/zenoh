@@ -57,8 +57,8 @@ use crate::{
     },
 };
 
-// mod client;
 pub(crate) mod broker;
+pub(crate) mod client;
 pub(crate) mod peer;
 // mod router;
 
@@ -169,7 +169,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn info(&self, kind: WhatAmI) -> String;
 
-    fn close_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>);
+    fn close_face(&mut self, ctx: BaseContext);
 
     fn update_from_config(
         &mut self,
@@ -213,10 +213,10 @@ pub(crate) trait HatBaseTrait: Any {
     /// Returns `true` if `face` belongs to this [`Hat`].
     fn owns(&self, face: &FaceState) -> bool {
         if self.region() == face.region && face.remote_bound.is_north() {
-            assert_eq!(self.whatami(), face.whatami);
+            debug_assert_eq!(self.whatami(), face.whatami);
 
             if self.region() == Region::Local {
-                assert!(face.is_local);
+                debug_assert!(face.is_local);
             }
         }
 
@@ -305,7 +305,18 @@ pub(crate) trait HatInterestTrait {
         ctx: BaseContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
-        other_matches: HashSet<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
+    );
+
+    /// Propagates current queryables to the interested subregion.
+    ///
+    /// This method is only called on the owner south hat.
+    fn propagate_current_queryables(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
     );
 
     /// Informs the interest source that all declarations have been transmitted.
@@ -366,8 +377,6 @@ pub(crate) trait HatPubSubTrait {
 
     /// Unregister a subscriber entity.
     ///
-    /// Returns `false` if the subscriber could not be unregistered.
-    ///
     /// The callee hat assumes that it owns the source face.
     fn unregister_subscription(
         &mut self,
@@ -386,17 +395,27 @@ pub(crate) trait HatPubSubTrait {
         &mut self,
         ctx: BaseContext,
         res: Arc<Resource>,
-        info: &SubscriberInfo,
+        other_info: Option<SubscriberInfo>,
     );
 
     /// Unpropagate a subscriber entity.
     fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
 
+    /// Unpropagate the last remaining subscriber entity which the callee hat doesn't own.
+    ///
+    /// This implies that the callee hat owns the last remaining subscriber and that the penultimate
+    /// subscriber was unregistered.
     fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
 
-    fn remote_subscriptions_for(&self, res: &Resource) -> Vec<SubscriberInfo>;
+    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo>;
 
     fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo>;
+
+    fn remote_subscriptions_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, SubscriberInfo>;
 
     fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
@@ -436,6 +455,57 @@ pub(crate) trait HatQueriesTrait {
         res: Option<Arc<Resource>>,
         node_id: NodeId,
     ) -> Option<Arc<Resource>>;
+
+    /// Register a queryable entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn register_queryable(
+        // TOOD: pass msg
+        &mut self,
+        ctx: BaseContext,
+        id: QueryableId,
+        res: Arc<Resource>,
+        nid: NodeId,
+        info: &QueryableInfoType,
+    );
+
+    /// Unregister a queryable entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn unregister_queryable(
+        &mut self,
+        ctx: BaseContext,
+        id: QueryableId,
+        res: Option<Arc<Resource>>,
+        nid: NodeId,
+    ) -> Option<Arc<Resource>>;
+
+    fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
+
+    /// Propagate a queryable entity.
+    ///
+    /// The callee hat will only push the subscription if is the north hat.
+    fn propagate_queryable(
+        &mut self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        other_info: Option<QueryableInfoType>,
+    );
+
+    /// Unpropagate a queryable entity.
+    fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    fn unpropagate_last_non_owned_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType>;
+
+    fn remote_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, QueryableInfoType>;
+
+    fn remote_queryables_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, QueryableInfoType>;
 
     fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 

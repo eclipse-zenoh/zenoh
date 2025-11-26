@@ -272,7 +272,7 @@ impl HatInterestTrait for Hat {
         };
 
         if interest_id == INITIAL_INTEREST_ID {
-            debug_assert!(self.owns(&ctx.src_face));
+            debug_assert!(self.owns(ctx.src_face));
             debug_assert!(ctx.src_face.remote_bound.is_north());
 
             // FIXME(regions): don't create start conditions for gateway peers
@@ -564,7 +564,7 @@ impl HatInterestTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
         debug_assert!(!self.region().bound().is_north());
-        debug_assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.owns(ctx.src_face));
 
         let Some(remote_interest) = self
             .face_hat_mut(ctx.src_face)

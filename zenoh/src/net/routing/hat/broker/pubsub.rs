@@ -227,7 +227,7 @@ impl HatPubSubTrait for Hat {
         _nid: NodeId,
         info: &SubscriberInfo,
     ) {
-        debug_assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.owns(ctx.src_face));
 
         {
             let res = get_mut_unchecked(&mut res);

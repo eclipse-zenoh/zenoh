@@ -11,23 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{atomic::Ordering, Arc},
+};
 
-use itertools::Itertools;
-use zenoh_protocol::{
-    core::WhatAmI,
-    network::{
-        declare,
-        interest::{self, InterestId, InterestMode},
-        Declare, DeclareBody, DeclareFinal, Interest,
-    },
+use zenoh_protocol::network::{
+    declare::queryable::ext::QueryableInfoType,
+    interest::{self, InterestId, InterestMode},
+    Interest,
 };
 use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
-        face::{FaceState, InterestState},
+        face::InterestState,
         interests::{
             CurrentInterest, CurrentInterestCleanup, PendingCurrentInterest, RemoteInterest,
         },
@@ -36,44 +35,47 @@ use crate::net::routing::{
         tables::TablesData,
     },
     hat::{BaseContext, CurrentFutureTrait, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
+    router::SubscriberInfo,
     RoutingContext,
 };
 impl Hat {
-    pub(super) fn interests_new_face(&self, tables: &mut TablesData, face: &mut Arc<FaceState>) {
-        if face.whatami != WhatAmI::Client {
-            for mut src_face in self
-                .faces(tables)
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
-                for RemoteInterest { res, options, .. } in
-                    self.face_hat_mut(&mut src_face).remote_interests.values()
-                {
-                    let id = self.face_hat(face).next_id.fetch_add(1, Ordering::SeqCst);
-                    let face_id = face.id;
-                    get_mut_unchecked(face).local_interests.insert(
+    pub(super) fn interests_new_face(
+        &self,
+        ctx: BaseContext,
+        other_hats: &RegionMap<&dyn HatTrait>,
+    ) {
+        for RemoteInterest { res, options, .. } in other_hats
+            .values()
+            .filter(|hat| hat.region().bound().is_south())
+            .flat_map(|hat| hat.remote_interests(ctx.tables))
+        {
+            let id = self
+                .face_hat(ctx.src_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            let face_id = ctx.src_face.id;
+            get_mut_unchecked(ctx.src_face)
+                .local_interests
+                .insert(id, InterestState::new(face_id, options, res.clone(), false));
+            let wire_expr = res
+                .as_ref()
+                .map(|res| Resource::decl_key(res, ctx.src_face));
+            ctx.src_face
+                .primitives
+                .send_interest(RoutingContext::with_expr(
+                    &mut Interest {
                         id,
-                        InterestState::new(face_id, *options, res.clone(), false),
-                    );
-
-                    let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, face, true));
-                    face.primitives.send_interest(RoutingContext::with_expr(
-                        &mut Interest {
-                            id,
-                            mode: InterestMode::CurrentFuture,
-                            options: *options,
-                            wire_expr,
-                            ext_qos: interest::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
-                        },
-                        res.as_ref()
-                            .map(|res| res.expr().to_string())
-                            .unwrap_or_default(),
-                    ));
-                }
-            }
+                        mode: InterestMode::CurrentFuture,
+                        options,
+                        wire_expr,
+                        ext_qos: interest::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
+                    },
+                    res.as_ref()
+                        .map(|res| res.expr().to_string())
+                        .unwrap_or_default(),
+                ));
         }
     }
 }
@@ -82,11 +84,11 @@ impl HatInterestTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn route_interest(
         &mut self,
-        mut ctx: BaseContext,
+        ctx: BaseContext,
         msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-        mut south_hats: RegionMap<&mut dyn HatTrait>,
-    ) {
+        res: Option<Arc<Resource>>,
+        remote: &Remote,
+    ) -> Option<CurrentInterest> {
         // I have received an interest with mode != FINAL.
         // I should be the north hat.
         // The face cannot be bound to me, so it must be south-bound. In which case the msg originates in a subregion (for which I am the gateway):
@@ -94,25 +96,11 @@ impl HatInterestTrait for Hat {
         //   2. If the interest is current, I need to send all current declarations in the (south) owner hat.
         //   3. If the interest is future, I need to register it as a remote interest in the (south) owner hat.
 
-        assert!(self.region().bound().is_north());
-        assert!(ctx.src_face.region.bound().is_south());
-
-        let owner_hat = &mut *south_hats[ctx.src_face.region];
-
-        if msg.mode.current() {
-            owner_hat.send_declarations(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
-        }
-
-        if msg.mode.future() {
-            owner_hat.register_interest(ctx.reborrow(), msg, res.as_deref().cloned().as_mut());
-        }
-
-        let Some(src) = owner_hat.new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
-            return;
-        };
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
         let interest = Arc::new(CurrentInterest {
-            src,
+            src: remote.clone(),
             src_region: ctx.src_face.region,
             src_interest_id: msg.id,
             mode: msg.mode,
@@ -131,12 +119,12 @@ impl HatInterestTrait for Hat {
                 InterestState::new(
                     dst_face_id,
                     msg.options,
-                    res.as_deref().cloned(),
+                    res.clone(),
                     msg.mode == InterestMode::Future,
                 ),
             );
 
-            if msg.mode.current() && msg.options.tokens() {
+            if msg.mode.current() {
                 let dst_face_mut = get_mut_unchecked(&mut dst_face);
                 let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
                 let rejection_token = dst_face_mut.task_controller.get_cancellation_token();
@@ -158,7 +146,7 @@ impl HatInterestTrait for Hat {
 
             let wire_expr = res
                 .as_ref()
-                .map(|res| Resource::decl_key(res, &mut dst_face, true));
+                .map(|res| Resource::decl_key(res, &mut dst_face));
             dst_face.primitives.send_interest(RoutingContext::with_expr(
                 &mut Interest {
                     id,
@@ -177,29 +165,25 @@ impl HatInterestTrait for Hat {
             tracing::debug!(
                 id = msg.id,
                 src = %ctx.src_face,
-                "No client gateway found. Will not propagate interest"
+                "Client region is empty. Will not propagate interest north"
             );
         }
 
         if msg.mode.current() {
             if let Some(interest) = Arc::into_inner(interest) {
-                tracing::debug!(
-                    id = msg.id,
-                    src = %ctx.src_face,
-                    "Finalizing current interest. It was not propagated upstream"
-                );
-
-                owner_hat.send_final_declaration(ctx, interest.src_interest_id, &interest.src);
+                return Some(interest);
             }
         }
+
+        None
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn route_interest_final(
         &mut self,
-        mut ctx: BaseContext,
-        msg: &Interest,
-        mut south_hats: RegionMap<&mut dyn HatTrait>,
+        ctx: BaseContext,
+        _msg: &Interest,
+        remote_interest: &RemoteInterest,
     ) {
         // I have received an interest with mode FINAL.
         // I should be the north hat.
@@ -207,17 +191,8 @@ impl HatInterestTrait for Hat {
         //   1. I need to unregister it as a remote interest in the owner (south) hat.
         //   2. If I have a gateway, I should re-propagate the FINAL interest to it iff no other subregion has the same remote interest.
 
-        assert!(self.region().bound().is_north());
-        assert!(ctx.src_face.region.bound().is_south());
-
-        // FIXME(regions): check if any subregion has the same remote interest before propagating the interest final
-
-        let owner_hat = &mut *south_hats[ctx.src_face.region];
-
-        let Some(remote_interest) = owner_hat.unregister_interest(ctx.reborrow(), msg) else {
-            tracing::error!(id = msg.id, "Unknown remote interest");
-            return;
-        };
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
         if let Some(dst_face) = self
             .owned_faces_mut(ctx.tables)
@@ -225,7 +200,7 @@ impl HatInterestTrait for Hat {
             .map(get_mut_unchecked)
         {
             dst_face.local_interests.retain(|id, local_interest| {
-                if *local_interest == remote_interest {
+                if local_interest == remote_interest {
                     dst_face.primitives.send_interest(RoutingContext::with_expr(
                         &mut Interest {
                             id: *id,
@@ -251,17 +226,32 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    fn route_final_declaration(
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn route_declare_final(
         &mut self,
         ctx: BaseContext,
         interest_id: InterestId,
-        mut south_hats: RegionMap<&mut dyn HatTrait>,
-    ) {
+    ) -> Option<CurrentInterest> {
         // I have received a Declare Final.
         // The source face must be a gateway, in which case there should be a pending current interest and I should be the north hat.
 
-        assert!(self.region().bound().is_north());
-        assert!(ctx.src_face.region.bound().is_north());
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_north());
+
+        if let Some(interest) = get_mut_unchecked(ctx.src_face)
+            .local_interests
+            .get_mut(&interest_id)
+        {
+            interest.set_finalized();
+            tracing::trace!(?interest, "Finalized interest");
+        } else {
+            tracing::error!(
+                id = interest_id,
+                src = %ctx.src_face,
+                "Unknown local interest"
+            );
+            return None;
+        };
 
         let Some(PendingCurrentInterest {
             interest,
@@ -276,106 +266,70 @@ impl HatInterestTrait for Hat {
                 src = %ctx.src_face,
                 "Unknown current interest"
             );
-            return;
-        };
-
-        cancellation_token.cancel();
-        if let Some(interest) = Arc::into_inner(interest) {
-            let owner_hat = &mut *south_hats[interest.src_region];
-            owner_hat.send_final_declaration(ctx, interest.src_interest_id, &interest.src);
-        }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn send_declarations(
-        &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-    ) {
-        // FIXME(regions): send subscribers and queryables as well
-
-        if msg.options.tokens() {
-            // Note: aggregation is forbidden for tokens. The flag is ignored.
-            self.declare_token_interest(
-                ctx.tables,
-                ctx.src_face,
-                msg.id,
-                res.as_deref().cloned().as_mut(),
-                msg.mode,
-                ctx.send_declare,
-            )
-        }
-
-        if msg.mode.future() {
-            self.face_hat_mut(ctx.src_face).remote_interests.insert(
-                msg.id,
-                RemoteInterest {
-                    res: res.as_deref().cloned(),
-                    options: msg.options,
-                    mode: msg.mode,
-                },
-            );
-        }
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn send_final_declaration(&mut self, ctx: BaseContext, id: InterestId, src: &Remote) {
-        // I should send a DeclareFinal to the source of the current interest identified by the given IID and FID
-
-        let src_face = self.hat_remote(src);
-
-        (ctx.send_declare)(
-            &src_face.primitives,
-            RoutingContext::new(Declare {
-                interest_id: Some(id),
-                ext_qos: declare::ext::QoSType::DECLARE,
-                ext_tstamp: None,
-                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                body: DeclareBody::DeclareFinal(DeclareFinal),
-            }),
-        );
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn register_interest(
-        &mut self,
-        ctx: BaseContext,
-        msg: &Interest,
-        res: Option<&mut Arc<Resource>>,
-    ) {
-        self.face_hat_mut(ctx.src_face).remote_interests.insert(
-            msg.id,
-            RemoteInterest {
-                res: res.as_deref().cloned(),
-                options: msg.options,
-                mode: msg.mode,
-            },
-        );
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
-        assert!(self.region().bound().is_south());
-        assert!(self.owns(&ctx.src_face));
-
-        let Some(remote_interest) = self
-            .face_hat_mut(ctx.src_face)
-            .remote_interests
-            .remove(&msg.id)
-        else {
-            tracing::error!(id = msg.id, "Unknown remote interest");
             return None;
         };
 
-        self.owned_faces(ctx.tables)
-            .all(|face| {
-                !self
-                    .face_hat(face)
-                    .remote_interests
-                    .values()
-                    .contains(&remote_interest)
-            })
-            .then_some(remote_interest)
+        cancellation_token.cancel();
+        Arc::into_inner(interest)
+    }
+
+    fn send_declarations(
+        &mut self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<&mut Arc<Resource>>,
+    ) {
+        unimplemented!()
+    }
+
+    fn propagate_current_subscriptions(
+        &self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
+    ) {
+        // The client hat is always the north hat, thus it shouldn't receive interests
+        unreachable!()
+    }
+
+    fn propagate_current_queryables(
+        &self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
+    ) {
+        unreachable!()
+    }
+
+    fn send_declare_final(&mut self, _ctx: BaseContext, _id: InterestId, _src: &Remote) {
+        // The client hat is always the north hat, thus it shouldn't receive interests
+        unreachable!()
+    }
+
+    fn register_interest(
+        &mut self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+    ) {
+        // The client hat is always the north hat, thus it shouldn't receive interests
+        unreachable!()
+    }
+
+    fn unregister_interest(
+        &mut self,
+        _ctx: BaseContext,
+        _msg: &Interest,
+    ) -> Option<RemoteInterest> {
+        // The client hat is always the north hat, thus it shouldn't receive interests
+        unreachable!()
+    }
+
+    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    fn remote_interests(&self, _tables: &TablesData) -> HashSet<RemoteInterest> {
+        // The client hat is always the north hat, thus it shouldn't receive interests
+        HashSet::default()
     }
 }

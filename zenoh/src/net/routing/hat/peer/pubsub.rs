@@ -641,7 +641,7 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for (fid, ctx) in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && !self.owns(&src_face) {
+                if ctx.subs.is_some() && !self.owns(src_face) {
                     route.insert(*fid, || {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(*fid);
@@ -728,7 +728,7 @@ impl HatPubSubTrait for Hat {
         _nid: NodeId,
         info: &SubscriberInfo,
     ) {
-        debug_assert!(self.owns(&ctx.src_face));
+        debug_assert!(self.owns(ctx.src_face));
 
         {
             let res = get_mut_unchecked(&mut res);
@@ -813,7 +813,7 @@ impl HatPubSubTrait for Hat {
         other_info: Option<SubscriberInfo>,
     ) {
         let Some(other_info) = other_info else {
-            debug_assert!(self.owns(&ctx.src_face));
+            debug_assert!(self.owns(ctx.src_face));
             return;
         };
 
