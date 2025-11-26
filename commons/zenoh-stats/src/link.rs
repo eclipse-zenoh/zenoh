@@ -21,10 +21,9 @@ scoped_thread_local! {
     static RX_LINK: LinkStats
 }
 thread_local! {
-    pub(self) static RX_LINK_LEVEL_INFO: Cell<Option<LinkLevelInfo>> = const { Cell::new(None) };
-}
-thread_local! {
-    pub(self) static TX_ROUTER_LEVEL_INFO: Cell<Option<RouterLevelInfo>> = const { Cell::new(None) };
+    static RX_LINK_LEVEL_INFO: Cell<Option<LinkLevelInfo>> = const { Cell::new(None) };
+
+    static TX_ROUTER_LEVEL_INFO: Cell<Option<RouterLevelInfo>> = const { Cell::new(None) };
 }
 
 pub fn with_tx_observe_network_message<R>(
