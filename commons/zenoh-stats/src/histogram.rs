@@ -70,7 +70,8 @@ impl TransportMetric for Histogram {
 
     fn drain_into(&self, other: &Self) {
         (other.0.sum).fetch_add(self.0.sum.load(Ordering::Relaxed), Ordering::Relaxed);
-        for ((_, c), (_, other_c)) in self.0.buckets.iter().zip(&other.0.buckets) {
+        for ((b, c), (other_b, other_c)) in iter::zip(&self.0.buckets, &other.0.buckets) {
+            debug_assert_eq!(b, other_b);
             other_c.fetch_add(c.load(Ordering::Relaxed), Ordering::Relaxed);
         }
     }
