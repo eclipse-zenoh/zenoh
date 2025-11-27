@@ -271,9 +271,7 @@ pub fn route_data(
             #[cfg(feature = "stats")]
             let payload_size = msg.payload_size();
             #[cfg(feature = "stats")]
-            let stats_keys = expr
-                .key_expr()
-                .map_or_else(Default::default, |k| tables.stats_keys.compute_keys(k));
+            let stats_keys = tables.stats_keys.compute_keys(|| expr.key_expr());
             #[cfg(feature = "stats")]
             zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
 

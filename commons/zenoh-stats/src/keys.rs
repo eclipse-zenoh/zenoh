@@ -26,9 +26,21 @@ pub struct StatsKeysTree {
 }
 
 impl StatsKeysTree {
-    pub fn compute_keys(&self, keyexpr: &keyexpr) -> StatsKeys {
-        let keys = (self.tree.iter())
-            .flat_map(|t| t.intersecting_nodes(keyexpr))
+    #[inline(always)]
+    pub fn compute_keys<'a>(&self, keyexpr: impl FnOnce() -> Option<&'a keyexpr>) -> StatsKeys {
+        self.tree
+            .as_ref()
+            .map_or_else(Default::default, |_| self.get_keys(keyexpr))
+    }
+
+    #[cold]
+    fn get_keys<'a>(&self, keyexpr: impl FnOnce() -> Option<&'a keyexpr>) -> StatsKeys {
+        let tree = self.tree.as_ref().unwrap();
+        let Some(keyexpr) = keyexpr() else {
+            return Default::default();
+        };
+        let keys = tree
+            .intersecting_nodes(keyexpr)
             .filter_map(|n| n.weight().cloned())
             .map(|key| (self.generation, key))
             .collect();

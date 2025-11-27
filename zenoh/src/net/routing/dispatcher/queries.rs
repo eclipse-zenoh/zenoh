@@ -408,9 +408,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
             #[cfg(feature = "stats")]
             let payload_size = msg.payload_size();
             #[cfg(feature = "stats")]
-            let stats_keys = expr
-                .key_expr()
-                .map_or_else(Default::default, |k| rtables.stats_keys.compute_keys(k));
+            let stats_keys = rtables.stats_keys.compute_keys(|| expr.key_expr());
             #[cfg(feature = "stats")]
             zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
 
@@ -536,11 +534,8 @@ pub(crate) fn route_send_response(
         match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
             Some(prefix) => {
                 let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
-                (
-                    expr.is_admin(),
-                    expr.key_expr()
-                        .map_or_else(Default::default, |k| tables.stats_keys.compute_keys(k)),
-                )
+                let stats_keys = tables.stats_keys.compute_keys(|| expr.key_expr());
+                (expr.is_admin(), stats_keys)
             }
             None => (false, Default::default()),
         };
