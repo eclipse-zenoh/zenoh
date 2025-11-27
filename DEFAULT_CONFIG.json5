@@ -524,6 +524,15 @@
   //   },
   // ],
 
+  /// Enable stats per key expression.
+  // stats: {
+  //   filters: [
+  //     {
+  //       key: "some/key/expression/**",
+  //     }
+  //   ],
+  // },
+
   /// Configure internal transport parameters
   transport: {
     unicast: {

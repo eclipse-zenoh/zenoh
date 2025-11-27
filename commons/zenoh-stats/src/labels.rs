@@ -16,7 +16,8 @@ use zenoh_protocol::{
 };
 
 use crate::{
-    family::TransportMetric, histogram::Histogram, stats::JsonExt, Rx, StatsDirection, Tx,
+    family::TransportMetric, histogram::Histogram, keys::HistogramPerKey, stats::JsonExt, Rx,
+    StatsDirection, Tx,
 };
 
 // Because of `prometheus_client` lack of blanket impl
@@ -199,9 +200,20 @@ pub(crate) trait StatsPath<M: TransportMetric> {
     fn incr_counters(
         transport: Option<&TransportLabels>,
         link: Option<&LinkLabels>,
+        key: Option<&str>,
         json: &mut serde_json::Value,
         incr_stats_counter: impl Fn(&mut serde_json::Value),
     ) {
+        let incr_counter = |json: &mut serde_json::Value| match key {
+            Some(key) => {
+                if let Some(entry) = (json.try_get_field("filtered_stats"))
+                    .and_then(|f| f.get_item(|entry| (entry.get_field("key") == key)))
+                {
+                    incr_stats_counter(entry.get_field("stats"))
+                }
+            }
+            None => incr_stats_counter(json.get_field("stats")),
+        };
         if let Some(transport) = transport {
             for json in json
                 .get_field("sessions")
@@ -213,18 +225,13 @@ pub(crate) trait StatsPath<M: TransportMetric> {
                     .is_some_and(|peer| json.get_field("peer") == &peer.0.to_string())
                     || transport.remote_zid.is_none()
                 {
-                    incr_stats_counter(json.get_field("stats"));
+                    incr_counter(json);
                     if let Some(link) = link {
-                        for json in json
-                            .get_field("links")
-                            .as_array_mut()
-                            .expect("links should be an array")
-                        {
-                            if json.get_field("src") == link.src_locator.as_str()
-                                && json.get_field("dst") == link.dst_locator.as_str()
-                            {
-                                incr_stats_counter(json.get_field("stats"));
-                            }
+                        if let Some(json) = json.get_field("links").get_item(|entry| {
+                            entry.get_field("src") == link.src_locator.as_str()
+                                && entry.get_field("dst") == link.dst_locator.as_str()
+                        }) {
+                            incr_counter(json);
                         }
                     }
                     if transport.remote_zid.is_some() {
@@ -233,7 +240,7 @@ pub(crate) trait StatsPath<M: TransportMetric> {
                 }
             }
         }
-        incr_stats_counter(json.get_field("stats"));
+        incr_counter(json);
     }
 }
 
@@ -315,7 +322,7 @@ impl StatsPath<Counter> for BytesLabels {
             Tx => "tx_bytes",
             Rx => "rx_bytes",
         };
-        Self::incr_counters(transport, link, json, |stats| {
+        Self::incr_counters(transport, link, None, json, |stats| {
             stats.incr_counter(counter, collected)
         });
     }
@@ -339,7 +346,7 @@ impl StatsPath<Counter> for TransportMessageLabels {
             Tx => "tx_t_msgs",
             Rx => "rx_t_msgs",
         };
-        Self::incr_counters(transport, link, json, |stats| {
+        Self::incr_counters(transport, link, None, json, |stats| {
             stats.incr_counter(counter, collected)
         });
     }
@@ -367,7 +374,7 @@ impl StatsPath<Counter> for NetworkMessageLabels {
             Rx => "rx_n_msgs",
         };
         let medium = if labels.shm { "shm" } else { "net" };
-        Self::incr_counters(transport, link, json, |stats| {
+        Self::incr_counters(transport, link, None, json, |stats| {
             stats.get_field(counter).incr_counter(medium, collected)
         });
     }
@@ -382,8 +389,9 @@ pub(crate) struct NetworkMessagePayloadLabels {
     pub(crate) protocol: ProtocolLabel,
 }
 
-impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
+impl NetworkMessagePayloadLabels {
     fn incr_stats(
+        key: Option<&str>,
         direction: StatsDirection,
         transport: Option<&TransportLabels>,
         link: Option<&LinkLabels>,
@@ -401,7 +409,7 @@ impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
         };
         let msgs = format!("{direction}_z_{msg}_msgs");
         let pl_bytes = format!("{direction}_z_{msg}_pl_bytes");
-        Self::incr_counters(transport, link, json, |stats| {
+        <Self as StatsPath<Histogram>>::incr_counters(transport, link, key, json, |stats| {
             let space = match labels.space {
                 SpaceLabel::Admin => "admin",
                 SpaceLabel::User => "user",
@@ -411,6 +419,42 @@ impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
                 stats.get_field(&pl_bytes).incr_counter(space, sum as u64);
             }
         });
+    }
+}
+
+impl StatsPath<Histogram> for NetworkMessagePayloadLabels {
+    fn incr_stats(
+        direction: StatsDirection,
+        transport: Option<&TransportLabels>,
+        link: Option<&LinkLabels>,
+        labels: &Self,
+        collected: <Histogram as TransportMetric>::Collected,
+        json: &mut serde_json::Value,
+    ) {
+        Self::incr_stats(None, direction, transport, link, labels, collected, json);
+    }
+}
+
+impl StatsPath<HistogramPerKey> for NetworkMessagePayloadLabels {
+    fn incr_stats(
+        direction: StatsDirection,
+        transport: Option<&TransportLabels>,
+        link: Option<&LinkLabels>,
+        labels: &Self,
+        collected: <HistogramPerKey as TransportMetric>::Collected,
+        json: &mut serde_json::Value,
+    ) {
+        for (key, collected) in collected {
+            Self::incr_stats(
+                Some(&key),
+                direction,
+                transport,
+                link,
+                labels,
+                collected,
+                json,
+            );
+        }
     }
 }
 
@@ -433,7 +477,9 @@ impl StatsPath<Histogram> for NetworkMessageDroppedPayloadLabels {
     ) {
         let (sum, count, _) = collected;
         let mut incr_counters = |field, by| {
-            Self::incr_counters(transport, link, json, |stats| stats.incr_counter(field, by))
+            Self::incr_counters(transport, link, None, json, |stats| {
+                stats.incr_counter(field, by)
+            })
         };
         match (direction, &labels.reason) {
             (Tx, ReasonLabel::Congestion) => {

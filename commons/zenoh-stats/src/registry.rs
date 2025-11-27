@@ -16,6 +16,7 @@ use prometheus_client::{
     },
     registry::{Registry, Unit},
 };
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 
 use crate::{
@@ -24,13 +25,14 @@ use crate::{
         COLLECT_PER_LINK, COLLECT_PER_TRANSPORT,
     },
     histogram::{Histogram, HistogramBuckets, PAYLOAD_SIZE_BUCKETS},
+    keys::{HistogramPerKey, StatsKeysRegistry},
     labels::{
         BytesLabels, LinkLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels,
         NetworkMessageLabels, NetworkMessagePayloadLabels, ProtocolLabels, ResourceDeclaredLabels,
         ResourceLabel, StatsPath, TransportLabels, TransportMessageLabels,
     },
     stats::init_stats,
-    Rx, StatsDirection, TransportStats, Tx,
+    Rx, StatsDirection, StatsKeysTree, TransportStats, Tx,
 };
 
 #[derive(Debug, Clone)]
@@ -38,6 +40,7 @@ pub struct StatsRegistry(Arc<StatsRegistryInner>);
 
 impl StatsRegistry {
     pub fn new(zid: ZenohIdProto, whatami: WhatAmI, build_version: impl Into<String>) -> Self {
+        let stats_keys = StatsKeysRegistry::default();
         let mut registry = Registry::with_prefix_and_labels(
             "zenoh",
             [
@@ -76,6 +79,9 @@ impl StatsRegistry {
             array::from_fn(|_dir| TransportFamily::new_with_constructor(PAYLOAD_SIZE_BUCKETS));
         let network_message_dropped_payload =
             array::from_fn(|_dir| TransportFamily::new_with_constructor(PAYLOAD_SIZE_BUCKETS));
+        let network_message_payload_per_key = array::from_fn(|_dir| {
+            TransportFamily::new_with_constructor((PAYLOAD_SIZE_BUCKETS, stats_keys.clone()))
+        });
         for dir in [Tx, Rx] {
             let action = match dir {
                 Tx => "sent",
@@ -111,6 +117,12 @@ impl StatsRegistry {
                 unit: Some(Unit::Bytes),
                 family: network_message_dropped_payload[dir as usize].clone(),
             }));
+            registry.register_collector(Box::new(TransportFamilyCollector {
+                name: format!("{dir}_network_message_payload_per_key"),
+                help: format!("Histogram of network messages payload {action} per key"),
+                unit: Some(Unit::Bytes),
+                family: network_message_payload_per_key[dir as usize].clone(),
+            }));
         }
         Self(Arc::new(StatsRegistryInner {
             registry: RwLock::new(registry),
@@ -122,6 +134,8 @@ impl StatsRegistry {
             network_message,
             network_message_payload,
             network_message_dropped_payload,
+            network_message_payload_per_key,
+            stats_keys,
         }))
     }
 
@@ -185,6 +199,17 @@ impl StatsRegistry {
         &self.0.network_message_dropped_payload[direction as usize]
     }
 
+    pub(crate) fn network_message_payload_per_key(
+        &self,
+        direction: StatsDirection,
+    ) -> &TransportFamily<
+        NetworkMessagePayloadLabels,
+        HistogramPerKey,
+        (HistogramBuckets, StatsKeysRegistry),
+    > {
+        &self.0.network_message_payload_per_key[direction as usize]
+    }
+
     fn families(&self) -> impl Iterator<Item = (StatsDirection, &dyn TransportFamilyAny)> {
         [Tx, Rx].into_iter().flat_map(|dir| {
             iter::repeat(dir).zip([
@@ -193,12 +218,13 @@ impl StatsRegistry {
                 &self.0.network_message[dir as usize],
                 &self.0.network_message_payload[dir as usize],
                 &self.0.network_message_dropped_payload[dir as usize],
+                &self.0.network_message_payload_per_key[dir as usize],
             ])
         })
     }
 
     pub fn merge_stats(&self, json: &mut serde_json::Value) {
-        init_stats(json);
+        init_stats(json, &self.0.stats_keys.keys());
         for (dir, family) in self.families() {
             family.merge_stats(dir, json);
         }
@@ -244,6 +270,13 @@ impl StatsRegistry {
             self.0.links_opened.get_or_create(&protocol).dec();
         }
     }
+
+    pub fn update_keys<'a>(
+        &self,
+        keyexprs: impl IntoIterator<Item = &'a keyexpr>,
+    ) -> StatsKeysTree {
+        self.0.stats_keys.update_keys(keyexprs)
+    }
 }
 
 #[derive(Debug)]
@@ -261,6 +294,13 @@ struct StatsRegistryInner {
     network_message_dropped_payload:
         [TransportFamily<NetworkMessageDroppedPayloadLabels, Histogram, HistogramBuckets>;
             StatsDirection::NUM],
+    #[allow(clippy::type_complexity)]
+    network_message_payload_per_key: [TransportFamily<
+        NetworkMessagePayloadLabels,
+        HistogramPerKey,
+        (HistogramBuckets, StatsKeysRegistry),
+    >; StatsDirection::NUM],
+    stats_keys: StatsKeysRegistry,
 }
 
 pub(crate) trait TransportFamilyAny {

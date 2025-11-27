@@ -125,6 +125,10 @@ pub struct Tables {
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) routes_version: RoutesVersion,
     pub(crate) next_interceptor_version: AtomicUsize,
+    #[cfg(feature = "stats")]
+    pub(crate) stats: zenoh_stats::StatsRegistry,
+    #[cfg(feature = "stats")]
+    pub(crate) stats_keys: zenoh_stats::StatsKeysTree,
 }
 
 impl Tables {
@@ -134,6 +138,7 @@ impl Tables {
         hlc: Option<Arc<HLC>>,
         config: &Config,
         hat_code: &(dyn HatTrait + Send + Sync),
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -160,6 +165,10 @@ impl Tables {
             hat: hat_code.new_tables(router_peers_failover_brokering),
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
+            #[cfg(feature = "stats")]
+            stats_keys: stats.update_keys(config.stats.filters().iter().map(|f| &*f.key)),
+            #[cfg(feature = "stats")]
+            stats,
         })
     }
 
@@ -218,8 +227,14 @@ pub struct TablesLock {
 
 impl TablesLock {
     #[allow(dead_code)]
-    pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
+    pub(crate) fn update_config(&self, config: &Config) -> ZResult<()> {
         let mut tables = zwrite!(self.tables);
+        #[cfg(feature = "stats")]
+        {
+            tables.stats_keys = tables
+                .stats
+                .update_keys(config.stats.filters().iter().map(|k| &*k.key));
+        }
         tables.interceptors = interceptor_factories(config)?;
         drop(tables);
         let tables = zread!(self.tables);

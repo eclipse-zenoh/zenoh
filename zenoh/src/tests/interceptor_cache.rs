@@ -203,7 +203,7 @@ async fn test_interceptors_cache_update_ingress() {
         .unwrap()
         .router()
         .tables
-        .regen_interceptors(&config_router)
+        .update_config(&config_router)
         .unwrap();
     tokio::time::sleep(SLEEP).await;
 
@@ -294,7 +294,7 @@ async fn test_interceptors_cache_update_egress() {
         .unwrap()
         .router()
         .tables
-        .regen_interceptors(&config_router)
+        .update_config(&config_router)
         .unwrap();
     tokio::time::sleep(SLEEP).await;
 
@@ -385,7 +385,7 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
         .unwrap()
         .router()
         .tables
-        .regen_interceptors(&config_router)
+        .update_config(&config_router)
         .unwrap();
     tokio::time::sleep(SLEEP).await;
 

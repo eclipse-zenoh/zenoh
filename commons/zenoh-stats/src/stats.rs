@@ -1,6 +1,8 @@
 pub(crate) trait JsonExt {
     fn has_field(&self, field: &str) -> bool;
+    fn try_get_field(&mut self, field: &str) -> Option<&mut Self>;
     fn get_field(&mut self, field: &str) -> &mut Self;
+    fn get_item(&mut self, predicate: impl Fn(&mut Self) -> bool) -> Option<&mut Self>;
     fn incr_counter(&mut self, field: &str, by: u64);
 }
 impl JsonExt for serde_json::Value {
@@ -10,11 +12,21 @@ impl JsonExt for serde_json::Value {
             .contains_key(field)
     }
 
-    fn get_field(&mut self, field: &str) -> &mut Self {
+    fn try_get_field(&mut self, field: &str) -> Option<&mut Self> {
         self.as_object_mut()
             .expect("json should be an object")
             .get_mut(field)
-            .expect("field should exist")
+    }
+
+    fn get_field(&mut self, field: &str) -> &mut Self {
+        self.try_get_field(field).expect("field should exist")
+    }
+
+    fn get_item(&mut self, predicate: impl Fn(&mut Self) -> bool) -> Option<&mut Self> {
+        self.as_array_mut()
+            .expect("json should be an array")
+            .iter_mut()
+            .find_map(|json| predicate(json).then_some(json))
     }
 
     fn incr_counter(&mut self, field: &str, by: u64) {
@@ -51,7 +63,7 @@ macro_rules! stats_default {
     };
 }
 
-pub(crate) fn init_stats(json: &mut serde_json::Value) {
+pub(crate) fn init_stats(json: &mut serde_json::Value, keys: &[String]) {
     let link_stats = stats_default!(bytes, t_msgs, n_msgs medium, n_dropped);
     let payload_stats = stats_default!(
         z_del_msgs space,
@@ -73,6 +85,16 @@ pub(crate) fn init_stats(json: &mut serde_json::Value) {
     json.as_object_mut()
         .expect("json should be an object")
         .insert("stats".into(), transport_stats.clone());
+    let filtered_stats: serde_json::Value = keys
+        .iter()
+        .map(|key| serde_json::json!({ "key": key, "stats": payload_stats.clone() }))
+        .collect::<Vec<_>>()
+        .into();
+    if !keys.is_empty() {
+        json.as_object_mut()
+            .expect("json should be an object")
+            .insert("filtered_stats".into(), filtered_stats.clone());
+    }
     for transport in json
         .get_field("sessions")
         .as_array_mut()
@@ -82,6 +104,12 @@ pub(crate) fn init_stats(json: &mut serde_json::Value) {
             .as_object_mut()
             .expect("json should be an object")
             .insert("stats".into(), transport_stats.clone());
+        if !keys.is_empty() {
+            transport
+                .as_object_mut()
+                .expect("json should be an object")
+                .insert("filtered_stats".into(), filtered_stats.clone());
+        }
         for link in transport
             .get_field("links")
             .as_array_mut()

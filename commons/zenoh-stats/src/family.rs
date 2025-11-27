@@ -71,7 +71,7 @@ impl<S: Clone + Hash + Eq, M, C: MetricConstructor<M>> TransportFamily<S, M, C> 
 impl<S: StatsPath<M> + Clone + Hash + Eq, M: TransportMetric + Clone, C: MetricConstructor<M>>
     TransportFamily<S, M, C>
 {
-    pub fn get_or_create_owned(
+    pub(crate) fn get_or_create_owned(
         &self,
         transport: &TransportLabels,
         link: Option<&LinkLabels>,
@@ -209,7 +209,11 @@ pub(crate) trait TransportMetric: 'static {
     fn drain_into(&self, other: &Self);
     fn collect(&self) -> Self::Collected;
     fn sum_collected(collected: &mut Self::Collected, other: &Self::Collected);
-    fn encode(encoder: MetricEncoder, collected: &Self::Collected) -> fmt::Result;
+    fn encode(
+        encoder: &mut MetricEncoder,
+        labels: &impl EncodeLabelSet,
+        collected: &Self::Collected,
+    ) -> fmt::Result;
 }
 
 impl TransportMetric for Counter {
@@ -227,8 +231,14 @@ impl TransportMetric for Counter {
         *collected += other;
     }
 
-    fn encode(mut encoder: MetricEncoder, collected: &Self::Collected) -> fmt::Result {
-        encoder.encode_counter::<NoLabelSet, _, u64>(collected, None)
+    fn encode(
+        encoder: &mut MetricEncoder,
+        labels: &impl EncodeLabelSet,
+        collected: &Self::Collected,
+    ) -> fmt::Result {
+        encoder
+            .encode_family(labels)?
+            .encode_counter::<NoLabelSet, _, u64>(collected, None)
     }
 }
 
@@ -264,7 +274,7 @@ impl<
         let mut metric_encoder =
             encoder.encode_descriptor(&self.name, &self.help, self.unit.as_ref(), M::TYPE)?;
         for (labels, (collected, _)) in collected.iter() {
-            M::encode(metric_encoder.encode_family(labels)?, collected)?
+            M::encode(&mut metric_encoder, labels, collected)?
         }
         if COLLECT_PER_TRANSPORT.get() {
             let per_transport = format!("{name}_per_transport", name = self.name);
@@ -280,7 +290,7 @@ impl<
                         LabelsSetRef(labels),
                         (LabelsSetRef(&transport.transport), transport.disconnected),
                     );
-                    M::encode(metric_encoder.encode_family(&labels)?, &transport.collected)?
+                    M::encode(&mut metric_encoder, &labels, &transport.collected)?
                 }
             }
         }
@@ -299,7 +309,7 @@ impl<
                             LabelsSetRef(labels),
                             (LabelsSetRef(&transport.transport), LabelsSetRef(link)),
                         );
-                        M::encode(metric_encoder.encode_family(&labels)?, collected)?
+                        M::encode(&mut metric_encoder, &labels, collected)?
                     }
                 }
             }
