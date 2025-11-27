@@ -25,6 +25,13 @@ impl MetricConstructor<Histogram> for HistogramBuckets {
     }
 }
 
+fn bound_to_f64(b: u64) -> f64 {
+    if b == u64::MAX {
+        return f64::INFINITY;
+    }
+    b as f64
+}
+
 #[derive(Debug)]
 struct HistogramInner {
     sum: AtomicU64,
@@ -71,7 +78,7 @@ impl TransportMetric for Histogram {
     fn collect(&self) -> Self::Collected {
         let sum = self.0.sum.load(Ordering::Relaxed) as f64;
         let buckets = (self.0.buckets.iter())
-            .map(|(b, c)| (*b as f64, c.load(Ordering::Relaxed)))
+            .map(|(b, c)| (bound_to_f64(*b), c.load(Ordering::Relaxed)))
             .collect::<Vec<_>>();
         let count = buckets.iter().map(|(_, c)| c).sum();
         (sum, count, buckets)
