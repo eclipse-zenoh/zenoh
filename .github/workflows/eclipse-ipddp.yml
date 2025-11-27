@@ -9,13 +9,13 @@ on:
 jobs:
   generate-deps:
     name: Generate ClearyDefined list of dependencies ids.
-    uses: ZettaScaleLabs/ci/.github/workflows/generate-deps.yml@add-eclipse-ipddp-workflow
-    with: 
+    uses: eclipse-zenoh/ci/.github/workflows/generate-deps.yml@main
+    with:
       repo: ${{ github.repository }}
 
   check-ipddp-compliance:
     name: Check Eclipse IPDDP compliance
     needs: generate-deps
-    uses: ZettaScaleLabs/ci/.github/workflows/eclipse-ipddp.yml@add-eclipse-ipddp-workflow
+    uses: eclipse-zenoh/ci/.github/workflows/eclipse-ipddp.yml@main
     with:
       dependencies: ${{ needs.generate-deps.outputs.dependencies }}
