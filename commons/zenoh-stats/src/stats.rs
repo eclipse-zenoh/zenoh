@@ -29,107 +29,47 @@ impl JsonExt for serde_json::Value {
     }
 }
 
+macro_rules! stats_default {
+    ($($name:ident $($discriminant:ident)?),+ $(, ..$flatten:expr)* $(,)?) => {{
+        let mut stats = serde_json::Map::new();
+        $(stats_default!(@ $name $($discriminant)?, stats);)+
+        $(stats.extend($flatten.as_object().unwrap().clone());)*
+        serde_json::Value::Object(stats)
+    }};
+    (@ $name:ident, $stats:expr, $value:expr) => {
+        $stats.insert(concat!("rx_", stringify!($name)).into(), $value);
+        $stats.insert(concat!("tx_", stringify!($name)).into(), $value);
+    };
+    (@ $name:ident, $stats:expr) => {
+        stats_default!(@ $name, $stats, serde_json::json!(0));
+    };
+    (@ $name:ident space, $stats:expr) => {
+        stats_default!(@ $name, $stats, serde_json::json!({ "admin": 0, "user": 0 }));
+    };
+    (@ $name:ident medium, $stats:expr) => {
+        stats_default!(@ $name, $stats, serde_json::json!({ "net": 0, "shm": 0 }));
+    };
+}
+
 pub(crate) fn init_stats(json: &mut serde_json::Value) {
-    let transport_stats = serde_json::json!({
-        "rx_bytes": 0,
-        "rx_downsampler_dropped_msgs": 0,
-        "rx_low_pass_dropped_bytes": 0,
-        "rx_low_pass_dropped_msgs": 0,
-        "rx_n_msgs": {
-            "net": 0,
-            "shm": 0
-        },
-        "rx_t_msgs": 0,
-        "rx_z_del_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_del_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_put_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_put_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_query_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_query_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_reply_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "rx_z_reply_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_bytes": 0,
-        "tx_downsampler_dropped_msgs": 0,
-        "tx_low_pass_dropped_bytes": 0,
-        "tx_low_pass_dropped_msgs": 0,
-        "tx_n_dropped": 0,
-        "tx_n_msgs": {
-            "net": 0,
-            "shm": 0
-        },
-        "tx_t_msgs": 0,
-        "tx_z_del_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_del_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_put_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_put_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_query_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_query_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_reply_msgs": {
-            "admin": 0,
-            "user": 0
-        },
-        "tx_z_reply_pl_bytes": {
-            "admin": 0,
-            "user": 0
-        }
-    });
-    let link_stats = serde_json::json!({
-        "rx_bytes": 0,
-        "rx_n_msgs": {
-            "net": 0,
-            "shm": 0
-        },
-        "rx_t_msgs": 0,
-        "tx_bytes": 0,
-        "tx_n_dropped": 0,
-        "tx_n_msgs": {
-            "net": 0,
-            "shm": 0
-        },
-        "tx_t_msgs": 0,
-    });
+    let link_stats = stats_default!(bytes, t_msgs, n_msgs medium, n_dropped);
+    let payload_stats = stats_default!(
+        z_del_msgs space,
+        z_del_pl_bytes space,
+        z_put_msgs space,
+        z_put_pl_bytes space,
+        z_query_msgs space,
+        z_query_pl_bytes space,
+        z_reply_msgs space,
+        z_reply_pl_bytes space,
+    );
+    let transport_stats = stats_default!(
+        downsampler_dropped_msgs,
+        low_pass_dropped_bytes,
+        low_pass_dropped_msgs,
+        ..payload_stats,
+        ..link_stats,
+    );
     json.as_object_mut()
         .expect("json should be an object")
         .insert("stats".into(), transport_stats.clone());
