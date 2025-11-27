@@ -106,7 +106,7 @@ impl StatsRegistry {
                 family: network_message_payload[dir as usize].clone(),
             }));
             registry.register_collector(Box::new(TransportFamilyCollector {
-                name: format!("{dir}_network_message_payload_dropped"),
+                name: format!("{dir}_network_message_dropped_payload"),
                 help: format!("Histogram of network messages payload dropped while {action}"),
                 unit: Some(Unit::Bytes),
                 family: network_message_dropped_payload[dir as usize].clone(),
