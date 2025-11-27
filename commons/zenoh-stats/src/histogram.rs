@@ -27,7 +27,8 @@ impl MetricConstructor<Histogram> for HistogramBuckets {
 
 fn bound_to_f64(b: u64) -> f64 {
     if b == u64::MAX {
-        return f64::INFINITY;
+        // prometheus_client treats `f64::MAX` as infinity
+        return f64::MAX;
     }
     b as f64
 }
