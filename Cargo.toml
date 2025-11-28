@@ -165,6 +165,7 @@ serde = { version = "1.0.225", default-features = false, features = [
 serde_json = "1.0.145"
 serde_with = "3.14.1"
 serde_yaml = "0.9.34"
+serial_test = "3.2.0"
 sha3 = "0.10.8"
 shellexpand = "3.1.1"
 smallvec = "1.15.1"
@@ -185,6 +186,7 @@ tokio-tungstenite = "0.24.0"
 tokio-util = "0.7.16"
 toml = "0.9.6"
 tracing = "0.1.41"
+tracing-capture = "0.1.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 either = "1.15.0"
