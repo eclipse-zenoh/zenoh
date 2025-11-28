@@ -729,7 +729,7 @@ fn metrics(context: &AdminContext, query: Query) {
             .collect();
     }
     #[cfg(feature = "stats")]
-    if query.parameters().get("compress") == Some("true") {
+    if query.parameters().get("compress") == Some("lz4") {
         if let Err(e) = query
             .reply(reply_key, lz4_flex::compress(metrics.as_bytes()))
             .encoding(encoding)
