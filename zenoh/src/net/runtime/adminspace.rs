@@ -63,14 +63,15 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Arc<dyn Fn(&'static keyexpr, &AdminContext, Query) + Send + Sync>;
+type Handler = Arc<dyn Fn(&keyexpr, &AdminContext, Query) + Send + Sync>;
 
 pub struct AdminSpace {
     zid: ZenohId,
     queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
-    handlers: HashMap<OwnedKeyExpr, Handler>,
+    // key is prefix + optional "**" or other suffix, separated for convenience
+    handlers: HashMap<(OwnedKeyExpr, Option<&'static keyexpr>), Handler>,
     context: Arc<AdminContext>,
 }
 
@@ -164,18 +165,14 @@ impl AdminSpace {
         let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
-        handlers.insert(root_key.clone(), Arc::new(local_data));
+        handlers.insert((root_key.clone(), None), Arc::new(local_data));
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/metrics")
-                .try_into()
-                .unwrap(),
+            (&root_key / keyexpr::new("metrics").unwrap(), None),
             Arc::new(metrics),
         );
         if runtime.state.whatami == WhatAmI::Router {
             handlers.insert(
-                format!("@/{zid_str}/{whatami_str}/linkstate/routers")
-                    .try_into()
-                    .unwrap(),
+                (&root_key / keyexpr::new("linkstate/routers").unwrap(), None),
                 Arc::new(routers_linkstate_data),
             );
         }
@@ -183,58 +180,63 @@ impl AdminSpace {
             && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
         {
             handlers.insert(
-                format!("@/{zid_str}/{whatami_str}/linkstate/peers")
-                    .try_into()
-                    .unwrap(),
+                (&root_key / keyexpr::new("linkstate/peers").unwrap(), None),
                 Arc::new(peers_linkstate_data),
             );
         }
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/subscriber/**")
-                .try_into()
-                .unwrap(),
+            (
+                &root_key / keyexpr::new("subscriber").unwrap(),
+                Some(keyexpr::new("**").unwrap()),
+            ),
             Arc::new(subscribers_data),
         );
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/publisher/**")
-                .try_into()
-                .unwrap(),
+            (
+                &root_key / keyexpr::new("publisher").unwrap(),
+                Some(keyexpr::new("**").unwrap()),
+            ),
             Arc::new(publishers_data),
         );
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/queryable/**")
-                .try_into()
-                .unwrap(),
+            (
+                &root_key / keyexpr::new("queryable").unwrap(),
+                Some(keyexpr::new("**").unwrap()),
+            ),
             Arc::new(queryables_data),
         );
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/querier/**")
-                .try_into()
-                .unwrap(),
+            (
+                &root_key / keyexpr::new("querier").unwrap(),
+                Some(keyexpr::new("**").unwrap()),
+            ),
             Arc::new(queriers_data),
         );
         if runtime.state.whatami == WhatAmI::Router {
             handlers.insert(
-                format!("@/{zid_str}/{whatami_str}/route/successor/**")
-                    .try_into()
-                    .unwrap(),
+                (
+                    &root_key / keyexpr::new("route/successor").unwrap(),
+                    Some(keyexpr::new("**").unwrap()),
+                ),
                 Arc::new(route_successor),
             );
         }
 
         #[cfg(feature = "plugins")]
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/plugins/**")
-                .try_into()
-                .unwrap(),
+            (
+                &root_key / keyexpr::new("plugins").unwrap(),
+                Some(keyexpr::new("**").unwrap()),
+            ),
             Arc::new(plugins_data),
         );
 
         #[cfg(feature = "plugins")]
         handlers.insert(
-            format!("@/{zid_str}/{whatami_str}/status/plugins/**")
-                .try_into()
-                .unwrap(),
+            (
+                &root_key / keyexpr::new("status/plugins").unwrap(),
+                Some(keyexpr::new("**").unwrap()),
+            ),
             Arc::new(plugins_status),
         );
 
@@ -502,9 +504,14 @@ impl Primitives for AdminSpace {
                     attachment: query.ext_attachment.take().map(Into::into),
                 };
 
-                for (key, handler) in &self.handlers {
-                    if key_expr.intersects(key) {
-                        handler(&self.context, query.clone());
+                for ((prefix, glob), handler) in &self.handlers {
+                    let key = if let Some(glob) = glob {
+                        prefix / glob
+                    } else {
+                        prefix.clone()
+                    };
+                    if key_expr.intersects(&key) {
+                        handler(prefix, &self.context, query.clone());
                     }
                 }
             }
@@ -714,7 +721,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     }
 }
 
-fn metrics(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/metrics",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -749,7 +756,7 @@ zenoh_build{{version="{}"}} 1
     }
 }
 
-fn routers_linkstate_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn routers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/routers",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -769,7 +776,7 @@ fn routers_linkstate_data(prefix: &'static keyexpr, context: &AdminContext, quer
     }
 }
 
-fn peers_linkstate_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn peers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/peers",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -789,7 +796,7 @@ fn peers_linkstate_data(prefix: &'static keyexpr, context: &AdminContext, query:
     }
 }
 
-fn subscribers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_subscriptions(&rtables) {
@@ -814,7 +821,7 @@ fn subscribers_data(prefix: &'static keyexpr, context: &AdminContext, query: Que
     }
 }
 
-fn publishers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn publishers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_publications(&rtables) {
@@ -839,7 +846,7 @@ fn publishers_data(prefix: &'static keyexpr, context: &AdminContext, query: Quer
     }
 }
 
-fn queryables_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn queryables_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for qabl in tables.hat_code.get_queryables(&rtables) {
@@ -864,7 +871,7 @@ fn queryables_data(prefix: &'static keyexpr, context: &AdminContext, query: Quer
     }
 }
 
-fn queriers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn queriers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_queriers(&rtables) {
@@ -889,7 +896,7 @@ fn queriers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query)
     }
 }
 
-fn route_successor(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
         if let Err(e) = query
             .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
@@ -930,7 +937,7 @@ fn route_successor(prefix: &'static keyexpr, context: &AdminContext, query: Quer
 }
 
 #[cfg(feature = "plugins")]
-fn plugins_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn plugins_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
         "@/{}/{}/plugins",
@@ -960,7 +967,7 @@ fn plugins_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) 
 }
 
 #[cfg(feature = "plugins")]
-fn plugins_status(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
+fn plugins_status(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
