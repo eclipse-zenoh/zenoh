@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt, iter,
     sync::{
-        atomic::{AtomicPtr, AtomicU64, Ordering},
+        atomic::{AtomicU64, Ordering},
         Arc, Mutex, RwLock,
     },
 };
@@ -28,7 +28,6 @@ pub struct StatsKeyCache {
     keys: UnsafeCell<StatsKeys>,
     generation: AtomicU64,
     mutex: Mutex<()>,
-    tree: AtomicPtr<StatsKeysTree>,
 }
 
 unsafe impl Send for StatsKeyCache {}
@@ -40,8 +39,11 @@ pub struct StatsKeysTree {
 }
 
 impl StatsKeysTree {
+    /// # Safety
+    ///
+    /// The cache must not be used with another tree.
     #[inline(always)]
-    pub fn get_keys<'a>(
+    pub unsafe fn get_keys<'a>(
         &self,
         cache: impl FnOnce() -> Option<&'a StatsKeyCache>,
         keyexpr: impl FnOnce() -> Option<&'a keyexpr>,
@@ -50,9 +52,7 @@ impl StatsKeysTree {
             return StatsKeys::default();
         }
         if let Some(cache) = cache() {
-            return if cache.generation.load(Ordering::Acquire) == self.generation
-                && cache.tree.load(Ordering::Relaxed).cast_const() == self
-            {
+            return if cache.generation.load(Ordering::Acquire) == self.generation {
                 unsafe { &*cache.keys.get() }.clone()
             } else {
                 self.update_cache(cache, keyexpr)
@@ -68,14 +68,8 @@ impl StatsKeysTree {
         keyexpr: impl FnOnce() -> Option<&'a keyexpr>,
     ) -> StatsKeys {
         let _guard = cache.mutex.lock().unwrap();
-        let tree = self as *const _ as *mut _;
-        if cache.generation.load(Ordering::Relaxed) == 0 {
-            cache.tree.store(tree, Ordering::Relaxed);
-        }
         let keys = self.compute_keys(keyexpr);
-        if cache.tree.load(Ordering::Relaxed) == tree {
-            unsafe { *cache.keys.get() = keys.clone() };
-        }
+        unsafe { *cache.keys.get() = keys.clone() };
         cache.generation.store(self.generation, Ordering::Release);
         keys
     }

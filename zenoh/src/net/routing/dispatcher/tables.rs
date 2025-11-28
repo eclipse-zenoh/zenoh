@@ -109,7 +109,8 @@ impl<'a> RoutingExpr<'a> {
     #[cfg(feature = "stats")]
     pub(crate) fn stats_keys(&self, tree: &zenoh_stats::StatsKeysTree) -> zenoh_stats::StatsKeys {
         let cache = || Some(&self.resource()?.context.as_ref()?.stats_keys);
-        tree.get_keys(cache, || self.key_expr())
+        // SAFETY: the tree is always the table's one
+        unsafe { tree.get_keys(cache, || self.key_expr()) }
     }
 }
 
