@@ -63,7 +63,7 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
+type Handler = Arc<dyn Fn(&'static keyexpr, &AdminContext, Query) + Send + Sync>;
 
 pub struct AdminSpace {
     zid: ZenohId,
@@ -564,7 +564,7 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 }
 
-fn local_data(context: &AdminContext, query: Query) {
+fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -714,7 +714,7 @@ fn local_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn metrics(context: &AdminContext, query: Query) {
+fn metrics(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/metrics",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -749,7 +749,7 @@ zenoh_build{{version="{}"}} 1
     }
 }
 
-fn routers_linkstate_data(context: &AdminContext, query: Query) {
+fn routers_linkstate_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/routers",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -769,7 +769,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn peers_linkstate_data(context: &AdminContext, query: Query) {
+fn peers_linkstate_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let reply_key: OwnedKeyExpr = format!(
         "@/{}/{}/linkstate/peers",
         context.runtime.state.zid, context.runtime.state.whatami
@@ -789,7 +789,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn subscribers_data(context: &AdminContext, query: Query) {
+fn subscribers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_subscriptions(&rtables) {
@@ -814,7 +814,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn publishers_data(context: &AdminContext, query: Query) {
+fn publishers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_publications(&rtables) {
@@ -839,7 +839,7 @@ fn publishers_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn queryables_data(context: &AdminContext, query: Query) {
+fn queryables_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for qabl in tables.hat_code.get_queryables(&rtables) {
@@ -864,7 +864,7 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn queriers_data(context: &AdminContext, query: Query) {
+fn queriers_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_queriers(&rtables) {
@@ -889,7 +889,7 @@ fn queriers_data(context: &AdminContext, query: Query) {
     }
 }
 
-fn route_successor(context: &AdminContext, query: Query) {
+fn route_successor(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
         if let Err(e) = query
             .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
@@ -930,7 +930,7 @@ fn route_successor(context: &AdminContext, query: Query) {
 }
 
 #[cfg(feature = "plugins")]
-fn plugins_data(context: &AdminContext, query: Query) {
+fn plugins_data(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let root_key = format!(
         "@/{}/{}/plugins",
@@ -960,7 +960,7 @@ fn plugins_data(context: &AdminContext, query: Query) {
 }
 
 #[cfg(feature = "plugins")]
-fn plugins_status(context: &AdminContext, query: Query) {
+fn plugins_status(prefix: &'static keyexpr, context: &AdminContext, query: Query) {
     let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
     let mut root_key = format!(
