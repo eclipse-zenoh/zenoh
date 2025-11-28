@@ -33,6 +33,7 @@ pub struct StatsKeyCache {
 unsafe impl Send for StatsKeyCache {}
 unsafe impl Sync for StatsKeyCache {}
 
+#[derive(Default)]
 pub struct StatsKeysTree {
     generation: u64,
     tree: Option<KeBoxTree<usize>>,
@@ -95,19 +96,25 @@ pub(crate) struct StatsKeysRegistry(Arc<RwLock<(Vec<String>, u64)>>);
 impl StatsKeysRegistry {
     pub(crate) fn update_keys<'a>(
         &self,
+        tree: &mut StatsKeysTree,
         keyexprs: impl IntoIterator<Item = &'a keyexpr>,
-    ) -> StatsKeysTree {
+    ) {
+        let keyexprs = keyexprs.into_iter().collect::<Vec<_>>();
         let (keys, generation) = &mut *self.0.write().unwrap();
+        if keys.len() == keyexprs.len()
+            && keys.iter().zip(&keyexprs).all(|(k1, k2)| k1 == k2.as_str())
+        {
+            return;
+        }
         keys.clear();
         *generation += 1;
-        let mut tree = None::<KeBoxTree<usize>>;
+        tree.generation = *generation;
+        tree.tree = None;
         for (i, keyexpr) in keyexprs.into_iter().enumerate() {
             keys.insert(i, keyexpr.to_string());
-            tree.get_or_insert_with(Default::default).insert(keyexpr, i);
-        }
-        StatsKeysTree {
-            generation: *generation,
-            tree,
+            tree.tree
+                .get_or_insert_with(Default::default)
+                .insert(keyexpr, i);
         }
     }
 

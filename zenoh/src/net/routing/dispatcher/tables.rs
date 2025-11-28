@@ -155,6 +155,13 @@ impl Tables {
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
+        #[cfg(feature = "stats")]
+        let mut stats_keys = zenoh_stats::StatsKeysTree::default();
+        #[cfg(feature = "stats")]
+        stats.update_keys(
+            &mut stats_keys,
+            config.stats.filters().iter().map(|f| &*f.key),
+        );
         Ok(Tables {
             zid,
             whatami,
@@ -173,7 +180,7 @@ impl Tables {
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
             #[cfg(feature = "stats")]
-            stats_keys: stats.update_keys(config.stats.filters().iter().map(|f| &*f.key)),
+            stats_keys,
             #[cfg(feature = "stats")]
             stats,
         })
@@ -238,9 +245,11 @@ impl TablesLock {
         let mut tables = zwrite!(self.tables);
         #[cfg(feature = "stats")]
         {
-            tables.stats_keys = tables
-                .stats
-                .update_keys(config.stats.filters().iter().map(|k| &*k.key));
+            let tables = &mut *tables;
+            tables.stats.update_keys(
+                &mut tables.stats_keys,
+                config.stats.filters().iter().map(|k| &*k.key),
+            );
         }
         tables.interceptors = interceptor_factories(config)?;
         drop(tables);

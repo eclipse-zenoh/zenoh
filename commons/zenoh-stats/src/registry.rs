@@ -273,9 +273,10 @@ impl StatsRegistry {
 
     pub fn update_keys<'a>(
         &self,
+        tree: &mut StatsKeysTree,
         keyexprs: impl IntoIterator<Item = &'a keyexpr>,
-    ) -> StatsKeysTree {
-        self.0.stats_keys.update_keys(keyexprs)
+    ) {
+        self.0.stats_keys.update_keys(tree, keyexprs)
     }
 }
 
