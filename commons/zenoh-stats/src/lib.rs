@@ -10,7 +10,7 @@ mod stats;
 mod transport;
 
 pub use crate::{
-    keys::{StatsKeys, StatsKeysTree},
+    keys::{StatsKeyCache, StatsKeys, StatsKeysTree},
     labels::{LocalityLabel, ReasonLabel, ResourceLabel},
     link::{rx_observe_network_message_finalize, with_tx_observe_network_message, LinkStats},
     registry::StatsRegistry,

@@ -1,7 +1,11 @@
 use std::{
+    cell::UnsafeCell,
     collections::HashMap,
     fmt, iter,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicPtr, AtomicU64, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use prometheus_client::{
@@ -20,6 +24,16 @@ use crate::{family::TransportMetric, histogram::HistogramBuckets, labels::Labels
 pub struct StatsKeys(SmallVec<[(u64, usize); 1]>);
 
 #[derive(Default)]
+pub struct StatsKeyCache {
+    keys: UnsafeCell<StatsKeys>,
+    generation: AtomicU64,
+    mutex: Mutex<()>,
+    tree: AtomicPtr<StatsKeysTree>,
+}
+
+unsafe impl Send for StatsKeyCache {}
+unsafe impl Sync for StatsKeyCache {}
+
 pub struct StatsKeysTree {
     generation: u64,
     tree: Option<KeBoxTree<usize>>,
@@ -27,17 +41,50 @@ pub struct StatsKeysTree {
 
 impl StatsKeysTree {
     #[inline(always)]
-    pub fn compute_keys<'a>(&self, keyexpr: impl FnOnce() -> Option<&'a keyexpr>) -> StatsKeys {
-        self.tree
-            .as_ref()
-            .map_or_else(Default::default, |_| self.get_keys(keyexpr))
+    pub fn get_keys<'a>(
+        &self,
+        cache: impl FnOnce() -> Option<&'a StatsKeyCache>,
+        keyexpr: impl FnOnce() -> Option<&'a keyexpr>,
+    ) -> StatsKeys {
+        if self.tree.is_none() {
+            return StatsKeys::default();
+        }
+        if let Some(cache) = cache() {
+            return if cache.generation.load(Ordering::Acquire) == self.generation
+                && cache.tree.load(Ordering::Relaxed).cast_const() == self
+            {
+                unsafe { &*cache.keys.get() }.clone()
+            } else {
+                self.update_cache(cache, keyexpr)
+            };
+        }
+        self.compute_keys(keyexpr)
     }
 
     #[cold]
-    fn get_keys<'a>(&self, keyexpr: impl FnOnce() -> Option<&'a keyexpr>) -> StatsKeys {
+    fn update_cache<'a>(
+        &self,
+        cache: &StatsKeyCache,
+        keyexpr: impl FnOnce() -> Option<&'a keyexpr>,
+    ) -> StatsKeys {
+        let _guard = cache.mutex.lock().unwrap();
+        let tree = self as *const _ as *mut _;
+        if cache.generation.load(Ordering::Relaxed) == 0 {
+            cache.tree.store(tree, Ordering::Relaxed);
+        }
+        let keys = self.compute_keys(keyexpr);
+        if cache.tree.load(Ordering::Relaxed) == tree {
+            unsafe { *cache.keys.get() = keys.clone() };
+        }
+        cache.generation.store(self.generation, Ordering::Release);
+        keys
+    }
+
+    #[cold]
+    fn compute_keys<'a>(&self, keyexpr: impl FnOnce() -> Option<&'a keyexpr>) -> StatsKeys {
         let tree = self.tree.as_ref().unwrap();
         let Some(keyexpr) = keyexpr() else {
-            return Default::default();
+            return StatsKeys::default();
         };
         let keys = tree
             .intersecting_nodes(keyexpr)
