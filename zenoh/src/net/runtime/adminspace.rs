@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use std::{
     collections::HashMap,
-    convert::{TryFrom, TryInto},
+    convert::TryInto,
     mem,
     sync::{Arc, Mutex},
 };
@@ -572,13 +572,6 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
 }
 
 fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
-
     let transport_mgr = context.runtime.manager().clone();
 
     #[cfg(feature = "stats")]
@@ -713,7 +706,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
         }
     };
     if let Err(e) = query
-        .reply(reply_key, payload)
+        .reply(prefix, payload)
         .encoding(Encoding::APPLICATION_JSON)
         .wait()
     {
@@ -722,12 +715,6 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 }
 
 fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}/metrics",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
     #[allow(unused_mut)]
     let mut metrics = format!(
         r#"# HELP zenoh_build Information about zenoh.
@@ -748,7 +735,7 @@ zenoh_build{{version="{}"}} 1
     );
 
     if let Err(e) = query
-        .reply(reply_key, metrics)
+        .reply(prefix, metrics)
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
@@ -757,18 +744,11 @@ zenoh_build{{version="{}"}} 1
 }
 
 fn routers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}/linkstate/routers",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
-
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
 
     if let Err(e) = query
-        .reply(reply_key, tables.hat_code.info(&rtables, WhatAmI::Router))
+        .reply(prefix, tables.hat_code.info(&rtables, WhatAmI::Router))
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
@@ -777,18 +757,11 @@ fn routers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query
 }
 
 fn peers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!(
-        "@/{}/{}/linkstate/peers",
-        context.runtime.state.zid, context.runtime.state.whatami
-    )
-    .try_into()
-    .unwrap();
-
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
 
     if let Err(e) = query
-        .reply(reply_key, tables.hat_code.info(&rtables, WhatAmI::Peer))
+        .reply(prefix, tables.hat_code.info(&rtables, WhatAmI::Peer))
         .encoding(Encoding::TEXT_PLAIN)
         .wait()
     {
@@ -800,13 +773,7 @@ fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_subscriptions(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/subscriber/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            sub.0.expr()
-        ))
-        .unwrap();
+        let key = prefix / keyexpr::new(sub.0.expr()).unwrap();
         if query.key_expr().intersects(&key) {
             let payload =
                 ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
@@ -825,13 +792,7 @@ fn publishers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_publications(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/publisher/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            sub.0.expr()
-        ))
-        .unwrap();
+        let key = prefix / keyexpr::new(sub.0.expr()).unwrap();
         if query.key_expr().intersects(&key) {
             let payload =
                 ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
@@ -850,13 +811,7 @@ fn queryables_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for qabl in tables.hat_code.get_queryables(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/queryable/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            qabl.0.expr()
-        ))
-        .unwrap();
+        let key = prefix / keyexpr::new(qabl.0.expr()).unwrap();
         if query.key_expr().intersects(&key) {
             let payload =
                 ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
@@ -875,13 +830,7 @@ fn queriers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     for sub in tables.hat_code.get_queriers(&rtables) {
-        let key = KeyExpr::try_from(format!(
-            "@/{}/{}/querier/{}",
-            context.runtime.state.zid,
-            context.runtime.state.whatami,
-            sub.0.expr()
-        ))
-        .unwrap();
+        let key = prefix / keyexpr::new(sub.0.expr()).unwrap();
         if query.key_expr().intersects(&key) {
             let payload =
                 ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
@@ -906,12 +855,11 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
             tracing::error!("Error sending AdminSpace reply: {:?}", e);
         }
     };
-    let prefix = format!("@/{}/router/route/successor", context.runtime.zid());
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
     // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
 
-    let suffix = query.key_expr().as_str().strip_prefix(&prefix);
+    let suffix = query.key_expr().as_str().strip_prefix(prefix.as_str());
     if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
         if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
             if let Some(successor) = tables.hat_code.route_successor(&rtables, src_zid, dst_zid) {
@@ -939,17 +887,12 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
 #[cfg(feature = "plugins")]
 fn plugins_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
-    let root_key = format!(
-        "@/{}/{}/plugins",
-        &context.runtime.state.zid, context.runtime.state.whatami
-    );
-    let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
     tracing::debug!("requested plugins status {:?}", query.key_expr());
-    if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
+    if let [names, ..] = query.key_expr().strip_prefix(prefix)[..] {
         let statuses = guard.plugins_status(names);
         for status in statuses {
             tracing::debug!("plugin status: {:?}", status);
-            let key = root_key.join(status.id()).unwrap();
+            let key = prefix / keyexpr::new(status.id()).unwrap();
             match serde_json::to_vec(&status) {
                 Ok(bytes) => {
                     if let Err(e) = query
@@ -970,11 +913,7 @@ fn plugins_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 fn plugins_status(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let key_expr = query.key_expr();
     let guard = context.runtime.plugins_manager();
-    let mut root_key = format!(
-        "@/{}/{}/status/plugins/",
-        &context.runtime.state.zid, context.runtime.state.whatami
-    );
-
+    let mut root_key = prefix.as_str().to_string();
     for plugin in guard.started_plugins_iter() {
         with_extended_string(&mut root_key, &[plugin.id()], |plugin_key| {
             // @TODO: response to "__version__", this need not to be implemented by each plugin
