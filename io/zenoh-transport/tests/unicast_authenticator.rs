@@ -160,7 +160,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator))
+        .build_test(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the client 02
@@ -214,7 +214,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator))
+        .build_test(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the client 03 with the same key as client 02
@@ -229,7 +229,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Client)
         .zid(client03_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator))
+        .build_test(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the router transport manager
@@ -282,7 +282,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Router)
         .zid(router_id)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     /* [1] */
@@ -423,7 +423,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Router)
         .zid(router_id)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     // Create the transport transport manager for the first client
@@ -437,7 +437,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator))
+        .build_test(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the second client
@@ -451,7 +451,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator))
+        .build_test(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the third client
@@ -465,7 +465,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
         .whatami(WhatAmI::Client)
         .zid(client03_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator))
+        .build_test(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     /* [1] */

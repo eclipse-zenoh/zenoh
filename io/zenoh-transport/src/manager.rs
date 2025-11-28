@@ -390,6 +390,17 @@ impl TransportManagerBuilder {
             stats,
         ))
     }
+
+    #[cfg(feature = "test")]
+    pub fn build_test(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
+        #[cfg(feature = "stats")]
+        let stats = zenoh_stats::StatsRegistry::new(self.zid, self.whatami, "test");
+        self.build(
+            handler,
+            #[cfg(feature = "stats")]
+            stats,
+        )
+    }
 }
 
 impl Default for TransportManagerBuilder {
