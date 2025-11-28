@@ -43,7 +43,10 @@ use zenoh_result::ZResult;
 use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
-use super::{routing::dispatcher::face::Face, Runtime};
+use super::{
+    routing::{dispatcher::face::Face, hat::HatTrait},
+    Runtime,
+};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
@@ -55,7 +58,10 @@ use crate::{
         queryable::{Query, QueryInner},
     },
     bytes::Encoding,
-    net::primitives::Primitives,
+    net::{
+        primitives::Primitives,
+        routing::{dispatcher::tables::Tables, hat::Sources, router::Resource},
+    },
 };
 
 pub struct AdminContext {
@@ -769,14 +775,17 @@ fn peers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) 
     }
 }
 
-fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
+fn resources_data<F>(prefix: &keyexpr, context: &AdminContext, query: Query, f: F)
+where
+    F: Fn(&dyn HatTrait, &Tables) -> Vec<(Arc<Resource>, Sources)>,
+{
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.get_subscriptions(&rtables) {
-        let key = prefix / keyexpr::new(sub.0.expr()).unwrap();
+    for res in f(&*tables.hat_code, &rtables) {
+        let key = prefix / keyexpr::new(res.0.expr()).unwrap();
         if query.key_expr().intersects(&key) {
             let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
+                ZBytes::from(serde_json::to_string(&res.1).unwrap_or_else(|_| "{}".to_string()));
             if let Err(e) = query
                 .reply(key, payload)
                 .encoding(Encoding::APPLICATION_JSON)
@@ -786,63 +795,30 @@ fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
             }
         }
     }
+}
+
+fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
+    resources_data(prefix, context, query, |hat_code, rtables| {
+        hat_code.get_subscriptions(rtables)
+    });
 }
 
 fn publishers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.get_publications(&rtables) {
-        let key = prefix / keyexpr::new(sub.0.expr()).unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
+    resources_data(prefix, context, query, |hat_code, rtables| {
+        hat_code.get_publications(rtables)
+    });
 }
 
 fn queryables_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for qabl in tables.hat_code.get_queryables(&rtables) {
-        let key = prefix / keyexpr::new(qabl.0.expr()).unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&qabl.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
+    resources_data(prefix, context, query, |hat_code, rtables| {
+        hat_code.get_queryables(rtables)
+    });
 }
 
 fn queriers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for sub in tables.hat_code.get_queriers(&rtables) {
-        let key = prefix / keyexpr::new(sub.0.expr()).unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&sub.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
+    resources_data(prefix, context, query, |hat_code, rtables| {
+        hat_code.get_queriers(rtables)
+    });
 }
 
 fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
