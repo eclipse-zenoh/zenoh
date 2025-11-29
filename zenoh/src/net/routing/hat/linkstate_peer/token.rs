@@ -33,10 +33,7 @@ use super::{
 use crate::net::{
     protocol::network::Network,
     routing::{
-        dispatcher::{face::FaceState, tables::Tables},
-        hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
-        router::{NodeId, Resource, SessionContext},
-        RoutingContext,
+        RoutingContext, dispatcher::{face::FaceState, tables::Tables}, hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources}, router::{NodeId, Resource, SessionContext}
     },
 };
 
@@ -721,5 +718,21 @@ impl HatTokenTrait for HatCode {
         } else {
             forget_simple_token(tables, face, id, send_declare)
         }
+    }
+
+    fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        let mut tokens = Vec::new();
+        for src_face in tables.faces.values() {
+            for (_, res) in &face_hat!(src_face).remote_tokens {
+                let mut srcs = Sources::empty();
+                match src_face.whatami {
+                    WhatAmI::Router => srcs.routers.push(src_face.zid),
+                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
+                    WhatAmI::Client => srcs.clients.push(src_face.zid),
+                }
+                tokens.push((res.clone(), srcs));
+            }
+        }
+        tokens
     }
 }
