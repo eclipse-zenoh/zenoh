@@ -76,8 +76,10 @@ pub struct AdminSpace {
     queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
-    // key is prefix + optional "**" or other suffix, separated for convenience
-    handlers: HashMap<(OwnedKeyExpr, Option<&'static keyexpr>), Handler>,
+    // key is full key expression (root_key/key[/glob]), value is (handler, glob_len)
+    // glob_len is the length of the glob suffix including the '/' separator
+    // to pass only the prefix to the handler
+    handlers: HashMap<OwnedKeyExpr, (Handler, usize)>,
     context: Arc<AdminContext>,
 }
 
@@ -170,81 +172,47 @@ impl AdminSpace {
         let config = &mut runtime.config().lock().0;
         let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
-        let mut handlers: HashMap<_, Handler> = HashMap::new();
-        handlers.insert((root_key.clone(), None), Arc::new(local_data));
-        handlers.insert(
-            (&root_key / keyexpr::new("metrics").unwrap(), None),
-            Arc::new(metrics),
-        );
+        let mut handlers: HashMap<OwnedKeyExpr, (Handler, usize)> = HashMap::new();
+        macro_rules! add_handler {
+            ($key:expr, $glob:expr, $handler:expr) => {{
+                let key_expr = keyexpr::new($key).unwrap();
+                let glob_expr = keyexpr::new($glob).unwrap();
+                let full_key = &root_key / key_expr / glob_expr;
+                let glob_len = $glob.len() + 1; // +1 for the '/' separator
+                handlers.insert(full_key, (Arc::new($handler), glob_len));
+            }};
+            ($key:expr, $handler:expr) => {{
+                let key_expr = keyexpr::new($key).unwrap();
+                let full_key = &root_key / key_expr;
+                handlers.insert(full_key, (Arc::new($handler), 0));
+            }};
+            ($handler:expr) => {{
+                handlers.insert(root_key.clone(), (Arc::new($handler), 0));
+            }};
+        }
+
+        add_handler!(local_data);
+        add_handler!("metrics", metrics);
         if runtime.state.whatami == WhatAmI::Router {
-            handlers.insert(
-                (&root_key / keyexpr::new("linkstate/routers").unwrap(), None),
-                Arc::new(routers_linkstate_data),
-            );
+            add_handler!("linkstate/routers", routers_linkstate_data);
         }
         if runtime.state.whatami != WhatAmI::Client
             && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
         {
-            handlers.insert(
-                (&root_key / keyexpr::new("linkstate/peers").unwrap(), None),
-                Arc::new(peers_linkstate_data),
-            );
+            add_handler!("linkstate/peers", peers_linkstate_data);
         }
-        handlers.insert(
-            (
-                &root_key / keyexpr::new("subscriber").unwrap(),
-                Some(keyexpr::new("**").unwrap()),
-            ),
-            Arc::new(subscribers_data),
-        );
-        handlers.insert(
-            (
-                &root_key / keyexpr::new("publisher").unwrap(),
-                Some(keyexpr::new("**").unwrap()),
-            ),
-            Arc::new(publishers_data),
-        );
-        handlers.insert(
-            (
-                &root_key / keyexpr::new("queryable").unwrap(),
-                Some(keyexpr::new("**").unwrap()),
-            ),
-            Arc::new(queryables_data),
-        );
-        handlers.insert(
-            (
-                &root_key / keyexpr::new("querier").unwrap(),
-                Some(keyexpr::new("**").unwrap()),
-            ),
-            Arc::new(queriers_data),
-        );
+        add_handler!("subscriber", "**", subscribers_data);
+        add_handler!("publisher", "**", publishers_data);
+        add_handler!("queryable", "**", queryables_data);
+        add_handler!("querier", "**", queriers_data);
         if runtime.state.whatami == WhatAmI::Router {
-            handlers.insert(
-                (
-                    &root_key / keyexpr::new("route/successor").unwrap(),
-                    Some(keyexpr::new("**").unwrap()),
-                ),
-                Arc::new(route_successor),
-            );
+            add_handler!("route/successor", "**", route_successor);
         }
 
         #[cfg(feature = "plugins")]
-        handlers.insert(
-            (
-                &root_key / keyexpr::new("plugins").unwrap(),
-                Some(keyexpr::new("**").unwrap()),
-            ),
-            Arc::new(plugins_data),
-        );
-
+        add_handler!("plugins", "**", plugins_data);
         #[cfg(feature = "plugins")]
-        handlers.insert(
-            (
-                &root_key / keyexpr::new("status/plugins").unwrap(),
-                Some(keyexpr::new("**").unwrap()),
-            ),
-            Arc::new(plugins_status),
-        );
+        add_handler!("status/plugins", "**", plugins_status);
 
         #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
         let mut active_plugins = runtime
@@ -510,13 +478,11 @@ impl Primitives for AdminSpace {
                     attachment: query.ext_attachment.take().map(Into::into),
                 };
 
-                for ((prefix, glob), handler) in &self.handlers {
-                    let key = if let Some(glob) = glob {
-                        prefix / glob
-                    } else {
-                        prefix.clone()
-                    };
-                    if key_expr.intersects(&key) {
+                for (full_key, (handler, glob_len)) in &self.handlers {
+                    if key_expr.intersects(full_key) {
+                        // Extract prefix by removing the glob suffix
+                        let prefix_str = &full_key.as_str()[..full_key.as_str().len() - glob_len];
+                        let prefix = keyexpr::new(prefix_str).unwrap();
                         handler(prefix, &self.context, query.clone());
                     }
                 }
