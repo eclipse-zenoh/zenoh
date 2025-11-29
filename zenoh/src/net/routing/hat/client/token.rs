@@ -408,17 +408,6 @@ impl HatTokenTrait for HatCode {
     }
 
     fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
-        let mut tokens = HashMap::new();
-        for src_face in tables.faces.values() {
-            for (_, res) in &face_hat!(src_face).remote_tokens {
-                let srcs = tokens.entry(res.clone()).or_insert_with(Sources::empty);
-                match src_face.whatami {
-                    WhatAmI::Router => srcs.routers.push(src_face.zid),
-                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
-                    WhatAmI::Client => srcs.clients.push(src_face.zid),
-                }
-            }
-        }
-        Vec::from_iter(tokens)
+        todo!()
     }
 }

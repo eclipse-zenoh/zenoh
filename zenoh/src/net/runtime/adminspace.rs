@@ -205,6 +205,7 @@ impl AdminSpace {
         add_handler!("publisher", "**", publishers_data);
         add_handler!("queryable", "**", queryables_data);
         add_handler!("querier", "**", queriers_data);
+        add_handler!("tokens", "**", tokens_data);
         if runtime.state.whatami == WhatAmI::Router {
             add_handler!("route/successor", "**", route_successor);
         }
@@ -784,6 +785,12 @@ fn queryables_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 fn queriers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     resources_data(prefix, context, query, |hat_code, rtables| {
         hat_code.get_queriers(rtables)
+    });
+}
+
+fn tokens_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
+    resources_data(prefix, context, query, |hat_code, rtables| {
+        hat_code.get_tokens(rtables)
     });
 }
 

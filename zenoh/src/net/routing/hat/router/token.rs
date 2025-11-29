@@ -37,7 +37,7 @@ use crate::net::{
     protocol::{linkstate::LinkEdgeWeight, network::Network},
     routing::{
         dispatcher::{face::FaceState, tables::Tables},
-        hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
+        hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources},
         router::{NodeId, Resource, SessionContext},
         RoutingContext,
     },
@@ -1134,5 +1134,9 @@ impl HatTokenTrait for HatCode {
             }
             _ => forget_simple_token(tables, face, id, send_declare),
         }
+    }
+
+    fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        todo!()
     }
 }
