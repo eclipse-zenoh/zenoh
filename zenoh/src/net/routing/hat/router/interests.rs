@@ -181,6 +181,7 @@ impl HatInterestTrait for Hat {
 }
 
 impl Hat {
+    #[allow(dead_code)] // FIXME(regions)
     fn register_pending_current_interest(
         &mut self,
         ctx: BaseContext,

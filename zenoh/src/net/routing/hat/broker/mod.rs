@@ -42,7 +42,7 @@ use super::{
         face::FaceState,
         tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
     },
-    HatBaseTrait, HatTrait, SendDeclare,
+    HatBaseTrait, HatTrait,
 };
 use crate::net::{
     routing::{
@@ -88,20 +88,6 @@ impl Hat {
         get_mut_unchecked(face_state).hats[self.region]
             .downcast_mut()
             .unwrap()
-    }
-
-    pub(crate) fn faces<'tbl>(
-        &self,
-        tables: &'tbl TablesData,
-    ) -> &'tbl HashMap<usize, Arc<FaceState>> {
-        &tables.faces
-    }
-
-    pub(crate) fn faces_mut<'t>(
-        &self,
-        tables: &'t mut TablesData,
-    ) -> &'t mut HashMap<usize, Arc<FaceState>> {
-        &mut tables.faces
     }
 
     pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
@@ -174,9 +160,8 @@ impl HatBaseTrait for Hat {
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
-        _other_hats: RegionMap<&dyn HatTrait>,
-        _tables_ref: &Arc<TablesLock>,
         _transport: &TransportUnicast,
+        _other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
@@ -209,13 +194,11 @@ impl HatBaseTrait for Hat {
 
     fn handle_oam(
         &mut self,
-        _tables: &mut TablesData,
-        _tables_ref: &Arc<TablesLock>,
+        _ctx: BaseContext,
         _oam: &mut Oam,
         _zid: &ZenohIdProto,
         _whatami: WhatAmI,
-        _send_declare: &mut SendDeclare,
-    ) -> ZResult<()> {
+        _other_hats: RegionMap<&mut dyn HatTrait>,    ) -> ZResult<()> {
         Ok(())
     }
 

@@ -1326,11 +1326,11 @@ impl Config {
     ///
     /// This method should be called before a user-supplied config is used in the runtime.
     pub fn expanded(mut self) -> Self {
-        if let None = self.id {
+        if self.id.is_none() {
             self.set_id(Some(ZenohId::default())).unwrap();
         }
 
-        if let None = self.mode {
+        if self.mode.is_none() {
             self.set_mode(Some(WhatAmI::default())).unwrap();
         }
 

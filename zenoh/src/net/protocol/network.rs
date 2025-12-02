@@ -45,6 +45,8 @@ use crate::net::{
     runtime::Runtime,
 };
 
+pub(crate) type LinkId = usize;
+
 #[derive(Clone, Default)]
 struct Details {
     zid: bool,
@@ -747,7 +749,7 @@ impl Network {
         }
     }
 
-    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> LinkId {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -1042,7 +1044,6 @@ impl Network {
         out
     }
 
-    #[allow(dead_code)] // FIXME(regions)
     fn successor_entry(&self, src: NodeIndex, dst: NodeIndex) -> Option<SuccessorEntry> {
         let succ = self.trees[src.index()].directions[dst.index()]?;
         Some(SuccessorEntry {
@@ -1052,7 +1053,6 @@ impl Network {
         })
     }
 
-    #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn route_successor(
         &self,
         src: ZenohIdProto,
@@ -1076,7 +1076,6 @@ impl Network {
         Some(self.successor_entry(src_idx?, dst_idx?)?.successor)
     }
 
-    #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn route_successors(&self) -> Vec<SuccessorEntry> {
         self.graph
             .node_indices()
@@ -1086,7 +1085,6 @@ impl Network {
     }
 }
 
-#[allow(dead_code)] // FIXME(regions)
 pub(crate) struct SuccessorEntry {
     pub(crate) source: ZenohIdProto,
     pub(crate) destination: ZenohIdProto,

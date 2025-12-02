@@ -303,7 +303,7 @@ impl TransportManagerBuilder {
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
         self = self.zid(config.id().expect("Config should be expanded").into());
-        self = self.whatami(config.mode().expect("Config should be expanded").into());
+        self = self.whatami(config.mode().expect("Config should be expanded"));
 
         let link = config.transport().link();
         let cc_drop = link.tx().queue().congestion_control().drop();

@@ -66,8 +66,7 @@ zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
-// TODO(now)
-#[derive(Default, serde::Serialize)]
+#[derive(Debug, Default, serde::Serialize)]
 pub(crate) struct Sources {
     routers: Vec<ZenohIdProto>,
     peers: Vec<ZenohIdProto>,
@@ -81,6 +80,12 @@ impl Sources {
             peers: vec![],
             clients: vec![],
         }
+    }
+
+    pub(crate) fn extend(&mut self, other: &Sources) {
+        self.routers.extend(other.routers.iter().copied());
+        self.peers.extend(other.peers.iter().copied());
+        self.clients.extend(other.clients.iter().copied());
     }
 }
 
@@ -135,19 +140,17 @@ pub(crate) trait HatBaseTrait: Any {
     fn new_transport_unicast_face(
         &mut self,
         ctx: BaseContext,
-        other_hats: RegionMap<&dyn HatTrait>,
-        tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
+        other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()>;
 
     fn handle_oam(
         &mut self,
-        tables: &mut TablesData,
-        tables_ref: &Arc<TablesLock>,
+        ctx: BaseContext,
         oam: &mut Oam,
         zid: &ZenohIdProto,
         whatami: WhatAmI,
-        send_declare: &mut SendDeclare,
+        other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()>;
 
     fn map_routing_context(
@@ -183,17 +186,15 @@ pub(crate) trait HatBaseTrait: Any {
         HashMap::new()
     }
 
-    #[allow(dead_code)] // FIXME(regions)
     fn route_successor(&self, _src: ZenohIdProto, _dst: ZenohIdProto) -> Option<ZenohIdProto> {
         None
     }
 
-    #[allow(dead_code)] // FIXME(regions)
     fn route_successors(&self) -> Vec<SuccessorEntry> {
         Vec::new()
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code)] // FIXME(regions)
     fn as_any(&self) -> &dyn Any;
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -201,14 +202,6 @@ pub(crate) trait HatBaseTrait: Any {
     fn whatami(&self) -> WhatAmI;
 
     fn region(&self) -> Region;
-
-    /// Returns `true` if the hat should route data or queries between `src` and `dst`.
-    fn should_route_between(&self, src: &FaceState, dst: &FaceState) -> bool {
-        // REVIEW(regions): not sure
-        src.region.bound().is_south() ^ dst.region.bound().is_south()
-            || (src.whatami.is_client() && src.region.bound().is_south())
-            || (dst.whatami.is_client() && dst.region.bound().is_south())
-    }
 
     /// Returns `true` if `face` belongs to this [`Hat`].
     fn owns(&self, face: &FaceState) -> bool {
@@ -336,7 +329,7 @@ pub(crate) trait HatInterestTrait {
     fn send_declare_final(
         &mut self,
         ctx: BaseContext,
-        interest_id: InterestId, // TODO(regions*): change to &Interest (?)
+        interest_id: InterestId, // TODO(regions): change to &Interest (?)
         dst: &Remote,
     );
 
@@ -354,25 +347,6 @@ pub(crate) trait HatInterestTrait {
 }
 
 pub(crate) trait HatPubSubTrait {
-    /// Handles subscriber declaration.
-    fn declare_subscription(
-        &mut self,
-        ctx: BaseContext,
-        id: SubscriberId,
-        res: &mut Arc<Resource>,
-        node_id: NodeId,
-        sub_info: &SubscriberInfo,
-    );
-
-    /// Handles subscriber undeclaration.
-    fn undeclare_subscription(
-        &mut self,
-        ctx: BaseContext,
-        id: SubscriberId,
-        res: Option<Arc<Resource>>,
-        node_id: NodeId,
-    ) -> Option<Arc<Resource>>;
-
     /// Register a subscriber entity.
     ///
     /// The callee hat assumes that it owns the source face.
@@ -433,9 +407,9 @@ pub(crate) trait HatPubSubTrait {
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, SubscriberInfo>;
 
-    fn get_subscriptions(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
-    fn get_publications(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_publishers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_data_route(
         &self,
@@ -453,25 +427,6 @@ pub(crate) trait HatPubSubTrait {
 }
 
 pub(crate) trait HatQueriesTrait {
-    /// Handles queryable declaration.
-    fn declare_queryable(
-        &mut self,
-        ctx: BaseContext,
-        id: QueryableId,
-        res: &mut Arc<Resource>,
-        node_id: NodeId,
-        qabl_info: &QueryableInfoType,
-    );
-
-    /// Handles queryable undeclaration.
-    fn undeclare_queryable(
-        &mut self,
-        ctx: BaseContext,
-        id: QueryableId,
-        res: Option<Arc<Resource>>,
-        node_id: NodeId,
-    ) -> Option<Arc<Resource>>;
-
     /// Register a queryable entity.
     ///
     /// The callee hat assumes that it owns the source face.
@@ -528,9 +483,9 @@ pub(crate) trait HatQueriesTrait {
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, QueryableInfoType>;
 
-    fn get_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
-    fn get_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,
@@ -549,25 +504,6 @@ pub(crate) trait HatQueriesTrait {
 }
 
 pub(crate) trait HatTokenTrait {
-    /// Handles token declaration.
-    fn declare_token(
-        &mut self,
-        ctx: BaseContext,
-        id: TokenId,
-        res: &mut Arc<Resource>,
-        node_id: NodeId,
-        interest_id: Option<InterestId>,
-    );
-
-    /// Handles token undeclaration.
-    fn undeclare_token(
-        &mut self,
-        ctx: BaseContext,
-        id: TokenId,
-        res: Option<Arc<Resource>>,
-        node_id: NodeId,
-    ) -> Option<Arc<Resource>>;
-
     /// Register a token entity.
     ///
     /// The callee hat assumes that it owns the source face.

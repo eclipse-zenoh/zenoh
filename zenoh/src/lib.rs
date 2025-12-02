@@ -13,8 +13,6 @@
 //
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
-// FIXME(regions)
-#![allow(dead_code)]
 // NOTE(fuzzypixelz): `clippy::incompatible_msrv` can have false positives (e.g. due to zenoh_core::polyfill).
 // This is acceptable thanks to MSRV tests in CI.
 // See https://github.com/rust-lang/rust-clippy/issues/12280.

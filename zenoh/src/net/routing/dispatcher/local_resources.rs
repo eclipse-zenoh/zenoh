@@ -120,11 +120,6 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         self.simple_resources.contains_key(key)
     }
 
-    #[allow(dead_code)] // TODO(regions): why is this only needed for linkstate peers? (see 20a95fb)
-    pub(crate) fn simple_resources(&self) -> impl Iterator<Item = &Res> {
-        self.simple_resources.keys()
-    }
-
     // Returns Id of newly inserted resource and the list of resources that were enabled/changed info by this operation
     pub(crate) fn insert_simple_resource<F>(
         &mut self,

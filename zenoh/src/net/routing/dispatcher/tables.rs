@@ -37,7 +37,7 @@ pub use super::resource::*;
 use crate::net::{
     routing::{
         dispatcher::{face::FaceId, region::RegionMap},
-        hat::HatTrait,
+        hat::{HatTrait, Sources},
         interceptor::{interceptor_factories, InterceptorFactory},
     },
     runtime::WeakRuntime,
@@ -239,6 +239,56 @@ pub struct TablesLock {
 pub struct Tables {
     pub data: TablesData,
     pub hats: RegionMap<Box<dyn HatTrait + Send + Sync>>,
+}
+
+impl Tables {
+    pub(crate) fn sourced_publishers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_publishers(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_subscribers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_subscribers(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_queryables(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_queryables(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_queriers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_queriers(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
 }
 
 impl Debug for Tables {

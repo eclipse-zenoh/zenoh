@@ -25,6 +25,7 @@ use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 use super::Primitives;
 use crate::net::routing::{
     dispatcher::face::Face,
+    hat::{BaseContext, HatTrait},
     interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     router::{InterceptorCacheValueType, Resource},
     RoutingContext,
@@ -169,13 +170,22 @@ impl TransportPeerEventHandler for DeMux {
                     let mut wtables = zwrite!(self.face.tables.tables);
                     let tables = &mut *wtables;
 
-                    tables.hats[self.face.state.region].handle_oam(
-                        &mut tables.data,
-                        &self.face.tables,
+                    let ctx = BaseContext {
+                        tables_lock: &self.face.tables,
+                        tables: &mut tables.data,
+                        src_face: &mut self.face.state.clone(),
+                        send_declare: &mut |p, m| declares.push((p.clone(), m)),
+                    };
+
+                    let (owner_hat, other_hats) =
+                        tables.hats.partition_mut(&self.face.state.region);
+
+                    owner_hat.handle_oam(
+                        ctx,
                         m,
                         &transport.get_zid()?,
                         transport.get_whatami()?,
-                        &mut |p, m| declares.push((p.clone(), m)),
+                        other_hats.map(|hat| &mut **hat as &mut dyn HatTrait), // FIXME(regions)
                     )?;
 
                     drop(wtables);

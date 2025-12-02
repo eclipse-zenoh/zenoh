@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::{self, Debug},
     sync::{Arc, Weak},
     time::Duration,
@@ -336,6 +336,16 @@ impl Face {
                 res.clone(),
                 other_qabl_matches,
             );
+
+            let other_token_matches = hats
+                .values()
+                .filter(|hat| hat.region() != region)
+                .flat_map(|hat| {
+                    hat.remote_tokens_matching(ctx.tables, res.as_deref())
+                        .into_iter()
+                })
+                .collect::<HashSet<_>>();
+            hats[region].send_current_tokens(ctx.reborrow(), msg, res.clone(), other_token_matches);
         }
 
         hats[region].register_interest(ctx.reborrow(), msg, res);

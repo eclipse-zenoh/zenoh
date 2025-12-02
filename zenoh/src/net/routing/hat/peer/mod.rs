@@ -49,7 +49,7 @@ use super::{
         face::FaceState,
         tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
     },
-    HatBaseTrait, HatTrait, SendDeclare,
+    HatBaseTrait, HatTrait,
 };
 use crate::net::{
     codec::Zenoh080Routing,
@@ -107,24 +107,6 @@ impl Hat {
 
     pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
         remote.downcast_ref().unwrap()
-    }
-
-    pub(crate) fn faces<'t>(&self, tables: &'t TablesData) -> &'t HashMap<usize, Arc<FaceState>> {
-        &tables.faces
-    }
-
-    pub(crate) fn faces_mut<'t>(
-        &self,
-        tables: &'t mut TablesData,
-    ) -> &'t mut HashMap<usize, Arc<FaceState>> {
-        &mut tables.faces
-    }
-
-    pub(crate) fn mcast_groups<'t>(
-        &self,
-        tables: &'t TablesData,
-    ) -> impl Iterator<Item = &'t Arc<FaceState>> {
-        tables.hats[self.region].mcast_groups.iter()
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -216,9 +198,8 @@ impl HatBaseTrait for Hat {
     fn new_transport_unicast_face(
         &mut self,
         mut ctx: BaseContext,
-        other_hats: RegionMap<&dyn HatTrait>,
-        _tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
+        other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
 
@@ -290,30 +271,32 @@ impl HatBaseTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
-        _tables: &mut TablesData,
-        _tables_ref: &Arc<TablesLock>,
+        _ctx: BaseContext,
         oam: &mut Oam,
         zid: &ZenohIdProto,
         whatami: WhatAmI,
-        _send_declare: &mut SendDeclare,
+        _other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
+            if !whatami.is_peer() {
+                tracing::error!("Received OAM_LINKSTATE from non-peer remote");
+                return Ok(());
+            }
+
             if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
-                if whatami != WhatAmI::Client {
-                    if let Some(net) = self.gossip.as_mut() {
-                        use zenoh_buffers::reader::HasReader;
-                        use zenoh_codec::RCodec;
-                        let codec = Zenoh080Routing::new();
-                        let mut reader = buf.reader();
-                        let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
-                            bail!("failed to decode link state");
-                        };
+                if let Some(net) = self.gossip.as_mut() {
+                    use zenoh_buffers::reader::HasReader;
+                    use zenoh_codec::RCodec;
+                    let codec = Zenoh080Routing::new();
+                    let mut reader = buf.reader();
+                    let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
+                        bail!("failed to decode link state");
+                    };
 
-                        tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
+                    tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
 
-                        net.link_states(list.link_states, *zid, whatami);
-                    }
-                };
+                    net.link_states(list.link_states, *zid, whatami);
+                }
             }
         }
 

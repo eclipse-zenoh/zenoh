@@ -157,8 +157,8 @@ impl Face {
                     "declare_queryable",
                     id,
                     expr = [prefix.expr(), expr.suffix.as_ref()].concat(),
-                    info.complete = qabl_info.complete,
-                    info.distance = qabl_info.distance
+                    complete = qabl_info.complete,
+                    distance = qabl_info.distance
                 )
                 .entered();
 
@@ -378,6 +378,10 @@ impl Face {
                     }
                 }
 
+                // NOTE: it's important to drop the query immediatly otherwise a ResponseFinal from a local queryable
+                // won't finalize a query, because `Arc::strong_count(&query)` would always be > 1.
+                drop(query);
+
                 let timeout = msg
                     .ext_timeout
                     .unwrap_or(rtables.data.queries_default_timeout);
@@ -386,8 +390,6 @@ impl Face {
                 drop(rtables);
 
                 let query_dirs = query_dirs.build();
-
-                tracing::trace!(?query_dirs);
 
                 if query_dirs.is_empty() {
                     tracing::debug!(
@@ -483,6 +485,13 @@ fn compute_final_route(
                     route.insert(qabl.dir.dst_face.id, || {
                         let mut dir = qabl.dir.clone();
                         let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                        tracing::debug!(
+                            src = %query.src_face,
+                            src_rid = query.src_qid,
+                            dst = %dir.dst_face,
+                            dst_rid = rid,
+                            strong_count = Arc::strong_count(query)
+                        );
                         QueryDirection { dir, rid }
                     });
                 }
@@ -501,6 +510,13 @@ fn compute_final_route(
                     route.insert(qabl.dir.dst_face.id, || {
                         let mut dir = qabl.dir.clone();
                         let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                        tracing::debug!(
+                            src = %query.src_face,
+                            src_rid = query.src_qid,
+                            dst = %dir.dst_face,
+                            dst_rid = rid,
+                            strong_count = Arc::strong_count(query)
+                        );
                         QueryDirection { dir, rid }
                     });
                 }
@@ -513,6 +529,13 @@ fn compute_final_route(
                 route.insert(qabl.dir.dst_face.id, || {
                     let mut dir = qabl.dir.clone();
                     let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                    tracing::debug!(
+                        src = %query.src_face,
+                        src_rid = query.src_qid,
+                        dst = %dir.dst_face,
+                        dst_rid = rid,
+                        strong_count = Arc::strong_count(query)
+                    );
                     QueryDirection { dir, rid }
                 });
             } else {
@@ -720,11 +743,12 @@ pub(crate) fn route_send_response_final(
         Some(query) => {
             drop(queries_lock);
             tracing::debug!(
-                "{}:{} Received final reply for query {}:{}",
+                "{}:{} Received final reply for query {}:{} strong_count={}",
                 face,
                 qid,
                 query.0.src_face,
                 query.0.src_qid,
+                Arc::strong_count(&query.0)
             );
             finalize_pending_query(query);
         }
@@ -757,6 +781,7 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
     }
 }
 
+// TODO(regions): replace with an Add impl
 pub(crate) fn merge_qabl_infos(
     mut this: QueryableInfoType,
     info: QueryableInfoType,
@@ -768,48 +793,6 @@ pub(crate) fn merge_qabl_infos(
     };
     this.complete = this.complete || info.complete;
     this
-}
-
-pub(crate) fn get_remote_qabl_info(
-    queryables: &HashMap<u32, (Arc<Resource>, QueryableInfoType)>,
-    res: &Arc<Resource>,
-) -> Option<QueryableInfoType> {
-    queryables
-        .values()
-        .fold(None, |accu, (ref r, ref qabl_info)| {
-            if *r == *res {
-                match accu {
-                    Some(qi) => Some(merge_qabl_infos(qi, *qabl_info)),
-                    None => Some(*qabl_info),
-                }
-            } else {
-                accu
-            }
-        })
-}
-
-pub(crate) fn update_queryable_info(
-    res: &mut Arc<Resource>,
-    face_id: usize,
-    new_qabl_info: &Option<QueryableInfoType>,
-) -> bool {
-    if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face_id) {
-        if ctx.qabl != *new_qabl_info {
-            get_mut_unchecked(ctx).qabl = *new_qabl_info;
-            true
-        } else {
-            false
-        }
-    } else if new_qabl_info.is_none() {
-        true
-    } else {
-        tracing::warn!(
-            "Request to update QueryableInfo for inexistent face id: {}, on resource: '{}'",
-            face_id,
-            res.expr()
-        );
-        false
-    }
 }
 
 impl LocalResourceInfoTrait<Arc<Resource>> for QueryableInfoType {
