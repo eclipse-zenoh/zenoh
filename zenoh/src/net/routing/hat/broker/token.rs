@@ -20,7 +20,6 @@ use std::{
 use itertools::Itertools;
 use zenoh_protocol::network::{
     declare::{self, common::ext::WireExprType, TokenId},
-    interest::InterestId,
     Declare, DeclareBody, DeclareToken, UndeclareToken,
 };
 use zenoh_sync::get_mut_unchecked;
@@ -133,29 +132,6 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn declare_token(
-        &mut self,
-        _ctx: BaseContext,
-        _id: TokenId,
-        _res: &mut Arc<Resource>,
-        _node_id: NodeId,
-        _interest_id: Option<InterestId>,
-    ) {
-        unimplemented!()
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn undeclare_token(
-        &mut self,
-        _ctx: BaseContext,
-        _id: TokenId,
-        _res: Option<Arc<Resource>>,
-        _node_id: NodeId,
-    ) -> Option<Arc<Resource>> {
-        unimplemented!()
-    }
-
     #[tracing::instrument(level = "trace", skip(ctx))]
     fn register_token(
         &mut self,

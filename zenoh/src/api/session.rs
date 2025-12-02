@@ -178,19 +178,22 @@ impl SessionState {
     }
 }
 
-pub(crate) struct SpannedPrimitives(Arc<dyn Primitives>, EnteredSpan);
+pub(crate) struct SpannedPrimitives {
+    inner: Arc<dyn Primitives>,
+    _span: EnteredSpan,
+}
 
 impl Deref for SpannedPrimitives {
     type Target = Arc<dyn Primitives>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
 impl SpannedPrimitives {
     pub(crate) fn into_primitives(self) -> Arc<dyn Primitives> {
-        self.0
+        self.inner
     }
 }
 
@@ -203,7 +206,10 @@ impl SessionState {
             .cloned()
             .ok_or(SessionClosedError)?;
 
-        Ok(SpannedPrimitives(primitives, self.span.clone().entered()))
+        Ok(SpannedPrimitives {
+            inner: primitives,
+            _span: self.span.clone().entered(),
+        })
     }
 
     #[inline]

@@ -576,7 +576,7 @@ impl Primitives for Face {
                 .filter(|hat| hat.remote_subscriptions_of(&res).is_some())
                 .collect_vec();
 
-            if (*remaining).is_empty() {
+            if remaining.is_empty() {
                 for hat in hats.values_mut() {
                     hat.unpropagate_subscription(ctx.reborrow(), res.clone());
                 }
@@ -615,6 +615,23 @@ impl Primitives for Face {
                         hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
                     }
                 }
+            }
+        }
+
+        for mut res in hats[region].unregister_face_tokens(ctx.reborrow()) {
+            let mut remaining = hats
+                .values_mut()
+                .filter(|hat| hat.remote_tokens_of(&res))
+                .collect_vec();
+
+            if remaining.is_empty() {
+                for hat in hats.values_mut() {
+                    hat.unpropagate_token(ctx.reborrow(), res.clone());
+                }
+                get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
+                Resource::clean(&mut res);
+            } else if let [last_owner] = &mut *remaining {
+                last_owner.unpropagate_last_non_owned_token(ctx.reborrow(), res.clone())
             }
         }
 

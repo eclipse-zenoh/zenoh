@@ -170,33 +170,45 @@ impl Hat {
 }
 
 impl HatQueriesTrait for Hat {
-    fn declare_queryable(
-        &mut self,
-        _ctx: BaseContext,
-        _id: QueryableId,
-        _res: &mut Arc<Resource>,
-        _node_id: NodeId,
-        _qabl_info: &QueryableInfoType,
-    ) {
-        unimplemented!()
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known queryables (keys)
+        let mut qabls = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for (qabl, _) in self.face_hat(face).remote_qabls.values() {
+                // Insert the key in the list of known queryables
+                let srcs = qabls.entry(qabl.clone()).or_insert_with(Sources::empty);
+                // Append src_face as a queryable source in the proper list
+                srcs.clients.push(face.zid);
+            }
+        }
+        Vec::from_iter(qabls)
     }
 
-    fn undeclare_queryable(
-        &mut self,
-        _ctx: BaseContext,
-        _id: QueryableId,
-        _res: Option<Arc<Resource>>,
-        _node_id: NodeId,
-    ) -> Option<Arc<Resource>> {
-        unimplemented!()
-    }
-
-    fn get_queryables(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        unimplemented!()
-    }
-
-    fn get_queriers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        unimplemented!()
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for res in self
+                .face_hat(face)
+                .remote_interests
+                .values()
+                .filter_map(|i| {
+                    if i.options.queryables() {
+                        i.res.as_ref()
+                    } else {
+                        None
+                    }
+                })
+            {
+                result
+                    .entry(res.clone())
+                    .or_insert_with(Sources::default)
+                    .clients
+                    .push(face.zid);
+            }
+        }
+        result.into_iter().collect()
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, rgn = %self.region))]

@@ -6,6 +6,9 @@ use std::{
 use zenoh_config::WhatAmI;
 pub(crate) use zenoh_transport::Bound;
 
+/// Subregion identifier.
+pub(crate) type SubregionId = usize;
+
 /// Region identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum Region {
@@ -16,7 +19,7 @@ pub(crate) enum Region {
     /// Subregion of remotes with no user-defined subregion.
     Undefined { mode: WhatAmI }, // REVIEW(regions): call this "unbound" even though it's effectively south-bound?
     /// User-defined subregions.
-    Subregion { id: usize, mode: WhatAmI },
+    Subregion { id: SubregionId, mode: WhatAmI },
 }
 
 impl Region {
@@ -33,8 +36,8 @@ impl Display for Region {
         match self {
             Region::North => f.write_str("N"),
             Region::Local => f.write_str("L"),
-            Region::Undefined { mode } => write!(f, "U/{}", mode.short()),
-            Region::Subregion { id, mode } => write!(f, "S{}/{}", id, mode.short()),
+            Region::Undefined { mode } => write!(f, "U:{}", mode.short()),
+            Region::Subregion { id, mode } => write!(f, "S:{}:{}", id, mode.short()),
         }
     }
 }
@@ -44,35 +47,12 @@ impl Display for Region {
 pub(crate) struct RegionMap<D>(hashbrown::HashMap<Region, D>);
 
 impl<D> RegionMap<D> {
-    #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn get_disjoint_mut<const N: usize>(
-        &mut self,
-        ks: [&Region; N],
-    ) -> [Option<&mut D>; N] {
-        self.0.get_disjoint_mut(ks)
-    }
-
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&Region, &D)> {
         self.0.iter()
     }
 
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (&Region, &mut D)> {
         self.0.iter_mut()
-    }
-
-    pub(crate) fn north(&self) -> &D {
-        let mut iter = self.iter().filter(|(b, _)| b.bound().is_north());
-        let (_, north) = iter.next().unwrap();
-        assert!(iter.next().is_none());
-        north
-    }
-
-    #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn north_mut(&mut self) -> &mut D {
-        let mut iter = self.iter_mut().filter(|(b, _)| b.bound().is_north());
-        let (_, north) = iter.next().unwrap();
-        assert!(iter.next().is_none());
-        north
     }
 
     pub(crate) fn partition_mut(&mut self, region: &Region) -> (&mut D, RegionMap<&mut D>) {

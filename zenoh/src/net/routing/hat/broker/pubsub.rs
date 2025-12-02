@@ -139,33 +139,45 @@ impl Hat {
 }
 
 impl HatPubSubTrait for Hat {
-    fn declare_subscription(
-        &mut self,
-        _ctx: BaseContext,
-        _id: SubscriberId,
-        _res: &mut Arc<Resource>,
-        _node_id: NodeId,
-        _sub_info: &SubscriberInfo,
-    ) {
-        unimplemented!()
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known subscriptions (keys)
+        let mut subs = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for (sub, _) in self.face_hat(face).remote_qabls.values() {
+                // Insert the key in the list of known subscriptions
+                let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
+                // Append src_face as a subscriptions source in the proper list
+                srcs.clients.push(face.zid);
+            }
+        }
+        Vec::from_iter(subs)
     }
 
-    fn undeclare_subscription(
-        &mut self,
-        _ctx: BaseContext,
-        _id: SubscriberId,
-        _res: Option<Arc<Resource>>,
-        _node_id: NodeId,
-    ) -> Option<Arc<Resource>> {
-        unimplemented!()
-    }
-
-    fn get_subscriptions(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        unimplemented!()
-    }
-
-    fn get_publications(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        unimplemented!()
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_publishers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        let mut result = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for res in self
+                .face_hat(face)
+                .remote_interests
+                .values()
+                .filter_map(|i| {
+                    if i.options.subscribers() {
+                        i.res.as_ref()
+                    } else {
+                        None
+                    }
+                })
+            {
+                result
+                    .entry(res.clone())
+                    .or_insert_with(Sources::default)
+                    .clients
+                    .push(face.zid);
+            }
+        }
+        result.into_iter().collect()
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]

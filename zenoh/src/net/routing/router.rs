@@ -299,9 +299,8 @@ impl Router {
         };
         owner_hat.new_transport_unicast_face(
             ctx,
-            other_hats.map(|hat| &**hat as &dyn HatTrait),
-            &self.tables,
             &transport,
+            other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
         )?;
         drop(wtables);
         drop(ctrl_lock);

@@ -39,11 +39,6 @@ use crate::net::routing::{
     router::SubscriberInfo,
     RoutingContext,
 };
-impl Hat {
-    pub(super) fn interests_new_face(&self, _ctx: BaseContext) {
-        // The broker hat is never the north hat, thus there are no interests to re-propagate
-    }
-}
 
 impl HatInterestTrait for Hat {
     fn route_interest(

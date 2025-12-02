@@ -119,8 +119,7 @@ impl HatInterestTrait for Hat {
         let interests_timeout = ctx.tables.interests_timeout;
 
         for mut dst_face in self
-            .faces_mut(ctx.tables)
-            .values()
+            .owned_faces(ctx.tables)
             .filter(|f| {
                 f.remote_bound.is_south()
                     || (f.whatami == WhatAmI::Peer
