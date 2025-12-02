@@ -461,7 +461,7 @@ impl Query {
         #[cfg(not(feature = "unstable"))]
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
-        let ext_sinfo = sample.source_info.into();
+        let ext_sinfo = sample.source_info.map(Into::into);
         self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
             wire_expr: WireExpr {
