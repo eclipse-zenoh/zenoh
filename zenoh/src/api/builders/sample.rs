@@ -51,7 +51,7 @@ pub trait TimestampBuilderTrait {
 pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: Option<SourceInfo>) -> Self;
+    fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self;
     /// Attach user-provided data in key-value format
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
@@ -198,10 +198,10 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
+    fn source_info<S: Into<Option<SourceInfo>>>(self, source_info: S) -> Self {
         Self {
             sample: Sample {
-                source_info,
+                source_info: source_info.into(),
                 ..self.sample
             },
             _t: PhantomData::<T>,

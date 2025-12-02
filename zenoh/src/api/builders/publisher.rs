@@ -196,9 +196,9 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }

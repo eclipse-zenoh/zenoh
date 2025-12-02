@@ -699,7 +699,7 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 #[zenoh_macros::unstable]
 impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
             ..self

@@ -130,9 +130,9 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
