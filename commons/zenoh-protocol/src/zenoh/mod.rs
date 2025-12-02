@@ -153,7 +153,7 @@ pub mod ext {
     /// %      sn       %
     /// +---------------+
     /// ```
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct SourceInfoType<const ID: u8> {
         pub id: EntityGlobalIdProto,
         pub sn: u32,

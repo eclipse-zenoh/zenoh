@@ -543,10 +543,7 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 
 #[zenoh_macros::unstable]
 fn handle_sample(states: &mut State, sample: Sample) -> bool {
-    if let (Some(source_id), Some(source_sn)) = (
-        sample.source_info().source_id(),
-        sample.source_info().source_sn(),
-    ) {
+    if let Some(source_info) = sample.source_info().cloned() {
         #[inline]
         fn deliver_and_flush(
             sample: Sample,
@@ -563,7 +560,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             }
         }
 
-        let entry = states.sequenced_states.entry(*source_id);
+        let entry = states.sequenced_states.entry(*source_info.source_id());
         let new = matches!(&entry, Entry::Vacant(_));
         let state = entry.or_insert(SourceState::<u32> {
             last_delivered: None,
@@ -573,38 +570,44 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         if state.last_delivered.is_none() && states.global_pending_queries != 0 {
             // Avoid going through the Map if history_depth == 1
             if states.history_depth == 1 {
-                state.last_delivered = Some(source_sn);
+                state.last_delivered = Some(source_info.source_sn());
                 states.callback.call(sample);
             } else {
-                state.pending_samples.insert(source_sn, sample);
+                state
+                    .pending_samples
+                    .insert(source_info.source_sn(), sample);
                 if state.pending_samples.len() >= states.history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
                         deliver_and_flush(sample, sn, &states.callback, state);
                     }
                 }
             }
-        } else if state.last_delivered.is_some() && source_sn != state.last_delivered.unwrap() + 1 {
-            if source_sn > state.last_delivered.unwrap() {
+        } else if state.last_delivered.is_some()
+            && source_info.source_sn() != state.last_delivered.unwrap() + 1
+        {
+            if source_info.source_sn() > state.last_delivered.unwrap() {
                 if states.retransmission {
-                    state.pending_samples.insert(source_sn, sample);
+                    state
+                        .pending_samples
+                        .insert(source_info.source_sn(), sample);
                 } else {
                     tracing::info!(
                         "Sample missed: missed {} samples from {:?}.",
-                        source_sn - state.last_delivered.unwrap() - 1,
-                        source_id,
+                        source_info.source_sn() - state.last_delivered.unwrap() - 1,
+                        source_info.source_id(),
                     );
                     for miss_callback in states.miss_handlers.values() {
                         miss_callback.call(Miss {
-                            source: *source_id,
-                            nb: source_sn - state.last_delivered.unwrap() - 1,
+                            source: *source_info.source_id(),
+                            nb: source_info.source_sn() - state.last_delivered.unwrap() - 1,
                         });
                     }
                     states.callback.call(sample);
-                    state.last_delivered = Some(source_sn);
+                    state.last_delivered = Some(source_info.source_sn());
                 }
             }
         } else {
-            deliver_and_flush(sample, source_sn, &states.callback, state);
+            deliver_and_flush(sample, source_info.source_sn(), &states.callback, state);
         }
         new
     } else if let Some(timestamp) = sample.timestamp() {
@@ -762,7 +765,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             move |s: Sample| {
                 let mut lock = zlock!(statesref);
                 let states = &mut *lock;
-                let source_id = s.source_info().source_id().cloned();
+                let source_id = s.source_info().map(|si| *si.source_id());
                 let new = handle_sample(states, s);
 
                 if let Some(source_id) = source_id {

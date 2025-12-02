@@ -59,7 +59,7 @@ pub struct ReplyBuilder<'a, 'b, T> {
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
     #[cfg(feature = "unstable")]
-    source_info: SourceInfo,
+    source_info: Option<SourceInfo>,
     attachment: Option<ZBytes>,
 }
 
@@ -84,7 +84,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
             },
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -103,7 +103,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
             kind: ReplyBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -130,7 +130,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
         Self {
             source_info,
             ..self

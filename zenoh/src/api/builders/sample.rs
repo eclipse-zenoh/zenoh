@@ -51,7 +51,7 @@ pub trait TimestampBuilderTrait {
 pub trait SampleBuilderTrait {
     /// Attach source information
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self;
+    fn source_info(self, source_info: Option<SourceInfo>) -> Self;
     /// Attach user-provided data in key-value format
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
@@ -107,7 +107,7 @@ impl SampleBuilder<SampleBuilderPut> {
                 #[cfg(feature = "unstable")]
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
+                source_info: None,
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderPut>,
@@ -139,7 +139,7 @@ impl SampleBuilder<SampleBuilderDelete> {
                 #[cfg(feature = "unstable")]
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
+                source_info: None,
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderDelete>,
@@ -198,7 +198,7 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
         Self {
             sample: Sample {
                 source_info,

@@ -532,10 +532,10 @@ impl<'a> AdvancedPublisher<'a> {
     {
         let mut builder = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
-            let info = SourceInfo::new(
-                Some(self.publisher.id()),
-                Some(seqnum.fetch_add(1, Ordering::Relaxed)),
-            );
+            let info = Some(SourceInfo::new(
+                self.publisher.id(),
+                seqnum.fetch_add(1, Ordering::Relaxed),
+            ));
             tracing::trace!(
                 "AdvancedPublisher{{key_expr: {}}}: Put data with {:?}",
                 self.publisher.key_expr(),
@@ -571,10 +571,10 @@ impl<'a> AdvancedPublisher<'a> {
     pub fn delete(&self) -> AdvancedPublisherDeleteBuilder<'_> {
         let mut builder = self.publisher.delete();
         if let Some(seqnum) = &self.seqnum {
-            builder = builder.source_info(SourceInfo::new(
-                Some(self.publisher.id()),
-                Some(seqnum.fetch_add(1, Ordering::Relaxed)),
-            ));
+            builder = builder.source_info(Some(SourceInfo::new(
+                self.publisher.id(),
+                seqnum.fetch_add(1, Ordering::Relaxed),
+            )));
         }
         if let Some(hlc) = self.publisher.session().hlc() {
             builder = builder.timestamp(hlc.new_timestamp());
@@ -699,7 +699,7 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 #[zenoh_macros::unstable]
 impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
             ..self

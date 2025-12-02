@@ -241,7 +241,7 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
     pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
@@ -292,7 +292,7 @@ impl<Handler> CancellationTokenBuilderTrait for QuerierGetBuilder<'_, '_, Handle
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
         Self {
             source_info,
             ..self

@@ -103,7 +103,7 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) kind: T,
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -196,7 +196,7 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info(self, source_info: Option<SourceInfo>) -> Self {
         Self {
             source_info,
             ..self

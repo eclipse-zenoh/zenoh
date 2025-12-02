@@ -31,8 +31,8 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};
 #[cfg(feature = "unstable")]
 use {
-    crate::api::sample::SourceInfo, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto, zenoh_protocol::core::Reliability,
+    zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto,
+    zenoh_protocol::core::Reliability,
 };
 
 use crate::api::{
@@ -263,7 +263,7 @@ impl<'a> Publisher<'a> {
             },
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -290,7 +290,7 @@ impl<'a> Publisher<'a> {
             kind: PublicationBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -471,7 +471,7 @@ impl Sink<Sample> for Publisher<'_> {
             self.reliability,
             None,
             #[cfg(feature = "unstable")]
-            SourceInfo::empty(),
+            None,
             attachment,
         )
     }
