@@ -166,7 +166,7 @@ impl EgressAclEnforcer {
                     return false;
                 };
                 if self.cached_result_or_action(
-                    cache.map(|c| c.put),
+                    cache.map(|c| c.delete),
                     AclMessage::Delete,
                     "Delete (egress)",
                     keyexpr,
