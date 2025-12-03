@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{atomic::Ordering, Arc};
+use std::{collections::HashMap, sync::{Arc, atomic::Ordering}};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
@@ -464,6 +464,26 @@ impl HatTokenTrait for HatCode {
     }
 
     fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
-        todo!()
+        // Compute the list of known tokens
+        let mut tokens = HashMap::new();
+        for face in tables.faces.values() {
+            for token in face_hat!(face).remote_tokens.values() {
+                // Insert the key in the list of known tokens
+                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
+                // Append face as a token source in the proper list
+                let whatami = if face.is_local {
+                    tables.whatami
+                } else {
+                    face.whatami
+                };
+                match whatami {
+                    WhatAmI::Router => srcs.routers.push(face.zid),
+                    WhatAmI::Peer => srcs.peers.push(face.zid),
+                    WhatAmI::Client => srcs.clients.push(face.zid),
+                }
+            }
+        }
+        Vec::from_iter(tokens)
+
     }
 }
