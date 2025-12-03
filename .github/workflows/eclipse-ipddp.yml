@@ -9,7 +9,7 @@ on:
 jobs:
   generate-deps:
     name: Generate ClearyDefined list of dependencies ids.
-    uses: eclipse-zenoh/ci/.github/workflows/generate-deps.yml@main
+    uses: eclipse-zenoh/ci/.github/workflows/generate-deps-cargo.yml@main
     with:
       repo: ${{ github.repository }}
 
