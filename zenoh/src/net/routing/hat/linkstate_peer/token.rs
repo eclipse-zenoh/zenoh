@@ -33,7 +33,10 @@ use super::{
 use crate::net::{
     protocol::network::Network,
     routing::{
-        RoutingContext, dispatcher::{face::FaceState, tables::Tables}, hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources}, router::{NodeId, Resource, SessionContext}
+        dispatcher::{face::FaceState, tables::Tables},
+        hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources},
+        router::{NodeId, Resource, SessionContext},
+        RoutingContext,
     },
 };
 

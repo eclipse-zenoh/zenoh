@@ -1176,6 +1176,5 @@ impl HatTokenTrait for HatCode {
                 )
             })
             .collect()
-
     }
 }

@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::{Arc, atomic::Ordering}};
+use std::{
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
@@ -25,7 +28,10 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::net::routing::{
-    RoutingContext, dispatcher::{face::FaceState, tables::Tables}, hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources}, router::{NodeId, Resource, SessionContext}
+    dispatcher::{face::FaceState, tables::Tables},
+    hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources},
+    router::{NodeId, Resource, SessionContext},
+    RoutingContext,
 };
 
 #[inline]

@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::{Arc, atomic::Ordering}};
+use std::{
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
@@ -484,6 +487,5 @@ impl HatTokenTrait for HatCode {
             }
         }
         Vec::from_iter(tokens)
-
     }
 }
