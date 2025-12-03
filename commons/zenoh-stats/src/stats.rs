@@ -159,7 +159,7 @@ pub(crate) trait StatsPath<M: TransportMetric> {
         let incr_counter = |json: &mut serde_json::Value| match key {
             Some(key) => {
                 if let Some(entry) = (json.try_get_field(STATS_FILTERED_KEY))
-                    .and_then(|f| f.get_item(|entry| (entry.get_field("key") == key)))
+                    .and_then(|f| f.get_item(|entry| entry.get_field("key") == key))
                 {
                     incr_stats_counter(entry.get_field(STATS_KEY))
                 }
