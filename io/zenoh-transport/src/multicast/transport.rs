@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "stats")]
+use std::sync::OnceLock;
 use std::{
     cmp::min,
     collections::HashMap,
@@ -37,8 +39,6 @@ use super::{
 };
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::MulticastTransportShmContext;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     multicast::{
         link::TransportLinkMulticast, TransportConfigMulticast, TransportMulticastEventHandler,
@@ -63,6 +63,8 @@ pub(super) struct TransportMulticastPeer {
     pub(super) priority_rx: Box<[TransportPriorityRx]>,
     pub(super) handler: Arc<dyn TransportPeerEventHandler>,
     pub(super) patch: PatchType,
+    #[cfg(feature = "stats")]
+    pub(super) stats: zenoh_stats::LinkStats,
 }
 
 impl TransportMulticastPeer {
@@ -93,7 +95,9 @@ pub(crate) struct TransportMulticastInner {
     task_controller: TaskController,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::TransportStats,
+    #[cfg(feature = "stats")]
+    pub(super) link_stats: OnceLock<zenoh_stats::LinkStats>,
 
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<MulticastTransportShmContext>,
@@ -118,7 +122,9 @@ impl TransportMulticastInner {
         }
 
         #[cfg(feature = "stats")]
-        let stats = TransportStats::new(Some(Arc::downgrade(&manager.get_stats())), HashMap::new());
+        let stats = manager
+            .stats()
+            .multicast_transport_stats(config.link.link.get_dst().to_string());
 
         let ti = TransportMulticastInner {
             manager,
@@ -130,6 +136,8 @@ impl TransportMulticastInner {
             task_controller: TaskController::default(),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "stats")]
+            link_stats: OnceLock::new(),
             #[cfg(feature = "shared-memory")]
             shm_context,
         };
@@ -415,6 +423,12 @@ impl TransportMulticastInner {
             priority_rx,
             handler,
             patch: min(PatchType::CURRENT, join.ext_patch),
+            #[cfg(feature = "stats")]
+            stats: self.stats.peer_link_stats(
+                peer.zid,
+                peer.whatami,
+                self.link_stats.get().unwrap(),
+            ),
         };
         zwrite!(self.peers).insert(locator.clone(), peer);
 

@@ -34,8 +34,6 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
@@ -109,8 +107,6 @@ pub struct FaceState {
     pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
-    #[cfg(feature = "stats")]
-    pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
@@ -132,7 +128,6 @@ impl FaceState {
         id: usize,
         zid: ZenohIdProto,
         whatami: WhatAmI,
-        #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
         in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
@@ -143,8 +138,6 @@ impl FaceState {
             id,
             zid,
             whatami,
-            #[cfg(feature = "stats")]
-            stats,
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),

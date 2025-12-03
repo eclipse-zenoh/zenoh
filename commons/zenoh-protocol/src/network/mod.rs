@@ -31,6 +31,8 @@ pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
 use crate::core::{CongestionControl, Priority, Reliability, WireExpr};
+#[cfg(feature = "shared-memory")]
+use crate::zenoh::{PushBody, RequestBody, ResponseBody};
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -162,8 +164,6 @@ pub trait NetworkMessageExt {
     #[inline]
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool {
-        use crate::zenoh::{PushBody, RequestBody, ResponseBody};
-
         match self.body() {
             NetworkBodyRef::Push(Push { payload, .. }) => match payload {
                 PushBody::Put(p) => p.ext_shm.is_some(),
@@ -228,6 +228,19 @@ pub trait NetworkMessageExt {
     }
 
     #[inline]
+    fn payload_size(&self) -> Option<usize> {
+        match &self.body() {
+            NetworkBodyRef::Push(p) => Some(p.payload_size()),
+            NetworkBodyRef::Request(r) => Some(r.payload_size()),
+            NetworkBodyRef::Response(r) => Some(r.payload_size()),
+            NetworkBodyRef::ResponseFinal(_)
+            | NetworkBodyRef::Interest(_)
+            | NetworkBodyRef::Declare(_)
+            | NetworkBodyRef::OAM(_) => None,
+        }
+    }
+
+    #[inline]
     fn as_ref(&self) -> NetworkMessageRef<'_> {
         NetworkMessageRef {
             body: self.body(),
@@ -249,6 +262,26 @@ pub trait NetworkMessageExt {
             },
             reliability: self.reliability(),
         }
+    }
+}
+
+impl<M: NetworkMessageExt> NetworkMessageExt for &M {
+    fn body(&self) -> NetworkBodyRef<'_> {
+        (**self).body()
+    }
+
+    fn reliability(&self) -> Reliability {
+        (**self).reliability()
+    }
+}
+
+impl<M: NetworkMessageExt> NetworkMessageExt for &mut M {
+    fn body(&self) -> NetworkBodyRef<'_> {
+        (**self).body()
+    }
+
+    fn reliability(&self) -> Reliability {
+        (**self).reliability()
     }
 }
 

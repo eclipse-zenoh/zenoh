@@ -18,7 +18,7 @@ use zenoh_codec::transport::frame::FrameReader;
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
-    network::NetworkMessage,
+    network::NetworkMessageMut,
     transport::{
         BatchSize, Close, Fragment, Join, KeepAlive, TransportBody, TransportMessage, TransportSn,
     },
@@ -39,33 +39,21 @@ impl TransportMulticastInner {
     fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut
-        mut msg: NetworkMessage,
+        mut msg: NetworkMessageMut,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
-        #[cfg(feature = "stats")]
-        {
-            #[cfg(feature = "shared-memory")]
-            {
-                use zenoh_protocol::network::NetworkMessageExt;
-                if msg.is_shm() {
-                    self.stats.rx_n_msgs.inc_shm(1);
-                } else {
-                    self.stats.rx_n_msgs.inc_net(1);
-                }
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            self.stats.rx_n_msgs.inc_net(1);
-        }
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
-                if let Err(e) = crate::shm::map_zmsg_to_shmbuf(&mut msg, &shm_context.shm_reader) {
+                if let Err(e) =
+                    crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
+                {
                     tracing::debug!("Error receiving SHM buffer: {e}");
                     return Ok(());
                 }
             }
         }
-        peer.handler.handle_message(msg.as_mut())
+        peer.handler.handle_message(msg)
     }
 
     pub(super) fn handle_join_from_peer(
@@ -181,8 +169,14 @@ impl TransportMulticastInner {
             // Drop invalid message and continue
             return Ok(());
         }
-        for msg in frame {
-            self.trigger_callback(msg, peer)?;
+        for mut msg in frame {
+            #[cfg(not(feature = "stats"))]
+            self.trigger_callback(msg.as_mut(), peer)?;
+            #[cfg(feature = "stats")]
+            peer.stats
+                .with_rx_observe_network_message(msg.as_mut(), |msg| {
+                    self.trigger_callback(msg, peer)
+                })?;
         }
 
         Ok(())
@@ -247,8 +241,15 @@ impl TransportMulticastInner {
         }
         if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
-            if let Some(msg) = guard.defrag.defragment() {
-                return self.trigger_callback(msg, peer);
+            if let Some(mut msg) = guard.defrag.defragment() {
+                #[cfg(not(feature = "stats"))]
+                return self.trigger_callback(msg.as_mut(), peer);
+                #[cfg(feature = "stats")]
+                return peer
+                    .stats
+                    .with_rx_observe_network_message(msg.as_mut(), |msg| {
+                        self.trigger_callback(msg, peer)
+                    });
             } else {
                 tracing::trace!(
                     "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
@@ -292,14 +293,14 @@ impl TransportMulticastInner {
         mut batch: RBatch,
         locator: Locator,
         batch_size: BatchSize,
-        #[cfg(feature = "stats")] transport: &TransportMulticastInner,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         while !batch.is_empty() {
             if let Ok(frame) = batch.decode() {
                 tracing::trace!("Received: {:?}", frame);
                 #[cfg(feature = "stats")]
                 {
-                    transport.stats.inc_rx_t_msgs(1);
+                    stats.inc_transport_message(zenoh_stats::Rx, 1);
                 }
                 if let Some(peer) = zread!(self.peers).get(&locator) {
                     peer.set_active();
@@ -315,7 +316,7 @@ impl TransportMulticastInner {
 
             #[cfg(feature = "stats")]
             {
-                transport.stats.inc_rx_t_msgs(1);
+                stats.inc_transport_message(zenoh_stats::Rx, 1);
             }
 
             let r_guard = zread!(self.peers);
@@ -325,7 +326,7 @@ impl TransportMulticastInner {
                     match msg.body {
                         TransportBody::Frame(_) => unreachable!(),
                         TransportBody::Fragment(fragment) => {
-                            self.handle_fragment(fragment, peer)?
+                            self.handle_fragment(fragment, peer)?;
                         }
                         TransportBody::Join(join) => self.handle_join_from_peer(join, peer)?,
                         TransportBody::KeepAlive(KeepAlive { .. }) => {}

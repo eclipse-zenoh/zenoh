@@ -1,3 +1,5 @@
+use zenoh_buffers::buffer::Buffer;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -66,6 +68,15 @@ pub mod ext {
 }
 
 impl Push {
+    pub fn payload_size(&self) -> usize {
+        match &self.payload {
+            PushBody::Put(p) => {
+                p.payload.len() + p.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
+            }
+            PushBody::Del(d) => d.ext_attachment.as_ref().map_or(0, |a| a.buffer.len()),
+        }
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {

@@ -55,9 +55,12 @@ impl TransportMulticastInner {
 
         #[cfg(feature = "stats")]
         if res {
-            self.stats.tx_n_msgs.inc_net(1);
+            self.link_stats
+                .get()
+                .unwrap()
+                .tx_observe_network_message_finalize(msg);
         } else {
-            self.stats.inc_tx_n_dropped(1);
+            self.link_stats.get().unwrap().tx_observe_congestion(msg);
         }
 
         Ok(res)
