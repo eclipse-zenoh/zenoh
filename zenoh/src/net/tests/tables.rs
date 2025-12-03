@@ -43,16 +43,23 @@ use crate::{
     },
 };
 
+fn new_router() -> Router {
+    let zid = ZenohIdProto::try_from([1]).unwrap();
+    let whatami = WhatAmI::Client;
+    Router::new(
+        zid,
+        whatami,
+        Some(Arc::new(HLC::default())),
+        &Config::default(),
+        #[cfg(feature = "stats")]
+        zenoh_stats::StatsRegistry::new(zid, whatami, "test"),
+    )
+    .unwrap()
+}
+
 #[test]
 fn base_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -140,14 +147,7 @@ fn match_test() {
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -179,14 +179,7 @@ fn match_test() {
 
 #[test]
 fn multisub_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -249,14 +242,7 @@ fn multisub_test() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn clean_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -581,14 +567,7 @@ impl EPrimitives for ClientPrimitives {
 
 #[test]
 fn client_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let sub_info = SubscriberInfo;
@@ -828,14 +807,7 @@ fn client_test() {
 
 #[test]
 fn get_best_key_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        None,
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
     let face1 = router.new_primitives(primitives.clone());
@@ -881,14 +853,7 @@ fn get_best_key_test() {
 
 #[test]
 fn big_key_expr() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        None,
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
     let face = router.new_primitives(primitives.clone());
