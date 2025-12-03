@@ -112,16 +112,16 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: TransportMetric + Clone, C: MetricC
     fn collect(&self) -> HashMap<S, (M::Collected, Vec<TransportCollected<M>>)> {
         let inner = self.0.read().unwrap();
         let now = Instant::now();
-        let is_disconnected = |disconnection: Option<Instant>| matches!(disconnection, Some(instant) if now.duration_since(instant) > GARBAGE_COLLECTION_DELAY);
-        let mut has_disconnection: bool = false;
+        let needs_garbage_collection = |disconnection: Option<Instant>| matches!(disconnection, Some(instant) if now.duration_since(instant) > GARBAGE_COLLECTION_DELAY);
+        let mut garbage_collection: bool = false;
         let mut results = inner
             .disconnected
             .iter()
             .map(|(s, m)| (s.clone(), (m.collect(), Vec::new())))
             .collect::<HashMap<S, (M::Collected, Vec<TransportCollected<M>>)>>();
         for (transport, state) in inner.transports.iter() {
-            let disconnected = is_disconnected(state.disconnection);
-            has_disconnection |= disconnected;
+            let disconnected = state.disconnection.is_some();
+            garbage_collection |= needs_garbage_collection(state.disconnection);
             for (link, metrics) in state.links.iter() {
                 for (labels, metric) in metrics {
                     let collected = metric.collect();
@@ -156,10 +156,10 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: TransportMetric + Clone, C: MetricC
             }
         }
         drop(inner);
-        if has_disconnection {
+        if garbage_collection {
             let inner = &mut *self.0.write().unwrap();
             inner.transports.retain(|_, family| {
-                if is_disconnected(family.disconnection) {
+                if needs_garbage_collection(family.disconnection) {
                     for (labels, metric) in family
                         .links
                         .get_mut(&None)
