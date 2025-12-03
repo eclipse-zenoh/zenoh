@@ -29,9 +29,9 @@ use crate::{
     labels::{
         BytesLabels, LinkLabels, LocalityLabel, NetworkMessageDroppedPayloadLabels,
         NetworkMessageLabels, NetworkMessagePayloadLabels, ProtocolLabels, ResourceDeclaredLabels,
-        ResourceLabel, StatsPath, TransportLabels, TransportMessageLabels,
+        ResourceLabel, TransportLabels, TransportMessageLabels,
     },
-    stats::init_stats,
+    stats::{init_stats, StatsPath},
     Rx, StatsDirection, StatsKeysTree, TransportStats, Tx,
 };
 

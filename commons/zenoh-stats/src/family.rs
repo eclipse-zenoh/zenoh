@@ -17,7 +17,8 @@ use prometheus_client::{
 
 use crate::{
     keys::HistogramPerKey,
-    labels::{DisconnectedLabels, LabelsSetRef, LinkLabels, StatsPath, TransportLabels},
+    labels::{DisconnectedLabels, LabelsSetRef, LinkLabels, TransportLabels},
+    stats::StatsPath,
     StatsDirection,
 };
 
