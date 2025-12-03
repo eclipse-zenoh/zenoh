@@ -56,7 +56,10 @@ use crate::{
         queryable::{Query, QueryInner},
     },
     bytes::Encoding,
-    net::primitives::Primitives,
+    net::{
+        primitives::Primitives,
+        routing::{dispatcher::tables::Tables, hat::Sources, router::Resource},
+    },
     LONG_VERSION,
 };
 
