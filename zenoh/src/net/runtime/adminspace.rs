@@ -57,6 +57,8 @@ use crate::{
     LONG_VERSION,
 };
 
+pub const METRICS_ENCODING: &str = "application/openmetrics-text; version=1.0.0; charset=utf-8";
+
 pub struct AdminContext {
     runtime: Runtime,
 }
@@ -700,9 +702,19 @@ fn metrics(context: &AdminContext, query: Query) {
     .try_into()
     .unwrap();
     #[cfg(not(feature = "stats"))]
-    let (metrics, encoding) = ("# EOF\n", Encoding::TEXT_PLAIN);
+    let metrics = format!(
+        concat!(
+            "# HELP zenoh_build Zenoh build version.\n",
+            "# TYPE zenoh_build info\n",
+            "zenoh_build_info{{local_id=\"{zid}\",local_whatami=\"{whatami}\",version=\"{version}\"}} 1\n",
+            "# EOF\n ",
+        ),
+        zid = context.runtime.state.zid,
+        whatami = context.runtime.state.whatami,
+        version = &*LONG_VERSION,
+    );
     #[cfg(feature = "stats")]
-    let (mut metrics, encoding) = (String::new(), zenoh_stats::CONTENT_TYPE);
+    let mut metrics = String::new();
     #[cfg(feature = "stats")]
     context
         .runtime
@@ -729,18 +741,17 @@ fn metrics(context: &AdminContext, query: Query) {
             .filter(|l| !l.split('{').next().is_some_and(|n| n.ends_with("_bucket")))
             .collect();
     }
+    #[allow(unused_mut)]
+    let mut metrics = metrics.into_bytes();
     #[cfg(feature = "stats")]
     if query.parameters().get("compress") == Some("lz4") {
-        if let Err(e) = query
-            .reply(reply_key, lz4_flex::compress(metrics.as_bytes()))
-            .encoding(encoding)
-            .wait()
-        {
-            tracing::error!("Error sending AdminSpace reply: {:?}", e);
-        }
-        return;
+        metrics = lz4_flex::compress(&metrics);
     }
-    if let Err(e) = query.reply(reply_key, metrics).encoding(encoding).wait() {
+    if let Err(e) = query
+        .reply(reply_key, metrics)
+        .encoding(METRICS_ENCODING)
+        .wait()
+    {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
