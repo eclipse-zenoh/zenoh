@@ -2339,7 +2339,7 @@ impl SessionInner {
                     consolidation,
                     parameters: parameters.to_string(),
                     #[cfg(feature = "unstable")]
-                    ext_sinfo: source.map(Into::into),
+                    ext_sinfo: source.clone().map(Into::into),
                     #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
@@ -2362,6 +2362,8 @@ impl SessionInner {
                 qid,
                 target,
                 consolidation,
+                #[cfg(feature = "unstable")]
+                source,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -2461,6 +2463,7 @@ impl SessionInner {
         qid: RequestId,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
+        #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
     ) {
@@ -2488,6 +2491,8 @@ impl SessionInner {
             parameters: parameters.to_owned().into(),
             qid,
             zid: zid.into(),
+            #[cfg(feature = "unstable")]
+            source_info,
             primitives: if local {
                 Arc::new(WeakSession::new(self))
             } else {
@@ -2803,6 +2808,8 @@ impl Primitives for WeakSession {
                             msg.id,
                             msg.ext_target,
                             m.consolidation,
+                            #[cfg(feature = "unstable")]
+                            m.ext_sinfo.map(Into::into),
                             mem::take(&mut m.ext_body),
                             mem::take(&mut m.ext_attachment).map(Into::into),
                         );

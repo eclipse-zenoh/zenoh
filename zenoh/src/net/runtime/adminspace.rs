@@ -486,7 +486,6 @@ impl Primitives for AdminSpace {
                         return;
                     }
                 };
-
                 let zid = self.zid;
                 let query = Query {
                     inner: Arc::new(QueryInner {
@@ -494,6 +493,8 @@ impl Primitives for AdminSpace {
                         parameters: mem::take(&mut query.parameters).into(),
                         qid: msg.id,
                         zid: zid.into(),
+                        #[cfg(feature = "unstable")]
+                        source_info: query.ext_sinfo.map(Into::into),
                         primitives,
                     }),
                     eid: self.queryable_id,
