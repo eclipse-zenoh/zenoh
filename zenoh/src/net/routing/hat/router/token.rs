@@ -1137,6 +1137,45 @@ impl HatTokenTrait for HatCode {
     }
 
     fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
-        todo!()
+        // Compute the list of known tokens
+        hat!(tables)
+            .router_tokens
+            .iter()
+            .map(|s| {
+                // Compute the list of routers, peers and clients that are known
+                // sources of those tokens
+                let routers = Vec::from_iter(res_hat!(s).router_tokens.iter().cloned());
+                let mut peers = if hat!(tables).full_net(WhatAmI::Peer) {
+                    Vec::from_iter(res_hat!(s).linkstatepeer_tokens.iter().cloned())
+                } else {
+                    vec![]
+                };
+                let mut clients = vec![];
+                for ctx in s
+                    .session_ctxs
+                    .values()
+                    .filter(|ctx| ctx.token && !ctx.face.is_local)
+                {
+                    match ctx.face.whatami {
+                        WhatAmI::Router => (),
+                        WhatAmI::Peer => {
+                            if !hat!(tables).full_net(WhatAmI::Peer) {
+                                peers.push(ctx.face.zid);
+                            }
+                        }
+                        WhatAmI::Client => clients.push(ctx.face.zid),
+                    }
+                }
+                (
+                    s.clone(),
+                    Sources {
+                        routers,
+                        peers,
+                        clients,
+                    },
+                )
+            })
+            .collect()
+
     }
 }
