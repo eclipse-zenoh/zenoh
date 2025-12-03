@@ -205,7 +205,7 @@ impl AdminSpace {
         add_handler!("publisher", "**", publishers_data);
         add_handler!("queryable", "**", queryables_data);
         add_handler!("querier", "**", queriers_data);
-        add_handler!("tokens", "**", tokens_data);
+        add_handler!("token", "**", tokens_data);
         if runtime.state.whatami == WhatAmI::Router {
             add_handler!("route/successor", "**", route_successor);
         }
