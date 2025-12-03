@@ -20,8 +20,8 @@ use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 
 use crate::{
     family::{
-        TransportFamily, TransportFamilyCollector, TransportMetric, COLLECT_PER_LINK,
-        COLLECT_PER_TRANSPORT,
+        TransportFamily, TransportFamilyCollector, TransportMetric, COLLECT_DISCONNECTED,
+        COLLECT_PER_LINK, COLLECT_PER_TRANSPORT,
     },
     histogram::{Histogram, HistogramBuckets, PAYLOAD_SIZE_BUCKETS},
     labels::{
@@ -140,10 +140,12 @@ impl StatsRegistry {
         writer: &mut impl Write,
         per_transport: bool,
         per_link: bool,
+        disconnected: bool,
     ) -> fmt::Result {
         let registry = self.0.registry.read().unwrap();
         COLLECT_PER_TRANSPORT.set(per_transport);
         COLLECT_PER_LINK.set(per_link);
+        COLLECT_DISCONNECTED.set(disconnected);
         encode(writer, &registry)?;
         Ok(())
     }

@@ -122,6 +122,9 @@ impl<S: StatsPath<M> + Clone + Hash + Eq, M: TransportMetric + Clone, C: MetricC
         for (transport, state) in inner.transports.iter() {
             let disconnected = state.disconnection.is_some();
             garbage_collection |= needs_garbage_collection(state.disconnection);
+            if disconnected && !COLLECT_DISCONNECTED.get() {
+                continue;
+            }
             for (link, metrics) in state.links.iter() {
                 for (labels, metric) in metrics {
                     let collected = metric.collect();
@@ -238,9 +241,8 @@ struct TransportCollected<M: TransportMetric> {
 
 thread_local! {
     pub(crate) static COLLECT_PER_TRANSPORT: Cell<bool> = const { Cell::new(false) };
-}
-thread_local! {
     pub(crate) static COLLECT_PER_LINK: Cell<bool> = const { Cell::new(false) };
+    pub(crate) static COLLECT_DISCONNECTED: Cell<bool> = const { Cell::new(false) };
 }
 
 #[derive(Debug)]
