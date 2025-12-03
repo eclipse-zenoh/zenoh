@@ -143,6 +143,10 @@ impl TransportUnicast {
         }
     }
 
+    /// Returns the transport stats, or an error if the transport is closed.
+    ///
+    /// Warning: returning an error prevents interceptors to initialize;
+    /// if the error changes in the future, updating interceptors may be necessary.
     #[cfg(feature = "stats")]
     pub fn get_stats(&self) -> ZResult<zenoh_stats::TransportStats> {
         Ok(self.get_inner()?.stats())

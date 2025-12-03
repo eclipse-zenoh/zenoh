@@ -187,6 +187,7 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                 .get_stats()
                 .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::LowPass))
             else {
+                // `get_stats` returning an error means the transport is closed
                 return (None, None);
             };
             return (

@@ -817,6 +817,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
             .get_stats()
             .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::AccessControl))
         else {
+            // `get_stats` returning an error means the transport is closed
             return (None, None);
         };
         let ingress_interceptor = Box::new(IngressAclEnforcer {
@@ -908,15 +909,15 @@ impl InterceptorTrait for IngressAclEnforcer {
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        let kept = self.filter_message(msg, ctx);
+        let allowed = self.filter_message(msg, ctx);
         #[cfg(feature = "stats")]
-        if !kept {
+        if !allowed {
             self.stats.observe_network_message_dropped(
                 super::stats_direction(InterceptorFlow::Ingress),
                 msg,
             );
         }
-        kept
+        allowed
     }
 }
 
@@ -957,15 +958,15 @@ impl InterceptorTrait for EgressAclEnforcer {
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        let kept = self.filter_message(msg, ctx);
+        let allowed = self.filter_message(msg, ctx);
         #[cfg(feature = "stats")]
-        if !kept {
+        if !allowed {
             self.stats.observe_network_message_dropped(
                 super::stats_direction(InterceptorFlow::Egress),
                 msg,
             );
         }
-        kept
+        allowed
     }
 }
 
