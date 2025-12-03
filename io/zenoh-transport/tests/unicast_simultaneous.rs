@@ -128,7 +128,7 @@ mod tests {
             .whatami(WhatAmI::Peer)
             .zid(peer_id01)
             .unicast(unicast)
-            .build(peer_sh01.clone())
+            .build_test(peer_sh01.clone())
             .unwrap();
 
         // Create the peer02 transport manager
@@ -138,7 +138,7 @@ mod tests {
             .whatami(WhatAmI::Peer)
             .zid(peer_id02)
             .unicast(unicast)
-            .build(peer_sh02.clone())
+            .build_test(peer_sh02.clone())
             .unwrap();
 
         // Add the endpoints on the peer01

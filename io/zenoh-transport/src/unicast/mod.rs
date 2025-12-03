@@ -42,8 +42,6 @@ use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::unicast::authentication::TransportAuthId;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
@@ -145,15 +143,13 @@ impl TransportUnicast {
         }
     }
 
+    /// Returns the transport stats, or an error if the transport is closed.
+    ///
+    /// Warning: returning an error prevents interceptors to initialize;
+    /// if the error changes in the future, updating interceptors may be necessary.
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<Arc<crate::stats::TransportStats>> {
+    pub fn get_stats(&self) -> ZResult<zenoh_stats::TransportStats> {
         Ok(self.get_inner()?.stats())
-    }
-
-    #[cfg(feature = "stats")]
-    pub fn get_link_stats(&self) -> ZResult<Vec<(Link, Arc<TransportStats>)>> {
-        let transport = self.get_inner()?;
-        Ok(transport.get_link_stats())
     }
 }
 

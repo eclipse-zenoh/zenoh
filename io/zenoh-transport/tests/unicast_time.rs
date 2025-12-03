@@ -110,7 +110,7 @@ async fn time_transport(
         .whatami(WhatAmI::Router)
         .zid(router_id)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     /* [CLIENT] */
@@ -127,7 +127,7 @@ async fn time_transport(
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientOpenClose::new()))
+        .build_test(Arc::new(SHClientOpenClose::new()))
         .unwrap();
 
     /* [1] */

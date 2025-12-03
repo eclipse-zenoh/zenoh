@@ -23,8 +23,6 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
-#[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -56,7 +54,7 @@ pub(super) struct TransportLinkUnicastUniversal {
     // Waiter for a BlockFirst message to be ready to be sent
     pub block_first_waiters: [Waiter; Priority::NUM],
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::LinkStats,
 }
 
 impl TransportLinkUnicastUniversal {
@@ -86,6 +84,11 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
+        #[cfg(feature = "stats")]
+        let stats = transport
+            .stats
+            .link_stats(link.link.get_src(), link.link.get_dst());
+
         #[cfg(feature = "unstable")]
         let mut block_first_notifiers = Vec::new();
         #[cfg(feature = "unstable")]
@@ -109,7 +112,7 @@ impl TransportLinkUnicastUniversal {
             #[cfg(feature = "unstable")]
             block_first_waiters: block_first_waiters.try_into().ok().unwrap(),
             #[cfg(feature = "stats")]
-            stats: TransportStats::new(Some(Arc::downgrade(&transport.stats)), Default::default()),
+            stats,
         };
 
         (result, consumer)
@@ -216,7 +219,7 @@ async fn tx_task(
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     loop {
         tokio::select! {
@@ -227,8 +230,8 @@ async fn tx_task(
 
                         #[cfg(feature = "stats")]
                         {
-                            stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                            stats.inc_tx_bytes(batch.len() as usize);
+                            stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
+                            stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
                         }
 
                         // Reinsert the batch into the queue
@@ -248,8 +251,8 @@ async fn tx_task(
 
                         #[cfg(feature = "stats")]
                         {
-                            stats.inc_tx_t_msgs(1);
-                            stats.inc_tx_bytes(n);
+                            stats.inc_bytes(zenoh_stats::Tx, n as u64);
+                            stats.inc_transport_message(zenoh_stats::Tx, 1);
                         }
                     }
                 }
@@ -268,8 +271,8 @@ async fn tx_task(
 
         #[cfg(feature = "stats")]
         {
-            stats.inc_tx_t_msgs(b.stats.t_msgs);
-            stats.inc_tx_bytes(b.len() as usize);
+            stats.inc_bytes(zenoh_stats::Tx, b.len() as u64);
+            stats.inc_transport_message(zenoh_stats::Tx, b.stats.t_msgs as u64);
         }
     }
 
@@ -282,7 +285,7 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
@@ -320,7 +323,8 @@ async fn rx_task(
                 let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {
-                    stats.inc_rx_bytes(2 + batch.len()); // Account for the batch len encoding (16 bits)
+                    let header_bytes = if l.is_streamed { 2 } else { 0 };
+                    stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                 }
                 transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
             }

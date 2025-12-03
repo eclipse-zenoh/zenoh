@@ -97,7 +97,7 @@ impl TransportUnicastUniversal {
             );
             // No Link found
             #[cfg(feature = "stats")]
-            self.stats.inc_tx_n_dropped(1);
+            self.stats.tx_observe_no_link(msg);
             return Ok(());
         };
 
@@ -113,6 +113,9 @@ impl TransportUnicastUniversal {
             self.get_zid()
         );
 
+        #[cfg(feature = "stats")]
+        let stats = transport_link.stats.clone();
+
         #[cfg(feature = "unstable")]
         if msg.congestion_control() == CongestionControl::BlockFirst {
             let priority = msg.priority();
@@ -121,7 +124,7 @@ impl TransportUnicastUniversal {
                 .is_err()
             {
                 #[cfg(feature = "stats")]
-                self.stats.inc_tx_n_dropped(1);
+                stats.tx_observe_congestion(msg);
                 return Ok(());
             };
             let transport = self.clone();
@@ -131,7 +134,12 @@ impl TransportUnicastUniversal {
             zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
                 let msg = msg.as_ref();
                 if let Ok(pushed) = pipeline.push_network_message(msg) {
-                    transport.handle_push_result(msg, pushed);
+                    transport.handle_push_result(
+                        msg,
+                        pushed,
+                        #[cfg(feature = "stats")]
+                        stats,
+                    );
                 }
                 let _ = block_first_notifier.notify();
             });
@@ -143,11 +151,21 @@ impl TransportUnicastUniversal {
         // block for fairly long time
         drop(transport_links);
 
-        self.handle_push_result(msg, pipeline.push_network_message(msg)?);
+        self.handle_push_result(
+            msg,
+            pipeline.push_network_message(msg)?,
+            #[cfg(feature = "stats")]
+            stats,
+        );
         Ok(())
     }
 
-    fn handle_push_result(&self, msg: NetworkMessageRef, pushed: bool) {
+    fn handle_push_result(
+        &self,
+        msg: NetworkMessageRef,
+        pushed: bool,
+        #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    ) {
         if !pushed && !msg.is_droppable() {
             tracing::error!(
                 "Unable to push non droppable network message to {}. Closing transport!",
@@ -168,16 +186,9 @@ impl TransportUnicastUniversal {
         }
         #[cfg(feature = "stats")]
         if pushed {
-            #[cfg(feature = "shared-memory")]
-            if msg.is_shm() {
-                self.stats.tx_n_msgs.inc_shm(1);
-            } else {
-                self.stats.tx_n_msgs.inc_net(1);
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            self.stats.tx_n_msgs.inc_net(1);
+            stats.tx_observe_network_message_finalize(msg);
         } else {
-            self.stats.inc_tx_n_dropped(1);
+            stats.tx_observe_congestion(msg);
         }
     }
 

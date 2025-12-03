@@ -312,6 +312,21 @@ pub enum Priority {
     Background = 7,
 }
 
+impl Display for Priority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Priority::Control => "control",
+            Priority::RealTime => "real-time",
+            Priority::InteractiveHigh => "interactive-high",
+            Priority::InteractiveLow => "interactive-low",
+            Priority::Data => "data",
+            Priority::DataHigh => "data-high",
+            Priority::DataLow => "data-low",
+            Priority::Background => "background",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize)]
 /// A [`Priority`] range bounded inclusively below and above.
 pub struct PriorityRange(RangeInclusive<Priority>);

@@ -157,7 +157,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Router)
         .zid(router_id)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     /* [CLIENT] */
@@ -177,7 +177,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientStable::new(counter.clone())))
+        .build_test(Arc::new(SHClientStable::new(counter.clone())))
         .unwrap();
 
     // Create the transport transport manager for the second client
@@ -191,7 +191,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent))
+        .build_test(Arc::new(SHClientIntermittent))
         .unwrap();
 
     // Create the transport transport manager for the third client
@@ -205,7 +205,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Client)
         .zid(client03_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent))
+        .build_test(Arc::new(SHClientIntermittent))
         .unwrap();
 
     /* [1] */

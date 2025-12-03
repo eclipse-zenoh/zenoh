@@ -39,8 +39,6 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
 use super::{
@@ -58,15 +56,14 @@ use crate::{
         queryable::{Query, QueryInner},
     },
     bytes::Encoding,
-    net::{
-        primitives::Primitives,
-        routing::{dispatcher::tables::Tables, hat::Sources, router::Resource},
-    },
+    net::primitives::Primitives,
+    LONG_VERSION,
 };
+
+pub const METRICS_ENCODING: &str = "application/openmetrics-text; version=1.0.0; charset=utf-8";
 
 pub struct AdminContext {
     runtime: Runtime,
-    version: String,
 }
 
 type Handler = Arc<dyn Fn(&keyexpr, &AdminContext, Query) + Send + Sync>;
@@ -166,7 +163,7 @@ impl AdminSpace {
         Ok(())
     }
 
-    pub async fn start(runtime: &Runtime, version: String) {
+    pub async fn start(runtime: &Runtime) {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
         let config = &mut runtime.config().lock().0;
@@ -224,7 +221,6 @@ impl AdminSpace {
 
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
-            version,
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid(),
@@ -463,7 +459,6 @@ impl Primitives for AdminSpace {
                         return;
                     }
                 };
-
                 let zid = self.zid;
                 let query = Query {
                     inner: Arc::new(QueryInner {
@@ -471,6 +466,8 @@ impl Primitives for AdminSpace {
                         parameters: mem::take(&mut query.parameters).into(),
                         qid: msg.id,
                         zid: zid.into(),
+                        #[cfg(feature = "unstable")]
+                        source_info: query.ext_sinfo.map(Into::into),
                         primitives,
                     }),
                     eid: self.queryable_id,
@@ -547,21 +544,6 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
 fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
-    #[cfg(feature = "stats")]
-    let export_stats = query
-        .parameters()
-        .iter()
-        .any(|(k, v)| k == "_stats" && v != "false");
-    #[cfg(feature = "stats")]
-    let insert_stats = |mut json: serde_json::Value, stats: Option<&Arc<TransportStats>>| {
-        if export_stats {
-            json.as_object_mut()
-                .unwrap()
-                .insert("stats".into(), json!(stats.map(|s| s.report())));
-        }
-        json
-    };
-
     // plugins info
     #[cfg(feature = "plugins")]
     let plugins: serde_json::Value = {
@@ -590,19 +572,11 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
                 "dst": link.dst.to_string()
             })
         };
-        #[cfg(not(feature = "stats"))]
         let links = transport
             .get_links()
             .unwrap_or_default()
             .iter()
             .map(link_to_json)
-            .collect_vec();
-        #[cfg(feature = "stats")]
-        let links = transport
-            .get_link_stats()
-            .unwrap_or_default()
-            .iter()
-            .map(|(link, stats)| insert_stats(link_to_json(link), Some(stats)))
             .collect_vec();
         #[cfg(feature = "shared-memory")]
         let shm = transport.is_shm().unwrap_or_default();
@@ -615,8 +589,6 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
             "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid)),
             "shm": shm,
         });
-        #[cfg(feature = "stats")]
-        let json = insert_stats(json, transport.get_stats().ok().as_ref());
         json
     };
     let transport_multicast_peer_to_json =
@@ -639,8 +611,6 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 
                 "links": links,
             });
-            #[cfg(feature = "stats")]
-            let json = insert_stats(json, transport.get_stats().ok().as_ref());
             json
         };
     let mut transports: Vec<serde_json::Value> = vec![];
@@ -659,16 +629,24 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
             }
         }
     });
-    let json = json!({
+    #[cfg_attr(not(feature = "stats"), allow(unused_mut))]
+    let mut json = json!({
         "zid": context.runtime.state.zid,
-        "version": context.version,
+        "version": &*LONG_VERSION,
         "metadata": context.runtime.config().lock().0.metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,
     });
+
     #[cfg(feature = "stats")]
-    let json = insert_stats(json, Some(&transport_mgr.get_stats()));
+    if query
+        .parameters()
+        .iter()
+        .any(|(k, v)| k == "_stats" && v != "false")
+    {
+        context.runtime.stats().merge_stats(&mut json);
+    }
 
     tracing::trace!("AdminSpace router_data: {:?}", json);
     let payload = match serde_json::to_vec(&json) {
@@ -688,28 +666,55 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 }
 
 fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    #[allow(unused_mut)]
-    let mut metrics = format!(
-        r#"# HELP zenoh_build Information about zenoh.
-# TYPE zenoh_build gauge
-zenoh_build{{version="{}"}} 1
-"#,
-        context.version
+    #[cfg(not(feature = "stats"))]
+    let metrics = format!(
+        concat!(
+            "# HELP zenoh_build Zenoh build version.\n",
+            "# TYPE zenoh_build info\n",
+            "zenoh_build_info{{local_id=\"{zid}\",local_whatami=\"{whatami}\",version=\"{version}\"}} 1\n",
+            "# EOF\n ",
+        ),
+        zid = context.runtime.state.zid,
+        whatami = context.runtime.state.whatami,
+        version = &*LONG_VERSION,
     );
-
     #[cfg(feature = "stats")]
-    metrics.push_str(
-        &context
-            .runtime
-            .manager()
-            .get_stats()
-            .report()
-            .openmetrics_text(),
-    );
-
+    let mut metrics = String::new();
+    #[cfg(feature = "stats")]
+    context
+        .runtime
+        .stats()
+        .encode_metrics(
+            &mut metrics,
+            query.parameters().get("per_transport") != Some("false"),
+            query.parameters().get("per_link") != Some("false"),
+            query.parameters().get("disconnected") == Some("true"),
+        )
+        .expect("metrics should be encodable");
+    #[cfg(feature = "stats")]
+    if query.parameters().get("descriptors") == Some("false") {
+        metrics = metrics
+            .split_inclusive("\n")
+            .filter(|l| !l.starts_with('#'))
+            .chain(["# EOF\n"])
+            .collect();
+    }
+    #[cfg(feature = "stats")]
+    if query.parameters().get("buckets") == Some("false") {
+        metrics = metrics
+            .split_inclusive("\n")
+            .filter(|l| !l.split('{').next().is_some_and(|n| n.ends_with("_bucket")))
+            .collect();
+    }
+    #[allow(unused_mut)]
+    let mut metrics = metrics.into_bytes();
+    #[cfg(feature = "stats")]
+    if query.parameters().get("compress") == Some("lz4") {
+        metrics = lz4_flex::compress(&metrics);
+    }
     if let Err(e) = query
         .reply(prefix, metrics)
-        .encoding(Encoding::TEXT_PLAIN)
+        .encoding(METRICS_ENCODING)
         .wait()
     {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);

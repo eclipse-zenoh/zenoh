@@ -167,7 +167,7 @@ mod tests {
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
-            .build(peer_shm01_handler.clone())
+            .build_test(peer_shm01_handler.clone())
             .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
@@ -180,7 +180,7 @@ mod tests {
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
-            .build(peer_shm02_handler.clone())
+            .build_test(peer_shm02_handler.clone())
             .unwrap();
 
         let mut shm = zenoh_config::ShmConf::default();
@@ -197,7 +197,7 @@ mod tests {
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
-            .build(peer_net01_handler.clone())
+            .build_test(peer_net01_handler.clone())
             .unwrap();
 
         // Create the listener on the peer
