@@ -28,6 +28,7 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 base64ct = "=1.6.0"
+derive_more = { version = "=2.0.1", features = ["as_ref"] }
 generic-array = "=0.14.7"
 home = "=0.5.9"
 icu_normalizer = "=1.5.0"
@@ -59,6 +60,7 @@ zerofrom = "=0.1.5"
 [package.metadata.cargo-machete]
 ignored = [
   "base64ct",
+  "derive_more",
   "generic-array",
   "home",
   "icu_normalizer",

@@ -34,8 +34,6 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, Bound};
 
 use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
@@ -116,8 +114,6 @@ pub struct FaceState {
     pub(crate) whatami: WhatAmI,
     pub(crate) region: Region,
     pub(crate) remote_bound: Bound,
-    #[cfg(feature = "stats")]
-    pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
@@ -164,8 +160,6 @@ impl FaceStateBuilder {
             hats,
             task_controller: TaskController::default(),
             is_local: false,
-            #[cfg(feature = "stats")]
-            stats: None,
         })
     }
 
@@ -189,12 +183,6 @@ impl FaceStateBuilder {
 
     pub(crate) fn local(mut self, is_local: bool) -> Self {
         self.0.is_local = is_local;
-        self
-    }
-
-    #[cfg(feature = "stats")]
-    pub(crate) fn stats(mut self, stats: Arc<TransportStats>) -> Self {
-        self.0.stats = Some(stats);
         self
     }
 

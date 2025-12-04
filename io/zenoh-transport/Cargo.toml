@@ -33,8 +33,9 @@ shared-memory = [
   "zenoh-codec/shared-memory",
   "zenoh-protocol/shared-memory",
   "zenoh-shm",
+  "zenoh-stats?/shared-memory",
 ]
-stats = []
+stats = ["zenoh-stats"]
 test = []
 transport_auth = []
 transport_compression = []
@@ -57,7 +58,6 @@ crossbeam-utils = { workspace = true }
 flume = { workspace = true }
 lazy_static = { workspace = true }
 lz4_flex = { workspace = true }
-paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
@@ -85,6 +85,7 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
+zenoh-stats = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-util = { workspace = true }

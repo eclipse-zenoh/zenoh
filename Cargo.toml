@@ -27,6 +27,7 @@ members = [
   "commons/zenoh-result",
   "commons/zenoh-runtime",
   "commons/zenoh-shm",
+  "commons/zenoh-stats",
   "commons/zenoh-sync",
   "commons/zenoh-task",
   "commons/zenoh-util",
@@ -129,12 +130,12 @@ num_cpus = "1.17.0"
 once_cell = "1.21.3"
 ordered-float = "5.1.0"
 panic-message = "0.3.0"
-paste = "1.0.15"
 petgraph = "0.8.3"
 phf = { version = "0.13.1", features = ["macros"] }
 pnet = "0.35.0"
 pnet_datalink = "0.35.0"
 proc-macro2 = "1.0.101"
+prometheus-client = "0.24.0"
 quinn = "0.11.5"
 quote = "1.0.40"
 rand = { version = "0.8.5", default-features = false } # Default features are disabled due to usage in no_std crates
@@ -156,6 +157,7 @@ rustls-pemfile = "2.2.0"
 rustls-pki-types = "1.12.0"
 rustls-webpki = "0.103.8"
 schemars = { version = "1.1.0", features = ["either1"] }
+scoped-tls = "1.0.1"
 secrecy = { version = "0.8.0", features = ["alloc", "serde"] }
 serde = { version = "1.0.225", default-features = false, features = [
   "derive",
@@ -165,6 +167,7 @@ serde_with = "3.14.1"
 serde_yaml = "0.9.34"
 sha3 = "0.10.8"
 shellexpand = "3.1.1"
+smallvec = "1.15.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 stabby = "72.1.1"
 static_assertions = "1.1.0"
@@ -236,6 +239,7 @@ zenoh-protocol = { version = "=1.6.2", path = "commons/zenoh-protocol", default-
 zenoh-result = { version = "=1.6.2", path = "commons/zenoh-result", default-features = false }
 zenoh-runtime = { version = "=1.6.2", path = "commons/zenoh-runtime" }
 zenoh-shm = { version = "=1.6.2", path = "commons/zenoh-shm" }
+zenoh-stats = { version = "=1.6.2", path = "commons/zenoh-stats" }
 zenoh-sync = { version = "=1.6.2", path = "commons/zenoh-sync" }
 zenoh-task = { version = "=1.6.2", path = "commons/zenoh-task" }
 zenoh-transport = { version = "=1.6.2", path = "io/zenoh-transport", default-features = false }

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "stats")]
+use std::sync::OnceLock;
 use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
@@ -32,8 +34,6 @@ use zenoh_result::{zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     unicast::{
         authentication::TransportAuthId,
@@ -61,7 +61,9 @@ pub(crate) struct TransportUnicastLowlatency {
     alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::TransportStats,
+    #[cfg(feature = "stats")]
+    pub(super) link_stats: Arc<OnceLock<zenoh_stats::LinkStats>>,
 
     // The handles for TX/RX tasks
     pub(crate) token: CancellationToken,
@@ -76,7 +78,7 @@ impl TransportUnicastLowlatency {
         manager: TransportManager,
         config: TransportConfigUnicast,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> Arc<dyn TransportUnicastTrait> {
         Arc::new(TransportUnicastLowlatency {
             manager,
@@ -86,6 +88,8 @@ impl TransportUnicastLowlatency {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "stats")]
+            link_stats: Arc::new(OnceLock::new()),
             token: CancellationToken::new(),
             tracker: TaskTracker::new(),
             #[cfg(feature = "shared-memory")]
@@ -230,16 +234,8 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> Arc<TransportStats> {
+    fn stats(&self) -> zenoh_stats::TransportStats {
         self.stats.clone()
-    }
-
-    #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
-        self.get_links()
-            .into_iter()
-            .map(|l| (l, self.stats.clone()))
-            .collect()
     }
 
     /*************************************/
@@ -271,6 +267,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             ));
         }
         let (link, ack) = link.unpack();
+        #[cfg(feature = "stats")]
+        self.link_stats
+            .set(
+                self.stats
+                    .link_stats(link.link.get_src(), link.link.get_dst()),
+            )
+            .unwrap();
         *guard = Some(link);
         drop(guard);
 

@@ -51,6 +51,8 @@ pub struct RouterBuilder<'conf> {
     config: &'conf Config,
     hlc: Option<Arc<HLC>>,
     hats: Vec<(Region, WhatAmI)>,
+    #[cfg(feature = "stats")]
+    stats: Option<zenoh_stats::StatsRegistry>,
 }
 
 impl<'conf> RouterBuilder<'conf> {
@@ -59,6 +61,8 @@ impl<'conf> RouterBuilder<'conf> {
             config,
             hlc: None,
             hats: Vec::new(),
+            #[cfg(feature = "stats")]
+            stats: None,
         }
     }
 
@@ -70,6 +74,12 @@ impl<'conf> RouterBuilder<'conf> {
     #[cfg(test)]
     pub fn hat(mut self, region: Region, whatami: WhatAmI) -> Self {
         self.hats.push((region, whatami));
+        self
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn stats(mut self, stats: zenoh_stats::StatsRegistry) -> Self {
+        self.stats = Some(stats);
         self
     }
 
@@ -101,6 +111,11 @@ impl<'conf> RouterBuilder<'conf> {
             }
         }
 
+        #[cfg(feature = "stats")]
+        let stats = self
+            .stats
+            .unwrap_or_else(|| zenoh_stats::StatsRegistry::new(zid, mode, &*crate::LONG_VERSION));
+
         tracing::trace!(hats = ?self.hats, "New router");
 
         Ok(Router {
@@ -115,6 +130,8 @@ impl<'conf> RouterBuilder<'conf> {
                             .copied()
                             .map(|(b, wai)| (b, tables::HatTablesData::new(wai)))
                             .collect(),
+                        #[cfg(feature = "stats")]
+                        stats,
                     )?,
                     hats: self
                         .hats
@@ -232,8 +249,6 @@ impl Router {
         let fid = tables.data.face_counter;
         tables.data.face_counter += 1;
         let zid = transport.get_zid()?;
-        #[cfg(feature = "stats")]
-        let stats = transport.get_stats()?;
 
         let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
@@ -253,9 +268,6 @@ impl Router {
                 )
                 .whatami(whatami)
                 .ingress_interceptors(ingress.clone());
-
-                #[cfg(feature = "stats")]
-                let builder = builder.stats(stats);
 
                 Arc::new(builder.build())
             })
@@ -363,9 +375,6 @@ impl Router {
         tables.data.face_counter += 1;
         let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
 
-        #[cfg(feature = "stats")]
-        let stats = transport.get_stats()?;
-
         let face_state_builder = FaceStateBuilder::new(
             fid,
             peer.zid,
@@ -378,8 +387,6 @@ impl Router {
         .ingress_interceptors(interceptor.clone())
         .whatami(WhatAmI::Client);
 
-        #[cfg(feature = "stats")]
-        let face_state_builder = face_state_builder.stats(stats);
         let face_state = Arc::new(face_state_builder.build());
 
         face_state.set_interceptors_from_factories(

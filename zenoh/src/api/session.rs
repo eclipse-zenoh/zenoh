@@ -1239,7 +1239,7 @@ impl Session {
             timestamp: None,
             attachment: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
         }
     }
 
@@ -1274,7 +1274,7 @@ impl Session {
             timestamp: None,
             attachment: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
         }
     }
     /// Query data from the matching queryables in the system. This is a shortcut for declaring
@@ -1324,7 +1324,7 @@ impl Session {
             attachment: None,
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             #[cfg(feature = "unstable")]
             cancellation_token: None,
         }
@@ -1909,7 +1909,7 @@ impl SessionInner {
                             #[cfg(feature = "unstable")]
                             reliability: Reliability::Reliable,
                             #[cfg(feature = "unstable")]
-                            source_info: SourceInfo::empty(),
+                            source_info: None,
                             attachment: None,
                         });
                     }
@@ -2201,7 +2201,7 @@ impl SessionInner {
         destination: Locality,
         #[cfg(feature = "unstable")] reliability: Reliability,
         timestamp: Option<uhlc::Timestamp>,
-        #[cfg(feature = "unstable")] source_info: SourceInfo,
+        #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
@@ -2214,7 +2214,7 @@ impl SessionInner {
                 timestamp,
                 encoding: encoding.clone().into(),
                 #[cfg(feature = "unstable")]
-                ext_sinfo: source_info.clone().into(),
+                ext_sinfo: source_info.clone().map(Into::into),
                 #[cfg(not(feature = "unstable"))]
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
@@ -2226,7 +2226,7 @@ impl SessionInner {
             SampleKind::Delete => PushBody::Del(Del {
                 timestamp,
                 #[cfg(feature = "unstable")]
-                ext_sinfo: source_info.clone().into(),
+                ext_sinfo: source_info.clone().map(Into::into),
                 #[cfg(not(feature = "unstable"))]
                 ext_sinfo: None,
                 ext_attachment: attachment.clone().map(Into::into),
@@ -2286,7 +2286,7 @@ impl SessionInner {
         timeout: Duration,
         value: Option<(ZBytes, Encoding)>,
         attachment: Option<ZBytes>,
-        #[cfg(feature = "unstable")] source: SourceInfo,
+        #[cfg(feature = "unstable")] source: Option<SourceInfo>,
         callback: Callback<Reply>,
     ) -> ZResult<Id> {
         tracing::trace!(
@@ -2368,7 +2368,7 @@ impl SessionInner {
                     consolidation,
                     parameters: parameters.to_string(),
                     #[cfg(feature = "unstable")]
-                    ext_sinfo: source.into(),
+                    ext_sinfo: source.clone().map(Into::into),
                     #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
@@ -2391,6 +2391,8 @@ impl SessionInner {
                 qid,
                 target,
                 consolidation,
+                #[cfg(feature = "unstable")]
+                source,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
@@ -2490,6 +2492,7 @@ impl SessionInner {
         qid: RequestId,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
+        #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
     ) {
@@ -2517,6 +2520,8 @@ impl SessionInner {
             parameters: parameters.to_owned().into(),
             qid,
             zid: zid.into(),
+            #[cfg(feature = "unstable")]
+            source_info,
             primitives: if local {
                 Arc::new(WeakSession::new(self))
             } else {
@@ -2702,7 +2707,7 @@ impl Primitives for WeakSession {
                                         #[cfg(feature = "unstable")]
                                         reliability: Reliability::Reliable,
                                         #[cfg(feature = "unstable")]
-                                        source_info: SourceInfo::empty(),
+                                        source_info: None,
                                         attachment: None,
                                     }),
                                     #[cfg(feature = "unstable")]
@@ -2832,6 +2837,8 @@ impl Primitives for WeakSession {
                             msg.id,
                             msg.ext_target,
                             m.consolidation,
+                            #[cfg(feature = "unstable")]
+                            m.ext_sinfo.map(Into::into),
                             mem::take(&mut m.ext_body),
                             mem::take(&mut m.ext_attachment).map(Into::into),
                         );

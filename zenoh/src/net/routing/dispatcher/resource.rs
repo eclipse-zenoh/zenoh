@@ -271,6 +271,8 @@ pub(crate) struct ResourceContext {
     // REVIEW(regions): added because e.g. router/router bounds needs separate
     // Routes (WhatAmI, NodeId -> Route) since each linkstate has a NodeId space
     pub(crate) hats: RegionMap<HatResourceContext>,
+    #[cfg(feature = "stats")]
+    pub(crate) stats_keys: zenoh_stats::StatsKeyCache,
 }
 
 impl ResourceContext {
@@ -278,6 +280,8 @@ impl ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             hats: hat,
+            #[cfg(feature = "stats")]
+            stats_keys: Default::default(),
         }
     }
 }

@@ -299,40 +299,6 @@ pub(crate) fn get_matching_subscriptions(
     tables.hats[Region::Local].get_matching_subscriptions(&tables.data, key_expr)
 }
 
-#[cfg(feature = "stats")]
-macro_rules! inc_stats {
-    (
-        $face:expr,
-        $txrx:ident,
-        $space:ident,
-        $body:expr
-    ) => {
-        paste::paste! {
-            if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::buffer::Buffer;
-                match &$body {
-                    zenoh_protocol::zenoh::PushBody::Put(p) => {
-                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        let mut n =  p.payload.len();
-                        if let Some(a) = p.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
-                    }
-                    zenoh_protocol::zenoh::PushBody::Del(d) => {
-                        stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
-                        let mut n = 0;
-                        if let Some(a) = d.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_del_pl_bytes>].[<inc_ $space>](n);
-                    }
-                }
-            }
-        }
-    };
-}
-
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
@@ -362,13 +328,13 @@ pub fn route_data(
     let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
     #[cfg(feature = "stats")]
-    let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
+    let is_admin = expr.is_admin();
     #[cfg(feature = "stats")]
-    if !admin {
-        inc_stats!(face, rx, user, msg.payload);
-    } else {
-        inc_stats!(face, rx, admin, msg.payload);
-    }
+    let payload_size = msg.payload_size();
+    #[cfg(feature = "stats")]
+    let stats_keys = expr.stats_keys(&rtables.data.stats_keys);
+    #[cfg(feature = "stats")]
+    zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
 
     let mut dirs = RouteBuilder::<Direction>::new();
 
@@ -385,13 +351,12 @@ pub fn route_data(
     }
 
     let send_push = |dst_face: &FaceState, msg: &mut Push, reliability: Reliability| {
+        #[cfg(not(feature = "stats"))]
+        dst_face.primitives.send_push(msg, reliability);
         #[cfg(feature = "stats")]
-        if !admin {
-            inc_stats!(dst_face, tx, user, msg.payload)
-        } else {
-            inc_stats!(dst_face, tx, admin, msg.payload)
-        }
-        dst_face.primitives.send_push(msg, reliability)
+        zenoh_stats::with_tx_observe_network_message(is_admin, payload_size, &stats_keys, || {
+            dst_face.primitives.send_push(msg, reliability)
+        });
     };
 
     let mut dirs_iter = dirs.build().into_iter();
