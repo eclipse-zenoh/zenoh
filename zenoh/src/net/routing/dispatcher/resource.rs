@@ -274,6 +274,8 @@ pub(crate) struct ResourceContext {
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
+    #[cfg(feature = "stats")]
+    pub(crate) stats_keys: zenoh_stats::StatsKeyCache,
 }
 
 impl ResourceContext {
@@ -283,6 +285,8 @@ impl ResourceContext {
             hat,
             data_routes: Default::default(),
             query_routes: Default::default(),
+            #[cfg(feature = "stats")]
+            stats_keys: Default::default(),
         }
     }
 

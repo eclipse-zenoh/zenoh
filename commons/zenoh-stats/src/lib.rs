@@ -2,6 +2,7 @@ use std::fmt;
 
 mod family;
 mod histogram;
+mod keys;
 mod labels;
 mod link;
 mod registry;
@@ -9,6 +10,7 @@ mod stats;
 mod transport;
 
 pub use crate::{
+    keys::{StatsKeyCache, StatsKeys, StatsKeysTree},
     labels::{LocalityLabel, ReasonLabel, ResourceLabel},
     link::{rx_observe_network_message_finalize, with_tx_observe_network_message, LinkStats},
     registry::StatsRegistry,

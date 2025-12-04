@@ -48,12 +48,21 @@ impl Router {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
     ) -> ZResult<Self> {
         let hat_code = hat::new_hat(whatami, config);
         Ok(Router {
             // whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config, hat_code.as_ref())?),
+                tables: RwLock::new(Tables::new(
+                    zid,
+                    whatami,
+                    hlc,
+                    config,
+                    hat_code.as_ref(),
+                    #[cfg(feature = "stats")]
+                    stats,
+                )?),
                 hat_code,
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),

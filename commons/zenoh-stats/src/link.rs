@@ -10,6 +10,7 @@ use zenoh_protocol::{core::Priority, network::NetworkMessageExt};
 
 use crate::{
     histogram::Histogram,
+    keys::{HistogramPerKey, StatsKeys},
     labels::{
         BytesLabels, LinkLabels, MessageLabel, NetworkMessageLabels, NetworkMessagePayloadLabels,
         ProtocolLabel, ReasonLabel, SpaceLabel, TransportMessageLabels,
@@ -29,18 +30,19 @@ thread_local! {
 pub fn with_tx_observe_network_message<R>(
     is_admin: bool,
     payload_size: usize,
+    keys: &StatsKeys,
     f: impl FnOnce() -> R,
 ) -> R {
-    let r_info = RouterLevelInfo::new(is_admin, payload_size);
+    let r_info = RouterLevelInfo::new(is_admin, payload_size, keys);
     TX_ROUTER_LEVEL_INFO.set(Some(r_info));
     let res = f();
     TX_ROUTER_LEVEL_INFO.set(None);
     res
 }
 
-pub fn rx_observe_network_message_finalize(is_admin: bool, payload_size: usize) {
+pub fn rx_observe_network_message_finalize(is_admin: bool, payload_size: usize, keys: &StatsKeys) {
     if let Some(l_info) = RX_LINK_LEVEL_INFO.get() {
-        let r_info = RouterLevelInfo::new(is_admin, payload_size);
+        let r_info = RouterLevelInfo::new(is_admin, payload_size, keys);
         RX_LINK.with(|stats| {
             stats.observe_network_message_payload(Rx, l_info, r_info);
         });
@@ -123,8 +125,9 @@ impl LinkStats {
         l_info: LinkLevelInfo,
         r_info: RouterLevelInfo,
     ) {
-        self.0.network_message_payload[Tx as usize][l_info.priority as usize]
-            [l_info.message as usize][l_info.shm as usize][r_info.space as usize]
+        let (histogram, histogram_per_key) = self.0.network_message_payload[Tx as usize]
+            [l_info.priority as usize][l_info.message as usize][l_info.shm as usize]
+            [r_info.space as usize]
             .get_or_init(|| {
                 let transport = self.0.transport_stats.transport();
                 let labels = NetworkMessagePayloadLabels {
@@ -134,19 +137,24 @@ impl LinkStats {
                     shm: l_info.shm,
                     protocol: self.0.protocol.clone(),
                 };
-                self.0
-                    .transport_stats
-                    .registry()
-                    .network_message_payload(direction)
-                    .get_or_create_owned(transport, Some(self.link()), &labels)
-            })
-            .observe(r_info.payload_size as u64);
+                let registry = self.0.transport_stats.registry();
+                (
+                    registry
+                        .network_message_payload(direction)
+                        .get_or_create_owned(transport, Some(self.link()), &labels),
+                    registry
+                        .network_message_payload_per_key(direction)
+                        .get_or_create_owned(transport, Some(self.link()), &labels),
+                )
+            });
+        histogram.observe(r_info.payload_size as u64);
+        histogram_per_key.observe(&r_info.keys, r_info.payload_size as u64);
     }
 
     pub fn tx_observe_network_message_finalize(&self, msg: impl NetworkMessageExt) {
         let l_info = LinkLevelInfo::new(&msg);
         self.inc_network_message(Tx, l_info);
-        if let Some(r_info) = TX_ROUTER_LEVEL_INFO.get() {
+        if let Some(r_info) = TX_ROUTER_LEVEL_INFO.replace(None) {
             self.observe_network_message_payload(Tx, l_info, r_info);
         }
     }
@@ -184,7 +192,7 @@ struct LinkStatsInner {
     network_message:
         [[[[OnceLock<Counter>; SHM_NUM]; MessageLabel::NUM]; Priority::NUM]; StatsDirection::NUM],
     #[allow(clippy::type_complexity)]
-    network_message_payload: [[[[[OnceLock<Histogram>; SpaceLabel::NUM]; SHM_NUM];
+    network_message_payload: [[[[[OnceLock<(Histogram, HistogramPerKey)>; SpaceLabel::NUM]; SHM_NUM];
         MessageLabel::NUM]; Priority::NUM]; StatsDirection::NUM],
     tx_congestion: DropStats,
 }
@@ -217,14 +225,15 @@ impl LinkLevelInfo {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct RouterLevelInfo {
     space: SpaceLabel,
     payload_size: usize,
+    keys: StatsKeys,
 }
 
 impl RouterLevelInfo {
-    fn new(is_admin: bool, payload_size: usize) -> Self {
+    fn new(is_admin: bool, payload_size: usize, keys: &StatsKeys) -> Self {
         Self {
             space: if is_admin {
                 SpaceLabel::Admin
@@ -232,6 +241,7 @@ impl RouterLevelInfo {
                 SpaceLabel::User
             },
             payload_size,
+            keys: keys.clone(),
         }
     }
 }
