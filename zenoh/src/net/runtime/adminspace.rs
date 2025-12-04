@@ -187,7 +187,10 @@ impl AdminSpace {
                 handlers.insert(full_key, (Arc::new($handler), full_key_len));
             }};
             ($handler:expr) => {{
-                handlers.insert(root_key.clone(), (Arc::new($handler), root_key.as_str().len()));
+                handlers.insert(
+                    root_key.clone(),
+                    (Arc::new($handler), root_key.as_str().len()),
+                );
             }};
         }
 
