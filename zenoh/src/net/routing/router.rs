@@ -283,7 +283,7 @@ impl Router {
         if gwy_count > 1 {
             tracing::error!(
                 total = gwy_count,
-                "Multiple gateways found in peer subregion. \
+                "Multiple gateways found in subregion. \
                 Only one gateway per subregion is supported."
             );
         }

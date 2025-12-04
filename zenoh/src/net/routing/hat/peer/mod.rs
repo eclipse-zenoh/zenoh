@@ -208,7 +208,7 @@ impl HatBaseTrait for Hat {
         }
 
         // NOTE(regions): we only send/recv initial interests between peers that are mutually north-bound,
-        // otherwise we are in PULL mode. In particular, the `open.return_conditions.delcares` configuration
+        // otherwise we are in PULL mode. In particular, the `open.return_conditions.declares` configuration
         // option doesn't apply to region gateways.
         let do_initial_interest =
             ctx.src_face.region.bound().is_north() && ctx.src_face.remote_bound.is_north();

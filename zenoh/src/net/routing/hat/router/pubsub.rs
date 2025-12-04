@@ -28,6 +28,8 @@ use zenoh_protocol::{
 };
 
 use super::Hat;
+#[allow(unused_imports)]
+use crate::zenoh_core::polyfill::*;
 use crate::{
     key_expr::KeyExpr,
     net::{

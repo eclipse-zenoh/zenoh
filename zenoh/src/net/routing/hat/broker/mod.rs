@@ -198,7 +198,8 @@ impl HatBaseTrait for Hat {
         _oam: &mut Oam,
         _zid: &ZenohIdProto,
         _whatami: WhatAmI,
-        _other_hats: RegionMap<&mut dyn HatTrait>,    ) -> ZResult<()> {
+        _other_hats: RegionMap<&mut dyn HatTrait>,
+    ) -> ZResult<()> {
         Ok(())
     }
 

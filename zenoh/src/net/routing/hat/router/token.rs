@@ -34,6 +34,8 @@ use crate::net::{
         RoutingContext,
     },
 };
+#[allow(unused_imports)]
+use crate::zenoh_core::polyfill::*;
 
 impl Hat {
     pub(super) fn token_tree_change(

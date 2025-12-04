@@ -1044,7 +1044,7 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
             tracing::info!(
                 zid = %peer.zid,
                 "Transport peer matches neither north nor south filters. \
-                Using default region instead"
+                Using undefined region instead"
             );
             Region::Undefined { mode: peer.whatami }
         }
@@ -1052,7 +1052,7 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
             tracing::warn!(
                 zid = %peer.zid,
                 "Transport peer matches north and south filters. \
-                Using default region instead"
+                Using undefined region instead"
             );
             Region::Undefined { mode: peer.whatami }
         }

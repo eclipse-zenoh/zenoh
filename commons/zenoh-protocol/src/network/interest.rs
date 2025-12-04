@@ -396,7 +396,7 @@ impl Debug for InterestOptions {
 
 impl Display for InterestOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut option_strs = Vec::with_capacity(5);
+        let mut option_strs = alloc::vec::Vec::with_capacity(5);
 
         if self.keyexprs() {
             option_strs.push("K");

@@ -31,6 +31,8 @@ use crate::net::routing::{
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
+#[allow(unused_imports)]
+use crate::zenoh_core::polyfill::*;
 
 impl Hat {
     pub(super) fn tokens_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
