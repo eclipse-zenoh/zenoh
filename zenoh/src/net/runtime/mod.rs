@@ -87,7 +87,7 @@ use crate::{
         config::{Config, Notifier},
     },
     net::routing::{dispatcher::region::Region, router::RouterBuilder},
-    GIT_VERSION, LONG_VERSION,
+    GIT_VERSION,
 };
 
 /// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
@@ -127,6 +127,8 @@ pub(crate) struct RuntimeState {
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
     namespace: Option<OwnedNonWildKeyExpr>,
+    #[cfg(feature = "stats")]
+    stats: zenoh_stats::StatsRegistry,
     span: tracing::Span,
 }
 
@@ -452,6 +454,10 @@ impl RuntimeBuilder {
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
+
+        #[cfg(feature = "stats")]
+        let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
+
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
@@ -459,6 +465,10 @@ impl RuntimeBuilder {
         if let Some(hlc) = hlc.as_ref().cloned() {
             router_builder = router_builder.hlc(hlc.clone());
         }
+
+        #[cfg(feature = "stats")]
+        let router_builder = router_builder.stats(stats.clone());
+
         let router = Arc::new(router_builder.build()?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
@@ -482,7 +492,11 @@ impl RuntimeBuilder {
         let transport_manager_builder =
             transport_manager_builder.shm_reader(shm_clients.map(ShmReader::new));
 
-        let transport_manager = transport_manager_builder.build(handler.clone())?;
+        let transport_manager = transport_manager_builder.build(
+            handler.clone(),
+            #[cfg(feature = "stats")]
+            stats.clone(),
+        )?;
 
         // Plugins manager
         #[cfg(feature = "plugins")]
@@ -515,6 +529,8 @@ impl RuntimeBuilder {
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
                 namespace,
+                #[cfg(feature = "stats")]
+                stats,
                 span,
             }),
         };
@@ -523,7 +539,7 @@ impl RuntimeBuilder {
 
         // Admin space
         if start_admin_space {
-            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+            AdminSpace::start(&runtime).await;
         }
 
         // Start plugins
@@ -670,6 +686,11 @@ impl Runtime {
 
     pub(crate) async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.state.remove_pending_connection(zid).await
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
+        &self.state.stats
     }
 }
 

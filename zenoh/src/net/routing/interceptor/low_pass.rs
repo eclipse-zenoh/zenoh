@@ -34,8 +34,6 @@ use zenoh_protocol::{
     zenoh::{PushBody, Reply, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
@@ -184,6 +182,14 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
             .collect_vec();
         if !subject_ids.is_empty() {
             let subject_ids = Arc::new(subject_ids);
+            #[cfg(feature = "stats")]
+            let Ok(stats) = transport
+                .get_stats()
+                .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::LowPass))
+            else {
+                // `get_stats` returning an error means the transport is closed
+                return (None, None);
+            };
             return (
                 self.state.interface_enabled.ingress.then(|| {
                     Box::new(LowPassInterceptor::new(
@@ -191,7 +197,7 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         subject_ids.clone(),
                         InterceptorFlow::Ingress,
                         #[cfg(feature = "stats")]
-                        transport.get_stats().unwrap_or_default(),
+                        stats.clone(),
                     )) as IngressInterceptor
                 }),
                 self.state.interface_enabled.egress.then(|| {
@@ -200,7 +206,7 @@ impl InterceptorFactoryTrait for LowPassInterceptorFactory {
                         subject_ids,
                         InterceptorFlow::Egress,
                         #[cfg(feature = "stats")]
-                        transport.get_stats().unwrap_or_default(),
+                        stats.clone(),
                     )) as EgressInterceptor
                 }),
             );
@@ -226,7 +232,7 @@ pub struct LowPassInterceptor {
     // NOTE: memory usage could be optimized by replacing flow with a PhantomData<T>
     flow: InterceptorFlow,
     #[cfg(feature = "stats")]
-    stats: Arc<TransportStats>,
+    stats: zenoh_stats::DropStats,
 }
 
 impl LowPassInterceptor {
@@ -234,7 +240,7 @@ impl LowPassInterceptor {
         inner: Arc<LowPassFilter>,
         subjects: Arc<Vec<usize>>,
         flow: InterceptorFlow,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::DropStats,
     ) -> Self {
         Self {
             inner,
@@ -250,7 +256,7 @@ impl LowPassInterceptor {
         msg: &mut NetworkMessageMut,
         ctx: &dyn InterceptorContext,
         cache: Option<&Cache>,
-    ) -> Result<(), usize> {
+    ) -> bool {
         let payload_size: usize;
         let attachment_size: usize;
         let message_type: LowPassFilterMessage;
@@ -343,10 +349,10 @@ impl LowPassInterceptor {
                 attachment_size = 0;
                 max_allowed_size = cache.map(|c| c.reply);
             }
-            NetworkBodyMut::ResponseFinal(_) => return Ok(()),
-            NetworkBodyMut::Interest(_) => return Ok(()),
-            NetworkBodyMut::Declare(_) => return Ok(()),
-            NetworkBodyMut::OAM(_) => return Ok(()),
+            NetworkBodyMut::ResponseFinal(_) => return true,
+            NetworkBodyMut::Interest(_) => return true,
+            NetworkBodyMut::Declare(_) => return true,
+            NetworkBodyMut::OAM(_) => return true,
         }
         let max_allowed_size = match max_allowed_size {
             Some(v) => v,
@@ -355,10 +361,9 @@ impl LowPassInterceptor {
                 None => 0,
             },
         };
-        match payload_size.checked_add(attachment_size) {
-            Some(msg_size) => (msg_size <= max_allowed_size).then_some(()).ok_or(msg_size),
-            None => Err(usize::MAX),
-        }
+        payload_size
+            .checked_add(attachment_size)
+            .is_some_and(|s| s <= max_allowed_size)
     }
 
     fn get_max_allowed_message_size(
@@ -411,24 +416,13 @@ impl InterceptorTrait for LowPassInterceptor {
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         let cache = ctx.get_cache(msg).and_then(|i| i.downcast_ref::<Cache>());
 
-        match self.message_passes_filters(msg, ctx, cache) {
-            Ok(_) => true,
-            #[allow(unused_variables)] // only used for stats
-            Err(msg_size) => {
-                #[cfg(feature = "stats")]
-                match self.flow {
-                    InterceptorFlow::Egress => {
-                        self.stats.inc_tx_low_pass_dropped_bytes(msg_size);
-                        self.stats.inc_tx_low_pass_dropped_msgs(1);
-                    }
-                    InterceptorFlow::Ingress => {
-                        self.stats.inc_rx_low_pass_dropped_bytes(msg_size);
-                        self.stats.inc_rx_low_pass_dropped_msgs(1);
-                    }
-                }
-                false
-            }
+        let kept = self.message_passes_filters(msg, ctx, cache);
+        #[cfg(feature = "stats")]
+        if !kept {
+            self.stats
+                .observe_network_message_dropped(super::stats_direction(self.flow), msg);
         }
+        kept
     }
 }
 

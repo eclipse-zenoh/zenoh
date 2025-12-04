@@ -22,9 +22,7 @@ use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zerror, zlock, Wait};
 use zenoh_protocol::{
-    network::{
-        NetworkBody, NetworkBodyMut, NetworkMessage, NetworkMessageMut, Push, Request, Response,
-    },
+    network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
     zenoh::{
         err::Err,
         ext::ShmType,
@@ -211,23 +209,23 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     }
 }
 
-pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &ShmReader) -> ZResult<()> {
-    match &mut msg.body {
-        NetworkBody::Push(Push { payload, .. }) => match payload {
+pub fn map_zmsg_to_shmbuf(msg: NetworkMessageMut, shmr: &ShmReader) -> ZResult<()> {
+    match msg.body {
+        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_shmbuf(shmr),
             PushBody::Del(_) => Ok(()),
         },
-        NetworkBody::Request(Request { payload, .. }) => match payload {
+        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shmbuf(shmr),
         },
-        NetworkBody::Response(Response { payload, .. }) => match payload {
+        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
         },
-        NetworkBody::ResponseFinal(_)
-        | NetworkBody::Interest(_)
-        | NetworkBody::Declare(_)
-        | NetworkBody::OAM(_) => Ok(()),
+        NetworkBodyMut::ResponseFinal(_)
+        | NetworkBodyMut::Interest(_)
+        | NetworkBodyMut::Declare(_)
+        | NetworkBodyMut::OAM(_) => Ok(()),
     }
 }
 

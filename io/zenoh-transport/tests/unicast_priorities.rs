@@ -202,14 +202,14 @@ async fn open_transport_unicast(
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     // Create the client transport manager
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
-        .build(Arc::new(SHClient))
+        .build_test(Arc::new(SHClient))
         .unwrap();
 
     // Create the listener on the router

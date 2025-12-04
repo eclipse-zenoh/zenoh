@@ -55,7 +55,7 @@ This repository contains the following elements:
 
 * [Docs.rs for Zenoh](https://docs.rs/zenoh/latest/zenoh/)
 
-* [Docs.rs for Zenoh-ext](https://docs.rs/zenoh/latest/zenoh-ext/)
+* [Docs.rs for Zenoh-ext](https://docs.rs/zenoh-ext/latest/zenoh_ext/)
 
 # Build and run
 

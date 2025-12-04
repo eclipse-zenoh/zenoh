@@ -22,9 +22,6 @@ pub mod manager;
 pub mod multicast;
 pub mod unicast;
 
-#[cfg(feature = "stats")]
-pub use common::stats;
-
 #[cfg(feature = "shared-memory")]
 pub mod shm;
 #[cfg(feature = "shared-memory")]

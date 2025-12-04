@@ -102,6 +102,23 @@ impl<'a> RoutingExpr<'a> {
             None => self.prefix.get_best_key(self.suffix, sid),
         }
     }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn is_admin(&self) -> bool {
+        let admin_prefix = "@/";
+        if self.prefix.parent.is_none() {
+            self.suffix.starts_with(admin_prefix)
+        } else {
+            self.prefix.expr().starts_with(admin_prefix)
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn stats_keys(&self, tree: &zenoh_stats::StatsKeysTree) -> zenoh_stats::StatsKeys {
+        let cache = || Some(&self.resource()?.ctx.as_ref()?.stats_keys);
+        // SAFETY: the tree is always the table's one
+        unsafe { tree.get_keys(cache, || self.key_expr()) }
+    }
 }
 
 pub(crate) struct TablesData {
@@ -122,6 +139,11 @@ pub(crate) struct TablesData {
     pub(crate) interceptors: Vec<InterceptorFactory>,
 
     pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
+
+    #[cfg(feature = "stats")]
+    pub(crate) stats: zenoh_stats::StatsRegistry,
+    #[cfg(feature = "stats")]
+    pub(crate) stats_keys: zenoh_stats::StatsKeysTree,
 
     pub(crate) hats: RegionMap<HatTablesData>,
 }
@@ -156,6 +178,7 @@ impl TablesData {
         hlc: Option<Arc<HLC>>,
         config: &Config,
         hat: RegionMap<HatTablesData>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -163,6 +186,14 @@ impl TablesData {
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
+        #[cfg(feature = "stats")]
+        let mut stats_keys = zenoh_stats::StatsKeysTree::default();
+        #[cfg(feature = "stats")]
+        stats.update_keys(
+            &mut stats_keys,
+            config.stats.filters().iter().map(|f| &*f.key),
+        );
+
         Ok(TablesData {
             zid,
             runtime: None,
@@ -176,6 +207,10 @@ impl TablesData {
             hats: hat,
             face_counter: 0,
             faces: HashMap::default(),
+            #[cfg(feature = "stats")]
+            stats_keys,
+            #[cfg(feature = "stats")]
+            stats,
         })
     }
 
@@ -299,8 +334,16 @@ impl Debug for Tables {
 
 impl TablesLock {
     #[allow(dead_code)]
-    pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
+    pub(crate) fn update_config(&self, config: &Config) -> ZResult<()> {
         let mut tables = zwrite!(self.tables);
+        #[cfg(feature = "stats")]
+        {
+            let tables = &mut *tables;
+            tables.data.stats.update_keys(
+                &mut tables.data.stats_keys,
+                config.stats.filters().iter().map(|k| &*k.key),
+            );
+        }
         tables.data.interceptors = interceptor_factories(config)?;
         drop(tables);
         let tables = zread!(self.tables);
@@ -308,10 +351,9 @@ impl TablesLock {
             .data
             .next_interceptor_version
             .fetch_add(1, Ordering::SeqCst);
-
-        for face in tables.data.faces.values() {
-            face.set_interceptors_from_factories(&tables.data.interceptors, version + 1)
-        }
+        tables.data.faces.values().for_each(|face| {
+            face.set_interceptors_from_factories(&tables.data.interceptors, version + 1);
+        });
         Ok(())
     }
 }

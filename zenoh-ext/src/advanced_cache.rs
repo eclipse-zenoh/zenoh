@@ -258,8 +258,7 @@ impl AdvancedCache {
                                 if range == (Bound::Unbounded, Bound::Unbounded)
                                     || sample
                                         .source_info()
-                                        .source_sn()
-                                        .is_some_and(|sn| range.contains(&sn))
+                                        .is_some_and(|si| range.contains(&si.source_sn()))
                                 {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
                                         (query.parameters().time_range(), sample.timestamp())
@@ -302,8 +301,7 @@ impl AdvancedCache {
                                 if range == (Bound::Unbounded, Bound::Unbounded)
                                     || sample
                                         .source_info()
-                                        .source_sn()
-                                        .is_some_and(|sn| range.contains(&sn))
+                                        .is_some_and(|si| range.contains(&si.source_sn()))
                                 {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
                                         (query.parameters().time_range(), sample.timestamp())

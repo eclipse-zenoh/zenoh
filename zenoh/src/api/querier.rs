@@ -41,8 +41,6 @@ use super::{
     session::{UndeclarableSealed, WeakSession},
     Id,
 };
-#[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
 use crate::{
     api::{
         builders::matching_listener::MatchingListenerBuilder,
@@ -170,7 +168,7 @@ impl<'a> Querier<'a> {
         QuerierGetBuilder {
             querier: self,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             value: None,
             attachment: None,
             parameters: Parameters::empty(),

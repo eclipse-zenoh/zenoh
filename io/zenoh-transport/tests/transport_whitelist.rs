@@ -75,12 +75,12 @@ async fn run(endpoints: &[EndPoint]) {
     let router_manager1: TransportManager = TransportManager::builder()
         .zid(router_id1)
         .protocols(Some(vec![])) // No protocols allowed
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
     let router_manager2: TransportManager = TransportManager::builder()
         .zid(router_id2)
         .protocols(Some(vec![])) // No protocols allowed
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
 
     // Create the listener on the router
@@ -102,7 +102,7 @@ async fn run(endpoints: &[EndPoint]) {
         .protocols(Some(Vec::from_iter(
             endpoints.iter().map(|e| e.protocol().to_string()),
         )))
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
     let router_manager2 = TransportManager::builder()
         .zid(router_id2)
@@ -110,7 +110,7 @@ async fn run(endpoints: &[EndPoint]) {
         .protocols(Some(Vec::from_iter(
             endpoints.iter().map(|e| e.protocol().to_string()),
         )))
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
 
     // Create the listener on the router

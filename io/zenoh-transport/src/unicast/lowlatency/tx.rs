@@ -38,16 +38,12 @@ impl TransportUnicastLowlatency {
 
         #[cfg(feature = "stats")]
         if res.is_ok() {
-            #[cfg(feature = "shared-memory")]
-            if msg.is_shm() {
-                self.stats.tx_n_msgs.inc_shm(1);
-            } else {
-                self.stats.tx_n_msgs.inc_net(1);
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            self.stats.tx_n_msgs.inc_net(1);
+            self.link_stats
+                .get()
+                .unwrap()
+                .tx_observe_network_message_finalize(msg);
         } else {
-            self.stats.inc_tx_n_dropped(1);
+            self.link_stats.get().unwrap().tx_observe_congestion(msg);
         }
 
         res

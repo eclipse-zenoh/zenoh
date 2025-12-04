@@ -22,8 +22,6 @@ use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
 use zenoh_keyexpr::keyexpr;
-#[cfg(feature = "stats")]
-use zenoh_protocol::zenoh::reply::ReplyBody;
 use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
@@ -54,72 +52,6 @@ use crate::{
         router::{get_or_set_route, QueryDirection, RouteBuilder},
     },
 };
-
-#[cfg(feature = "stats")]
-macro_rules! inc_req_stats {
-    (
-        $face:expr,
-        $txrx:ident,
-        $space:ident,
-        $body:expr
-    ) => {
-        paste::paste! {
-            if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::buffer::Buffer;
-                match &$body {
-                    zenoh_protocol::zenoh::RequestBody::Query(q) => {
-                        stats.[<$txrx _z_query_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_query_pl_bytes>].[<inc_ $space>](
-                            q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
-                        );
-                    }
-                }
-            }
-        }
-    };
-}
-
-#[cfg(feature = "stats")]
-macro_rules! inc_res_stats {
-    (
-        $face:expr,
-        $txrx:ident,
-        $space:ident,
-        $body:expr
-    ) => {
-        paste::paste! {
-            if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::buffer::Buffer;
-                match &$body {
-                    ResponseBody::Reply(r) => {
-                        stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
-                        let mut n = 0;
-                        match &r.payload {
-                            ReplyBody::Put(p) => {
-                                if let Some(a) = p.ext_attachment.as_ref() {
-                                   n += a.buffer.len();
-                                }
-                                n += p.payload.len();
-                            }
-                            ReplyBody::Del(d) => {
-                                if let Some(a) = d.ext_attachment.as_ref() {
-                                   n += a.buffer.len();
-                                }
-                            }
-                        }
-                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](n);
-                    }
-                    ResponseBody::Err(e) => {
-                        stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](
-                            e.payload.len()
-                        );
-                    }
-                }
-            }
-        }
-    };
-}
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -339,13 +271,17 @@ impl Face {
                 let expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
                 #[cfg(feature = "stats")]
-                let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
+                let is_admin = expr.is_admin();
                 #[cfg(feature = "stats")]
-                if !admin {
-                    inc_req_stats!(self.state, rx, user, msg.payload)
-                } else {
-                    inc_req_stats!(self.state, rx, admin, msg.payload)
-                }
+                let payload_size = msg.payload_size();
+                #[cfg(feature = "stats")]
+                let stats_keys = expr.stats_keys(&rtables.data.stats_keys);
+                #[cfg(feature = "stats")]
+                zenoh_stats::rx_observe_network_message_finalize(
+                    is_admin,
+                    payload_size,
+                    &stats_keys,
+                );
 
                 let mut query_dirs = RouteBuilder::<QueryDirection>::new();
 
@@ -378,8 +314,9 @@ impl Face {
                     }
                 }
 
-                // NOTE: it's important to drop the query immediatly otherwise a ResponseFinal from a local queryable
-                // won't finalize a query, because `Arc::strong_count(&query)` would always be > 1.
+                // NOTE: it's important to drop the `Arc<Query>` object immediatly otherwise
+                // a ResponseFinal from a local queryable won't finalize the query,
+                // this is because `Arc::strong_count(&query)` would always be > 1.
                 drop(query);
 
                 let timeout = msg
@@ -413,12 +350,7 @@ impl Face {
                             rid,
                             timeout,
                         );
-                        #[cfg(feature = "stats")]
-                        if !admin {
-                            inc_req_stats!(&dir.dst_face, tx, user, msg.payload)
-                        } else {
-                            inc_req_stats!(&dir.dst_face, tx, admin, msg.payload)
-                        }
+
                         tracing::trace!(
                             "{}:{} Propagate query to {}:{}",
                             self.state,
@@ -426,7 +358,8 @@ impl Face {
                             dir.dst_face,
                             rid
                         );
-                        dir.dst_face.primitives.send_request(&mut Request {
+
+                        let msg = &mut Request {
                             id: rid,
                             wire_expr: dir.wire_expr,
                             ext_qos: msg.ext_qos,
@@ -438,7 +371,18 @@ impl Face {
                             ext_budget: msg.ext_budget,
                             ext_timeout: msg.ext_timeout,
                             payload: msg.payload.clone(),
-                        });
+                        };
+
+                        #[cfg(not(feature = "stats"))]
+                        dir.dst_face.primitives.send_request(msg);
+
+                        #[cfg(feature = "stats")]
+                        zenoh_stats::with_tx_observe_network_message(
+                            is_admin,
+                            payload_size,
+                            &stats_keys,
+                            || dir.dst_face.primitives.send_request(msg),
+                        );
                     }
                 }
             }
@@ -690,7 +634,6 @@ fn get_query_route(
     compute_route()
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
@@ -698,13 +641,24 @@ pub(crate) fn route_send_response(
 ) {
     let queries_lock = zread!(tables_ref.queries_lock);
     #[cfg(feature = "stats")]
-    let admin = msg.wire_expr.as_str().starts_with("@/");
+    let tables = zread!(tables_ref.tables);
     #[cfg(feature = "stats")]
-    if !admin {
-        inc_res_stats!(face, rx, user, msg.payload)
-    } else {
-        inc_res_stats!(face, rx, admin, msg.payload)
-    }
+    let (is_admin, stats_keys) =
+        match tables
+            .data
+            .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        {
+            Some(prefix) => {
+                let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
+                let stats_keys = expr.stats_keys(&tables.data.stats_keys);
+                (expr.is_admin(), stats_keys)
+            }
+            None => (false, Default::default()),
+        };
+    #[cfg(feature = "stats")]
+    let payload_size = msg.payload_size();
+    #[cfg(feature = "stats")]
+    zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
 
     match face.pending_queries.get(&msg.rid) {
         Some((query, _)) => {
@@ -719,15 +673,16 @@ pub(crate) fn route_send_response(
 
             drop(queries_lock);
 
-            #[cfg(feature = "stats")]
-            if !admin {
-                inc_res_stats!(query.src_face, tx, user, msg.payload)
-            } else {
-                inc_res_stats!(query.src_face, tx, admin, msg.payload)
-            }
-
             msg.rid = query.src_qid;
+            #[cfg(not(feature = "stats"))]
             query.src_face.primitives.send_response(msg);
+            #[cfg(feature = "stats")]
+            zenoh_stats::with_tx_observe_network_message(
+                is_admin,
+                payload_size,
+                &stats_keys,
+                || query.src_face.primitives.send_response(msg),
+            );
         }
         None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
     }

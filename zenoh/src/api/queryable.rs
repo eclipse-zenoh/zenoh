@@ -33,6 +33,8 @@ use {
 };
 
 #[zenoh_macros::unstable]
+use crate::api::sample::SourceInfo;
+#[zenoh_macros::unstable]
 use crate::api::selector::ZenohParameters;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
@@ -57,6 +59,8 @@ pub(crate) struct QueryInner {
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
+    #[cfg(feature = "unstable")]
+    pub(crate) source_info: Option<SourceInfo>,
     pub(crate) primitives: Arc<dyn Primitives>,
 }
 
@@ -68,6 +72,8 @@ impl QueryInner {
             parameters: Parameters::empty(),
             qid: 0,
             zid: ZenohIdProto::default(),
+            #[cfg(feature = "unstable")]
+            source_info: None,
             primitives: Arc::new(DummyPrimitives),
         }
     }
@@ -270,6 +276,13 @@ impl Query {
         self.attachment.as_mut()
     }
 
+    /// Gets info on the source of this Query.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn source_info(&self) -> Option<&SourceInfo> {
+        self.inner.source_info.as_ref()
+    }
+
     /// Sends a reply in the form of [`Sample`] to this Query.
     ///
     /// This api is for internal use only.
@@ -461,7 +474,7 @@ impl Query {
         #[cfg(not(feature = "unstable"))]
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
-        let ext_sinfo = sample.source_info.into();
+        let ext_sinfo = sample.source_info.map(Into::into);
         self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
             wire_expr: WireExpr {

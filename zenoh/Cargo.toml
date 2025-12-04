@@ -58,7 +58,7 @@ shared-memory = [
   "zenoh-shm",
   "zenoh-transport/shared-memory",
 ]
-stats = ["zenoh-transport/stats"]
+stats = ["zenoh-stats", "zenoh-transport/stats"]
 tracing-instrument = [
   "zenoh-runtime/tracing-instrument",
   "zenoh-task/tracing-instrument",
@@ -95,9 +95,9 @@ hashbrown = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
+lz4_flex = { workspace = true }
 nonempty-collections = { workspace = true }
 once_cell = { workspace = true }
-paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
@@ -124,6 +124,7 @@ zenoh-protocol = { workspace = true, features = ["std"] }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
+zenoh-stats = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-transport = { workspace = true }
