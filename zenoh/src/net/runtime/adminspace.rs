@@ -76,9 +76,8 @@ pub struct AdminSpace {
     queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
-    // key is full key expression (root_key/key[/glob]), value is (handler, glob_len)
-    // glob_len is the length of the glob suffix including the '/' separator
-    // to pass only the prefix to the handler
+    /// Array of (handler, prefix_len) indexed by key expression prefix[/glob]
+    /// where prefix is the key expression @/{zid}/{whatami}/adminspace_key and glob is `**` or `*`
     handlers: HashMap<OwnedKeyExpr, (Handler, usize)>,
     context: Arc<AdminContext>,
 }
@@ -177,17 +176,18 @@ impl AdminSpace {
             ($key:expr, $glob:expr, $handler:expr) => {{
                 let key_expr = keyexpr::new($key).unwrap();
                 let glob_expr = keyexpr::new($glob).unwrap();
-                let full_key = &root_key / key_expr / glob_expr;
-                let glob_len = $glob.len() + 1; // +1 for the '/' separator
-                handlers.insert(full_key, (Arc::new($handler), glob_len));
+                let prefix = &root_key / key_expr;
+                let full_key = &prefix / glob_expr;
+                handlers.insert(full_key, (Arc::new($handler), prefix.as_str().len()));
             }};
             ($key:expr, $handler:expr) => {{
                 let key_expr = keyexpr::new($key).unwrap();
                 let full_key = &root_key / key_expr;
-                handlers.insert(full_key, (Arc::new($handler), 0));
+                let full_key_len = full_key.as_str().len();
+                handlers.insert(full_key, (Arc::new($handler), full_key_len));
             }};
             ($handler:expr) => {{
-                handlers.insert(root_key.clone(), (Arc::new($handler), 0));
+                handlers.insert(root_key.clone(), (Arc::new($handler), root_key.as_str().len()));
             }};
         }
 
@@ -479,10 +479,9 @@ impl Primitives for AdminSpace {
                     attachment: query.ext_attachment.take().map(Into::into),
                 };
 
-                for (full_key, (handler, glob_len)) in &self.handlers {
+                for (full_key, (handler, prefix_len)) in &self.handlers {
                     if key_expr.intersects(full_key) {
-                        // Extract prefix by removing the glob suffix
-                        let prefix_str = &full_key.as_str()[..full_key.as_str().len() - glob_len];
+                        let prefix_str = &key_expr.as_str()[..*prefix_len];
                         let prefix = keyexpr::new(prefix_str).unwrap();
                         handler(prefix, &self.context, query.clone());
                     }
