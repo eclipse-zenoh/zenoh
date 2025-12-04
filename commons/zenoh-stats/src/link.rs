@@ -23,7 +23,6 @@ scoped_thread_local! {
 }
 thread_local! {
     static RX_LINK_LEVEL_INFO: Cell<Option<LinkLevelInfo>> = const { Cell::new(None) };
-
     static TX_ROUTER_LEVEL_INFO: Cell<Option<RouterLevelInfo>> = const { Cell::new(None) };
 }
 
@@ -41,7 +40,7 @@ pub fn with_tx_observe_network_message<R>(
 }
 
 pub fn rx_observe_network_message_finalize(is_admin: bool, payload_size: usize, keys: &StatsKeys) {
-    if let Some(l_info) = RX_LINK_LEVEL_INFO.get() {
+    if let Some(l_info) = RX_LINK_LEVEL_INFO.take() {
         let r_info = RouterLevelInfo::new(is_admin, payload_size, keys);
         RX_LINK.with(|stats| {
             stats.observe_network_message_payload(Rx, l_info, r_info);
