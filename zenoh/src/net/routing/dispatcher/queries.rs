@@ -314,7 +314,7 @@ impl Face {
                     }
                 }
 
-                // NOTE: it's important to drop the `Arc<Query>` object immediatly otherwise
+                // NOTE: it's important to drop the `Arc<Query>` object immediately otherwise
                 // a ResponseFinal from a local queryable won't finalize the query,
                 // this is because `Arc::strong_count(&query)` would always be > 1.
                 drop(query);

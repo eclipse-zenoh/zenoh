@@ -31,6 +31,8 @@ use crate::net::routing::{
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
+#[allow(unused_imports)]
+use crate::zenoh_core::polyfill::*;
 
 impl Hat {
     #[inline]

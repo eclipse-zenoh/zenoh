@@ -125,7 +125,7 @@ impl HatInterestTrait for Hat {
                     || (f.whatami == WhatAmI::Peer
                         && msg.options.tokens()
                         && msg.mode == InterestMode::Current
-                        // REVIEW(regions): is this necessary? (we don't do intial interest with gateways)
+                        // REVIEW(regions): is this necessary? (we don't do initial interest with gateways)
                         && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
             })
             .cloned()
