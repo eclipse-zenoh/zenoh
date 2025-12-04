@@ -88,6 +88,7 @@ arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 const_format = { workspace = true }
+flate2 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
