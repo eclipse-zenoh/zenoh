@@ -7,11 +7,14 @@ use std::{
 };
 
 use prometheus_client::{
-    encoding::{EncodeMetric, MetricEncoder, NoLabelSet},
+    encoding::{EncodeLabelSet, MetricEncoder, NoLabelSet},
     metrics::{family::MetricConstructor, MetricType, TypedMetric},
 };
 
-use crate::family::TransportMetric;
+use crate::{
+    family::TransportMetric,
+    keys::{HistogramPerKey, StatsKeysRegistry},
+};
 
 pub const PAYLOAD_SIZE_BUCKETS: HistogramBuckets =
     HistogramBuckets(&[0, 1 << 5, 1 << 10, 1 << 15, 1 << 20, 1 << 25, 1 << 30]);
@@ -22,6 +25,12 @@ pub struct HistogramBuckets(pub &'static [u64]);
 impl MetricConstructor<Histogram> for HistogramBuckets {
     fn new_metric(&self) -> Histogram {
         Histogram::new(self.clone())
+    }
+}
+
+impl MetricConstructor<HistogramPerKey> for (HistogramBuckets, StatsKeysRegistry) {
+    fn new_metric(&self) -> HistogramPerKey {
+        HistogramPerKey::new(self.0.clone(), self.1.clone())
     }
 }
 
@@ -46,9 +55,7 @@ impl Histogram {
     pub fn new(buckets: HistogramBuckets) -> Self {
         Self(Arc::new(HistogramInner {
             sum: AtomicU64::new(0),
-            buckets: buckets
-                .0
-                .iter()
+            buckets: (buckets.0.iter())
                 .chain([&u64::MAX])
                 .map(|b| (*b, AtomicU64::new(0)))
                 .collect(),
@@ -98,18 +105,13 @@ impl TransportMetric for Histogram {
         }
     }
 
-    fn encode(mut encoder: MetricEncoder, collected: &Self::Collected) -> fmt::Result {
-        let (sum, count, buckets) = collected;
-        encoder.encode_histogram::<NoLabelSet>(*sum, *count, buckets, None)
-    }
-}
-
-impl EncodeMetric for Histogram {
-    fn encode(&self, encoder: MetricEncoder) -> Result<(), fmt::Error> {
-        <Self as TransportMetric>::encode(encoder, &self.collect())
-    }
-
-    fn metric_type(&self) -> MetricType {
-        Self::TYPE
+    fn encode(
+        encoder: &mut MetricEncoder,
+        labels: &impl EncodeLabelSet,
+        (sum, count, buckets): &Self::Collected,
+    ) -> fmt::Result {
+        encoder
+            .encode_family(labels)?
+            .encode_histogram::<NoLabelSet>(*sum, *count, buckets, None)
     }
 }

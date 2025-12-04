@@ -449,10 +449,21 @@ impl RuntimeBuilder {
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
+
+        #[cfg(feature = "stats")]
+        let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
+
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
+        let router = Arc::new(Router::new(
+            zid,
+            whatami,
+            hlc.clone(),
+            &config,
+            #[cfg(feature = "stats")]
+            stats.clone(),
+        )?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -467,9 +478,6 @@ impl RuntimeBuilder {
         #[cfg(feature = "shared-memory")]
         let transport_manager_builder =
             transport_manager_builder.shm_reader(shm_clients.map(ShmReader::new));
-
-        #[cfg(feature = "stats")]
-        let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
 
         let transport_manager = transport_manager_builder.build(
             handler.clone(),
