@@ -88,6 +88,7 @@ async-global-executor = "3.1.0"
 async-io = "2.6.0"
 async-std = { version = "1.13.2", features = ["tokio1"] }
 async-trait = "0.1.89"
+axum = "0.8.4"
 base64 = "0.22.1"
 bincode = "1.3.3"
 buddy_system_allocator = "=0.10.0" # Fixed at 0.10.0 to be compatible with Rust 1.75
@@ -112,7 +113,6 @@ hashbrown = "0.16.0"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
 home = "0.5.9"
-http-types = "2.12.0"
 humantime = "2.3.0"
 itertools = "0.14.0"
 json5 = "0.4.1"
@@ -123,6 +123,7 @@ leb128 = "0.2"
 libc = "0.2.175"
 libloading = "0.8.9"
 lz4_flex = "0.11.3"
+mime = "0.3.17"
 nix = { version = "0.29.0", features = ["fs"] }
 nonempty-collections = { version = "0.3.1", features = ["serde"] }
 num-traits = { version = "0.2.19", default-features = false }
@@ -176,13 +177,14 @@ stop-token = "0.7.0"
 syn = "2.0.110"
 talc = { version = "4.4.3", default-features = false }
 test-case = "3.3.1"
-tide = "0.16.0"
 time = "0.3.41"
 token-cell = { version = "2.0.0", default-features = false }
 tokio = { version = "1.47.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-rustls = { version = "0.26.2", default-features = false }
 tokio-tungstenite = "0.24.0"
 tokio-util = "0.7.16"
+tower = "0.5.2"
+tower-http = "0.6.6"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)

@@ -27,6 +27,8 @@ version = { workspace = true }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+axum = "=0.8.4"
+axum-core = "=0.5.2"
 base64ct = "=1.6.0"
 derive_more = { version = "=2.0.1", features = ["as_ref"] }
 generic-array = "=0.14.7"
@@ -59,6 +61,8 @@ zerofrom = "=0.1.5"
 
 [package.metadata.cargo-machete]
 ignored = [
+  "axum",
+  "axum-core",
   "base64ct",
   "derive_more",
   "generic-array",
