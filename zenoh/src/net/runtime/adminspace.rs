@@ -13,6 +13,7 @@
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
+    io::Write,
     mem,
     sync::{Arc, Mutex},
 };
@@ -703,7 +704,7 @@ fn metrics(context: &AdminContext, query: Query) {
     .try_into()
     .unwrap();
     #[cfg(not(feature = "stats"))]
-    let metrics = format!(
+    let mut metrics = format!(
         concat!(
             "# HELP zenoh_build Zenoh build version.\n",
             "# TYPE zenoh_build info\n",
@@ -728,7 +729,6 @@ fn metrics(context: &AdminContext, query: Query) {
             query.parameters().get("per_key") != Some("false"),
         )
         .expect("metrics should be encodable");
-    #[cfg(feature = "stats")]
     if query.parameters().get("descriptors") == Some("false") {
         metrics = metrics
             .split_inclusive("\n")
@@ -736,24 +736,15 @@ fn metrics(context: &AdminContext, query: Query) {
             .chain(["# EOF\n"])
             .collect();
     }
-    #[cfg(feature = "stats")]
-    if query.parameters().get("buckets") == Some("false") {
-        metrics = metrics
-            .split_inclusive("\n")
-            .filter(|l| !l.split('{').next().is_some_and(|n| n.ends_with("_bucket")))
-            .collect();
-    }
-    #[allow(unused_mut)]
     let mut metrics = metrics.into_bytes();
-    #[cfg(feature = "stats")]
-    if query.parameters().get("compress") == Some("lz4") {
-        metrics = lz4_flex::compress(&metrics);
+    let mut encoding = METRICS_ENCODING.to_string();
+    if query.parameters().get("compression") != Some("false") {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        encoder.write_all(&metrics).unwrap();
+        metrics = encoder.finish().unwrap();
+        encoding.push_str(";content-encoding=gzip");
     }
-    if let Err(e) = query
-        .reply(reply_key, metrics)
-        .encoding(METRICS_ENCODING)
-        .wait()
-    {
+    if let Err(e) = query.reply(reply_key, metrics).encoding(encoding).wait() {
         tracing::error!("Error sending AdminSpace reply: {:?}", e);
     }
 }
