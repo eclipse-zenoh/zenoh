@@ -15,17 +15,18 @@
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 
 #[cfg(feature = "unstable")]
+use zenoh_config::{wrappers::ZenohId, WhatAmI};
+#[cfg(feature = "unstable")]
 use zenoh_core::{Resolve, ResolveClosure};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Locator;
 
 use crate::{
-    api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, LinksBuilder, TransportsBuilder, ZenohIdBuilder},
+    api::builders::info::{
+        LinksBuilder, PeersZenohIdBuilder, RoutersZenohIdBuilder, TransportsBuilder, ZenohIdBuilder,
+    },
     net::runtime::DynamicRuntime,
 };
-
-#[cfg(feature = "unstable")]
-use zenoh_config::{wrappers::ZenohId, WhatAmI};
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
 ///

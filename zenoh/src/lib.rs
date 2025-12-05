@@ -388,6 +388,11 @@ pub mod session {
 
     #[zenoh_macros::internal]
     pub use crate::api::builders::session::{init, InitBuilder};
+    #[zenoh_macros::unstable]
+    pub use crate::api::{
+        builders::info::{LinksBuilder, TransportsBuilder},
+        info::{Link, Transport},
+    };
     pub use crate::api::{
         builders::{
             close::CloseBuilder,
@@ -398,12 +403,6 @@ pub mod session {
         },
         info::SessionInfo,
         session::{open, Session, SessionClosedError, Undeclarable},
-    };
-
-    #[zenoh_macros::unstable]
-    pub use crate::api::{
-        builders::info::{LinksBuilder, TransportsBuilder},
-        info::{Link, Transport},
     };
 }
 

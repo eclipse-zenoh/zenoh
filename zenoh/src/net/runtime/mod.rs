@@ -40,7 +40,7 @@ use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
-use zenoh_link::{EndPoint};
+use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
     core::{Locator, WhatAmI, ZenohIdProto},
@@ -259,14 +259,12 @@ impl IRuntime for RuntimeState {
                 .block_in_place(self.manager.get_transports_unicast())
                 .into_iter()
                 .filter_map(|t| {
-                    t.get_zid()
-                        .ok()
-                        .and_then(|zid| {
-                            t.get_whatami().ok().map(|whatami| Transport {
-                                zid: zid.into(),
-                                whatami,
-                            })
+                    t.get_zid().ok().and_then(|zid| {
+                        t.get_whatami().ok().map(|whatami| Transport {
+                            zid: zid.into(),
+                            whatami,
                         })
+                    })
                 }),
         )
     }

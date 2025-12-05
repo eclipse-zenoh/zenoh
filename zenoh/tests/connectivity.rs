@@ -120,11 +120,7 @@ mod tests {
             println!("Link from session1: {} -> {}", link.src, link.dst);
 
             // Source and destination should not be empty
-            assert_ne!(
-                link.src.to_string(),
-                "",
-                "Link source should not be empty"
-            );
+            assert_ne!(link.src.to_string(), "", "Link source should not be empty");
             assert_ne!(
                 link.dst.to_string(),
                 "",
@@ -173,7 +169,10 @@ mod tests {
             println!("Transport {}: zid={}", count, transport.zid);
             count += 1;
         }
-        assert!(count > 0, "Should have iterated over at least one transport");
+        assert!(
+            count > 0,
+            "Should have iterated over at least one transport"
+        );
 
         // Test using for loop
         let mut link_count = 0;
@@ -181,7 +180,10 @@ mod tests {
             println!("Link {}: {} -> {}", link_count, link.src, link.dst);
             link_count += 1;
         }
-        assert!(link_count > 0, "Should have iterated over at least one link");
+        assert!(
+            link_count > 0,
+            "Should have iterated over at least one link"
+        );
 
         session1.close().await.unwrap();
         session2.close().await.unwrap();
