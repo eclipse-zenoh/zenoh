@@ -59,12 +59,13 @@ mod tests {
         for transport in &transports {
             println!(
                 "Transport from session1: zid={}, whatami={:?}",
-                transport.zid, transport.whatami
+                transport.zid(),
+                transport.whatami()
             );
 
             // ZID should not be empty
             assert_ne!(
-                transport.zid.to_string(),
+                transport.zid().to_string(),
                 "",
                 "Transport ZID should not be empty"
             );
@@ -117,12 +118,16 @@ mod tests {
 
         // Verify link fields are populated
         for link in &links {
-            println!("Link from session1: {} -> {}", link.src, link.dst);
+            println!("Link from session1: {} -> {}", link.src(), link.dst());
 
             // Source and destination should not be empty
-            assert_ne!(link.src.to_string(), "", "Link source should not be empty");
             assert_ne!(
-                link.dst.to_string(),
+                link.src().to_string(),
+                "",
+                "Link source should not be empty"
+            );
+            assert_ne!(
+                link.dst().to_string(),
                 "",
                 "Link destination should not be empty"
             );
@@ -166,7 +171,7 @@ mod tests {
 
         let mut count = 0;
         for transport in session1.info().transports().await {
-            println!("Transport {}: zid={}", count, transport.zid);
+            println!("Transport {}: zid={}", count, transport.zid());
             count += 1;
         }
         assert!(
@@ -177,7 +182,7 @@ mod tests {
         // Test using for loop
         let mut link_count = 0;
         for link in session1.info().links().await {
-            println!("Link {}: {} -> {}", link_count, link.src, link.dst);
+            println!("Link {}: {} -> {}", link_count, link.src(), link.dst());
             link_count += 1;
         }
         assert!(

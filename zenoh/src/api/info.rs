@@ -114,15 +114,13 @@ impl SessionInfo {
     /// Return information about transports this session is connected to.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut transports = session.info().transports().await;
     /// while let Some(transport) = transports.next() {
-    ///     println!("Transport: zid={}, whatami={:?}", transport.zid, transport.whatami);
+    ///     println!("Transport: zid={}, whatami={:?}", transport.zid(), transport.whatami());
     /// }
     /// # }
     /// ```
@@ -134,15 +132,13 @@ impl SessionInfo {
     /// Return information about links across all transports.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
-    /// use zenoh::prelude::*;
-    ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let mut links = session.info().links().await;
     /// while let Some(link) = links.next() {
-    ///     println!("Link: {} -> {}", link.src, link.dst);
+    ///     println!("Link: {} -> {}", link.src(), link.dst());
     /// }
     /// # }
     /// ```
@@ -157,10 +153,23 @@ impl SessionInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Transport {
-    /// The ZenohId of the remote zenoh node
-    pub zid: ZenohId,
-    /// The type of the remote zenoh node (Router, Peer, or Client)
-    pub whatami: WhatAmI,
+    pub(crate) zid: ZenohId,
+    pub(crate) whatami: WhatAmI,
+}
+
+#[zenoh_macros::unstable]
+impl Transport {
+    /// Gets the ZenohId of the remote zenoh node.
+    #[inline]
+    pub fn zid(&self) -> &ZenohId {
+        &self.zid
+    }
+
+    /// Gets the type of the remote zenoh node (Router, Peer, or Client).
+    #[inline]
+    pub fn whatami(&self) -> WhatAmI {
+        self.whatami
+    }
 }
 
 /// Represents a physical link within a transport.
@@ -168,8 +177,21 @@ pub struct Transport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Link {
-    /// Source locator (local endpoint)
-    pub src: Locator,
-    /// Destination locator (remote endpoint)
-    pub dst: Locator,
+    pub(crate) src: Locator,
+    pub(crate) dst: Locator,
+}
+
+#[zenoh_macros::unstable]
+impl Link {
+    /// Gets the source locator (local endpoint).
+    #[inline]
+    pub fn src(&self) -> &Locator {
+        &self.src
+    }
+
+    /// Gets the destination locator (remote endpoint).
+    #[inline]
+    pub fn dst(&self) -> &Locator {
+        &self.dst
+    }
 }
