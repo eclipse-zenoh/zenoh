@@ -193,4 +193,217 @@ mod tests {
         session1.close().await.unwrap();
         session2.close().await.unwrap();
     }
+
+    /// Test that transport_events() delivers events when transports open and close
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17450".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Subscribe to transport events with history
+        let events = session1
+            .info()
+            .transport_events()
+            .history(true)
+            .with(flume::bounded(32))
+            .await;
+
+        // Create second peer that connects to first
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17450".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection to establish
+        tokio::time::sleep(SLEEP).await;
+
+        // Should receive transport opened event with SampleKind::Put
+        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
+            .await
+            .expect("Timeout waiting for transport event")
+            .expect("Channel closed");
+
+        assert!(event.is_open(), "Event should be an 'open' event");
+        assert_eq!(
+            event.kind(),
+            zenoh::sample::SampleKind::Put,
+            "Event kind should be Put for opened transport"
+        );
+        println!("Transport opened: {}", event.transport().zid());
+
+        // Close session2 to trigger transport close event
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // Should receive transport closed event with SampleKind::Delete
+        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
+            .await
+            .expect("Timeout waiting for transport close event")
+            .expect("Channel closed");
+
+        assert!(event.is_closed(), "Event should be a 'closed' event");
+        assert_eq!(
+            event.kind(),
+            zenoh::sample::SampleKind::Delete,
+            "Event kind should be Delete for closed transport"
+        );
+        println!("Transport closed");
+
+        session1.close().await.unwrap();
+    }
+
+    /// Test that link_events() delivers events when links are added and removed
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_link_events() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17451".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Subscribe to link events with history
+        let events = session1
+            .info()
+            .link_events()
+            .history(true)
+            .with(flume::bounded(32))
+            .await;
+
+        // Create second peer that connects to first
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17451".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection to establish
+        tokio::time::sleep(SLEEP).await;
+
+        // Should receive link added event with SampleKind::Put
+        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
+            .await
+            .expect("Timeout waiting for link event")
+            .expect("Channel closed");
+
+        assert!(event.is_added(), "Event should be an 'added' event");
+        assert_eq!(
+            event.kind(),
+            zenoh::sample::SampleKind::Put,
+            "Event kind should be Put for added link"
+        );
+        println!(
+            "Link added: {} -> {} (transport: {})",
+            event.link().src(),
+            event.link().dst(),
+            event.transport_zid()
+        );
+
+        // Close session2 to trigger link removal event
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // Should receive link removed event with SampleKind::Delete
+        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
+            .await
+            .expect("Timeout waiting for link removal event")
+            .expect("Channel closed");
+
+        assert!(event.is_removed(), "Event should be a 'removed' event");
+        assert_eq!(
+            event.kind(),
+            zenoh::sample::SampleKind::Delete,
+            "Event kind should be Delete for removed link"
+        );
+        println!("Link removed");
+
+        session1.close().await.unwrap();
+    }
+
+    /// Test that event history works correctly - sends existing transports/links as Put events
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_event_history() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17452".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Create second peer that connects to first
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17452".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection to establish
+        tokio::time::sleep(SLEEP).await;
+
+        // Subscribe to transport events WITH history - should get existing transport
+        let transport_events = session1
+            .info()
+            .transport_events()
+            .history(true)
+            .with(flume::bounded(32))
+            .await;
+
+        // Should immediately receive event for existing transport
+        let event = tokio::time::timeout(Duration::from_secs(5), transport_events.recv_async())
+            .await
+            .expect("Timeout waiting for history transport event")
+            .expect("Channel closed");
+
+        assert!(event.is_open(), "History event should be Put (opened)");
+        println!("History: Transport {}", event.transport().zid());
+
+        // Subscribe to link events WITH history - should get existing link
+        let link_events = session1
+            .info()
+            .link_events()
+            .history(true)
+            .with(flume::bounded(32))
+            .await;
+
+        // Should immediately receive event for existing link
+        let event = tokio::time::timeout(Duration::from_secs(5), link_events.recv_async())
+            .await
+            .expect("Timeout waiting for history link event")
+            .expect("Channel closed");
+
+        assert!(event.is_added(), "History event should be Put (added)");
+        println!("History: Link {} -> {}", event.link().src(), event.link().dst());
+
+        session1.close().await.unwrap();
+        session2.close().await.unwrap();
+    }
 }

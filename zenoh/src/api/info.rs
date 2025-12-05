@@ -27,6 +27,13 @@ use crate::{
     },
     net::runtime::DynamicRuntime,
 };
+
+#[cfg(feature = "unstable")]
+use crate::api::{
+    builders::info::{LinkEventsBuilder, TransportEventsBuilder},
+    handlers::{CallbackParameter, DefaultHandler},
+    sample::SampleKind,
+};
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
 ///
@@ -146,6 +153,63 @@ impl SessionInfo {
     pub fn links(&self) -> LinksBuilder<'_> {
         LinksBuilder::new(&self.runtime)
     }
+
+    /// Subscribe to transport lifecycle events.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let events = session.info()
+    ///     .transport_events()
+    ///     .history(true)
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    ///
+    /// while let Ok(event) = events.recv_async().await {
+    ///     match event.kind() {
+    ///         SampleKind::Put => println!("Transport opened: {}", event.transport().zid()),
+    ///         SampleKind::Delete => println!("Transport closed"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn transport_events(&self) -> TransportEventsBuilder<'_, DefaultHandler> {
+        TransportEventsBuilder::new(&self.runtime)
+    }
+
+    /// Subscribe to link lifecycle events.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let events = session.info()
+    ///     .link_events()
+    ///     .history(true)
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    ///
+    /// while let Ok(event) = events.recv_async().await {
+    ///     match event.kind() {
+    ///         SampleKind::Put => println!("Link added: {} -> {}",
+    ///             event.link().src(), event.link().dst()),
+    ///         SampleKind::Delete => println!("Link removed"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn link_events(&self) -> LinkEventsBuilder<'_, DefaultHandler> {
+        LinkEventsBuilder::new(&self.runtime)
+    }
 }
 
 /// Represents a transport connection to a remote zenoh node.
@@ -193,5 +257,89 @@ impl Link {
     #[inline]
     pub fn dst(&self) -> &Locator {
         &self.dst
+    }
+}
+
+/// Event emitted when a transport is opened or closed
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransportEvent {
+    pub(crate) kind: SampleKind,  // Put = opened, Delete = closed
+    pub(crate) transport: Transport,
+}
+
+#[zenoh_macros::unstable]
+impl TransportEvent {
+    /// Returns the kind of event (Put for opened, Delete for closed)
+    pub fn kind(&self) -> SampleKind {
+        self.kind
+    }
+
+    /// Returns a reference to the transport
+    pub fn transport(&self) -> &Transport {
+        &self.transport
+    }
+
+    /// Returns true if this is an "opened" event
+    pub fn is_open(&self) -> bool {
+        self.kind == SampleKind::Put
+    }
+
+    /// Returns true if this is a "closed" event
+    pub fn is_closed(&self) -> bool {
+        self.kind == SampleKind::Delete
+    }
+}
+
+#[zenoh_macros::unstable]
+impl CallbackParameter for TransportEvent {
+    type Message<'a> = Self;
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
+
+/// Event emitted when a link is added or removed
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkEvent {
+    pub(crate) kind: SampleKind,  // Put = added, Delete = removed
+    pub(crate) link: Link,
+    pub(crate) transport_zid: ZenohId,
+}
+
+#[zenoh_macros::unstable]
+impl LinkEvent {
+    /// Returns the kind of event (Put for added, Delete for removed)
+    pub fn kind(&self) -> SampleKind {
+        self.kind
+    }
+
+    /// Returns a reference to the link
+    pub fn link(&self) -> &Link {
+        &self.link
+    }
+
+    /// Returns the ZenohId of the transport this link belongs to
+    pub fn transport_zid(&self) -> &ZenohId {
+        &self.transport_zid
+    }
+
+    /// Returns true if this is an "added" event
+    pub fn is_added(&self) -> bool {
+        self.kind == SampleKind::Put
+    }
+
+    /// Returns true if this is a "removed" event
+    pub fn is_removed(&self) -> bool {
+        self.kind == SampleKind::Delete
+    }
+}
+
+#[zenoh_macros::unstable]
+impl CallbackParameter for LinkEvent {
+    type Message<'a> = Self;
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
     }
 }
