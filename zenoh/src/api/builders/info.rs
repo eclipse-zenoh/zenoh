@@ -155,12 +155,12 @@ impl IntoFuture for PeersZenohIdBuilder<'_> {
 /// access to information about transports this session is connected to.
 ///
 /// # Examples
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let mut transports = session.info().transports().await;
-/// while let Some(transport) = transports.next() {
+/// let transports = session.info().transports().await;
+/// for transport in transports {
 ///     println!("Transport: zid={}, whatami={:?}", transport.zid(), transport.whatami());
 /// }
 /// # }
@@ -204,12 +204,12 @@ impl IntoFuture for TransportsBuilder<'_> {
 /// access to information about links across all transports.
 ///
 /// # Examples
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let mut links = session.info().links().await;
-/// while let Some(link) = links.next() {
+/// let links = session.info().links().await;
+/// for link in links {
 ///     println!("Link: {} -> {}", link.src(), link.dst());
 /// }
 /// # }
