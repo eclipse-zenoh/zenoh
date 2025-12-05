@@ -20,6 +20,9 @@ use zenoh_protocol::core::WhatAmI;
 
 use crate::net::runtime::DynamicRuntime;
 
+#[cfg(feature = "unstable")]
+use crate::api::info::{Link, Transport};
+
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows
 /// access to the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
 ///
@@ -141,6 +144,108 @@ impl Wait for PeersZenohIdBuilder<'_> {
 }
 
 impl IntoFuture for PeersZenohIdBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder returned by [`SessionInfo::transports()`](crate::session::SessionInfo::transports) that allows
+/// access to information about transports this session is connected to.
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let mut transports = session.info().transports().await;
+/// while let Some(transport) = transports.next() {
+///     println!("Transport: zid={}, whatami={:?}", transport.zid, transport.whatami);
+/// }
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[zenoh_macros::unstable]
+pub struct TransportsBuilder<'a> {
+    runtime: &'a DynamicRuntime,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> TransportsBuilder<'a> {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+        Self { runtime }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for TransportsBuilder<'_> {
+    type To = Box<dyn Iterator<Item = Transport> + Send + Sync>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for TransportsBuilder<'_> {
+    fn wait(self) -> Self::To {
+        self.runtime.get_transports()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for TransportsBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
+/// access to information about links across all transports.
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let mut links = session.info().links().await;
+/// while let Some(link) = links.next() {
+///     println!("Link: {} -> {}", link.src, link.dst);
+/// }
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[zenoh_macros::unstable]
+pub struct LinksBuilder<'a> {
+    runtime: &'a DynamicRuntime,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> LinksBuilder<'a> {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+        Self { runtime }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for LinksBuilder<'_> {
+    type To = Box<dyn Iterator<Item = Link> + Send + Sync>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for LinksBuilder<'_> {
+    fn wait(self) -> Self::To {
+        self.runtime.get_links()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for LinksBuilder<'_> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

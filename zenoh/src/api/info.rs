@@ -20,9 +20,12 @@ use zenoh_core::{Resolve, ResolveClosure};
 use zenoh_protocol::core::Locator;
 
 use crate::{
-    api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
+    api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, LinksBuilder, TransportsBuilder, ZenohIdBuilder},
     net::runtime::DynamicRuntime,
 };
+
+#[cfg(feature = "unstable")]
+use zenoh_config::{wrappers::ZenohId, WhatAmI};
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
 ///
@@ -106,4 +109,66 @@ impl SessionInfo {
     pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
         ResolveClosure::new(|| self.runtime.get_locators())
     }
+
+    /// Return information about transports this session is connected to.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let mut transports = session.info().transports().await;
+    /// while let Some(transport) = transports.next() {
+    ///     println!("Transport: zid={}, whatami={:?}", transport.zid, transport.whatami);
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn transports(&self) -> TransportsBuilder<'_> {
+        TransportsBuilder::new(&self.runtime)
+    }
+
+    /// Return information about links across all transports.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let mut links = session.info().links().await;
+    /// while let Some(link) = links.next() {
+    ///     println!("Link: {} -> {}", link.src, link.dst);
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn links(&self) -> LinksBuilder<'_> {
+        LinksBuilder::new(&self.runtime)
+    }
+}
+
+/// Represents a transport connection to a remote zenoh node.
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "unstable", derive(serde::Serialize))]
+pub struct Transport {
+    /// The ZenohId of the remote zenoh node
+    pub zid: ZenohId,
+    /// The type of the remote zenoh node (Router, Peer, or Client)
+    pub whatami: WhatAmI,
+}
+
+/// Represents a physical link within a transport.
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "unstable", derive(serde::Serialize))]
+pub struct Link {
+    /// Source locator (local endpoint)
+    pub src: Locator,
+    /// Destination locator (remote endpoint)
+    pub dst: Locator,
 }

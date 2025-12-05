@@ -399,6 +399,12 @@ pub mod session {
         info::SessionInfo,
         session::{open, Session, SessionClosedError, Undeclarable},
     };
+
+    #[zenoh_macros::unstable]
+    pub use crate::api::{
+        builders::info::{LinksBuilder, TransportsBuilder},
+        info::{Link, Transport},
+    };
 }
 
 /// # Sample primitives
