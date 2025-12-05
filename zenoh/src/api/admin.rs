@@ -225,21 +225,9 @@ impl Handler {
                     #[cfg(feature = "unstable")]
                     Reliability::Reliable,
                 );
-
-                // Broadcast transport event to user callbacks
-                #[cfg(feature = "unstable")]
-                {
-                    use crate::api::sample::SampleKind;
-                    self.session.runtime.broadcast_transport_event(SampleKind::Put, &peer);
-                }
-
                 Ok(Arc::new(PeerHandler {
                     expr: wire_expr,
                     session: self.session.clone(),
-                    #[cfg(feature = "unstable")]
-                    peer: peer.clone(),
-                    #[cfg(feature = "unstable")]
-                    peer_zid: peer.zid,
                 }))
             } else {
                 bail!("Unable to build keyexpr from zid")
@@ -268,10 +256,6 @@ impl TransportMulticastEventHandler for Handler {
 pub(crate) struct PeerHandler {
     pub(crate) expr: WireExpr<'static>,
     pub(crate) session: WeakSession,
-    #[cfg(feature = "unstable")]
-    pub(crate) peer: zenoh_transport::TransportPeer,
-    #[cfg(feature = "unstable")]
-    pub(crate) peer_zid: zenoh_protocol::core::ZenohIdProto,
 }
 
 impl PeerHandler {
@@ -318,12 +302,6 @@ impl TransportPeerEventHandler for PeerHandler {
             Some(Encoding::APPLICATION_JSON),
             Some(serde_json::to_vec(&link).unwrap().into()),
         );
-
-        // Broadcast link event to user callbacks
-        #[cfg(feature = "unstable")]
-        {
-            self.session.runtime.broadcast_link_event(SampleKind::Put, self.peer_zid, &link);
-        }
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
@@ -335,23 +313,10 @@ impl TransportPeerEventHandler for PeerHandler {
             None,
             None,
         );
-
-        // Broadcast link removal event to user callbacks
-        #[cfg(feature = "unstable")]
-        {
-            self.session.runtime.broadcast_link_event(SampleKind::Delete, self.peer_zid, &link);
-        }
     }
 
     fn closed(&self) {
         self.push(SampleKind::Delete, "", None, None);
-
-        // Broadcast transport closure event to user callbacks
-        #[cfg(feature = "unstable")]
-        {
-            use crate::api::sample::SampleKind;
-            self.session.runtime.broadcast_transport_event(SampleKind::Delete, &self.peer);
-        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

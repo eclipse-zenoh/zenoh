@@ -68,6 +68,8 @@ use zenoh_task::TaskController;
 
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
+use super::connectivity;
+#[cfg(feature = "unstable")]
 use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
@@ -718,7 +720,15 @@ impl Session {
                 face_id: OnceCell::new(),
             }));
 
+            // Register admin handler
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
+
+            // Register connectivity handler (independent from admin)
+            #[cfg(feature = "unstable")]
+            runtime.new_handler(Arc::new(connectivity::ConnectivityHandler::new(
+                (*runtime).clone(),
+            )));
+
             let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
