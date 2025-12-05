@@ -34,12 +34,15 @@ use super::{
     },
     TransportEventHandler,
 };
-use crate::multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
+use crate::{
+    multicast::manager::{
+        TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+        TransportManagerStateMulticast,
+    },
+    TransportPeer,
+};
 
 fn duration_from_i64us(us: i64) -> Duration {
     if us >= 0 {
@@ -48,6 +51,25 @@ fn duration_from_i64us(us: i64) -> Duration {
         Duration::MAX
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Bound {
+    #[default]
+    North,
+    South,
+}
+
+impl Bound {
+    pub fn is_north(&self) -> bool {
+        *self == Bound::North
+    }
+
+    pub fn is_south(&self) -> bool {
+        *self == Bound::South
+    }
+}
+
+pub type BoundCallback = Arc<dyn Fn(TransportPeer) -> Bound + Send + Sync>;
 
 /// # Examples
 /// ```
@@ -122,6 +144,7 @@ pub struct TransportManagerConfig {
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
     pub supported_links: Vec<LinkKind>,
+    pub bound_callback: Option<BoundCallback>,
 }
 
 pub struct TransportManagerState {
@@ -156,6 +179,7 @@ pub struct TransportManagerBuilder {
     link_configs: HashMap<LinkKind, String>, // (protocol, config)
     tx_threads: usize,
     supported_links: Option<Vec<LinkKind>>,
+    bound_callback: Option<BoundCallback>,
     #[cfg(feature = "shared-memory")]
     shm: zenoh_config::ShmConf,
     #[cfg(feature = "shared-memory")]
@@ -269,13 +293,17 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn bound_callback(
+        mut self,
+        callback: impl Fn(TransportPeer) -> Bound + Send + Sync + 'static,
+    ) -> Self {
+        self.bound_callback = Some(Arc::new(callback));
+        self
+    }
+
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        if let Some(zid) = *config.id() {
-            self = self.zid(zid.into());
-        }
-        if let Some(v) = config.mode() {
-            self = self.whatami(*v);
-        }
+        self = self.zid(config.id().expect("Config should be expanded").into());
+        self = self.whatami(config.mode().expect("Config should be expanded"));
 
         let link = config.transport().link();
         let cc_drop = link.tx().queue().congestion_control().drop();
@@ -372,6 +400,7 @@ impl TransportManagerBuilder {
             supported_links: self
                 .supported_links
                 .unwrap_or_else(|| zenoh_link::ALL_SUPPORTED_LINKS.to_vec()),
+            bound_callback: self.bound_callback,
         };
 
         let state = TransportManagerState {
@@ -432,6 +461,7 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             supported_links: None,
+            bound_callback: None,
             #[cfg(feature = "shared-memory")]
             shm: zenoh_config::ShmConf::default(),
             #[cfg(feature = "shared-memory")]

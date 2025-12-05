@@ -84,6 +84,13 @@ impl ZenohIdProto {
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }
+
+    pub fn short(&self) -> String {
+        const MAX_ZID_LEN: usize = 8;
+        let mut string = self.to_string();
+        string.truncate(MAX_ZID_LEN);
+        string
+    }
 }
 
 impl Default for ZenohIdProto {
@@ -621,6 +628,11 @@ impl CongestionControl {
     pub const DEFAULT_DECLARE: Self = Self::Block;
     #[cfg(not(feature = "internal"))]
     pub(crate) const DEFAULT_DECLARE: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
+    pub const DEFAULT_INTEREST: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_INTEREST: Self = Self::Block;
 
     #[cfg(feature = "internal")]
     pub const DEFAULT_OAM: Self = Self::Block;
