@@ -274,6 +274,44 @@ fn zenoh_shm_startup_init() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_shm_pub_to_null() {
+    // Initiate logging
+    zenoh::init_log_from_env_or("error");
+
+    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19500"]).await;
+
+    let mut publishers = Vec::default();
+    let mut make_publisher = async |i: usize, peer: &Session| {
+        let provider = ShmProviderBuilder::default_backend(4096).wait().unwrap();
+        let publisher = peer
+            .declare_publisher(format!("pub_to_null_{i}"))
+            .await
+            .unwrap();
+        publishers.push((provider, publisher));
+    };
+
+    const PUBLISHERS: usize = 10;
+    for i in 0..PUBLISHERS {
+        make_publisher(i, &peer01).await;
+        make_publisher(i + PUBLISHERS / 2, &peer02).await;
+    }
+
+    for _ in 0..100 {
+        for (provider, publisher) in &publishers {
+            let buf = provider
+                .alloc(1024 * 2)
+                .with_policy::<GarbageCollect>()
+                .wait()
+                .unwrap();
+            publisher.put(buf).await.unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(33)).await;
+    }
+
+    close_session(peer01, peer02).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_shm_unicast() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
