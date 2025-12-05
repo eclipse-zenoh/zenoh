@@ -52,7 +52,6 @@ pub trait LinkMulticastTrait: Send + Sync {
     fn get_dst(&self) -> &Locator;
     fn get_auth_id(&self) -> &LinkAuthId;
     fn is_reliable(&self) -> bool;
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, Locator>)>;
     async fn close(&self) -> ZResult<()>;
