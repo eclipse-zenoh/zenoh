@@ -14,7 +14,9 @@
 
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 
+#[cfg(feature = "unstable")]
 use zenoh_core::{Resolve, ResolveClosure};
+#[cfg(feature = "unstable")]
 use zenoh_protocol::core::Locator;
 
 use crate::{
