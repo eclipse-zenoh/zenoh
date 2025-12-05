@@ -99,6 +99,7 @@ impl SessionInfo {
     /// // print ["tcp/127.0.0.1:7447"]
     /// # }
     /// ```
+    #[zenoh_macros::unstable]
     pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
         ResolveClosure::new(|| self.runtime.get_locators())
     }
