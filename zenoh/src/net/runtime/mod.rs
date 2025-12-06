@@ -127,9 +127,11 @@ pub(crate) struct RuntimeState {
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "unstable")]
-    transport_event_callbacks: std::sync::RwLock<Vec<crate::api::handlers::Callback<crate::api::info::TransportEvent>>>,
+    transport_event_callbacks:
+        std::sync::RwLock<Vec<crate::api::handlers::Callback<crate::api::info::TransportEvent>>>,
     #[cfg(feature = "unstable")]
-    link_event_callbacks: std::sync::RwLock<Vec<crate::api::handlers::Callback<crate::api::info::LinkEvent>>>,
+    link_event_callbacks:
+        std::sync::RwLock<Vec<crate::api::handlers::Callback<crate::api::info::LinkEvent>>>,
 }
 
 #[allow(private_interfaces)]
@@ -158,16 +160,29 @@ pub trait IRuntime: Send + Sync {
     fn get_links(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     #[cfg(feature = "unstable")]
-    fn transport_events(&self, callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>, history: bool);
+    fn transport_events(
+        &self,
+        callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
+        history: bool,
+    );
 
     #[cfg(feature = "unstable")]
-    fn link_events(&self, callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>, history: bool);
+    fn link_events(
+        &self,
+        callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
+        history: bool,
+    );
 
     #[cfg(feature = "unstable")]
     fn broadcast_transport_event(&self, kind: crate::api::sample::SampleKind, peer: &TransportPeer);
 
     #[cfg(feature = "unstable")]
-    fn broadcast_link_event(&self, kind: crate::api::sample::SampleKind, transport_zid: ZenohIdProto, link: &zenoh_link::Link);
+    fn broadcast_link_event(
+        &self,
+        kind: crate::api::sample::SampleKind,
+        transport_zid: ZenohIdProto,
+        link: &zenoh_link::Link,
+    );
 
     fn new_primitives(
         &self,
@@ -305,15 +320,21 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn transport_events(&self, callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>, history: bool) {
-        use crate::api::info::{TransportEvent, Transport};
-        use crate::api::sample::SampleKind;
-        use crate::api::handlers::CallbackParameter;
+    fn transport_events(
+        &self,
+        callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
+        history: bool,
+    ) {
+        use crate::api::{
+            handlers::CallbackParameter,
+            info::{Transport, TransportEvent},
+            sample::SampleKind,
+        };
 
         // If history enabled, send Put events for existing transports
         if history {
-            let transports = zenoh_runtime::ZRuntime::Net
-                .block_in_place(self.manager.get_transports_unicast());
+            let transports =
+                zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
             for transport in transports {
                 if let (Ok(zid), Ok(whatami)) = (transport.get_zid(), transport.get_whatami()) {
                     let event = TransportEvent {
@@ -329,19 +350,28 @@ impl IRuntime for RuntimeState {
         }
 
         // Register callback for future events
-        self.transport_event_callbacks.write().unwrap().push(callback);
+        self.transport_event_callbacks
+            .write()
+            .unwrap()
+            .push(callback);
     }
 
     #[cfg(feature = "unstable")]
-    fn link_events(&self, callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>, history: bool) {
-        use crate::api::info::{LinkEvent, Link};
-        use crate::api::sample::SampleKind;
-        use crate::api::handlers::CallbackParameter;
+    fn link_events(
+        &self,
+        callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
+        history: bool,
+    ) {
+        use crate::api::{
+            handlers::CallbackParameter,
+            info::{Link, LinkEvent},
+            sample::SampleKind,
+        };
 
         // If history enabled, send Put events for existing links
         if history {
-            let transports = zenoh_runtime::ZRuntime::Net
-                .block_in_place(self.manager.get_transports_unicast());
+            let transports =
+                zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
             for transport in transports {
                 if let Ok(zid) = transport.get_zid() {
                     if let Ok(links) = transport.get_links() {
@@ -366,9 +396,15 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn broadcast_transport_event(&self, kind: crate::api::sample::SampleKind, peer: &TransportPeer) {
-        use crate::api::info::{TransportEvent, Transport};
-        use crate::api::handlers::CallbackParameter;
+    fn broadcast_transport_event(
+        &self,
+        kind: crate::api::sample::SampleKind,
+        peer: &TransportPeer,
+    ) {
+        use crate::api::{
+            handlers::CallbackParameter,
+            info::{Transport, TransportEvent},
+        };
 
         let event = TransportEvent {
             kind,
@@ -385,9 +421,16 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn broadcast_link_event(&self, kind: crate::api::sample::SampleKind, transport_zid: ZenohIdProto, link: &zenoh_link::Link) {
-        use crate::api::info::{LinkEvent, Link};
-        use crate::api::handlers::CallbackParameter;
+    fn broadcast_link_event(
+        &self,
+        kind: crate::api::sample::SampleKind,
+        transport_zid: ZenohIdProto,
+        link: &zenoh_link::Link,
+    ) {
+        use crate::api::{
+            handlers::CallbackParameter,
+            info::{Link, LinkEvent},
+        };
 
         let event = LinkEvent {
             kind,

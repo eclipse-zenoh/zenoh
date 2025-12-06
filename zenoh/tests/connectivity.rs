@@ -401,7 +401,11 @@ mod tests {
             .expect("Channel closed");
 
         assert!(event.is_added(), "History event should be Put (added)");
-        println!("History: Link {} -> {}", event.link().src(), event.link().dst());
+        println!(
+            "History: Link {} -> {}",
+            event.link().src(),
+            event.link().dst()
+        );
 
         session1.close().await.unwrap();
         session2.close().await.unwrap();

@@ -19,9 +19,9 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmI;
 
 #[cfg(feature = "unstable")]
-use crate::api::info::{Link, LinkEvent, Transport, TransportEvent};
-#[cfg(feature = "unstable")]
 use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
+#[cfg(feature = "unstable")]
+use crate::api::info::{Link, LinkEvent, Transport, TransportEvent};
 use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows
@@ -323,7 +323,10 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
     }
 
     /// Provide a mutable callback (internally synchronized)
-    pub fn callback_mut<F>(self, callback: F) -> TransportEventsBuilder<'a, Callback<TransportEvent>>
+    pub fn callback_mut<F>(
+        self,
+        callback: F,
+    ) -> TransportEventsBuilder<'a, Callback<TransportEvent>>
     where
         F: FnMut(TransportEvent) + Send + Sync + 'static,
     {

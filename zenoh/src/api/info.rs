@@ -21,18 +21,17 @@ use zenoh_core::{Resolve, ResolveClosure};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Locator;
 
-use crate::{
-    api::builders::info::{
-        LinksBuilder, PeersZenohIdBuilder, RoutersZenohIdBuilder, TransportsBuilder, ZenohIdBuilder,
-    },
-    net::runtime::DynamicRuntime,
-};
-
 #[cfg(feature = "unstable")]
 use crate::api::{
     builders::info::{LinkEventsBuilder, TransportEventsBuilder},
     handlers::{CallbackParameter, DefaultHandler},
     sample::SampleKind,
+};
+use crate::{
+    api::builders::info::{
+        LinksBuilder, PeersZenohIdBuilder, RoutersZenohIdBuilder, TransportsBuilder, ZenohIdBuilder,
+    },
+    net::runtime::DynamicRuntime,
 };
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
@@ -264,7 +263,7 @@ impl Link {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportEvent {
-    pub(crate) kind: SampleKind,  // Put = opened, Delete = closed
+    pub(crate) kind: SampleKind, // Put = opened, Delete = closed
     pub(crate) transport: Transport,
 }
 
@@ -303,7 +302,7 @@ impl CallbackParameter for TransportEvent {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkEvent {
-    pub(crate) kind: SampleKind,  // Put = added, Delete = removed
+    pub(crate) kind: SampleKind, // Put = added, Delete = removed
     pub(crate) link: Link,
     pub(crate) transport_zid: ZenohId,
 }
