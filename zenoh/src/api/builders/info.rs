@@ -18,6 +18,10 @@ use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmI;
 
+#[cfg(feature = "unstable")]
+use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
+#[cfg(feature = "unstable")]
+use crate::api::info::{Link, LinkEvent, Transport, TransportEvent};
 use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows
@@ -141,6 +145,340 @@ impl Wait for PeersZenohIdBuilder<'_> {
 }
 
 impl IntoFuture for PeersZenohIdBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder returned by [`SessionInfo::transports()`](crate::session::SessionInfo::transports) that allows
+/// access to information about transports this session is connected to.
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let transports = session.info().transports().await;
+/// for transport in transports {
+///     println!("Transport: zid={}, whatami={:?}", transport.zid(), transport.whatami());
+/// }
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[zenoh_macros::unstable]
+pub struct TransportsBuilder<'a> {
+    runtime: &'a DynamicRuntime,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> TransportsBuilder<'a> {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+        Self { runtime }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for TransportsBuilder<'_> {
+    type To = Box<dyn Iterator<Item = Transport> + Send + Sync>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for TransportsBuilder<'_> {
+    fn wait(self) -> Self::To {
+        self.runtime.get_transports()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for TransportsBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
+/// access to information about links across all transports.
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let links = session.info().links().await;
+/// for link in links {
+///     println!("Link: {} -> {}", link.src(), link.dst());
+/// }
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[zenoh_macros::unstable]
+pub struct LinksBuilder<'a> {
+    runtime: &'a DynamicRuntime,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> LinksBuilder<'a> {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+        Self { runtime }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for LinksBuilder<'_> {
+    type To = Box<dyn Iterator<Item = Link> + Send + Sync>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for LinksBuilder<'_> {
+    fn wait(self) -> Self::To {
+        self.runtime.get_links()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for LinksBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder returned by [`SessionInfo::transport_events()`](crate::session::SessionInfo::transport_events) that allows
+/// subscribing to transport lifecycle events.
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::sample::SampleKind;
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let events = session.info()
+///     .transport_events()
+///     .history(true)
+///     .with(flume::bounded(32))
+///     .await;
+///
+/// while let Ok(event) = events.recv_async().await {
+///     match event.kind() {
+///         SampleKind::Put => println!("Transport opened: {}", event.transport().zid()),
+///         SampleKind::Delete => println!("Transport closed"),
+///     }
+/// }
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[zenoh_macros::unstable]
+pub struct TransportEventsBuilder<'a, Handler> {
+    runtime: &'a DynamicRuntime,
+    handler: Handler,
+    history: bool,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> TransportEventsBuilder<'a, DefaultHandler> {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+        Self {
+            runtime,
+            handler: DefaultHandler::default(),
+            history: false,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
+    /// Enable history - send events for existing transports before live events.
+    pub fn history(mut self, enabled: bool) -> Self {
+        self.history = enabled;
+        self
+    }
+
+    /// Use a custom handler (channel, callback, etc.)
+    pub fn with<H>(self, handler: H) -> TransportEventsBuilder<'a, H>
+    where
+        H: IntoHandler<TransportEvent>,
+    {
+        TransportEventsBuilder {
+            runtime: self.runtime,
+            handler,
+            history: self.history,
+        }
+    }
+
+    /// Provide a callback to handle events
+    pub fn callback<F>(self, callback: F) -> TransportEventsBuilder<'a, Callback<TransportEvent>>
+    where
+        F: Fn(TransportEvent) + Send + Sync + 'static,
+    {
+        self.with(Callback::from(callback))
+    }
+
+    /// Provide a mutable callback (internally synchronized)
+    pub fn callback_mut<F>(
+        self,
+        callback: F,
+    ) -> TransportEventsBuilder<'a, Callback<TransportEvent>>
+    where
+        F: FnMut(TransportEvent) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for TransportEventsBuilder<'_, Handler>
+where
+    Handler: IntoHandler<TransportEvent> + Send,
+    Handler::Handler: Send,
+{
+    type To = Handler::Handler;
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Wait for TransportEventsBuilder<'_, Handler>
+where
+    Handler: IntoHandler<TransportEvent> + Send,
+    Handler::Handler: Send,
+{
+    fn wait(self) -> Self::To {
+        let (callback, handler) = self.handler.into_handler();
+        self.runtime.transport_events(callback, self.history);
+        handler
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> IntoFuture for TransportEventsBuilder<'_, Handler>
+where
+    Handler: IntoHandler<TransportEvent> + Send,
+    Handler::Handler: Send,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+/// A builder returned by [`SessionInfo::link_events()`](crate::session::SessionInfo::link_events) that allows
+/// subscribing to link lifecycle events.
+///
+/// # Examples
+/// ```
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::sample::SampleKind;
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let events = session.info()
+///     .link_events()
+///     .history(true)
+///     .with(flume::bounded(32))
+///     .await;
+///
+/// while let Ok(event) = events.recv_async().await {
+///     match event.kind() {
+///         SampleKind::Put => println!("Link added: {} -> {}",
+///             event.link().src(), event.link().dst()),
+///         SampleKind::Delete => println!("Link removed"),
+///     }
+/// }
+/// # }
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[zenoh_macros::unstable]
+pub struct LinkEventsBuilder<'a, Handler> {
+    runtime: &'a DynamicRuntime,
+    handler: Handler,
+    history: bool,
+}
+
+#[zenoh_macros::unstable]
+impl<'a> LinkEventsBuilder<'a, DefaultHandler> {
+    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+        Self {
+            runtime,
+            handler: DefaultHandler::default(),
+            history: false,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
+    /// Enable history - send events for existing links before live events.
+    pub fn history(mut self, enabled: bool) -> Self {
+        self.history = enabled;
+        self
+    }
+
+    /// Use a custom handler (channel, callback, etc.)
+    pub fn with<H>(self, handler: H) -> LinkEventsBuilder<'a, H>
+    where
+        H: IntoHandler<LinkEvent>,
+    {
+        LinkEventsBuilder {
+            runtime: self.runtime,
+            handler,
+            history: self.history,
+        }
+    }
+
+    /// Provide a callback to handle events
+    pub fn callback<F>(self, callback: F) -> LinkEventsBuilder<'a, Callback<LinkEvent>>
+    where
+        F: Fn(LinkEvent) + Send + Sync + 'static,
+    {
+        self.with(Callback::from(callback))
+    }
+
+    /// Provide a mutable callback (internally synchronized)
+    pub fn callback_mut<F>(self, callback: F) -> LinkEventsBuilder<'a, Callback<LinkEvent>>
+    where
+        F: FnMut(LinkEvent) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for LinkEventsBuilder<'_, Handler>
+where
+    Handler: IntoHandler<LinkEvent> + Send,
+    Handler::Handler: Send,
+{
+    type To = Handler::Handler;
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Wait for LinkEventsBuilder<'_, Handler>
+where
+    Handler: IntoHandler<LinkEvent> + Send,
+    Handler::Handler: Send,
+{
+    fn wait(self) -> Self::To {
+        let (callback, handler) = self.handler.into_handler();
+        self.runtime.link_events(callback, self.history);
+        handler
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> IntoFuture for LinkEventsBuilder<'_, Handler>
+where
+    Handler: IntoHandler<LinkEvent> + Send,
+    Handler::Handler: Send,
+{
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
