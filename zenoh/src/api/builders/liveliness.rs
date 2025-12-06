@@ -223,6 +223,14 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
 }
 
 impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handler, BACKGROUND> {
+    /// Sets the `history` option.
+    ///
+    /// When set to `true`, Zenoh queries the network for _currently live tokens_[^1] upon declaring the subscriber.
+    ///
+    /// When set to `false`, Zenoh does not query the network for currently live tokens.
+    /// In this mode, currently live tokens may still be delivered to the subscriber.
+    ///
+    /// [^1]: Currently live tokens comprise the set of samples that would be returned by a liveliness GET.
     #[inline]
     pub fn history(mut self, history: bool) -> Self {
         self.history = history;
