@@ -23,14 +23,12 @@ use zenoh_protocol::core::Locator;
 
 #[cfg(feature = "unstable")]
 use crate::api::{
-    builders::info::{LinkEventsBuilder, TransportEventsBuilder},
+    builders::info::{LinkEventsBuilder, LinksBuilder, TransportEventsBuilder, TransportsBuilder},
     handlers::{CallbackParameter, DefaultHandler},
     sample::SampleKind,
 };
 use crate::{
-    api::builders::info::{
-        LinksBuilder, PeersZenohIdBuilder, RoutersZenohIdBuilder, TransportsBuilder, ZenohIdBuilder,
-    },
+    api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
     net::runtime::DynamicRuntime,
 };
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
