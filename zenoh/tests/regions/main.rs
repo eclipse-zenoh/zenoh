@@ -15,6 +15,7 @@
 mod scenario1;
 
 use std::time::Duration;
+
 use zenoh::Session;
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
