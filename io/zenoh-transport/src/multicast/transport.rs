@@ -97,7 +97,7 @@ pub(crate) struct TransportMulticastInner {
     #[cfg(feature = "stats")]
     pub(super) stats: zenoh_stats::TransportStats,
     #[cfg(feature = "stats")]
-    pub(super) link_stats: OnceLock<zenoh_stats::LinkStats>,
+    pub(super) link_stats: zenoh_stats::LinkStats,
 
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<MulticastTransportShmContext>,
@@ -125,6 +125,8 @@ impl TransportMulticastInner {
         let stats = manager
             .stats()
             .multicast_transport_stats(config.link.link.get_dst().to_string());
+        #[cfg(feature = "stats")]
+        let link_stats = stats.link_stats(config.link.link.get_src(), config.link.link.get_dst());
 
         let ti = TransportMulticastInner {
             manager,
@@ -137,7 +139,7 @@ impl TransportMulticastInner {
             #[cfg(feature = "stats")]
             stats,
             #[cfg(feature = "stats")]
-            link_stats: OnceLock::new(),
+            link_stats,
             #[cfg(feature = "shared-memory")]
             shm_context,
         };
@@ -424,11 +426,9 @@ impl TransportMulticastInner {
             handler,
             patch: min(PatchType::CURRENT, join.ext_patch),
             #[cfg(feature = "stats")]
-            stats: self.stats.peer_link_stats(
-                peer.zid,
-                peer.whatami,
-                self.link_stats.get().unwrap(),
-            ),
+            stats: self
+                .stats
+                .peer_link_stats(peer.zid, peer.whatami, &self.link_stats),
         };
         zwrite!(self.peers).insert(locator.clone(), peer);
 
