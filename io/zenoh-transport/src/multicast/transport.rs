@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "stats")]
-use std::sync::OnceLock;
 use std::{
     cmp::min,
     collections::HashMap,
