@@ -20,14 +20,18 @@
 mod adminspace;
 pub mod orchestrator;
 
+#[cfg(feature = "unstable")]
+use std::collections::HashMap;
+#[cfg(feature = "unstable")]
+use std::sync::atomic::AtomicUsize;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     ops::Deref,
     sync::{
-        atomic::{AtomicU32, AtomicUsize, Ordering},
+        atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
 };
