@@ -16,6 +16,8 @@
 mod tests {
     use std::time::Duration;
 
+    use zenoh::{cancellation::CancellationToken, Config};
+
     const SLEEP: Duration = Duration::from_millis(100);
 
     /// Test that transports() returns an iterator of Transport objects
@@ -24,7 +26,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -34,7 +36,7 @@ mod tests {
         let session1 = zenoh::open(config1).await.unwrap();
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -88,7 +90,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -98,7 +100,7 @@ mod tests {
         let session1 = zenoh::open(config1).await.unwrap();
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -147,7 +149,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -157,7 +159,7 @@ mod tests {
         let session1 = zenoh::open(config1).await.unwrap();
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -200,7 +202,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -218,7 +220,7 @@ mod tests {
             .await;
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -271,7 +273,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -289,7 +291,7 @@ mod tests {
             .await;
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -347,7 +349,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -357,7 +359,7 @@ mod tests {
         let session1 = zenoh::open(config1).await.unwrap();
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -417,7 +419,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -431,7 +433,7 @@ mod tests {
         let events_received_clone = events_received.clone();
 
         // Create cancellation token and subscribe with callback
-        let ct = zenoh::cancellation::CancellationToken::default();
+        let ct = CancellationToken::default();
         let _subscriber = session1
             .info()
             .transport_events()
@@ -443,7 +445,7 @@ mod tests {
             .await;
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -475,7 +477,7 @@ mod tests {
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let mut config3 = zenoh::Config::default();
+        let mut config3 = Config::default();
         config3
             .connect
             .endpoints
@@ -507,7 +509,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -521,7 +523,7 @@ mod tests {
         let events_received_clone = events_received.clone();
 
         // Create cancellation token and subscribe with callback
-        let ct = zenoh::cancellation::CancellationToken::default();
+        let ct = CancellationToken::default();
         let _subscriber = session1
             .info()
             .link_events()
@@ -533,7 +535,7 @@ mod tests {
             .await;
 
         // Create second peer that connects to first
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -565,7 +567,7 @@ mod tests {
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let mut config3 = zenoh::Config::default();
+        let mut config3 = Config::default();
         config3
             .connect
             .endpoints
@@ -597,7 +599,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -607,7 +609,7 @@ mod tests {
         let session1 = zenoh::open(config1).await.unwrap();
 
         // Create cancellation token
-        let ct = zenoh::cancellation::CancellationToken::default();
+        let ct = CancellationToken::default();
 
         // Track callback execution
         let callback_started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -631,7 +633,7 @@ mod tests {
             .await;
 
         // Create second peer to trigger event
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -681,7 +683,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -695,7 +697,7 @@ mod tests {
         let events_received_clone = events_received.clone();
 
         // Create and immediately cancel the token
-        let ct = zenoh::cancellation::CancellationToken::default();
+        let ct = CancellationToken::default();
         ct.cancel().await.unwrap();
 
         // Subscribe with already-cancelled token
@@ -710,7 +712,7 @@ mod tests {
             .await;
 
         // Create second peer to trigger event
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -742,7 +744,7 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Create first peer with listener
-        let mut config1 = zenoh::Config::default();
+        let mut config1 = Config::default();
         config1
             .listen
             .endpoints
@@ -758,7 +760,7 @@ mod tests {
         let events2_count_clone = events2_count.clone();
 
         // Create two cancellation tokens and subscribers
-        let ct1 = zenoh::cancellation::CancellationToken::default();
+        let ct1 = CancellationToken::default();
         let _sub1 = session1
             .info()
             .transport_events()
@@ -769,7 +771,7 @@ mod tests {
             .cancellation_token(ct1.clone())
             .await;
 
-        let ct2 = zenoh::cancellation::CancellationToken::default();
+        let ct2 = CancellationToken::default();
         let _sub2 = session1
             .info()
             .transport_events()
@@ -781,7 +783,7 @@ mod tests {
             .await;
 
         // Create second peer to trigger event
-        let mut config2 = zenoh::Config::default();
+        let mut config2 = Config::default();
         config2
             .connect
             .endpoints
@@ -818,7 +820,7 @@ mod tests {
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let mut config3 = zenoh::Config::default();
+        let mut config3 = Config::default();
         config3
             .connect
             .endpoints
