@@ -25,7 +25,8 @@ use zenoh_transport::{
 };
 
 use crate::api::session::WeakSession;
-
+#[cfg(feature = "unstable")]
+use crate::sample::SampleKind;
 /// Handler for connectivity events - independent from adminspace
 #[cfg(feature = "unstable")]
 pub(crate) struct ConnectivityHandler {
@@ -47,7 +48,6 @@ impl TransportEventHandler for ConnectivityHandler {
         _transport: zenoh_transport::unicast::TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Broadcast transport opened event
-        use crate::api::sample::SampleKind;
         self.session
             .runtime
             .broadcast_transport_event(SampleKind::Put, &peer);
@@ -87,7 +87,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
 
     fn new_link(&self, link: zenoh_link::Link) {
         // Broadcast link added event
-        use crate::api::sample::SampleKind;
         self.session
             .runtime
             .broadcast_link_event(SampleKind::Put, self.peer_zid, &link);
@@ -95,7 +94,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
 
     fn del_link(&self, link: zenoh_link::Link) {
         // Broadcast link removed event
-        use crate::api::sample::SampleKind;
         self.session
             .runtime
             .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link);
@@ -103,7 +101,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
 
     fn closed(&self) {
         // Broadcast transport closed event
-        use crate::api::sample::SampleKind;
         self.session
             .runtime
             .broadcast_transport_event(SampleKind::Delete, &self.peer);
@@ -124,7 +121,7 @@ pub(crate) struct ConnectivityMulticastHandler {
 impl TransportMulticastEventHandler for ConnectivityMulticastHandler {
     fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Broadcast transport opened event
-        use crate::api::sample::SampleKind;
+
         self.session
             .runtime
             .broadcast_transport_event(SampleKind::Put, &peer);

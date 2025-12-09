@@ -205,7 +205,8 @@ impl IntoFuture for TransportsBuilder<'_> {
 }
 
 /// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
-/// access to information about links across all transports.
+/// access to information about links across all transport sessions. Multiple links can be established
+/// between two zenoh nodes (e.g., using different interfaces).
 ///
 /// # Examples
 /// ```
@@ -330,7 +331,8 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
         self.with(Callback::from(callback))
     }
 
-    /// Provide a mutable callback (internally synchronized)
+    /// Provide a mutable callback which is never called concurrently. If the callback can be accepted by
+    /// [`callback`](Self::callback), prefer using that instead for better performance.
     pub fn callback_mut<F>(
         self,
         callback: F,
@@ -345,7 +347,7 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
 #[cfg(feature = "unstable")]
 #[zenoh_macros::internal_trait]
 impl<Handler> CancellationTokenBuilderTrait for TransportEventsBuilder<'_, Handler> {
-    /// Provide a cancellation token that ensures the callback is properly cleaned up.
+    /// Provide a cancellation token that can be used to interrupt the transport events subscription.
     ///
     /// # Examples
     /// ```
@@ -523,7 +525,8 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
         self.with(Callback::from(callback))
     }
 
-    /// Provide a mutable callback (internally synchronized)
+    /// Provide a mutable callback which is never called concurrently. If the callback can be accepted by
+    /// [`callback`](Self::callback), prefer using that instead for better performance.
     pub fn callback_mut<F>(self, callback: F) -> LinkEventsBuilder<'a, Callback<LinkEvent>>
     where
         F: FnMut(LinkEvent) + Send + Sync + 'static,
@@ -535,7 +538,7 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
 #[cfg(feature = "unstable")]
 #[zenoh_macros::internal_trait]
 impl<Handler> CancellationTokenBuilderTrait for LinkEventsBuilder<'_, Handler> {
-    /// Provide a cancellation token that ensures the callback is properly cleaned up.
+    /// Provide a cancellation token that can be used to interrupt the link events subscription.
     ///
     /// # Examples
     /// ```

@@ -115,7 +115,7 @@ impl SessionInfo {
         ResolveClosure::new(|| self.runtime.get_locators())
     }
 
-    /// Return information about transports this session is connected to.
+    /// Return information about currently opened transport sessions. Transport session is a connection to an another zenoh node.
     ///
     /// # Examples
     /// ```
