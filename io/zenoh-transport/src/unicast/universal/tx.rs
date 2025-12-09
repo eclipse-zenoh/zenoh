@@ -138,7 +138,7 @@ impl TransportUnicastUniversal {
             // No Link found
             #[cfg(feature = "stats")]
             self.stats.tx_observe_no_link(msg);
-            return Ok(true);
+            return Ok(false);
         };
 
         let transport_link = transport_links

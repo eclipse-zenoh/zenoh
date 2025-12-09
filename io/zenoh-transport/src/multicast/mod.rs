@@ -108,6 +108,7 @@ impl TransportMulticast {
         }
     }
 
+    /// Returns if the message has successfully been sent.
     #[inline(always)]
     pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<bool> {
         let transport = self.get_transport()?;
