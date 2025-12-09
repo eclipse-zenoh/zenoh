@@ -334,7 +334,7 @@ impl TransportLinkMulticastUniversal {
                     config,
                     initial_sns,
                     #[cfg(feature = "stats")]
-                    c_transport.link_stats.get().unwrap().clone(),
+                    c_transport.link_stats.clone(),
                 )
                 .await;
                 if let Err(e) = res {
@@ -552,9 +552,6 @@ async fn rx_task(
         n = 1;
     }
 
-    #[cfg(feature = "stats")]
-    let stats = transport.link_stats.get().unwrap();
-
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     loop {
         tokio::select! {
@@ -563,7 +560,7 @@ async fn rx_task(
                 let (batch, locator) = res?;
 
                 #[cfg(feature = "stats")]
-                stats.inc_bytes(zenoh_stats::Rx, batch.len() as u64);
+                transport.link_stats.inc_bytes(zenoh_stats::Rx, batch.len() as u64);
 
                 // Deserialize all the messages from the current ZBuf
                 transport.read_messages(
@@ -571,7 +568,7 @@ async fn rx_task(
                     locator,
                     batch_size,
                     #[cfg(feature = "stats")]
-                    transport.link_stats.get().unwrap(),
+                    &transport.link_stats,
                 )?;
             }
         }
