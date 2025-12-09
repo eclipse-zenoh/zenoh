@@ -72,94 +72,6 @@ impl TransportUnicastUniversal {
         match_.full.or(match_.partial).or(match_.any)
     }
 
-    fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<()> {
-        let transport_links = self
-            .links
-            .read()
-            .expect("reading `TransportUnicastUniversal::links` should not fail");
-
-        let Some(transport_link_index) = Self::select(
-            transport_links.iter().map(|tl| {
-                (
-                    tl.link
-                        .config
-                        .reliability
-                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
-                    tl.link.config.priorities.clone(),
-                )
-            }),
-            Reliability::from(msg.is_reliable()),
-            msg.priority(),
-        ) else {
-            tracing::trace!(
-                "Message dropped because the transport has no links: {}",
-                msg
-            );
-            // No Link found
-            #[cfg(feature = "stats")]
-            self.stats.tx_observe_no_link(msg);
-            return Ok(());
-        };
-
-        let transport_link = transport_links
-            .get(transport_link_index)
-            .expect("transport link index should be valid");
-
-        let pipeline = transport_link.pipeline.clone();
-        tracing::trace!(
-            "Scheduled {:?} for transmission to {} ({})",
-            msg,
-            transport_link.link.link.get_dst(),
-            self.get_zid()
-        );
-
-        #[cfg(feature = "stats")]
-        let stats = transport_link.stats.clone();
-
-        #[cfg(feature = "unstable")]
-        if msg.congestion_control() == CongestionControl::BlockFirst {
-            let priority = msg.priority();
-            if transport_link.block_first_waiters[priority as usize]
-                .wait_timeout(self.manager.config.wait_before_drop)
-                .is_err()
-            {
-                #[cfg(feature = "stats")]
-                stats.tx_observe_congestion(msg);
-                return Ok(());
-            };
-            let transport = self.clone();
-            let block_first_notifier =
-                transport_link.block_first_notifiers[priority as usize].clone();
-            let msg = NetworkMessageExt::to_owned(&msg);
-            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
-                let msg = msg.as_ref();
-                if let Ok(pushed) = pipeline.push_network_message(msg) {
-                    transport.handle_push_result(
-                        msg,
-                        pushed,
-                        #[cfg(feature = "stats")]
-                        stats,
-                    );
-                }
-                let _ = block_first_notifier.notify();
-            });
-            return Ok(());
-        }
-
-        // Drop the guard before the push_zenoh_message since
-        // the link could be congested and this operation could
-        // block for fairly long time
-        drop(transport_links);
-
-        self.handle_push_result(
-            msg,
-            pipeline.push_network_message(msg)?,
-            #[cfg(feature = "stats")]
-            stats,
-        );
-        Ok(())
-    }
-
     fn handle_push_result(
         &self,
         msg: NetworkMessageRef,
@@ -186,7 +98,7 @@ impl TransportUnicastUniversal {
         }
         #[cfg(feature = "stats")]
         if pushed {
-            stats.tx_observe_network_message_finalize(msg);
+            stats.inc_network_message(zenoh_stats::Tx, msg);
         } else {
             stats.tx_observe_congestion(msg);
         }
@@ -195,12 +107,97 @@ impl TransportUnicastUniversal {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
-        self.schedule_on_link(msg.as_ref())
+        let msg = msg.as_ref();
+        let transport_links = self
+            .links
+            .read()
+            .expect("reading `TransportUnicastUniversal::links` should not fail");
+
+        let Some(transport_link_index) = Self::select(
+            transport_links.iter().map(|tl| {
+                (
+                    tl.link
+                        .config
+                        .reliability
+                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
+                    tl.link.config.priorities.clone(),
+                )
+            }),
+            Reliability::from(msg.is_reliable()),
+            msg.priority(),
+        ) else {
+            tracing::trace!(
+                "Message dropped because the transport has no links: {}",
+                msg
+            );
+            // No Link found
+            #[cfg(feature = "stats")]
+            self.stats.tx_observe_no_link(msg);
+            return Ok(true);
+        };
+
+        let transport_link = transport_links
+            .get(transport_link_index)
+            .expect("transport link index should be valid");
+
+        let pipeline = transport_link.pipeline.clone();
+        tracing::trace!(
+            "Scheduled {:?} for transmission to {} ({})",
+            msg,
+            transport_link.link.link.get_dst(),
+            self.get_zid()
+        );
+
+        #[cfg(feature = "stats")]
+        let stats = transport_link.stats.clone();
+
+        #[cfg(feature = "unstable")]
+        if msg.congestion_control() == CongestionControl::BlockFirst {
+            let priority = msg.priority();
+            if transport_link.block_first_waiters[priority as usize]
+                .wait_timeout(self.manager.config.wait_before_drop)
+                .is_err()
+            {
+                #[cfg(feature = "stats")]
+                stats.tx_observe_congestion(msg);
+                return Ok(false);
+            };
+            let transport = self.clone();
+            let block_first_notifier =
+                transport_link.block_first_notifiers[priority as usize].clone();
+            let msg = NetworkMessageExt::to_owned(&msg);
+            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
+                let msg = msg.as_ref();
+                if let Ok(pushed) = pipeline.push_network_message(msg) {
+                    transport.handle_push_result(
+                        msg,
+                        pushed,
+                        #[cfg(feature = "stats")]
+                        stats,
+                    );
+                }
+                let _ = block_first_notifier.notify();
+            });
+            return Ok(true);
+        }
+
+        // Drop the guard before the push_zenoh_message since
+        // the link could be congested and this operation could
+        // block for fairly long time
+        drop(transport_links);
+
+        self.handle_push_result(
+            msg,
+            pipeline.push_network_message(msg)?,
+            #[cfg(feature = "stats")]
+            stats,
+        );
+        Ok(true)
     }
 }
 

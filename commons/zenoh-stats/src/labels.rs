@@ -55,7 +55,7 @@ impl EncodeLabelValue for LocalityLabel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum MessageLabel {
+pub enum MessageLabel {
     Put,
     Del,
     Query,
@@ -108,7 +108,7 @@ impl From<NetworkBodyRef<'_>> for MessageLabel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum SpaceLabel {
+pub enum SpaceLabel {
     User,
     Admin,
 }
@@ -146,6 +146,8 @@ impl EncodeLabelValue for ReasonLabel {
         })
     }
 }
+
+pub(crate) const SHM_NUM: usize = 2;
 
 macro_rules! wrap_label {
     ($ty:ty, $label:ident $(, $derive:ty)*) => {
@@ -265,7 +267,6 @@ pub(crate) struct NetworkMessagePayloadLabels {
     pub(crate) priority: PriorityLabel,
     pub(crate) message: MessageLabel,
     pub(crate) shm: bool,
-    pub(crate) protocol: ProtocolLabel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]

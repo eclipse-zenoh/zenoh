@@ -31,8 +31,9 @@ impl TransportUnicastLowlatency {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
 
+        let msg = msg.as_ref();
         let tmsg = TransportMessageLowLatencyRef {
-            body: TransportBodyLowLatencyRef::Network(msg.as_ref()),
+            body: TransportBodyLowLatencyRef::Network(msg),
         };
         let res = self.send(tmsg);
 
@@ -41,7 +42,7 @@ impl TransportUnicastLowlatency {
             self.link_stats
                 .get()
                 .unwrap()
-                .tx_observe_network_message_finalize(msg);
+                .inc_network_message(zenoh_stats::Rx, msg);
         } else {
             self.link_stats.get().unwrap().tx_observe_congestion(msg);
         }

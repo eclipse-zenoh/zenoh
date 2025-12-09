@@ -531,9 +531,11 @@ impl Primitives for ClientPrimitives {
 }
 
 impl EPrimitives for ClientPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) {}
+    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) -> bool {
+        false
+    }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) {
+    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) -> bool {
         match &ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
@@ -544,21 +546,31 @@ impl EPrimitives for ClientPrimitives {
             }
             _ => (),
         }
+        false
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+    ) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) -> bool {
+        false
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self

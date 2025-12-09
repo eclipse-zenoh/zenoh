@@ -108,7 +108,7 @@ impl InterceptorContext for MuxContext<'_> {
 }
 
 impl EPrimitives for Mux {
-    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) {
+    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
         let interest_id = ctx.msg.id;
 
         let mut msg = NetworkMessageMut {
@@ -125,16 +125,17 @@ impl EPrimitives for Mux {
             .load()
             .intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
         } else {
             // send declare final to avoid timeout on blocked interest
             if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
                 face.reject_interest(interest_id);
             }
+            false
         }
     }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) {
+    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
@@ -149,11 +150,13 @@ impl EPrimitives for Mux {
             .load()
             .intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
@@ -167,11 +170,13 @@ impl EPrimitives for Mux {
         if interceptor.interceptors.is_empty()
             || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
-    fn send_request(&self, msg: &mut Request) {
+    fn send_request(&self, msg: &mut Request) -> bool {
         let request_id = msg.id;
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
@@ -184,24 +189,26 @@ impl EPrimitives for Mux {
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
         } else if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
             if interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext) {
-                let _ = self.handler.schedule(msg);
+                self.handler.schedule(msg).unwrap_or(false)
             } else {
                 // request was blocked by an interceptor, we need to send response final to avoid timeout error
                 face.send_response_final(&mut ResponseFinal {
                     rid: request_id,
                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                     ext_tstamp: None,
-                })
+                });
+                false
             }
         } else {
             tracing::error!("Uninitialized multiplexer!");
+            false
         }
     }
 
-    fn send_response(&self, msg: &mut Response) {
+    fn send_response(&self, msg: &mut Response) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
@@ -215,11 +222,13 @@ impl EPrimitives for Mux {
         if interceptor.interceptors.is_empty()
             || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
-    fn send_response_final(&self, msg: &mut ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
@@ -233,7 +242,9 @@ impl EPrimitives for Mux {
         if interceptor.interceptors.is_empty()
             || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
@@ -314,7 +325,7 @@ impl InterceptorContext for McastMuxContext<'_> {
 }
 
 impl EPrimitives for McastMux {
-    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) {
+    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
         let interest_id = ctx.msg.id;
 
         let mut msg = NetworkMessageMut {
@@ -331,16 +342,17 @@ impl EPrimitives for McastMux {
             .load()
             .intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
         } else {
             // send declare final to avoid timeout on blocked interest
             if let Some(face) = self.face.get() {
                 face.reject_interest(interest_id);
             }
+            false
         }
     }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) {
+    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
@@ -355,11 +367,13 @@ impl EPrimitives for McastMux {
             .load()
             .intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
@@ -373,11 +387,13 @@ impl EPrimitives for McastMux {
         if interceptor.interceptors.is_empty()
             || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
-    fn send_request(&self, msg: &mut Request) {
+    fn send_request(&self, msg: &mut Request) -> bool {
         let request_id = msg.id;
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
@@ -390,24 +406,26 @@ impl EPrimitives for McastMux {
         };
         let interceptor = self.interceptor.load();
         if interceptor.interceptors.is_empty() {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
         } else if let Some(face) = self.face.get() {
             if interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext) {
-                let _ = self.handler.schedule(msg);
+                self.handler.schedule(msg).unwrap_or(false)
             } else {
                 // request was blocked by an interceptor, we need to send response final to avoid timeout error
                 face.send_response_final(&mut ResponseFinal {
                     rid: request_id,
                     ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                     ext_tstamp: None,
-                })
+                });
+                false
             }
         } else {
             tracing::error!("Uninitialized multiplexer!");
+            false
         }
     }
 
-    fn send_response(&self, msg: &mut Response) {
+    fn send_response(&self, msg: &mut Response) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
@@ -421,11 +439,13 @@ impl EPrimitives for McastMux {
         if interceptor.interceptors.is_empty()
             || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 
-    fn send_response_final(&self, msg: &mut ResponseFinal) {
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
@@ -439,7 +459,9 @@ impl EPrimitives for McastMux {
         if interceptor.interceptors.is_empty()
             || interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext)
         {
-            let _ = self.handler.schedule(msg);
+            self.handler.schedule(msg).unwrap_or(false)
+        } else {
+            false
         }
     }
 

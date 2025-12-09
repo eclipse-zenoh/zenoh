@@ -42,6 +42,11 @@ impl TransportMulticastInner {
         mut msg: NetworkMessageMut,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        peer.stats.inc_network_message(
+            zenoh_stats::Rx,
+            zenoh_protocol::network::NetworkMessageExt::as_ref(&msg),
+        );
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
@@ -170,13 +175,7 @@ impl TransportMulticastInner {
             return Ok(());
         }
         for mut msg in frame {
-            #[cfg(not(feature = "stats"))]
             self.trigger_callback(msg.as_mut(), peer)?;
-            #[cfg(feature = "stats")]
-            peer.stats
-                .with_rx_observe_network_message(msg.as_mut(), |msg| {
-                    self.trigger_callback(msg, peer)
-                })?;
         }
 
         Ok(())
@@ -242,14 +241,7 @@ impl TransportMulticastInner {
         if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
             if let Some(mut msg) = guard.defrag.defragment() {
-                #[cfg(not(feature = "stats"))]
                 return self.trigger_callback(msg.as_mut(), peer);
-                #[cfg(feature = "stats")]
-                return peer
-                    .stats
-                    .with_rx_observe_network_message(msg.as_mut(), |msg| {
-                        self.trigger_callback(msg, peer)
-                    });
             } else {
                 tracing::trace!(
                     "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",

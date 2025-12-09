@@ -109,10 +109,9 @@ impl TransportMulticast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<bool> {
         let transport = self.get_transport()?;
-        transport.schedule(message)?;
-        Ok(())
+        transport.schedule(message)
     }
 
     #[cfg(feature = "stats")]
