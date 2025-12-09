@@ -335,12 +335,21 @@ impl IRuntime for RuntimeState {
         let transports =
             zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
 
+        let transports = if let Some(filter_zid) = transport_zid {
+            transports
+                .into_iter()
+                .find(|t| t.get_zid().ok() == Some(filter_zid.into()))
+                .into_iter()
+                .collect()
+        } else {
+            transports
+        };
+
         // Convert transport to links (returns empty vec if get_zid fails)
-        let transport_to_links = |t: TransportUnicast| -> Vec<Link> {
-            let Ok(zid) = t.get_zid() else {
+        Box::new(transports.into_iter().flat_map(|t| {
+            let Ok(zid) = t.get_zid().map(Into::into) else {
                 return Vec::new();
             };
-            let zid: ZenohId = zid.into();
 
             t.get_links()
                 .unwrap_or_default()
@@ -350,23 +359,8 @@ impl IRuntime for RuntimeState {
                     src: link.src,
                     dst: link.dst,
                 })
-                .collect()
-        };
-
-        if let Some(filter_zid) = transport_zid {
-            // Specific transport requested - find it and return its links
-            Box::new(
-                transports
-                    .into_iter()
-                    .find(|t| t.get_zid().ok() == Some(filter_zid.into()))
-                    .map(transport_to_links)
-                    .unwrap_or_default()
-                    .into_iter(),
-            )
-        } else {
-            // All transports - scan all and collect links
-            Box::new(transports.into_iter().flat_map(transport_to_links))
-        }
+                .collect::<Vec<_>>()
+        }))
     }
 
     #[cfg(feature = "unstable")]
