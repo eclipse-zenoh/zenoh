@@ -410,4 +410,416 @@ mod tests {
         session1.close().await.unwrap();
         session2.close().await.unwrap();
     }
+
+    /// Test that cancellation token stops transport events
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events_cancellation() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17453".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Track events received
+        let events_received = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events_received_clone = events_received.clone();
+
+        // Create cancellation token and subscribe with callback
+        let ct = zenoh::cancellation::CancellationToken::default();
+        let _subscriber = session1
+            .info()
+            .transport_events()
+            .history(false)
+            .callback(move |_event| {
+                events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })
+            .cancellation_token(ct.clone())
+            .await;
+
+        // Create second peer that connects to first
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17453".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection and events
+        tokio::time::sleep(SLEEP).await;
+
+        // Should have received open event
+        let count_before = events_received.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(count_before > 0, "Should have received at least one event");
+        println!("Received {} events before cancellation", count_before);
+
+        // Cancel the token
+        ct.cancel().await.unwrap();
+        println!("Cancellation token cancelled");
+
+        // Close session2 and create session3
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        let mut config3 = zenoh::Config::default();
+        config3
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17453".parse().unwrap()])
+            .unwrap();
+        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session3 = zenoh::open(config3).await.unwrap();
+
+        // Wait for potential events
+        tokio::time::sleep(SLEEP).await;
+
+        // Should NOT have received any more events after cancellation
+        let count_after = events_received.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            count_before, count_after,
+            "Should not receive events after cancellation (before: {}, after: {})",
+            count_before, count_after
+        );
+
+        println!("Successfully verified no events received after cancellation");
+
+        session1.close().await.unwrap();
+        session3.close().await.unwrap();
+    }
+
+    /// Test that cancellation token stops link events
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_link_events_cancellation() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17454".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Track events received
+        let events_received = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events_received_clone = events_received.clone();
+
+        // Create cancellation token and subscribe with callback
+        let ct = zenoh::cancellation::CancellationToken::default();
+        let _subscriber = session1
+            .info()
+            .link_events()
+            .history(false)
+            .callback(move |_event| {
+                events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })
+            .cancellation_token(ct.clone())
+            .await;
+
+        // Create second peer that connects to first
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17454".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection and events
+        tokio::time::sleep(SLEEP).await;
+
+        // Should have received link event
+        let count_before = events_received.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(count_before > 0, "Should have received at least one event");
+        println!("Received {} events before cancellation", count_before);
+
+        // Cancel the token
+        ct.cancel().await.unwrap();
+        println!("Cancellation token cancelled");
+
+        // Close session2 and create session3
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        let mut config3 = zenoh::Config::default();
+        config3
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17454".parse().unwrap()])
+            .unwrap();
+        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session3 = zenoh::open(config3).await.unwrap();
+
+        // Wait for potential events
+        tokio::time::sleep(SLEEP).await;
+
+        // Should NOT have received any more events after cancellation
+        let count_after = events_received.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            count_before, count_after,
+            "Should not receive events after cancellation (before: {}, after: {})",
+            count_before, count_after
+        );
+
+        println!("Successfully verified no events received after cancellation");
+
+        session1.close().await.unwrap();
+        session3.close().await.unwrap();
+    }
+
+    /// Test that cancellation waits for in-flight callbacks to complete
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events_cancellation_synchronization() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17455".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Create cancellation token
+        let ct = zenoh::cancellation::CancellationToken::default();
+
+        // Track callback execution
+        let callback_started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let callback_completed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let callback_started_clone = callback_started.clone();
+        let callback_completed_clone = callback_completed.clone();
+
+        // Subscribe with a callback that takes time to execute
+        let _events = session1
+            .info()
+            .transport_events()
+            .history(false)
+            .callback(move |_event| {
+                callback_started_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+                // Simulate processing time
+                std::thread::sleep(Duration::from_millis(200));
+                callback_completed_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+            })
+            .cancellation_token(ct.clone())
+            .await;
+
+        // Create second peer to trigger event
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17455".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for event to trigger callback
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // Verify callback started
+        assert!(
+            callback_started.load(std::sync::atomic::Ordering::SeqCst),
+            "Callback should have started"
+        );
+
+        // Cancel while callback is still executing
+        ct.cancel().await.unwrap();
+
+        // After cancel completes, callback should have completed
+        assert!(
+            callback_completed.load(std::sync::atomic::Ordering::SeqCst),
+            "Callback should have completed before cancel returned"
+        );
+
+        println!("Successfully verified cancellation waits for callback completion");
+
+        session1.close().await.unwrap();
+        session2.close().await.unwrap();
+    }
+
+    /// Test that using an already-cancelled token prevents registration
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events_pre_cancelled_token() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17456".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Track events received
+        let events_received = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events_received_clone = events_received.clone();
+
+        // Create and immediately cancel the token
+        let ct = zenoh::cancellation::CancellationToken::default();
+        ct.cancel().await.unwrap();
+
+        // Subscribe with already-cancelled token
+        let _subscriber = session1
+            .info()
+            .transport_events()
+            .history(false)
+            .callback(move |_event| {
+                events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })
+            .cancellation_token(ct.clone())
+            .await;
+
+        // Create second peer to trigger event
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17456".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection
+        tokio::time::sleep(SLEEP).await;
+
+        // Should NOT receive any events because token was already cancelled
+        let count = events_received.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            count, 0,
+            "Should not receive events with pre-cancelled token (received: {})",
+            count
+        );
+
+        println!("Successfully verified pre-cancelled token prevents event registration");
+
+        session1.close().await.unwrap();
+        session2.close().await.unwrap();
+    }
+
+    /// Test multiple subscribers with independent cancellation tokens
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events_multiple_subscribers_cancellation() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = zenoh::Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17457".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Track events received by each subscriber
+        let events1_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events2_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events1_count_clone = events1_count.clone();
+        let events2_count_clone = events2_count.clone();
+
+        // Create two cancellation tokens and subscribers
+        let ct1 = zenoh::cancellation::CancellationToken::default();
+        let _sub1 = session1
+            .info()
+            .transport_events()
+            .history(false)
+            .callback(move |_event| {
+                events1_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })
+            .cancellation_token(ct1.clone())
+            .await;
+
+        let ct2 = zenoh::cancellation::CancellationToken::default();
+        let _sub2 = session1
+            .info()
+            .transport_events()
+            .history(false)
+            .callback(move |_event| {
+                events2_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })
+            .cancellation_token(ct2.clone())
+            .await;
+
+        // Create second peer to trigger event
+        let mut config2 = zenoh::Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17457".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection and events
+        tokio::time::sleep(SLEEP).await;
+
+        // Both subscribers should have received events
+        let count1_before = events1_count.load(std::sync::atomic::Ordering::SeqCst);
+        let count2_before = events2_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(count1_before > 0, "Subscriber 1 should have received events");
+        assert!(count2_before > 0, "Subscriber 2 should have received events");
+        println!(
+            "Before cancellation: subscriber1={}, subscriber2={}",
+            count1_before, count2_before
+        );
+
+        // Cancel only the first token
+        ct1.cancel().await.unwrap();
+
+        // Close and reconnect to trigger new events
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        let mut config3 = zenoh::Config::default();
+        config3
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17457".parse().unwrap()])
+            .unwrap();
+        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session3 = zenoh::open(config3).await.unwrap();
+
+        // Wait for new connection and potential events
+        tokio::time::sleep(SLEEP).await;
+
+        // Subscriber 1 should NOT have received new events
+        let count1_after = events1_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            count1_before, count1_after,
+            "Subscriber 1 should not receive events after cancellation"
+        );
+
+        // Subscriber 2 SHOULD have received new events
+        let count2_after = events2_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            count2_after > count2_before,
+            "Subscriber 2 should still receive events (before: {}, after: {})",
+            count2_before,
+            count2_after
+        );
+
+        println!(
+            "After cancellation: subscriber1={}, subscriber2={}",
+            count1_after, count2_after
+        );
+        println!("Successfully verified independent cancellation of multiple subscribers");
+
+        session1.close().await.unwrap();
+        session3.close().await.unwrap();
+    }
 }
