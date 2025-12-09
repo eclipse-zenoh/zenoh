@@ -19,6 +19,8 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmI;
 
 #[cfg(feature = "unstable")]
+use crate::api::cancellation::CancellationTokenBuilderTrait;
+#[cfg(feature = "unstable")]
 use crate::api::handlers::{locked, Callback, DefaultHandler, IntoHandler};
 #[cfg(feature = "unstable")]
 use crate::api::info::{Link, LinkEvent, Transport, TransportEvent};
@@ -281,6 +283,8 @@ pub struct TransportEventsBuilder<'a, Handler> {
     runtime: &'a DynamicRuntime,
     handler: Handler,
     history: bool,
+    #[cfg(feature = "unstable")]
+    cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
 #[zenoh_macros::unstable]
@@ -290,6 +294,8 @@ impl<'a> TransportEventsBuilder<'a, DefaultHandler> {
             runtime,
             handler: DefaultHandler::default(),
             history: false,
+            #[cfg(feature = "unstable")]
+            cancellation_token: None,
         }
     }
 }
@@ -311,6 +317,8 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
             runtime: self.runtime,
             handler,
             history: self.history,
+            #[cfg(feature = "unstable")]
+            cancellation_token: self.cancellation_token,
         }
     }
 
@@ -334,6 +342,50 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
     }
 }
 
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for TransportEventsBuilder<'_, Handler> {
+    /// Provide a cancellation token that ensures the callback is properly cleaned up.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let events = session.info()
+    ///     .transport_events()
+    ///     .with(flume::bounded(32))
+    ///     .cancellation_token(ct.clone())
+    ///     .await;
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    ///
+    /// while let Ok(event) = events.recv_async().await {
+    ///     match event.kind() {
+    ///         SampleKind::Put => println!("Transport opened: {}", event.transport().zid()),
+    ///         SampleKind::Delete => println!("Transport closed"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
+            ..self
+        }
+    }
+}
+
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for TransportEventsBuilder<'_, Handler>
 where
@@ -350,7 +402,17 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> Self::To {
-        let (callback, handler) = self.handler.into_handler();
+        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
+        let (mut callback, handler) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        if let Some(ct) = self.cancellation_token {
+            if let Some(notifier) = ct.notifier() {
+                callback.set_on_drop_notifier(notifier);
+            } else {
+                // Token already cancelled, return handler without registering
+                return handler;
+            }
+        }
         self.runtime.transport_events(callback, self.history);
         handler
     }
