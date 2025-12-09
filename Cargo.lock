@@ -6345,6 +6345,7 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "twox-hash",
+ "unzip-n",
  "zerofrom",
 ]
 
