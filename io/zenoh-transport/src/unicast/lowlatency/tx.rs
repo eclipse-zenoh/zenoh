@@ -43,8 +43,6 @@ impl TransportUnicastLowlatency {
                 .get()
                 .unwrap()
                 .inc_network_message(zenoh_stats::Rx, msg);
-        } else {
-            self.link_stats.get().unwrap().tx_observe_congestion(msg);
         }
 
         res
