@@ -129,7 +129,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<bool> {
         let transport = self.get_inner()?;
         transport.schedule(message)
     }

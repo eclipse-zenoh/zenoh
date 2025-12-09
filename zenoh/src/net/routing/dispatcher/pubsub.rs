@@ -267,13 +267,9 @@ pub fn route_data(
             let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let is_admin = expr.is_admin();
+            let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &tables);
             #[cfg(feature = "stats")]
-            let payload_size = msg.payload_size();
-            #[cfg(feature = "stats")]
-            let stats_keys = expr.stats_keys(&tables.stats_keys);
-            #[cfg(feature = "stats")]
-            zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
+            payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
 
             if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
                 let route = get_data_route(
@@ -296,15 +292,10 @@ pub fn route_data(
                             drop(tables);
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            #[cfg(not(feature = "stats"))]
-                            outface.primitives.send_push(msg, reliability);
-                            #[cfg(feature = "stats")]
-                            zenoh_stats::with_tx_observe_network_message(
-                                is_admin,
-                                payload_size,
-                                &stats_keys,
-                                || outface.primitives.send_push(msg, reliability),
-                            );
+                            if outface.primitives.send_push(msg, reliability) {
+                                #[cfg(feature = "stats")]
+                                payload_observer.observe_payload(zenoh_stats::Tx, outface, msg);
+                            }
                             // Reset the wire_expr to indicate the message has been consumed
                             msg.wire_expr = WireExpr::empty();
                         }
@@ -328,15 +319,10 @@ pub fn route_data(
                                 ext_nodeid: ext::NodeIdType { node_id: context },
                                 payload: msg.payload.clone(),
                             };
-                            #[cfg(not(feature = "stats"))]
-                            outface.primitives.send_push(msg, reliability);
-                            #[cfg(feature = "stats")]
-                            zenoh_stats::with_tx_observe_network_message(
-                                is_admin,
-                                payload_size,
-                                &stats_keys,
-                                || outface.primitives.send_push(msg, reliability),
-                            );
+                            if outface.primitives.send_push(msg, reliability) {
+                                #[cfg(feature = "stats")]
+                                payload_observer.observe_payload(zenoh_stats::Tx, &outface, msg);
+                            }
                         }
                     }
                 }

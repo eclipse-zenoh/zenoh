@@ -100,6 +100,8 @@ impl Router {
                     None,
                     self.tables.hat_code.new_face(),
                     true,
+                    #[cfg(feature = "stats")]
+                    None,
                 )
             })
             .clone();
@@ -148,6 +150,8 @@ impl Router {
                     Some(ingress.clone()),
                     self.tables.hat_code.new_face(),
                     false,
+                    #[cfg(feature = "stats")]
+                    transport.get_stats().ok(),
                 )
             })
             .clone();
@@ -187,6 +191,8 @@ impl Router {
         let fid = tables.face_counter;
         tables.face_counter += 1;
         let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
@@ -196,6 +202,8 @@ impl Router {
             None,
             self.tables.hat_code.new_face(),
             false,
+            #[cfg(feature = "stats")]
+            stats,
         );
         face.set_interceptors_from_factories(
             &tables.interceptors,
@@ -221,6 +229,8 @@ impl Router {
         let fid = tables.face_counter;
         tables.face_counter += 1;
         let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
         let face_state = FaceState::new(
             fid,
             peer.zid,
@@ -230,6 +240,8 @@ impl Router {
             Some(interceptor.clone()),
             self.tables.hat_code.new_face(),
             false,
+            #[cfg(feature = "stats")]
+            stats,
         );
         face_state.set_interceptors_from_factories(
             &tables.interceptors,

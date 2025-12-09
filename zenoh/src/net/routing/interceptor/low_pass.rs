@@ -420,7 +420,7 @@ impl InterceptorTrait for LowPassInterceptor {
         #[cfg(feature = "stats")]
         if !kept {
             self.stats
-                .observe_network_message_dropped(super::stats_direction(self.flow), msg);
+                .observe_network_message_dropped_payload(super::stats_direction(self.flow), msg);
         }
         kept
     }

@@ -43,7 +43,13 @@ impl TransportUnicastUniversal {
         callback: &dyn TransportPeerEventHandler,
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessageMut,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        stats.inc_network_message(
+            zenoh_stats::Rx,
+            zenoh_protocol::network::NetworkMessageExt::as_ref(&msg),
+        );
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
@@ -105,12 +111,12 @@ impl TransportUnicastUniversal {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
             for mut msg in frame {
-                #[cfg(not(feature = "stats"))]
-                self.trigger_callback(callback.as_ref(), msg.as_mut())?;
-                #[cfg(feature = "stats")]
-                stats.with_rx_observe_network_message(msg.as_mut(), |msg| {
-                    self.trigger_callback(callback.as_ref(), msg)
-                })?;
+                self.trigger_callback(
+                    callback.as_ref(),
+                    msg.as_mut(),
+                    #[cfg(feature = "stats")]
+                    stats,
+                )?;
             }
         } else {
             tracing::debug!(
@@ -186,12 +192,12 @@ impl TransportUnicastUniversal {
             if let Some(mut msg) = guard.defrag.defragment() {
                 let callback = zread!(self.callback).clone();
                 if let Some(callback) = callback.as_ref() {
-                    #[cfg(not(feature = "stats"))]
-                    return self.trigger_callback(callback.as_ref(), msg.as_mut());
-                    #[cfg(feature = "stats")]
-                    return stats.with_rx_observe_network_message(msg.as_mut(), |msg| {
-                        self.trigger_callback(callback.as_ref(), msg)
-                    });
+                    return self.trigger_callback(
+                        callback.as_ref(),
+                        msg.as_mut(),
+                        #[cfg(feature = "stats")]
+                        stats,
+                    );
                 } else {
                     tracing::debug!(
                         "Transport: {}. No callback available, dropping messages: {:?}",

@@ -247,37 +247,35 @@ impl EPrimitives for ENamespace {
         self
     }
 
-    fn send_interest(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>) {
-        if self.handle_interest_ingress(ctx.msg) {
-            self.primitives.send_interest(ctx);
-        }
+    fn send_interest(
+        &self,
+        ctx: super::RoutingContext<&mut zenoh_protocol::network::Interest>,
+    ) -> bool {
+        self.handle_interest_ingress(ctx.msg) && self.primitives.send_interest(ctx)
     }
 
-    fn send_declare(&self, ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>) {
-        if self.handle_declare_ingress(ctx.msg) {
-            self.primitives.send_declare(ctx);
-        }
+    fn send_declare(
+        &self,
+        ctx: super::RoutingContext<&mut zenoh_protocol::network::Declare>,
+    ) -> bool {
+        self.handle_declare_ingress(ctx.msg) && self.primitives.send_declare(ctx)
     }
 
-    fn send_push(&self, msg: &mut Push, reliability: zenoh_protocol::core::Reliability) {
-        if self.handle_namespace_ingress(&mut msg.wire_expr, None) {
-            self.primitives.send_push(msg, reliability);
-        }
+    fn send_push(&self, msg: &mut Push, reliability: zenoh_protocol::core::Reliability) -> bool {
+        self.handle_namespace_ingress(&mut msg.wire_expr, None)
+            && self.primitives.send_push(msg, reliability)
     }
 
-    fn send_request(&self, msg: &mut Request) {
-        if self.handle_namespace_ingress(&mut msg.wire_expr, None) {
-            self.primitives.send_request(msg);
-        }
+    fn send_request(&self, msg: &mut Request) -> bool {
+        self.handle_namespace_ingress(&mut msg.wire_expr, None) && self.primitives.send_request(msg)
     }
 
-    fn send_response(&self, msg: &mut Response) {
-        if self.handle_namespace_ingress(&mut msg.wire_expr, None) {
-            self.primitives.send_response(msg);
-        }
+    fn send_response(&self, msg: &mut Response) -> bool {
+        self.handle_namespace_ingress(&mut msg.wire_expr, None)
+            && self.primitives.send_response(msg)
     }
 
-    fn send_response_final(&self, msg: &mut ResponseFinal) {
-        self.primitives.send_response_final(msg);
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+        self.primitives.send_response_final(msg)
     }
 }

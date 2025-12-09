@@ -55,7 +55,7 @@ impl TransportMulticastInner {
 
         #[cfg(feature = "stats")]
         if res {
-            self.link_stats.tx_observe_network_message_finalize(msg);
+            self.link_stats.inc_network_message(zenoh_stats::Tx, msg);
         } else {
             self.link_stats.tx_observe_congestion(msg);
         }
