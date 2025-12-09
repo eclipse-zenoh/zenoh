@@ -36,13 +36,6 @@ use std::{
     },
 };
 
-#[cfg(feature = "unstable")]
-use crate::api::{
-    handlers::{Callback, CallbackParameter},
-    info::{Link, LinkEvent},
-    sample::SampleKind,
-};
-
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::Future;
@@ -88,6 +81,12 @@ use crate::api::info::Transport;
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "unstable")]
+use crate::api::{
+    handlers::{Callback, CallbackParameter},
+    info::{Link, LinkEvent, TransportEvent},
+    sample::SampleKind,
+};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -369,27 +368,14 @@ impl IRuntime for RuntimeState {
         callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
         history: bool,
     ) -> usize {
-        use crate::api::{
-            handlers::CallbackParameter,
-            info::{Transport, TransportEvent},
-            sample::SampleKind,
-        };
-
         // If history enabled, send Put events for existing transports
         if history {
-            let transports =
-                zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
-            for transport in transports {
-                if let (Ok(zid), Ok(whatami)) = (transport.get_zid(), transport.get_whatami()) {
-                    let event = TransportEvent {
-                        kind: SampleKind::Put,
-                        transport: Transport {
-                            zid: zid.into(),
-                            whatami,
-                        },
-                    };
-                    callback.call(TransportEvent::from_message(event));
-                }
+            for transport in self.get_transports() {
+                let event = TransportEvent {
+                    kind: SampleKind::Put,
+                    transport,
+                };
+                callback.call(TransportEvent::from_message(event));
             }
         }
 
@@ -418,31 +404,12 @@ impl IRuntime for RuntimeState {
     ) -> usize {
         // If history enabled, send Put events for existing links
         if history {
-            let transports =
-                zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
-            for transport in transports {
-                if let Ok(zid) = transport.get_zid() {
-                    // Filter by transport if specified
-                    if let Some(filter_zid) = transport_zid.as_ref() {
-                        let zid_converted: ZenohId = zid.into();
-                        if &zid_converted != filter_zid {
-                            continue;
-                        }
-                    }
-                    if let Ok(links) = transport.get_links() {
-                        for link in links {
-                            let event = LinkEvent {
-                                kind: SampleKind::Put,
-                                link: Link {
-                                    zid: zid.into(),
-                                    src: link.src,
-                                    dst: link.dst,
-                                },
-                            };
-                            callback.call(LinkEvent::from_message(event));
-                        }
-                    }
-                }
+            for link in self.get_links(transport_zid) {
+                let event = LinkEvent {
+                    kind: SampleKind::Put,
+                    link,
+                };
+                callback.call(LinkEvent::from_message(event));
             }
         }
 
