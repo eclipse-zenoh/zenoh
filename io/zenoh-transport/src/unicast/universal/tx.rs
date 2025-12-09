@@ -183,6 +183,7 @@ impl TransportUnicastUniversal {
                 }
                 let _ = block_first_notifier.notify();
             });
+            // Message should be sent as it is blocking.
             return Ok(true);
         }
 
@@ -191,13 +192,14 @@ impl TransportUnicastUniversal {
         // block for fairly long time
         drop(transport_links);
 
+        let pushed = pipeline.push_network_message(msg)?;
         self.handle_push_result(
             msg,
-            pipeline.push_network_message(msg)?,
+            pushed,
             #[cfg(feature = "stats")]
             stats,
         );
-        Ok(true)
+        Ok(pushed)
     }
 }
 
