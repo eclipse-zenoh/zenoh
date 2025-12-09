@@ -405,15 +405,28 @@ where
         #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
         let (mut callback, handler) = self.handler.into_handler();
         #[cfg(feature = "unstable")]
-        if let Some(ct) = self.cancellation_token {
+        let cancellation_token = if let Some(ct) = self.cancellation_token {
             if let Some(notifier) = ct.notifier() {
                 callback.set_on_drop_notifier(notifier);
+                Some(ct)
             } else {
                 // Token already cancelled, return handler without registering
                 return handler;
             }
+        } else {
+            None
+        };
+        #[allow(unused_variables)] // id is only needed for unstable cancellation_token
+        let id = self.runtime.transport_events(callback, self.history);
+        #[cfg(feature = "unstable")]
+        if let Some(cancellation_token) = cancellation_token {
+            let runtime_clone = self.runtime.clone();
+            let on_cancel = move || {
+                runtime_clone.cancel_transport_events(id);
+                Ok(())
+            };
+            cancellation_token.add_on_cancel_handler(Box::new(on_cancel));
         }
-        self.runtime.transport_events(callback, self.history);
         handler
     }
 }
@@ -463,6 +476,8 @@ pub struct LinkEventsBuilder<'a, Handler> {
     runtime: &'a DynamicRuntime,
     handler: Handler,
     history: bool,
+    #[cfg(feature = "unstable")]
+    cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
 #[zenoh_macros::unstable]
@@ -472,6 +487,8 @@ impl<'a> LinkEventsBuilder<'a, DefaultHandler> {
             runtime,
             handler: DefaultHandler::default(),
             history: false,
+            #[cfg(feature = "unstable")]
+            cancellation_token: None,
         }
     }
 }
@@ -493,6 +510,8 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
             runtime: self.runtime,
             handler,
             history: self.history,
+            #[cfg(feature = "unstable")]
+            cancellation_token: self.cancellation_token,
         }
     }
 
@@ -513,6 +532,51 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
     }
 }
 
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for LinkEventsBuilder<'_, Handler> {
+    /// Provide a cancellation token that ensures the callback is properly cleaned up.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let events = session.info()
+    ///     .link_events()
+    ///     .with(flume::bounded(32))
+    ///     .cancellation_token(ct.clone())
+    ///     .await;
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    ///
+    /// while let Ok(event) = events.recv_async().await {
+    ///     match event.kind() {
+    ///         SampleKind::Put => println!("Link added: {} -> {}",
+    ///             event.link().src(), event.link().dst()),
+    ///         SampleKind::Delete => println!("Link removed"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
+            ..self
+        }
+    }
+}
+
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for LinkEventsBuilder<'_, Handler>
 where
@@ -529,8 +593,31 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> Self::To {
-        let (callback, handler) = self.handler.into_handler();
-        self.runtime.link_events(callback, self.history);
+        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
+        let (mut callback, handler) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        let cancellation_token = if let Some(ct) = self.cancellation_token {
+            if let Some(notifier) = ct.notifier() {
+                callback.set_on_drop_notifier(notifier);
+                Some(ct)
+            } else {
+                // Token already cancelled, return handler without registering
+                return handler;
+            }
+        } else {
+            None
+        };
+        #[allow(unused_variables)] // id is only needed for unstable cancellation_token
+        let id = self.runtime.link_events(callback, self.history);
+        #[cfg(feature = "unstable")]
+        if let Some(cancellation_token) = cancellation_token {
+            let runtime_clone = self.runtime.clone();
+            let on_cancel = move || {
+                runtime_clone.cancel_link_events(id);
+                Ok(())
+            };
+            cancellation_token.add_on_cancel_handler(Box::new(on_cancel));
+        }
         handler
     }
 }

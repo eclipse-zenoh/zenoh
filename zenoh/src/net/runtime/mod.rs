@@ -24,10 +24,10 @@ pub mod orchestrator;
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ops::Deref,
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicU32, AtomicUsize, Ordering},
         Arc, Weak,
     },
 };
@@ -127,11 +127,17 @@ pub(crate) struct RuntimeState {
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "unstable")]
-    transport_event_callbacks:
-        std::sync::RwLock<Vec<crate::api::handlers::Callback<crate::api::info::TransportEvent>>>,
+    transport_event_callbacks: std::sync::RwLock<
+        HashMap<usize, crate::api::handlers::Callback<crate::api::info::TransportEvent>>,
+    >,
     #[cfg(feature = "unstable")]
-    link_event_callbacks:
-        std::sync::RwLock<Vec<crate::api::handlers::Callback<crate::api::info::LinkEvent>>>,
+    transport_event_callback_counter: AtomicUsize,
+    #[cfg(feature = "unstable")]
+    link_event_callbacks: std::sync::RwLock<
+        HashMap<usize, crate::api::handlers::Callback<crate::api::info::LinkEvent>>,
+    >,
+    #[cfg(feature = "unstable")]
+    link_event_callback_counter: AtomicUsize,
 }
 
 #[allow(private_interfaces)]
@@ -164,14 +170,20 @@ pub trait IRuntime: Send + Sync {
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
         history: bool,
-    );
+    ) -> usize;
+
+    #[cfg(feature = "unstable")]
+    fn cancel_transport_events(&self, id: usize);
 
     #[cfg(feature = "unstable")]
     fn link_events(
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
         history: bool,
-    );
+    ) -> usize;
+
+    #[cfg(feature = "unstable")]
+    fn cancel_link_events(&self, id: usize);
 
     #[cfg(feature = "unstable")]
     fn broadcast_transport_event(&self, kind: crate::api::sample::SampleKind, peer: &TransportPeer);
@@ -324,7 +336,7 @@ impl IRuntime for RuntimeState {
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
         history: bool,
-    ) {
+    ) -> usize {
         use crate::api::{
             handlers::CallbackParameter,
             info::{Transport, TransportEvent},
@@ -349,11 +361,20 @@ impl IRuntime for RuntimeState {
             }
         }
 
-        // Register callback for future events
+        // Generate unique ID and register callback for future events
+        let id = self
+            .transport_event_callback_counter
+            .fetch_add(1, Ordering::Relaxed);
         self.transport_event_callbacks
             .write()
             .unwrap()
-            .push(callback);
+            .insert(id, callback);
+        id
+    }
+
+    #[cfg(feature = "unstable")]
+    fn cancel_transport_events(&self, id: usize) {
+        self.transport_event_callbacks.write().unwrap().remove(&id);
     }
 
     #[cfg(feature = "unstable")]
@@ -361,7 +382,7 @@ impl IRuntime for RuntimeState {
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
         history: bool,
-    ) {
+    ) -> usize {
         use crate::api::{
             handlers::CallbackParameter,
             info::{Link, LinkEvent},
@@ -391,8 +412,20 @@ impl IRuntime for RuntimeState {
             }
         }
 
-        // Register callback for future events
-        self.link_event_callbacks.write().unwrap().push(callback);
+        // Generate unique ID and register callback for future events
+        let id = self
+            .link_event_callback_counter
+            .fetch_add(1, Ordering::Relaxed);
+        self.link_event_callbacks
+            .write()
+            .unwrap()
+            .insert(id, callback);
+        id
+    }
+
+    #[cfg(feature = "unstable")]
+    fn cancel_link_events(&self, id: usize) {
+        self.link_event_callbacks.write().unwrap().remove(&id);
     }
 
     #[cfg(feature = "unstable")]
@@ -415,7 +448,7 @@ impl IRuntime for RuntimeState {
         };
 
         let callbacks = self.transport_event_callbacks.read().unwrap();
-        for callback in callbacks.iter() {
+        for callback in callbacks.values() {
             callback.call(TransportEvent::from_message(event.clone()));
         }
     }
@@ -442,7 +475,7 @@ impl IRuntime for RuntimeState {
         };
 
         let callbacks = self.link_event_callbacks.read().unwrap();
-        for callback in callbacks.iter() {
+        for callback in callbacks.values() {
             callback.call(LinkEvent::from_message(event.clone()));
         }
     }
@@ -722,9 +755,13 @@ impl RuntimeBuilder {
                 #[cfg(feature = "stats")]
                 stats,
                 #[cfg(feature = "unstable")]
-                transport_event_callbacks: std::sync::RwLock::new(vec![]),
+                transport_event_callbacks: std::sync::RwLock::new(HashMap::new()),
                 #[cfg(feature = "unstable")]
-                link_event_callbacks: std::sync::RwLock::new(vec![]),
+                transport_event_callback_counter: AtomicUsize::new(0),
+                #[cfg(feature = "unstable")]
+                link_event_callbacks: std::sync::RwLock::new(HashMap::new()),
+                #[cfg(feature = "unstable")]
+                link_event_callback_counter: AtomicUsize::new(0),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
