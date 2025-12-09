@@ -92,7 +92,7 @@ impl LinkStats {
     pub fn tx_observe_congestion(&self, msg: impl NetworkMessageExt) {
         self.0
             .tx_congestion
-            .observe_with_protocol(Tx, msg, Some(self.0.protocol.clone()));
+            .observe_dropped_with_protocol(Tx, msg, Some(self.0.protocol.clone()));
     }
 }
 

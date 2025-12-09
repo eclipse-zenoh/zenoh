@@ -146,7 +146,7 @@ impl DropStats {
         }))
     }
 
-    pub(crate) fn observe_with_protocol(
+    pub(crate) fn observe_dropped_with_protocol(
         &self,
         direction: StatsDirection,
         msg: impl NetworkMessageExt,
@@ -170,7 +170,7 @@ impl DropStats {
         direction: StatsDirection,
         msg: impl NetworkMessageExt,
     ) {
-        self.observe_with_protocol(direction, msg, None)
+        self.observe_dropped_with_protocol(direction, msg, None)
     }
 }
 
