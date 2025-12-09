@@ -238,12 +238,19 @@ impl Transport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Link {
+    pub(crate) zid: ZenohId,
     pub(crate) src: Locator,
     pub(crate) dst: Locator,
 }
 
 #[zenoh_macros::unstable]
 impl Link {
+    /// Gets the ZenohId of the transport this link belongs to.
+    #[inline]
+    pub fn zid(&self) -> &ZenohId {
+        &self.zid
+    }
+
     /// Gets the source locator (local endpoint).
     #[inline]
     pub fn src(&self) -> &Locator {
@@ -302,7 +309,6 @@ impl CallbackParameter for TransportEvent {
 pub struct LinkEvent {
     pub(crate) kind: SampleKind, // Put = added, Delete = removed
     pub(crate) link: Link,
-    pub(crate) transport_zid: ZenohId,
 }
 
 #[zenoh_macros::unstable]
@@ -319,7 +325,7 @@ impl LinkEvent {
 
     /// Returns the ZenohId of the transport this link belongs to
     pub fn transport_zid(&self) -> &ZenohId {
-        &self.transport_zid
+        self.link.zid()
     }
 
     /// Returns true if this is an "added" event

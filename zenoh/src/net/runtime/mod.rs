@@ -36,6 +36,13 @@ use std::{
     },
 };
 
+#[cfg(feature = "unstable")]
+use crate::api::{
+    handlers::{Callback, CallbackParameter},
+    info::{Link, LinkEvent},
+    sample::SampleKind,
+};
+
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::Future;
@@ -76,7 +83,7 @@ use super::{
     },
 };
 #[cfg(feature = "unstable")]
-use crate::api::info::{Link, Transport};
+use crate::api::info::Transport;
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
@@ -167,7 +174,10 @@ pub trait IRuntime: Send + Sync {
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
 
     #[cfg(feature = "unstable")]
-    fn get_links(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
+    fn get_links(
+        &self,
+        transport_zid: Option<ZenohId>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     #[cfg(feature = "unstable")]
     fn transport_events(
@@ -184,6 +194,7 @@ pub trait IRuntime: Send + Sync {
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
         history: bool,
+        transport_zid: Option<ZenohId>,
     ) -> usize;
 
     #[cfg(feature = "unstable")]
@@ -317,22 +328,45 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn get_links(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
-        Box::new(
-            zenoh_runtime::ZRuntime::Net
-                .block_in_place(self.manager.get_transports_unicast())
+    fn get_links(
+        &self,
+        transport_zid: Option<ZenohId>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let transports =
+            zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
+
+        // Convert transport to links (returns empty vec if get_zid fails)
+        let transport_to_links = |t: TransportUnicast| -> Vec<Link> {
+            let Ok(zid) = t.get_zid() else {
+                return Vec::new();
+            };
+            let zid: ZenohId = zid.into();
+
+            t.get_links()
+                .unwrap_or_default()
                 .into_iter()
-                .flat_map(|t| {
-                    t.get_links()
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|link| Link {
-                            src: link.src,
-                            dst: link.dst,
-                        })
-                        .collect::<Vec<_>>()
-                }),
-        )
+                .map(move |link| Link {
+                    zid,
+                    src: link.src,
+                    dst: link.dst,
+                })
+                .collect()
+        };
+
+        if let Some(filter_zid) = transport_zid {
+            // Specific transport requested - find it and return its links
+            Box::new(
+                transports
+                    .into_iter()
+                    .find(|t| t.get_zid().ok() == Some(filter_zid.into()))
+                    .map(transport_to_links)
+                    .unwrap_or_default()
+                    .into_iter(),
+            )
+        } else {
+            // All transports - scan all and collect links
+            Box::new(transports.into_iter().flat_map(transport_to_links))
+        }
     }
 
     #[cfg(feature = "unstable")]
@@ -386,25 +420,27 @@ impl IRuntime for RuntimeState {
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
         history: bool,
+        transport_zid: Option<ZenohId>,
     ) -> usize {
-        use crate::api::{
-            handlers::CallbackParameter,
-            info::{Link, LinkEvent},
-            sample::SampleKind,
-        };
-
         // If history enabled, send Put events for existing links
         if history {
             let transports =
                 zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
             for transport in transports {
                 if let Ok(zid) = transport.get_zid() {
+                    // Filter by transport if specified
+                    if let Some(filter_zid) = transport_zid.as_ref() {
+                        let zid_converted: ZenohId = zid.into();
+                        if &zid_converted != filter_zid {
+                            continue;
+                        }
+                    }
                     if let Ok(links) = transport.get_links() {
                         for link in links {
                             let event = LinkEvent {
                                 kind: SampleKind::Put,
-                                transport_zid: zid.into(),
                                 link: Link {
+                                    zid: zid.into(),
                                     src: link.src,
                                     dst: link.dst,
                                 },
@@ -416,6 +452,18 @@ impl IRuntime for RuntimeState {
             }
         }
 
+        // Wrap callback with filter if transport_zid is specified
+        let filtered_callback = if let Some(filter_zid) = transport_zid {
+            let callback_clone = callback.clone();
+            Callback::new(Arc::new(move |event: LinkEvent| {
+                if event.link().zid() == &filter_zid {
+                    callback_clone.call(event);
+                }
+            }))
+        } else {
+            callback
+        };
+
         // Generate unique ID and register callback for future events
         let id = self
             .link_event_callback_counter
@@ -423,7 +471,7 @@ impl IRuntime for RuntimeState {
         self.link_event_callbacks
             .write()
             .unwrap()
-            .insert(id, callback);
+            .insert(id, filtered_callback);
         id
     }
 
@@ -471,8 +519,8 @@ impl IRuntime for RuntimeState {
 
         let event = LinkEvent {
             kind,
-            transport_zid: transport_zid.into(),
             link: Link {
+                zid: transport_zid.into(),
                 src: link.src.clone(),
                 dst: link.dst.clone(),
             },

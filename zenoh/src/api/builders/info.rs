@@ -223,12 +223,35 @@ impl IntoFuture for TransportsBuilder<'_> {
 #[zenoh_macros::unstable]
 pub struct LinksBuilder<'a> {
     runtime: &'a DynamicRuntime,
+    transport_zid: Option<ZenohId>,
 }
 
 #[zenoh_macros::unstable]
 impl<'a> LinksBuilder<'a> {
     pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
-        Self { runtime }
+        Self {
+            runtime,
+            transport_zid: None,
+        }
+    }
+
+    /// Filter links by transport ZenohId.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let transport_zid = /* some ZenohId */;
+    /// let links = session.info().links().transport(transport_zid).await;
+    /// for link in links {
+    ///     println!("Link: {} -> {}", link.src(), link.dst());
+    /// }
+    /// # }
+    /// ```
+    pub fn transport(mut self, zid: ZenohId) -> Self {
+        self.transport_zid = Some(zid);
+        self
     }
 }
 
@@ -240,7 +263,7 @@ impl Resolvable for LinksBuilder<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LinksBuilder<'_> {
     fn wait(self) -> Self::To {
-        self.runtime.get_links()
+        self.runtime.get_links(self.transport_zid)
     }
 }
 
@@ -478,6 +501,7 @@ pub struct LinkEventsBuilder<'a, Handler> {
     runtime: &'a DynamicRuntime,
     handler: Handler,
     history: bool,
+    transport_zid: Option<ZenohId>,
     #[cfg(feature = "unstable")]
     cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
@@ -489,6 +513,7 @@ impl<'a> LinkEventsBuilder<'a, DefaultHandler> {
             runtime,
             handler: DefaultHandler::default(),
             history: false,
+            transport_zid: None,
             #[cfg(feature = "unstable")]
             cancellation_token: None,
         }
@@ -512,9 +537,30 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
             runtime: self.runtime,
             handler,
             history: self.history,
+            transport_zid: self.transport_zid,
             #[cfg(feature = "unstable")]
             cancellation_token: self.cancellation_token,
         }
+    }
+
+    /// Filter link events by transport ZenohId.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let transport_zid = /* some ZenohId */;
+    /// let events = session.info()
+    ///     .link_events()
+    ///     .transport(transport_zid)
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    /// # }
+    /// ```
+    pub fn transport(mut self, zid: ZenohId) -> Self {
+        self.transport_zid = Some(zid);
+        self
     }
 
     /// Provide a callback to handle events
@@ -611,7 +657,9 @@ where
             None
         };
         #[allow(unused_variables)] // id is only needed for unstable cancellation_token
-        let id = self.runtime.link_events(callback, self.history);
+        let id = self
+            .runtime
+            .link_events(callback, self.history, self.transport_zid);
         #[cfg(feature = "unstable")]
         if let Some(cancellation_token) = cancellation_token {
             let runtime_clone = self.runtime.clone();

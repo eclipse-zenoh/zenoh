@@ -857,4 +857,205 @@ mod tests {
         session1.close().await.unwrap();
         session3.close().await.unwrap();
     }
+
+    /// Test that links() can be filtered by transport ZID
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_links_filter_by_transport() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17458".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Create two peers that connect to first
+        let mut config2 = Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17458".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        let mut config3 = Config::default();
+        config3
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17458".parse().unwrap()])
+            .unwrap();
+        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session3 = zenoh::open(config3).await.unwrap();
+
+        // Wait for connections
+        tokio::time::sleep(SLEEP).await;
+
+        // Get all transports
+        let transports = session1.info().transports().await;
+        let transport_zids: Vec<_> = transports.map(|t| *t.zid()).collect();
+        assert_eq!(
+            transport_zids.len(),
+            2,
+            "Should have 2 transports (one for each peer)"
+        );
+
+        // Get all links (without filter)
+        let all_links: Vec<_> = session1.info().links().await.collect();
+        assert_eq!(all_links.len(), 2, "Should have 2 links in total");
+
+        // Get links for first transport only
+        let filtered_links: Vec<_> = session1
+            .info()
+            .links()
+            .transport(transport_zids[0])
+            .await
+            .collect();
+        assert_eq!(
+            filtered_links.len(),
+            1,
+            "Should have 1 link for first transport"
+        );
+        assert_eq!(
+            filtered_links[0].zid(),
+            &transport_zids[0],
+            "Filtered link should belong to specified transport"
+        );
+
+        // Get links for second transport only
+        let filtered_links2: Vec<_> = session1
+            .info()
+            .links()
+            .transport(transport_zids[1])
+            .await
+            .collect();
+        assert_eq!(
+            filtered_links2.len(),
+            1,
+            "Should have 1 link for second transport"
+        );
+        assert_eq!(
+            filtered_links2[0].zid(),
+            &transport_zids[1],
+            "Filtered link should belong to specified transport"
+        );
+
+        println!("Successfully verified links() filtering by transport");
+
+        session1.close().await.unwrap();
+        session2.close().await.unwrap();
+        session3.close().await.unwrap();
+    }
+
+    /// Test that link_events() can be filtered by transport ZID
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_link_events_filter_by_transport() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Create second peer first (we'll filter for this one)
+        let mut config2 = Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection
+        tokio::time::sleep(SLEEP).await;
+
+        // Get the transport ZID for session2's connection
+        let transports: Vec<_> = session1.info().transports().await.collect();
+        assert_eq!(transports.len(), 1, "Should have 1 transport");
+        let target_zid = *transports[0].zid();
+
+        // Track events received
+        let events_received = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events_received_clone = events_received.clone();
+
+        // Subscribe to link events with filter for target_zid
+        let _events = session1
+            .info()
+            .link_events()
+            .transport(target_zid)
+            .history(false)
+            .callback(move |_event| {
+                events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            })
+            .await;
+
+        // Create third peer that connects - should NOT trigger events (different transport)
+        let mut config3 = Config::default();
+        config3
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
+            .unwrap();
+        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session3 = zenoh::open(config3).await.unwrap();
+
+        // Wait for potential events
+        tokio::time::sleep(SLEEP).await;
+
+        // Should NOT have received events (filtered out)
+        let count = events_received.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            count, 0,
+            "Should not receive events for different transport"
+        );
+
+        // Close and reconnect session2 - SHOULD trigger events
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        let mut config2_new = Config::default();
+        config2_new
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
+            .unwrap();
+        config2_new
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+        let _session2_new = zenoh::open(config2_new).await.unwrap();
+
+        // Wait for events (poll with timeout)
+        let start = std::time::Instant::now();
+        let mut final_count;
+        loop {
+            final_count = events_received.load(std::sync::atomic::Ordering::SeqCst);
+            if final_count > 0 {
+                break;
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Did not receive filtered link events within timeout");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        println!(
+            "Successfully verified link_events() filtering by transport (received {} events)",
+            final_count
+        );
+
+        session1.close().await.unwrap();
+        session3.close().await.unwrap();
+    }
 }
