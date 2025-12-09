@@ -452,12 +452,19 @@ mod tests {
         config2.scouting.multicast.set_enabled(Some(false)).unwrap();
         let session2 = zenoh::open(config2).await.unwrap();
 
-        // Wait for connection and events
-        tokio::time::sleep(SLEEP).await;
-
-        // Should have received open event
-        let count_before = events_received.load(std::sync::atomic::Ordering::SeqCst);
-        assert!(count_before > 0, "Should have received at least one event");
+        // Wait for connection and events (poll with timeout to handle system load)
+        let start = std::time::Instant::now();
+        let mut count_before;
+        loop {
+            count_before = events_received.load(std::sync::atomic::Ordering::SeqCst);
+            if count_before > 0 {
+                break;
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Did not receive any transport events within timeout");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
         println!("Received {} events before cancellation", count_before);
 
         // Cancel the token
@@ -535,12 +542,19 @@ mod tests {
         config2.scouting.multicast.set_enabled(Some(false)).unwrap();
         let session2 = zenoh::open(config2).await.unwrap();
 
-        // Wait for connection and events
-        tokio::time::sleep(SLEEP).await;
-
-        // Should have received link event
-        let count_before = events_received.load(std::sync::atomic::Ordering::SeqCst);
-        assert!(count_before > 0, "Should have received at least one event");
+        // Wait for connection and events (poll with timeout to handle system load)
+        let start = std::time::Instant::now();
+        let mut count_before;
+        loop {
+            count_before = events_received.load(std::sync::atomic::Ordering::SeqCst);
+            if count_before > 0 {
+                break;
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Did not receive any link events within timeout");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
         println!("Received {} events before cancellation", count_before);
 
         // Cancel the token
@@ -609,8 +623,8 @@ mod tests {
             .history(false)
             .callback(move |_event| {
                 callback_started_clone.store(true, std::sync::atomic::Ordering::SeqCst);
-                // Simulate processing time
-                std::thread::sleep(Duration::from_millis(200));
+                // Simulate processing time - long enough to test synchronization (2 seconds)
+                std::thread::sleep(Duration::from_millis(2000));
                 callback_completed_clone.store(true, std::sync::atomic::Ordering::SeqCst);
             })
             .cancellation_token(ct.clone())
@@ -626,14 +640,25 @@ mod tests {
         config2.scouting.multicast.set_enabled(Some(false)).unwrap();
         let session2 = zenoh::open(config2).await.unwrap();
 
-        // Wait for event to trigger callback
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        // Wait for callback to start (poll with timeout)
+        let start = std::time::Instant::now();
+        while !callback_started.load(std::sync::atomic::Ordering::SeqCst) {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Callback did not start within timeout");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
-        // Verify callback started
+        // Verify callback has started but not yet completed (still in progress)
         assert!(
             callback_started.load(std::sync::atomic::Ordering::SeqCst),
             "Callback should have started"
         );
+        assert!(
+            !callback_completed.load(std::sync::atomic::Ordering::SeqCst),
+            "Callback should still be in progress before cancellation"
+        );
+        println!("Verified callback is in progress");
 
         // Cancel while callback is still executing
         ct.cancel().await.unwrap();
@@ -765,14 +790,22 @@ mod tests {
         config2.scouting.multicast.set_enabled(Some(false)).unwrap();
         let session2 = zenoh::open(config2).await.unwrap();
 
-        // Wait for connection and events
-        tokio::time::sleep(SLEEP).await;
+        // Wait for connection and events (poll with timeout to handle system load)
+        let start = std::time::Instant::now();
+        loop {
+            let count1 = events1_count.load(std::sync::atomic::Ordering::SeqCst);
+            let count2 = events2_count.load(std::sync::atomic::Ordering::SeqCst);
+            if count1 > 0 && count2 > 0 {
+                break;
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Both subscribers did not receive events within timeout");
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
-        // Both subscribers should have received events
         let count1_before = events1_count.load(std::sync::atomic::Ordering::SeqCst);
         let count2_before = events2_count.load(std::sync::atomic::Ordering::SeqCst);
-        assert!(count1_before > 0, "Subscriber 1 should have received events");
-        assert!(count2_before > 0, "Subscriber 2 should have received events");
         println!(
             "Before cancellation: subscriber1={}, subscriber2={}",
             count1_before, count2_before
