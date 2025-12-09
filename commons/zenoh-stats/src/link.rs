@@ -38,8 +38,12 @@ impl LinkStats {
                 .transport_message(StatsDirection::from_index(dir))
                 .get_or_create_owned(transport, Some(&link), &labels)
         });
-        let tx_congestion =
-            DropStats::new(registry.clone(), transport.clone(), ReasonLabel::Congestion);
+        let tx_congestion = DropStats::new(
+            registry.clone(),
+            transport.clone(),
+            ReasonLabel::Congestion,
+            Some(protocol.clone()),
+        );
         Self(Arc::new(LinkStatsInner {
             transport_stats,
             link,
@@ -92,7 +96,7 @@ impl LinkStats {
     pub fn tx_observe_congestion(&self, msg: impl NetworkMessageExt) {
         self.0
             .tx_congestion
-            .observe_dropped_with_protocol(Tx, msg, Some(self.0.protocol.clone()));
+            .observe_network_message_dropped_payload(Tx, msg)
     }
 }
 
