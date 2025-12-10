@@ -267,9 +267,7 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        let Some(PendingCurrentInterest { interest, .. }) = get_mut_unchecked(ctx.src_face)
-            .pending_current_interests
-            .remove(&interest_id)
+        let Some(pending_interest) = ctx.src_face.pending_current_interests.get(&interest_id)
         else {
             tracing::error!(
                 id = interest_id,
@@ -279,7 +277,9 @@ impl HatInterestTrait for Hat {
             return None;
         };
 
-        Arc::into_inner(interest)
+        tracing::trace!(interest = ?pending_interest.interest);
+
+        Some(pending_interest.interest.as_ref().clone())
     }
 
     fn send_current_subscriptions(
@@ -289,7 +289,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
     ) {
-        unreachable!()
+        bug!("South-bound client hat")
     }
 
     fn send_current_queryables(
@@ -299,7 +299,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
     ) {
-        unreachable!()
+        bug!("South-bound client hat")
     }
 
     fn send_current_tokens(
@@ -309,7 +309,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _other_matches: HashSet<Arc<Resource>>,
     ) {
-        unreachable!()
+        bug!("South-bound client hat")
     }
 
     fn propagate_current_token(
@@ -318,11 +318,11 @@ impl HatInterestTrait for Hat {
         _res: Arc<Resource>,
         _interest: CurrentInterest,
     ) {
-        unreachable!()
+        bug!("South-bound client hat")
     }
 
     fn send_declare_final(&mut self, _ctx: BaseContext, _id: InterestId, _src: &Remote) {
-        unreachable!()
+        bug!("South-bound client hat")
     }
 
     fn register_interest(
@@ -331,7 +331,7 @@ impl HatInterestTrait for Hat {
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
     ) {
-        unreachable!()
+        bug!("South-bound client hat")
     }
 
     fn unregister_interest(
@@ -339,7 +339,8 @@ impl HatInterestTrait for Hat {
         _ctx: BaseContext,
         _msg: &Interest,
     ) -> Option<RemoteInterest> {
-        unreachable!()
+        bug!("South-bound client hat");
+        None
     }
 
     #[tracing::instrument(level = "trace", skip(_tables), ret)]

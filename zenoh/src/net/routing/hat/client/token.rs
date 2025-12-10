@@ -73,7 +73,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn register_token(
         &mut self,
         ctx: BaseContext,
@@ -106,7 +106,7 @@ impl HatTokenTrait for Hat {
             .insert(id, res.clone());
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_token(
         &mut self,
         ctx: BaseContext,
@@ -200,7 +200,7 @@ impl HatTokenTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
     fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
             tracing::debug!("Client region is empty; won't unpropagate token upstream");
@@ -229,9 +229,10 @@ impl HatTokenTrait for Hat {
 
     #[tracing::instrument(level = "trace", ret)]
     fn remote_tokens_of(&self, res: &Resource) -> bool {
-        self.owned_face_contexts(res).any(|(_, ctx)| ctx.token)
+        self.owned_face_contexts(res).any(|ctx| ctx.token)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_tokens_matching(
         &self,

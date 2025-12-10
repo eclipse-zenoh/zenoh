@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use zenoh_core::zread;
@@ -28,17 +28,14 @@ use super::{
     resource::Resource,
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::Face,
-            local_resources::{LocalResourceInfoTrait, LocalResources},
-            region::Region,
-        },
-        hat::{BaseContext, SendDeclare},
-        router::{get_or_set_route, Direction, RouteBuilder},
+use crate::net::routing::{
+    dispatcher::{
+        face::Face,
+        local_resources::{LocalResourceInfoTrait, LocalResources},
+        region::Region,
     },
+    hat::{BaseContext, SendDeclare},
+    router::{get_or_set_route, Direction, RouteBuilder},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -290,15 +287,6 @@ fn get_data_route(
     }
 }
 
-#[inline]
-pub(crate) fn get_matching_subscriptions(
-    tables: &Tables,
-    key_expr: &KeyExpr<'_>,
-) -> HashMap<usize, Arc<FaceState>> {
-    // REVIEW(regions2): use the broker hat
-    tables.hats[Region::Local].get_matching_subscriptions(&tables.data, key_expr)
-}
-
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
@@ -331,15 +319,15 @@ pub fn route_data(
     let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &rtables);
     #[cfg(feature = "stats")]
     payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
-    let mut dirs = RouteBuilder::<Direction>::new();
+    let mut builder = RouteBuilder::<Direction>::new();
 
-    for (bound, hat) in rtables.hats.iter() {
+    for (region, hat) in rtables.hats.iter() {
         if hat.ingress_filter(&rtables.data, face, &expr) {
-            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, bound);
+            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, region);
 
             for dir in route.iter() {
                 if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
-                    dirs.insert(dir.dst_face.id, || dir.clone());
+                    builder.insert(dir.dst_face.id, || dir.clone());
                 }
             }
         }
@@ -352,9 +340,9 @@ pub fn route_data(
         }
     };
 
-    let mut dirs_iter = dirs.build().into_iter();
+    let mut dirs = builder.build().into_iter();
 
-    if let Some(dir) = dirs_iter.next() {
+    if let Some(dir) = dirs.next() {
         treat_timestamp!(
             &rtables.data.hlc,
             msg.payload,
@@ -368,7 +356,7 @@ pub fn route_data(
 
         drop(rtables);
 
-        for dir in dirs_iter {
+        for dir in dirs {
             send_push(
                 &dir.dst_face,
                 &mut Push {

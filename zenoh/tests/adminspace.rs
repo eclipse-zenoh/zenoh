@@ -111,19 +111,12 @@ async fn test_adminspace_read() {
         .next();
     assert!(metrics.is_some());
     let routers_graph = router
-        .get(format!("@/{zid}/router/linkstate/routers"))
+        .get(format!("@/{zid}/router/linkstate/north"))
         .await
         .unwrap()
         .into_iter()
         .next();
     assert!(routers_graph.is_some());
-    let peers_graph = router
-        .get(format!("@/{zid}/router/linkstate/peers"))
-        .await
-        .unwrap()
-        .into_iter()
-        .next();
-    assert!(peers_graph.is_some());
 
     let subscribers: Vec<String> = router
         .get(format!("@/{zid}/router/subscriber/**"))

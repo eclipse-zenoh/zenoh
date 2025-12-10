@@ -181,7 +181,7 @@ impl FaceStateBuilder {
         self
     }
 
-    pub(crate) fn multicast_groups(mut self, mcast_group: TransportMulticast) -> Self {
+    pub(crate) fn multicast_group(mut self, mcast_group: TransportMulticast) -> Self {
         self.0.mcast_group = Some(mcast_group);
         self
     }
@@ -325,7 +325,7 @@ impl FaceState {
 
 impl fmt::Display for FaceState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}:{}", self.id, self.zid.short(), self.region)
+        write!(f, "{}/{}:{}", self.region, self.zid.short(), self.id)
     }
 }
 
@@ -384,8 +384,6 @@ impl Face {
         if let Some(interest) = self.state.pending_current_interests.get(&interest_id) {
             interest.rejection_token.cancel();
         }
-
-        // FIXME(regions): reject sourced interests
     }
 }
 
@@ -518,12 +516,12 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(reliability))]
+    #[tracing::instrument(level = "debug", skip(msg), ret)]
     fn send_push(&self, msg: &mut Push, reliability: Reliability) {
         route_data(&self.tables, &self.state, msg, reliability);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(id = msg.id))]
+    #[tracing::instrument(level = "debug", skip(msg), ret)]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -532,17 +530,17 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(msg), ret)]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(msg), ret)]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", ret)]
     fn send_close(&self) {
         tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
@@ -602,7 +600,7 @@ impl Primitives for Face {
                     get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
                     Resource::clean(&mut res);
                 }
-                [(last_owner, _)] => hats[last_owner]
+                [(last_owner, _)] if last_owner != &region => hats[last_owner]
                     .unpropagate_last_non_owned_queryable(ctx.reborrow(), res.clone()),
                 _ => {
                     for hat in hats.values_mut() {

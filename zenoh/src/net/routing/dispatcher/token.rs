@@ -26,7 +26,7 @@ use zenoh_protocol::{
 
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
-    dispatcher::{face::Face, region::Region},
+    dispatcher::face::Face,
     hat::{BaseContext, SendDeclare},
     router::Resource,
 };
@@ -42,6 +42,16 @@ impl Face {
         interest_id: Option<InterestId>,
         send_declare: &mut SendDeclare,
     ) {
+        if interest_id.is_some() && self.state.region.bound().is_south() {
+            tracing::error!(
+                src = %self.state,
+                id = interest_id,
+                "Received token with interest id from south-bound face. \
+                This message should only flow downstream"
+            );
+            return;
+        }
+
         let rtables = zread!(tables.tables);
         match rtables
             .data
@@ -52,7 +62,7 @@ impl Face {
                 let _span = tracing::debug_span!(
                     "declare_token",
                     id,
-                    iid = interest_id,
+                    interest_id,
                     expr = [prefix.expr(), expr.suffix.as_ref()].concat()
                 )
                 .entered();
@@ -91,16 +101,13 @@ impl Face {
                 };
 
                 if let Some(interest_id) = interest_id {
-                    if let Some(pending_interest) = hats[Region::North].route_current_token(
-                        ctx.reborrow(),
-                        interest_id,
-                        res.clone(),
-                    ) {
-                        tracing::trace!(
-                            src_id = pending_interest.src_interest_id,
-                            %region,
-                            "Propagating current token"
-                        );
+                    if let Some(pending_interest) =
+                        hats[region].route_current_token(ctx.reborrow(), interest_id, res.clone())
+                    {
+                        if pending_interest.mode.is_future() {
+                            hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
+                        }
+
                         hats[pending_interest.src_region].propagate_current_token(
                             ctx,
                             res,
@@ -209,20 +216,24 @@ impl Face {
             .unregister_token(ctx.reborrow(), id, res.clone(), node_id)
             .or(res)
         {
-            let remaining = hats
+            let rem = hats
                 .values_mut()
                 .filter_map(|hat| hat.remote_tokens_of(&res).then_some(hat.region()))
                 .collect_vec();
 
-            tracing::trace!(rem = ?remaining);
+            tracing::trace!(?rem);
 
-            if remaining.is_empty() {
-                for hat in tables.hats.values_mut() {
-                    hat.unpropagate_token(ctx.reborrow(), res.clone());
+            match &*rem {
+                [] => {
+                    for hat in tables.hats.values_mut() {
+                        hat.unpropagate_token(ctx.reborrow(), res.clone());
+                    }
+                    Resource::clean(&mut res);
                 }
-                Resource::clean(&mut res);
-            } else if let [last_owner] = &*remaining {
-                hats[last_owner].unpropagate_last_non_owned_token(ctx, res.clone())
+                [last_owner] if last_owner != &region => {
+                    hats[last_owner].unpropagate_last_non_owned_token(ctx, res.clone())
+                }
+                _ => {}
             }
         }
     }

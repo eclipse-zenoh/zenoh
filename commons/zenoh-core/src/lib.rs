@@ -177,6 +177,9 @@ where
 pub use zenoh_result::{likely, unlikely};
 
 /// Re-definitions of inaccessible [`std`] items for MSRV compatibility.
+///
+/// These definitions are likely to cause `incompatible_msrv` warnings from clippy,
+/// see https://github.com/rust-lang/rust-clippy/issues/12280.
 pub mod polyfill {
     // TODO: use rustversion?
 
@@ -203,5 +206,17 @@ pub mod polyfill {
 macro_rules! debug_assert_implies {
     ($lhs:expr, $rhs:expr) => {
         debug_assert!(!$lhs || $rhs)
+    };
+}
+
+/// Panics with the given message in debug mode or logs an error otherwise.
+#[macro_export]
+macro_rules! bug {
+    ($msg:literal) => {
+        if cfg!(debug_assertions) {
+            assert!(false, $msg);
+        } else {
+            tracing::error!(target: "bug", $msg);
+        }
     };
 }

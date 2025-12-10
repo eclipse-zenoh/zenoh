@@ -33,21 +33,18 @@ use zenoh_protocol::{
 };
 
 use super::Hat;
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::network::Network,
-        routing::{
-            dispatcher::{
-                face::{FaceId, FaceState},
-                queries::merge_qabl_infos,
-                resource::{NodeId, Resource},
-                tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
-            },
-            hat::{BaseContext, HatBaseTrait, HatQueriesTrait, Sources},
-            router::Direction,
-            RoutingContext,
+use crate::net::{
+    protocol::network::Network,
+    routing::{
+        dispatcher::{
+            face::FaceState,
+            queries::merge_qabl_infos,
+            resource::{NodeId, Resource},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
+        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, Sources, UnregisterResult},
+        router::Direction,
+        RoutingContext,
     },
 };
 
@@ -284,7 +281,7 @@ impl Hat {
 }
 
 impl HatQueriesTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
     fn sourced_queryables(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         self.router_qabls
@@ -302,18 +299,18 @@ impl HatQueriesTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
     fn sourced_queriers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, rgn = %self.region))]
+    #[tracing::instrument(level = "debug", skip(tables), fields(%src_face) ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        source: NodeId,
+        nid: NodeId,
     ) -> Arc<QueryTargetQablSet> {
         lazy_static::lazy_static! {
             static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
@@ -371,13 +368,7 @@ impl HatQueriesTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
-        let source_type = src_face.whatami;
-        tracing::trace!(
-            "compute_query_route({}, {:?}, {:?})",
-            key_expr,
-            source,
-            source_type
-        );
+
         let matches = expr
             .resource()
             .as_ref()
@@ -389,8 +380,9 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             let net = self.routers_net.as_ref().unwrap();
-            let router_source = match source_type {
-                WhatAmI::Router => source,
+            // FIXME(regions): remove this
+            let router_source = match src_face.whatami {
+                WhatAmI::Router => nid,
                 _ => net.idx.index() as NodeId,
             };
             insert_target_for_qabls(
@@ -409,57 +401,7 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    fn get_matching_queryables(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<FaceId, Arc<FaceState>> {
-        let mut matching_queryables = HashMap::new();
-
-        tracing::trace!(
-            "get_matching_queryables({}; complete: {})",
-            key_expr,
-            complete
-        );
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
-                continue;
-            }
-
-            let net = self.routers_net.as_ref().unwrap();
-            self.insert_faces_for_qbls(
-                &mut matching_queryables,
-                tables,
-                net,
-                &self.res_hat(&mres).router_qabls,
-                complete,
-            );
-
-            for (sid, ctx) in &mres.face_ctxs {
-                if match complete {
-                    true => ctx.qabl.is_some_and(|q| q.complete),
-                    false => ctx.qabl.is_some(),
-                } && ctx.face.whatami != WhatAmI::Router
-                {
-                    matching_queryables
-                        .entry(*sid)
-                        .or_insert_with(|| ctx.face.clone());
-                }
-            }
-        }
-        matching_queryables
-    }
-
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    #[tracing::instrument(level = "debug", skip(ctx, _id))]
     fn register_queryable(
         &mut self,
         ctx: BaseContext,
@@ -485,26 +427,26 @@ impl HatQueriesTrait for Hat {
         self.propagate_sourced_queryable(ctx.tables, &res, info, Some(ctx.src_face), &router);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, _id), ret)]
     fn unregister_queryable(
         &mut self,
         ctx: BaseContext,
         _id: QueryableId,
         res: Option<Arc<Resource>>,
         nid: NodeId,
-    ) -> Option<Arc<Resource>> {
+    ) -> UnregisterResult {
         debug_assert!(self.owns(ctx.src_face));
 
         let Some(router) = self.get_router(ctx.src_face, nid) else {
             tracing::error!(%nid, "Queryable from unknown router");
-            return None;
+            return UnregisterResult::Noop;
         };
 
         debug_assert_ne!(router, ctx.tables.zid);
 
         let Some(mut res) = res else {
             tracing::error!("Queryable undeclaration in router region with no resource");
-            return None;
+            return UnregisterResult::Noop;
         };
 
         self.res_hat_mut(&mut res).router_qabls.remove(&router);
@@ -515,15 +457,19 @@ impl HatQueriesTrait for Hat {
 
         self.propagate_forget_sourced_queryable(ctx.tables, &res, Some(ctx.src_face), &router);
 
-        Some(res)
+        // FIXME(regions): handle the InfoUpdate
+        UnregisterResult::LastUnregistered { res }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
         self.unregister_node_queryables(&ctx.src_face.zid)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    #[allow(clippy::incompatible_msrv)]
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
     fn propagate_queryable(
         &mut self,
         ctx: BaseContext,
@@ -551,8 +497,8 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    fn unpropagate_queryable(&mut self, ctx: BaseContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_queryable
             return;
@@ -563,14 +509,28 @@ impl HatQueriesTrait for Hat {
             .router_qabls
             .contains_key(&ctx.tables.zid);
 
+        // if !was_propagated {
+        //     dbg!(("unpropagate_queryable", &self, &res, &ctx.src_face));
+        //     panic!();
+        // } else {
+        //     dbg!(("unpropagate_queryable", &self, &res, &ctx.src_face));
+        // }
+
         debug_assert!(was_propagated);
 
         if was_propagated {
+            self.res_hat_mut(&mut res)
+                .router_qabls
+                .remove(&ctx.tables.zid);
+            if self.res_hat(&res).router_qabls.is_empty() {
+                self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
+            }
+
             self.propagate_forget_sourced_queryable(ctx.tables, &res, None, &ctx.tables.zid);
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[tracing::instrument(level = "trace", ret)]
     fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
         // FIXME(regions): use TablesData::zid?
         let net = self.net();
@@ -583,7 +543,8 @@ impl HatQueriesTrait for Hat {
             .reduce(merge_qabl_infos)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[allow(clippy::incompatible_msrv)]
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_queryables_matching(
         &self,
         tables: &TablesData,
@@ -608,39 +569,5 @@ impl HatQueriesTrait for Hat {
                     .or_insert(info);
                 acc
             })
-    }
-}
-
-impl Hat {
-    #[inline]
-    fn insert_faces_for_qbls(
-        &self,
-        route: &mut HashMap<usize, Arc<FaceState>>,
-        tables: &TablesData,
-        net: &Network,
-        qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
-        complete: bool,
-    ) {
-        let source = net.idx.index();
-        if net.trees.len() > source {
-            for qbl in qbls {
-                if complete && !qbl.1.complete {
-                    continue;
-                }
-                if let Some(qbl_idx) = net.get_idx(qbl.0) {
-                    if net.trees[source].directions.len() > qbl_idx.index() {
-                        if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
-                            if net.graph.contains_node(direction) {
-                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
-                                    route.entry(face.id).or_insert_with(|| face.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            tracing::trace!("Tree for node sid:{} not yet ready", source);
-        }
     }
 }

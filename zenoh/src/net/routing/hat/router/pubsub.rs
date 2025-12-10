@@ -28,25 +28,22 @@ use zenoh_protocol::{
 };
 
 use super::Hat;
-#[allow(unused_imports)]
-use crate::zenoh_core::polyfill::*;
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::network::Network,
-        routing::{
-            dispatcher::{
-                face::FaceState,
-                pubsub::SubscriberInfo,
-                resource::{NodeId, Resource},
-                tables::{Route, RoutingExpr, TablesData},
-            },
-            hat::{BaseContext, HatBaseTrait, HatPubSubTrait, Sources},
-            router::{Direction, RouteBuilder},
-            RoutingContext,
+use crate::net::{
+    protocol::network::Network,
+    routing::{
+        dispatcher::{
+            face::FaceState,
+            pubsub::SubscriberInfo,
+            resource::{NodeId, Resource},
+            tables::{Route, RoutingExpr, TablesData},
         },
+        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, Sources},
+        router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
+        RoutingContext,
     },
 };
+#[allow(unused_imports)]
+use crate::zenoh_core::polyfill::*;
 
 impl Hat {
     pub(super) fn pubsub_tree_change(
@@ -388,76 +385,19 @@ impl HatPubSubTrait for Hat {
             );
         }
 
+        // HACK(regions)
+        for group in self.multicast_groups(tables) {
+            route.insert(group.id, || {
+                let wire_expr = expr.get_best_key(group.id);
+                Direction {
+                    dst_face: group.clone(),
+                    wire_expr: wire_expr.to_owned(),
+                    node_id: DEFAULT_NODE_ID,
+                }
+            });
+        }
+
         Arc::new(route.build())
-    }
-
-    fn get_matching_subscriptions(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        #[inline]
-        fn insert_faces_for_subs(
-            this: &Hat,
-            route: &mut HashMap<usize, Arc<FaceState>>,
-            tables: &TablesData,
-            net: &Network,
-            source: usize,
-            subs: &HashSet<ZenohIdProto>,
-        ) {
-            if net.trees.len() > source {
-                for sub in subs {
-                    if let Some(sub_idx) = net.get_idx(sub) {
-                        if net.trees[source].directions.len() > sub_idx.index() {
-                            if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
-                                if net.graph.contains_node(direction) {
-                                    if let Some(face) = this.face(tables, &net.graph[direction].zid)
-                                    {
-                                        route.entry(face.id).or_insert_with(|| face.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                tracing::trace!("Tree for node sid:{} not yet ready", source);
-            }
-        }
-
-        let mut matching_subscriptions = HashMap::new();
-
-        tracing::trace!("get_matching_subscriptions({})", key_expr,);
-
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
-            let net = self.routers_net.as_ref().unwrap();
-            insert_faces_for_subs(
-                self,
-                &mut matching_subscriptions,
-                tables,
-                net,
-                net.idx.index(),
-                &self.res_hat(&mres).router_subs,
-            );
-
-            for (sid, context) in &mres.face_ctxs {
-                if context.subs.is_some() && context.face.whatami != WhatAmI::Router {
-                    matching_subscriptions
-                        .entry(*sid)
-                        .or_insert_with(|| context.face.clone());
-                }
-            }
-        }
-        matching_subscriptions
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
@@ -507,7 +447,6 @@ impl HatPubSubTrait for Hat {
         };
 
         self.res_hat_mut(&mut res).router_subs.remove(&router);
-
         if self.res_hat(&res).router_subs.is_empty() {
             self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
         }
@@ -552,7 +491,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_subscription
             return;
@@ -563,6 +502,13 @@ impl HatPubSubTrait for Hat {
         debug_assert!(was_propagated);
 
         if was_propagated {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .remove(&ctx.tables.zid);
+            if self.res_hat(&res).router_subs.is_empty() {
+                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
+            }
+
             self.propagate_forget_sourced_subscription(ctx.tables, &res, None, &ctx.tables.zid);
         }
     }
@@ -580,6 +526,7 @@ impl HatPubSubTrait for Hat {
             .then_some(SubscriberInfo)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_subscriptions_matching(
         &self,

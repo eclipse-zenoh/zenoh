@@ -42,6 +42,8 @@ use zenoh_config::{
     gateway::BoundFilterConf, unwrap_or_default, GenericConfig, IConfig, Interface, ModeDependent,
     ZenohId,
 };
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -86,7 +88,11 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
-    net::routing::{dispatcher::region::Region, router::RouterBuilder},
+    net::routing::{
+        dispatcher::region::Region,
+        hat::{self, HatTrait},
+        router::RouterBuilder,
+    },
     GIT_VERSION,
 };
 
@@ -267,34 +273,44 @@ impl IRuntime for RuntimeState {
         let router = self.router();
         let tables = zread!(router.tables.tables);
 
-        let matches = match matching_type {
+        let (broker_hat, other_hats) = tables.hats.partition(&Region::Local);
+        let local_broker = broker_hat
+            .as_any()
+            .downcast_ref::<hat::broker::Hat>()
+            .unwrap();
+
+        let key_expr = match &ns_key_expr {
+            Some(ns_ke) => ns_ke,
+            None => key_expr,
+        };
+
+        let Some(src_face) = tables.data.faces.get(&face_id) else {
+            tracing::error!(fid = face_id, "Unknown session face");
+            return MatchingStatus { matching: false };
+        };
+
+        let matching = match matching_type {
             crate::api::matching::MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_subscriber_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                 )
             }
             crate::api::matching::MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_queryable_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                     complete,
                 )
             }
         };
 
-        drop(tables);
-        let matching = match destination {
-            crate::sample::Locality::Any => !matches.is_empty(),
-            crate::sample::Locality::Remote => matches.values().any(|dir| dir.id != face_id),
-            crate::sample::Locality::SessionLocal => matches.values().any(|dir| dir.id == face_id),
-        };
         MatchingStatus { matching }
     }
 
@@ -481,7 +497,7 @@ impl RuntimeBuilder {
             .bound_callback({
                 let config = config.clone();
                 move |p| {
-                    compute_region(&p, &config)
+                    compute_transport_peer_region(&config, &p)
                         .map(|b| b.bound())
                         .unwrap_or_default()
                 }
@@ -721,7 +737,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                let region = compute_region(&peer, &runtime.config().lock().0)?;
+                let region = compute_transport_peer_region(&runtime.config().lock().0, &peer)?;
 
                 fn north_bound_transport_peer_count(
                     runtime: &Runtime,
@@ -749,8 +765,10 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
                                 // NOTE(regions): compute bound instead of querying the router as
                                 // the corresponding transport face might not exist yet
-                                let Ok(bound) = compute_region(&peer, &runtime.config().lock().0)
-                                else {
+                                let Ok(bound) = compute_transport_peer_region(
+                                    &runtime.config().lock().0,
+                                    &peer,
+                                ) else {
                                     tracing::error!(
                                         zid = %peer.zid.short(),
                                         wai = %peer.whatami.short(),
@@ -776,8 +794,8 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
                 tracing::trace!(
                     peer.zid = %peer.zid.short(),
-                    peer.wai = %peer.whatami.short(),
-                    peer.rgn = %region
+                    peer.mode = %peer.whatami.short(),
+                    peer.region = %region
                 );
 
                 Ok(Arc::new(RuntimeSession {
@@ -808,15 +826,13 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
 
-                // FIXME(regions): multicast support
-                let bound = Region::Undefined {
-                    mode: WhatAmI::default(),
-                };
+                let region =
+                    compute_multicast_group_region(&runtime.config().lock().0, &transport)?;
 
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone(), bound)?;
+                    .new_transport_multicast(transport.clone(), region)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -885,16 +901,13 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
 
-        // FIXME(regions): multicast support
-        let bound = Region::Undefined {
-            mode: WhatAmI::default(),
-        };
+        let region = compute_transport_peer_region(&self.runtime.config().lock().0, &peer)?;
 
         Ok(Arc::new(RuntimeMulticastSession {
             main_handler: self.runtime.state.router.new_peer_multicast(
                 self.transport.clone(),
                 peer,
-                bound,
+                region,
             )?,
             slave_handlers,
         }))
@@ -950,7 +963,7 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
     async fn close_inner(&self) {
-        tracing::trace!("Runtime::close())");
+        tracing::trace!("Runtime::close()");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
@@ -976,85 +989,60 @@ impl Closeable for Runtime {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all, fields(?peer))]
-fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResult<Region> {
-    let mode = zenoh_config::unwrap_or_default!(config.mode());
+#[allow(clippy::incompatible_msrv)]
+#[tracing::instrument(level = "debug", skip_all, fields(zid = %peer.zid.short(), wai = %peer.whatami), ret)]
+fn compute_transport_peer_region(
+    config: &zenoh_config::Config,
+    peer: &TransportPeer,
+) -> ZResult<Region> {
+    let mode = config.mode().expect("Config should be expanded");
 
     let gateway_config = config
         .gateway
         .get(mode)
-        .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
+        .ok_or_else(|| zerror!("`mode` is set to `{mode}` but `gateway.{mode}` is not set"))?;
 
-    fn matches(peer: &TransportPeer, filter: &BoundFilterConf) -> bool {
+    let is_match = |filter: &BoundFilterConf| {
         filter
             .zids
             .as_ref()
-            .map(|zid| zid.contains(&peer.zid.into()))
-            .unwrap_or(true)
-            && filter
-                .interfaces
-                .as_ref()
-                .map(|ifaces| {
-                    peer.links
-                        .iter()
-                        .flat_map(|link| {
-                            link.interfaces
-                                .iter()
-                                .map(|iface| Interface(iface.to_owned()))
-                        })
-                        .all(|iface| ifaces.contains(&iface))
-                })
-                .unwrap_or(true)
+            .is_none_or(|zid| zid.contains(&peer.zid.into()))
+            && filter.interfaces.as_ref().is_none_or(|ifaces| {
+                peer.links
+                    .iter()
+                    .flat_map(|link| {
+                        link.interfaces
+                            .iter()
+                            .map(|iface| Interface(iface.to_owned()))
+                    })
+                    .all(|iface| ifaces.contains(&iface))
+            })
             && filter
                 .modes
                 .as_ref()
-                .map(|mode| mode.matches(peer.whatami))
-                .unwrap_or(true)
-    }
+                .is_none_or(|mode| mode.matches(peer.whatami))
+    };
 
     let north = gateway_config
         .north
         .filters
         .as_ref()
-        .map(|filters| filters.iter().any(|filter| matches(peer, filter)))
-        .unwrap_or(true);
+        .is_none_or(|filters| filters.iter().any(is_match));
 
     let south = gateway_config.south.iter().position(|south| {
         south
             .filters
             .as_ref()
-            .map(|filters| filters.iter().any(|filter| matches(peer, filter)))
-            .unwrap_or(true)
+            .is_none_or(|filters| filters.iter().any(is_match))
     });
 
     let region = match (north, south) {
-        (true, None) => {
-            tracing::debug!(zid = %peer.zid, "Transport peer is north-bound");
-            Region::North
-        }
-        (false, Some(index)) => {
-            tracing::debug!(zid = %peer.zid, "Transport peer is south-bound");
-            Region::Subregion {
-                id: index,
-                mode: peer.whatami,
-            }
-        }
-        (false, None) => {
-            tracing::info!(
-                zid = %peer.zid,
-                "Transport peer matches neither north nor south filters. \
-                Using undefined region instead"
-            );
-            Region::Undefined { mode: peer.whatami }
-        }
-        (true, Some(_)) => {
-            tracing::warn!(
-                zid = %peer.zid,
-                "Transport peer matches north and south filters. \
-                Using undefined region instead"
-            );
-            Region::Undefined { mode: peer.whatami }
-        }
+        (true, None) => Region::North,
+        (false, Some(index)) => Region::Subregion {
+            id: index,
+            mode: peer.whatami,
+        },
+        (false, None) | (true, Some(_)) => Region::Undefined { mode: peer.whatami },
     };
 
     if peer.whatami.is_router() && region.bound().is_south() && !mode.is_router() {
@@ -1062,6 +1050,21 @@ fn compute_region(peer: &TransportPeer, config: &zenoh_config::Config) -> ZResul
     }
 
     Ok(region)
+}
+
+#[allow(clippy::incompatible_msrv)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
+fn compute_multicast_group_region(
+    config: &zenoh_config::Config,
+    _group: &TransportMulticast, // TODO(regions*): remove this
+) -> ZResult<Region> {
+    let mode = config.mode().expect("Config should be expanded");
+
+    if mode.is_client() {
+        bail!("Multicast groups are only supported in north peer/router regions");
+    }
+
+    Ok(Region::North)
 }
 
 #[derive(Clone)]

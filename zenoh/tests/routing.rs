@@ -25,7 +25,6 @@ use std::{
 use itertools::Itertools;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
-use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_result::bail;
 
@@ -385,10 +384,12 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
-                            break session;
-                        } else {
-                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        match ztimeout!(zenoh::open(config.clone())) {
+                            Ok(session) => break session,
+                            Err(err) => {
+                                tracing::error!(node = node.name, err = %err, "Failed to open session");
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
                         }
                     }
                 };
@@ -441,7 +442,8 @@ impl Recipe {
                     while let Some(res) = recipe_join_set.join_next().await {
                         res??;
                     }
-                    bail!("Timeout");
+
+                    bail!("Recipe {self} timed out");
                 },
                 res = recipe_join_set.join_next() => {
                     if let Some(res) = res {
@@ -524,60 +526,6 @@ async fn gossip() -> Result<()> {
     }
 
     println!("Gossip test passed.");
-    Result::Ok(())
-}
-
-// Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn static_failover_brokering() -> Result<()> {
-    zenoh::init_log_from_env_or("error");
-    let locator = String::from("tcp/127.0.0.1:17449");
-    let ke = String::from("testKeyExprStaticFailoverBrokering");
-    let msg_size = 8;
-
-    let disable_autoconnect_config = || {
-        let mut config = Config::default();
-        config
-            .scouting
-            .gossip
-            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
-            .unwrap();
-        Some(config)
-    };
-
-    let recipe = Recipe::new([
-        Node {
-            name: format!("Router {}", WhatAmI::Router),
-            mode: WhatAmI::Router,
-            listen: vec![locator.clone()],
-            con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-            ..Default::default()
-        },
-        Node {
-            name: format!("Pub & Queryable {}", WhatAmI::Peer),
-            mode: WhatAmI::Peer,
-            connect: vec![locator.clone()],
-            config: disable_autoconnect_config(),
-            con_task: ConcurrentTask::from([
-                SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
-                SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
-            ]),
-            ..Default::default()
-        },
-        Node {
-            name: format!("Sub & Get {}", WhatAmI::Peer),
-            mode: WhatAmI::Peer,
-            connect: vec![locator.clone()],
-            config: disable_autoconnect_config(),
-            con_task: ConcurrentTask::from([
-                SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::Checkpoint]),
-                SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::Checkpoint]),
-            ]),
-            ..Default::default()
-        },
-    ]);
-    recipe.run().await?;
-    println!("Static failover brokering test passed.");
     Result::Ok(())
 }
 

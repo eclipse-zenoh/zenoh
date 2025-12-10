@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashMap,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -39,33 +38,20 @@ use super::{
     resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, TablesLock},
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::Face,
-            local_resources::{LocalResourceInfoTrait, LocalResources},
-            region::Region,
-            tables::Tables,
-        },
-        hat::{BaseContext, SendDeclare},
-        router::{get_or_set_route, QueryDirection, RouteBuilder},
+use crate::net::routing::{
+    dispatcher::{
+        face::Face,
+        local_resources::{LocalResourceInfoTrait, LocalResources},
+        region::Region,
+        tables::Tables,
     },
+    hat::{BaseContext, SendDeclare, UnregisterResult},
+    router::{get_or_set_route, QueryDirection, RouteBuilder},
 };
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
-}
-
-#[inline]
-pub(crate) fn get_matching_queryables(
-    tables: &Tables,
-    key_expr: &KeyExpr<'_>,
-    complete: bool,
-) -> HashMap<usize, Arc<FaceState>> {
-    // REVIEW(regions2): use the broker hat
-    tables.hats[Region::Local].get_matching_queryables(&tables.data, key_expr, complete)
 }
 
 impl Face {
@@ -137,6 +123,8 @@ impl Face {
                 );
 
                 for region in hats.regions().copied().collect_vec() {
+                    disable_matches_query_routes(&mut res, &region);
+
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
@@ -144,7 +132,6 @@ impl Face {
                         .reduce(merge_qabl_infos);
 
                     hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
-                    disable_matches_query_routes(&mut res, &region);
                 }
 
                 drop(wtables);
@@ -199,6 +186,7 @@ impl Face {
             }
         };
 
+        // FIXME(regions): these spans duplicate fields in the hat spans
         let _span = tracing::debug_span!(
             "undeclare_queryable",
             id,
@@ -219,34 +207,53 @@ impl Face {
             send_declare,
         };
 
-        if let Some(mut res) =
-            hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id)
-        {
-            disable_matches_query_routes(&mut res, &region);
+        match hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id) {
+            UnregisterResult::Noop => {} // ¯\_(ツ)_/¯
+            UnregisterResult::InfoUpdate { mut res } => {
+                disable_matches_query_routes(&mut res, &region);
 
-            let remaining = hats
-                .iter()
-                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (*rgn, info)))
-                .collect_vec();
+                for region in hats.regions().copied().collect_vec() {
+                    let other_info = hats
+                        .values()
+                        .filter(|hat| hat.region() != region)
+                        .filter_map(|hat| hat.remote_queryables_of(&res))
+                        .reduce(merge_qabl_infos);
 
-            match &*remaining {
-                [] => {
-                    for hat in hats.values_mut() {
-                        hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                    hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                }
+            }
+            UnregisterResult::LastUnregistered { mut res } => {
+                let remainder = hats
+                    .values()
+                    .filter_map(|hat| {
+                        (hat.region() != region)
+                            .then(|| hat.remote_queryables_of(&res))
+                            .flatten()
+                            .map(|info| (hat.region(), info))
+                    })
+                    .collect_vec();
+
+                match &*remainder {
+                    [] => {
+                        for hat in hats.values_mut() {
+                            hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                        }
+                        Resource::clean(&mut res);
                     }
-                    Resource::clean(&mut res);
-                }
-                [(last_owner, _)] => {
-                    hats[last_owner].unpropagate_last_non_owned_queryable(ctx, res.clone())
-                }
-                _ => {
-                    for hat in hats.values_mut() {
-                        let other_info = remaining
-                            .iter()
-                            .filter_map(|(region, info)| (region != &hat.region()).then_some(*info))
-                            .reduce(merge_qabl_infos);
+                    [(last_owner, _)] => {
+                        hats[last_owner].unpropagate_last_non_owned_queryable(ctx, res.clone())
+                    }
+                    _ => {
+                        for hat in hats.values_mut() {
+                            let other_info = remainder
+                                .iter()
+                                .filter_map(|(region, info)| {
+                                    (region != &hat.region()).then_some(*info)
+                                })
+                                .reduce(merge_qabl_infos);
 
-                        hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                            hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                        }
                     }
                 }
             }
@@ -710,7 +717,6 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
     }
 }
 
-// TODO(regions): replace with an Add impl
 pub(crate) fn merge_qabl_infos(
     mut this: QueryableInfoType,
     info: QueryableInfoType,

@@ -29,6 +29,7 @@ use crate::{
             dispatcher::{
                 face::{Face, FaceState},
                 pubsub::SubscriberInfo,
+                region::Region,
                 tables::TablesData,
             },
             router::*,
@@ -43,7 +44,10 @@ fn new_router() -> Router {
         .set_id(Some(ZenohId::from_str("1").unwrap()))
         .unwrap();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    RouterBuilder::new(&config).build().unwrap()
+    RouterBuilder::new(&config)
+        .hat(Region::Local, WhatAmI::Client)
+        .build()
+        .unwrap()
 }
 
 #[test]

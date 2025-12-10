@@ -758,24 +758,26 @@ fn linkstate_data(context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
 
-    for (rgn, hat) in rtables
+    for (region, hat) in rtables
         .hats
         .iter()
         .filter(|(_, hat)| hat.whatami().is_router())
     {
         let reply_key: OwnedKeyExpr = format!(
             "@/{}/{}/linkstate/{}",
-            context.runtime.state.zid, context.runtime.state.whatami, rgn
+            context.runtime.state.zid, context.runtime.state.whatami, region
         )
         .try_into()
         .unwrap();
 
-        if let Err(e) = query
-            .reply(reply_key, hat.info(WhatAmI::Router))
-            .encoding(Encoding::TEXT_PLAIN)
-            .wait()
-        {
-            tracing::error!("Error sending AdminSpace reply: {:?}", e);
+        if query.key_expr().intersects(&reply_key) {
+            if let Err(e) = query
+                .reply(reply_key, hat.info(WhatAmI::Router))
+                .encoding(Encoding::TEXT_PLAIN)
+                .wait()
+            {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
+            }
         }
     }
 }

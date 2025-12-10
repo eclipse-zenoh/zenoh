@@ -199,6 +199,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
     );
     assert_eq!(get_matching_listener_status(&matching_listener2), None);
 
+    // NOTE: _qbl3 is complete, but its keyexpr doesn't include the AllComplete querier's
     assert_eq!(
         ztimeout!(querier1.matching_status()).unwrap().matching(),
         locality_compatible
@@ -209,6 +210,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
         .declare_queryable(format!("{key_expr}/*"))
         .complete(true))
     .unwrap();
+    // NOTE: now there is a complete queryable whose keyexpr includes that of the AllComplete querier
     assert_eq!(
         get_matching_listener_status(&matching_listener2),
         locality_compatible.then_some(true)
@@ -220,6 +222,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
 
     ztimeout!(qbl4.undeclare()).unwrap();
 
+    // NOTE: undeclaring qbl4 should not change the state of the BestMatching querier
     assert_eq!(get_matching_listener_status(&matching_listener1), None);
     assert_eq!(
         get_matching_listener_status(&matching_listener2),

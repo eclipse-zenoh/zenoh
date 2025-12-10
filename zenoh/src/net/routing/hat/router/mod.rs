@@ -21,7 +21,7 @@ use std::{
     any::Any,
     collections::{HashMap, HashSet},
     fmt::Debug,
-    mem,
+    iter, mem,
     sync::Arc,
 };
 
@@ -180,7 +180,7 @@ impl Hat {
 
     #[allow(dead_code)] // FIXME(regions)
     pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
-        remote.downcast_ref().unwrap()
+        remote.as_any().downcast_ref().unwrap()
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
@@ -201,9 +201,16 @@ impl Hat {
         tables.faces.values().find(|face| face.zid == *zid)
     }
 
+    pub(crate) fn multicast_groups<'t>(
+        &self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> {
+        tables.hats[self.region].mcast_groups.iter()
+    }
+
     #[allow(dead_code)] // FIXME(regions)
-    /// Identifies the gateway of this hat's subregion (if any).
-    pub(crate) fn subregion_gateway(&self) -> Option<NodeId> {
+    /// Identifies the gateway of this hat's region (if any).
+    pub(crate) fn region_gateway(&self) -> Option<NodeId> {
         // TODO(regions2): elect the primary gateway
         let net = self.net();
         let mut gwys = net.graph.node_indices().filter(|idx| {
@@ -362,8 +369,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote> {
-        self.get_router(face, nid)
-            .map(|zid| Arc::new(zid) as Arc<dyn std::any::Any + std::marker::Send + Sync>)
+        self.get_router(face, nid).map(|zid| Remote(Box::new(zid)))
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
@@ -403,10 +409,10 @@ impl HatBaseTrait for Hat {
         other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
-            if !whatami.is_router() {
-                tracing::error!("Received OAM_LINKSTATE from non-router remote");
-                return Ok(());
-            }
+            debug_assert_implies!(
+                !ctx.src_face.whatami.is_router(),
+                ctx.src_face.remote_bound.is_south()
+            );
 
             if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
                 use zenoh_buffers::reader::HasReader;
@@ -450,7 +456,7 @@ impl HatBaseTrait for Hat {
 
                 let mut hats = other_hats
                     .into_iter()
-                    .chain(std::iter::once((self.region, self as &mut dyn HatTrait)))
+                    .chain(iter::once((self.region, self as &mut dyn HatTrait)))
                     .collect::<RegionMap<_>>();
 
                 for mut res in removed_subscriptions {
@@ -560,7 +566,8 @@ impl HatBaseTrait for Hat {
         _expr: &RoutingExpr,
     ) -> bool {
         src_face.id != out_face.id
-            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
+            && out_face.mcast_group.is_none()
+            && src_face.mcast_group.is_none()
     }
 
     fn info(&self, kind: WhatAmI) -> String {

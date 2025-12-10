@@ -26,23 +26,20 @@ use zenoh_protocol::network::declare::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            pubsub::SubscriberInfo,
-            region::RegionMap,
-            resource::{FaceContext, NodeId, Resource},
-            tables::{Route, RoutingExpr, TablesData},
-        },
-        hat::{
-            peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
-            BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources,
-        },
-        router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
-        RoutingContext,
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        pubsub::SubscriberInfo,
+        region::RegionMap,
+        resource::{FaceContext, NodeId, Resource},
+        tables::{Route, RoutingExpr, TablesData},
     },
+    hat::{
+        peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
+        BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources,
+    },
+    router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
+    RoutingContext,
 };
 
 impl Hat {
@@ -212,20 +209,18 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[tracing::instrument(level = "debug", skip(tables, _nid), fields(%src_face) ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        _node_id: NodeId,
+        _nid: NodeId,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::<Direction>::new();
         let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
         };
-
-        tracing::trace!(%key_expr);
 
         let matches = expr
             .resource()
@@ -237,11 +232,11 @@ impl HatPubSubTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
-            for (fid, ctx) in self.owned_face_contexts(&mres) {
+            for ctx in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some() && !self.owns(src_face) {
-                    route.insert(*fid, || {
+                    route.insert(ctx.face.id, || {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
-                        let wire_expr = expr.get_best_key(*fid);
+                        let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),
                             wire_expr: wire_expr.to_owned(),
@@ -284,39 +279,22 @@ impl HatPubSubTrait for Hat {
             }
         }
 
+        // HACK(regions)
+        for group in self.multicast_groups(tables) {
+            route.insert(group.id, || {
+                let wire_expr = expr.get_best_key(group.id);
+                Direction {
+                    dst_face: group.clone(),
+                    wire_expr: wire_expr.to_owned(),
+                    node_id: DEFAULT_NODE_ID,
+                }
+            });
+        }
+
         Arc::new(route.build())
     }
 
-    fn get_matching_subscriptions(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        let mut matching_subscriptions = HashMap::new();
-
-        tracing::trace!("get_matching_subscriptions({})", key_expr,);
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
-            for (fid, ctx) in &mres.face_ctxs {
-                if ctx.subs.is_some() {
-                    matching_subscriptions
-                        .entry(*fid)
-                        .or_insert_with(|| ctx.face.clone());
-                }
-            }
-        }
-        matching_subscriptions
-    }
-
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx, _nid))]
     fn register_subscription(
         &mut self,
         ctx: BaseContext,
@@ -350,7 +328,7 @@ impl HatPubSubTrait for Hat {
             .insert(id, res.clone());
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx, _nid), ret)]
     fn unregister_subscription(
         &mut self,
         ctx: BaseContext,
@@ -358,6 +336,8 @@ impl HatPubSubTrait for Hat {
         _res: Option<Arc<Resource>>,
         _nid: NodeId,
     ) -> Option<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
         let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) else {
             tracing::error!(id, "Unknown subscription");
             return None;
@@ -383,7 +363,7 @@ impl HatPubSubTrait for Hat {
         Some(res)
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
@@ -402,7 +382,7 @@ impl HatPubSubTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "trace", skip(ctx))]
     fn propagate_subscription(
         &mut self,
         ctx: BaseContext,
@@ -417,9 +397,33 @@ impl HatPubSubTrait for Hat {
         for dst_face in self.owned_faces_mut(ctx.tables) {
             self.maybe_propagate_subscription(&res, &other_info, dst_face, ctx.send_declare);
         }
+
+        // TODO(regions): does this still cause a "buffer overflow" on Windows?
+        #[cfg(not(windows))]
+        {
+            // HACK(regions): if we have a multicast group, we use it to propagate subscribers to upstream gateways.
+            for group in self.multicast_groups(ctx.tables) {
+                (ctx.send_declare)(
+                    &group.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: SubscriberId::default(),
+                                wire_expr: res.expr().to_string().into(),
+                            }),
+                        },
+                        res.expr().to_string(),
+                    ),
+                );
+            }
+        }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "trace", skip(ctx))]
     fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             return;
@@ -430,14 +434,15 @@ impl HatPubSubTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[tracing::instrument(level = "trace", ret)]
     fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
         self.owned_face_contexts(res)
-            .filter_map(|(_, ctx)| ctx.subs)
+            .filter_map(|ctx| ctx.subs)
             .reduce(|_, _| SubscriberInfo)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[allow(clippy::incompatible_msrv)]
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_subscriptions_matching(
         &self,
         tables: &TablesData,

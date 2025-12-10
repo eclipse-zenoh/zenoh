@@ -34,22 +34,24 @@ use crate::net::routing::{
     router::SubscriberInfo,
 };
 
-const WARNING: &str = "Ignoring interest protocol (unsupported)"; // FIXME(regions)
-
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(ctx, _msg, _src))]
+    #[tracing::instrument(level = "trace", skip(ctx, msg, src))]
     fn route_interest(
         &mut self,
         ctx: BaseContext,
-        _msg: &Interest,
+        msg: &Interest,
         _res: Option<Arc<Resource>>,
-        _src: &Remote,
+        src: &Remote,
     ) -> Option<CurrentInterest> {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        tracing::warn!(WARNING);
-        None
+        Some(CurrentInterest {
+            src: src.clone(),
+            src_region: ctx.src_face.region,
+            src_interest_id: msg.id,
+            mode: msg.mode,
+        })
     }
 
     #[tracing::instrument(level = "trace", skip(ctx, _msg))]
@@ -61,8 +63,6 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
-
-        tracing::warn!(WARNING);
     }
 
     #[tracing::instrument(level = "trace", skip(ctx), ret)]
@@ -74,7 +74,6 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        tracing::error!(WARNING);
         None
     }
 
@@ -82,13 +81,12 @@ impl HatInterestTrait for Hat {
     fn route_current_token(
         &mut self,
         ctx: BaseContext,
-        interest_id: InterestId,
-        res: Arc<Resource>,
+        _interest_id: InterestId,
+        _res: Arc<Resource>,
     ) -> Option<CurrentInterest> {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        tracing::error!(WARNING);
         None
     }
 
@@ -102,8 +100,6 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
-
-        tracing::warn!(WARNING);
     }
 
     #[tracing::instrument(level = "trace", skip(ctx, _msg))]
@@ -116,11 +112,9 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
-
-        tracing::warn!(WARNING);
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "trace", skip(ctx, _msg), ret)]
     fn send_current_tokens(
         &self,
         ctx: BaseContext,
@@ -130,11 +124,9 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
-
-        tracing::warn!(WARNING);
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_current_token(
         &self,
         ctx: BaseContext,
@@ -143,14 +135,10 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
-
-        tracing::warn!(WARNING);
     }
 
     #[tracing::instrument(level = "trace", skip(_ctx, _dst))]
-    fn send_declare_final(&mut self, _ctx: BaseContext, _id: InterestId, _dst: &Remote) {
-        tracing::warn!(WARNING);
-    }
+    fn send_declare_final(&mut self, _ctx: BaseContext, _id: InterestId, _dst: &Remote) {}
 
     #[tracing::instrument(level = "trace", skip(ctx, _msg), ret)]
     fn register_interest(
@@ -161,8 +149,6 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(self.region().bound().is_south());
-
-        tracing::error!(WARNING);
     }
 
     #[tracing::instrument(level = "trace", skip(ctx, _msg), ret)]
@@ -170,7 +156,6 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(self.region().bound().is_south());
 
-        tracing::error!(WARNING);
         None
     }
 

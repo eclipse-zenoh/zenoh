@@ -47,7 +47,6 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{
-            face::FaceId,
             interests::RemoteInterest,
             queries::LocalQueryables,
             region::{Region, RegionMap},
@@ -80,7 +79,7 @@ impl Hat {
         Self { region }
     }
 
-    pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
+    pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
         face_state.hats[self.region].downcast_ref().unwrap()
     }
 
@@ -91,36 +90,35 @@ impl Hat {
     }
 
     pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
-        remote.downcast_ref().unwrap()
+        remote.as_any().downcast_ref().unwrap()
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
-    pub(crate) fn owned_face_contexts<'a>(
-        &'a self,
-        res: &'a Resource,
-    ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
-        // FIXME(regions): make this return values only
+    pub(crate) fn owned_face_contexts<'r>(
+        &'r self,
+        res: &'r Resource,
+    ) -> impl Iterator<Item = &'r Arc<FaceContext>> {
         res.face_ctxs
-            .iter()
-            .filter(move |(_, ctx)| self.owns(&ctx.face))
+            .values()
+            .filter(move |ctx| self.owns(&ctx.face))
     }
 
-    pub(crate) fn owned_faces<'hat, 'tbl>(
-        &'hat self,
-        tables: &'tbl TablesData,
-    ) -> impl Iterator<Item = &'tbl Arc<FaceState>> + 'hat
+    pub(crate) fn owned_faces<'h, 't>(
+        &'h self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> + 'h
     where
-        'tbl: 'hat,
+        't: 'h,
     {
         tables.faces.values().filter(|face| self.owns(face))
     }
 
-    pub(crate) fn owned_faces_mut<'hat, 'tbl>(
-        &'hat self,
-        tables: &'tbl mut TablesData,
-    ) -> impl Iterator<Item = &'tbl mut Arc<FaceState>> + 'hat
+    pub(crate) fn owned_faces_mut<'h, 't>(
+        &'h self,
+        tables: &'t mut TablesData,
+    ) -> impl Iterator<Item = &'t mut Arc<FaceState>> + 'h
     where
-        'tbl: 'hat,
+        't: 'h,
     {
         tables.faces.values_mut().filter(|face| self.owns(face))
     }
@@ -140,7 +138,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_remote(&self, face: &Arc<FaceState>, _nid: NodeId) -> Option<Remote> {
-        Some(face.clone())
+        Some(Remote(Box::new(face.clone())))
     }
 
     fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
@@ -227,8 +225,7 @@ impl HatBaseTrait for Hat {
         _expr: &RoutingExpr,
     ) -> bool {
         src_face.id != out_face.id
-            && out_face.mcast_group.is_none()
-            && src_face.mcast_group.is_none()
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
     fn info(&self, _kind: WhatAmI) -> String {
@@ -288,4 +285,4 @@ impl HatFace {
 
 impl HatTrait for Hat {}
 
-type HatRemote = FaceState;
+type HatRemote = Arc<FaceState>;

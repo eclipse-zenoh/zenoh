@@ -20,6 +20,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
+    fmt::Debug,
     sync::Arc,
 };
 
@@ -45,16 +46,13 @@ use super::{
     },
     RoutingContext,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-        routing::dispatcher::{
-            interests::{CurrentInterest, RemoteInterest},
-            region::{Region, RegionMap},
-        },
-        runtime::Runtime,
+use crate::net::{
+    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::{
+        interests::{CurrentInterest, RemoteInterest},
+        region::{Region, RegionMap},
     },
+    runtime::Runtime,
 };
 
 pub(crate) mod broker;
@@ -121,7 +119,43 @@ impl BaseContext<'_> {
 /// to nodes that don't have a face but still need to be identified in hat interfaces.
 ///
 /// Named after Git remotes.
-pub(crate) type Remote = Arc<dyn Any + Send + Sync>;
+#[derive(Debug)]
+pub(crate) struct Remote(Box<dyn RemoteTrait>);
+
+impl Remote {
+    fn as_any(&self) -> &dyn Any {
+        self.0.as_any()
+    }
+
+    // FIXME(regions): remove this
+    pub(crate) fn downcast_ref_to_face(&self) -> &Arc<FaceState> {
+        self.as_any().downcast_ref().unwrap()
+    }
+}
+
+pub(crate) trait RemoteTrait: Any + Send + Sync + Debug {
+    fn clone_box(&self) -> Box<dyn RemoteTrait>;
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<T> RemoteTrait for T
+where
+    T: Any + Send + Sync + Debug + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn RemoteTrait> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Clone for Remote {
+    fn clone(&self) -> Self {
+        Remote(self.0.clone_box())
+    }
+}
 
 pub(crate) trait HatBaseTrait: Any {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;
@@ -162,6 +196,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
 
+    // TODO(regions): review multicast-related logic
     fn egress_filter(
         &self,
         tables: &TablesData,
@@ -252,7 +287,7 @@ pub(crate) trait HatInterestTrait {
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
-    ) -> Option<CurrentInterest>;
+    ) -> Option<CurrentInterest>; // TODO(regions): it's odd that this needs to be `Some` for "resolved interest" (i.e. doing nothing).
 
     /// Handles interest finalization messages.
     ///
@@ -346,6 +381,17 @@ pub(crate) trait HatInterestTrait {
     fn remote_interests(&self, tables: &TablesData) -> HashSet<RemoteInterest>;
 }
 
+/// Return value of entity unregistration methods.
+#[derive(Debug)]
+pub(crate) enum UnregisterResult {
+    /// Indicates that the unregisration was a no-op (e.g. the entity has duplicates).
+    Noop,
+    /// Indicates that the entity info changed (e.g. an update to queryable completeness).
+    InfoUpdate { res: Arc<Resource> },
+    /// Indicates that the last entity on the given [`Resource`] was unregistered.
+    LastUnregistered { res: Arc<Resource> },
+}
+
 pub(crate) trait HatPubSubTrait {
     /// Register a subscriber entity.
     ///
@@ -418,12 +464,6 @@ pub(crate) trait HatPubSubTrait {
         expr: &RoutingExpr,
         node_id: NodeId,
     ) -> Arc<Route>;
-
-    fn get_matching_subscriptions(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
@@ -448,7 +488,7 @@ pub(crate) trait HatQueriesTrait {
         id: QueryableId,
         res: Option<Arc<Resource>>,
         nid: NodeId,
-    ) -> Option<Arc<Resource>>;
+    ) -> UnregisterResult;
 
     fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
 
@@ -483,6 +523,7 @@ pub(crate) trait HatQueriesTrait {
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, QueryableInfoType>;
 
+    // TODO(region): replace return type with map
     fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
@@ -494,13 +535,6 @@ pub(crate) trait HatQueriesTrait {
         expr: &RoutingExpr,
         source: NodeId,
     ) -> Arc<QueryTargetQablSet>;
-
-    fn get_matching_queryables(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatTokenTrait {

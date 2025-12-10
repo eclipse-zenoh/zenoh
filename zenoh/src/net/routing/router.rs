@@ -71,7 +71,7 @@ impl<'conf> RouterBuilder<'conf> {
         self
     }
 
-    #[cfg(test)]
+    #[allow(dead_code)] // FIXME(regions)
     pub fn hat(mut self, region: Region, whatami: WhatAmI) -> Self {
         self.hats.push((region, whatami));
         self
@@ -339,26 +339,26 @@ impl Router {
         #[cfg(feature = "stats")]
         let stats = transport.get_stats().ok();
 
-        let face_state_builder = FaceStateBuilder::new(
+        let builder = FaceStateBuilder::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
             region,
-            Bound::North, // TODO
+            Bound::default(), // HACK(regions): this is a placeholder
             mux.clone(),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
-        .multicast_groups(transport);
+        .multicast_group(transport);
 
         #[cfg(feature = "stats")]
-        let face_state_builder = {
+        let builder = {
             if let Some(stats) = stats {
-                face_state_builder.stats(stats)
+                builder.stats(stats)
             } else {
-                face_state_builder
+                builder
             }
         };
 
-        let face = Arc::new(face_state_builder.build());
+        let face = Arc::new(builder.build());
 
         face.set_interceptors_from_factories(
             &tables.data.interceptors,
@@ -391,42 +391,39 @@ impl Router {
         #[cfg(feature = "stats")]
         let stats = transport.get_stats().ok();
 
-        let face_state_builder = FaceStateBuilder::new(
+        let builder = FaceStateBuilder::new(
             fid,
             peer.zid,
             region,
-            Bound::North, // TODO
+            Bound::default(), // HACK(regions): this is a placeholder
             Arc::new(DummyPrimitives),
             tables.hats.map_ref(|hat| hat.new_face()),
         )
-        .multicast_groups(transport)
-        .ingress_interceptors(interceptor.clone())
-        .whatami(WhatAmI::Client);
+        .multicast_group(transport)
+        .ingress_interceptors(interceptor.clone());
 
         #[cfg(feature = "stats")]
-        let face_state_builder = {
+        let builder = {
             if let Some(stats) = stats {
-                face_state_builder.stats(stats)
+                builder.stats(stats)
             } else {
-                face_state_builder
+                builder
             }
         };
 
-        let face_state = Arc::new(face_state_builder.build());
+        let face = Arc::new(builder.build());
 
-        face_state.set_interceptors_from_factories(
+        face.set_interceptors_from_factories(
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
         );
-        tables.data.hats[region]
-            .mcast_faces
-            .push(face_state.clone());
+        tables.data.hats[region].mcast_faces.push(face.clone());
 
         tables.data.disable_all_routes();
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),
-                state: face_state,
+                state: face,
             },
             None,
             interceptor,

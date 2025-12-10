@@ -80,13 +80,13 @@ pub(crate) struct QueryTargetQabl {
 
 impl QueryTargetQabl {
     pub(crate) fn new(
-        (&fid, ctx): (&FaceId, &Arc<FaceContext>),
+        ctx: &FaceContext,
         expr: &RoutingExpr,
         complete: bool,
         region: &Region,
     ) -> Option<Self> {
         let qabl = ctx.qabl?;
-        let wire_expr = expr.get_best_key(fid);
+        let wire_expr = expr.get_best_key(ctx.face.id);
         Some(Self {
             dir: Direction {
                 dst_face: ctx.face.clone(),
@@ -416,6 +416,10 @@ impl Resource {
             // SAFETY: non-root resources are valid keyexprs
             unsafe { Some(keyexpr::from_str_unchecked(&self.expr)) }
         }
+    }
+
+    pub fn as_keyexpr(&self) -> &keyexpr {
+        self.keyexpr().unwrap()
     }
 
     pub fn suffix(&self) -> &str {

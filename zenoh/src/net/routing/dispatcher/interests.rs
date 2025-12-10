@@ -38,22 +38,12 @@ use crate::net::routing::{
     RoutingContext,
 };
 
+#[derive(Debug, Clone)]
 pub(crate) struct CurrentInterest {
     pub(crate) src: Remote,
     pub(crate) src_region: Region,
     pub(crate) src_interest_id: InterestId,
     pub(crate) mode: InterestMode,
-}
-
-// FIXME(regions): impl Debug for `Remote`
-impl Debug for CurrentInterest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CurrentInterest")
-            .field("src_region", &self.src_region)
-            .field("src_interest_id", &self.src_interest_id)
-            .field("mode", &self.mode)
-            .finish()
-    }
 }
 
 pub(crate) struct PendingCurrentInterest {
@@ -103,7 +93,7 @@ pub(crate) fn finalize_pending_interest(
     if let Some(interest) = Arc::into_inner(interest) {
         // FIXME(regions): this code is specific to peer/client hats
 
-        let src_face = interest.src.downcast_ref::<FaceState>().unwrap();
+        let src_face = interest.src.downcast_ref_to_face();
 
         tracing::debug!(
             "{}:{} Propagate DeclareFinal",
@@ -172,7 +162,7 @@ impl CurrentInterestCleanup {
                         "{}:{} Didn't receive DeclareFinal for interest {:?}:{}: Timeout({:#?})!",
                         face,
                         self.id,
-                        interest.interest.src.downcast_ref::<FaceState>().unwrap(),
+                        interest.interest.src.downcast_ref_to_face(),
                         interest.interest.src_interest_id,
                         self.interests_timeout,
                     );
@@ -203,12 +193,18 @@ impl Face {
     ) {
         let region = self.state.region;
 
-        if region.bound().is_north() {
+        if region.bound().is_north() && !self.state.whatami.is_peer() {
             tracing::error!(
                 src = %self.state,
-                "Received interest from north-bound face. \
-                This message should only flow upstream"
+                src_whatami = ?self.state.whatami,
+                north_whatami = ?tables_lock.tables.read().unwrap().hats[Region::North].whatami(),
+                "Ignoring interest from non-peer north-bound face (illegal)"
             );
+            return;
+        }
+
+        if self.state.whatami.is_router() {
+            tracing::warn!("Ignoring interest from router (unsupported)");
             return;
         }
 
@@ -282,6 +278,7 @@ impl Face {
             (None, zwrite!(tables_lock.tables))
         };
 
+        // TODO(regions): this should cover the whole function
         let _span = tracing::debug_span!(
             "interest",
             id,
@@ -310,49 +307,62 @@ impl Face {
             hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &remote);
 
         if msg.mode.is_current() {
-            let other_sub_matches = hats
-                .values()
-                .filter(|hat| hat.region() != region)
-                .flat_map(|hat| {
-                    hat.remote_subscriptions_matching(ctx.tables, res.as_deref())
-                        .into_iter()
-                })
-                .collect::<HashMap<_, _>>();
+            if msg.options.subscribers() {
+                let other_sub_matches = hats
+                    .values()
+                    .filter(|hat| hat.region() != region)
+                    .flat_map(|hat| {
+                        hat.remote_subscriptions_matching(ctx.tables, res.as_deref())
+                            .into_iter()
+                    })
+                    .collect::<HashMap<_, _>>();
 
-            hats[region].send_current_subscriptions(
-                ctx.reborrow(),
-                msg,
-                res.clone(),
-                other_sub_matches,
-            );
+                hats[region].send_current_subscriptions(
+                    ctx.reborrow(),
+                    msg,
+                    res.clone(),
+                    other_sub_matches,
+                );
+            }
 
-            let other_qabl_matches = hats
-                .values()
-                .filter(|hat| hat.region() != region)
-                .flat_map(|hat| {
-                    hat.remote_queryables_matching(ctx.tables, res.as_deref())
-                        .into_iter()
-                })
-                .collect::<HashMap<_, _>>();
-            hats[region].send_current_queryables(
-                ctx.reborrow(),
-                msg,
-                res.clone(),
-                other_qabl_matches,
-            );
+            if msg.options.queryables() {
+                let other_qabl_matches = hats
+                    .values()
+                    .filter(|hat| hat.region() != region)
+                    .flat_map(|hat| {
+                        hat.remote_queryables_matching(ctx.tables, res.as_deref())
+                            .into_iter()
+                    })
+                    .collect::<HashMap<_, _>>();
+                hats[region].send_current_queryables(
+                    ctx.reborrow(),
+                    msg,
+                    res.clone(),
+                    other_qabl_matches,
+                );
+            }
 
-            let other_token_matches = hats
-                .values()
-                .filter(|hat| hat.region() != region)
-                .flat_map(|hat| {
-                    hat.remote_tokens_matching(ctx.tables, res.as_deref())
-                        .into_iter()
-                })
-                .collect::<HashSet<_>>();
-            hats[region].send_current_tokens(ctx.reborrow(), msg, res.clone(), other_token_matches);
+            if msg.options.tokens() {
+                let other_token_matches = hats
+                    .values()
+                    .filter(|hat| hat.region() != region)
+                    .flat_map(|hat| {
+                        hat.remote_tokens_matching(ctx.tables, res.as_deref())
+                            .into_iter()
+                    })
+                    .collect::<HashSet<_>>();
+                hats[region].send_current_tokens(
+                    ctx.reborrow(),
+                    msg,
+                    res.clone(),
+                    other_token_matches,
+                );
+            }
         }
 
-        hats[region].register_interest(ctx.reborrow(), msg, res);
+        if msg.mode.is_future() {
+            hats[region].register_interest(ctx.reborrow(), msg, res);
+        }
 
         if let Some(resolved_interest) = resolved_interest_opt {
             tracing::trace!(
@@ -390,7 +400,6 @@ impl Face {
         let region = ctx.src_face.region;
 
         let Some(remote_interest) = hats[region].unregister_interest(ctx.reborrow(), msg) else {
-            tracing::error!(id = msg.id, "Unknown remote interest");
             return;
         };
 

@@ -183,6 +183,7 @@ impl TransportPeerEventHandler for DeMux {
                     owner_hat.handle_oam(
                         ctx,
                         m,
+                        // TODO(regions): are these every different from the face's?
                         &transport.get_zid()?,
                         transport.get_whatami()?,
                         other_hats.map(|hat| &mut **hat as &mut dyn HatTrait), // FIXME(regions)

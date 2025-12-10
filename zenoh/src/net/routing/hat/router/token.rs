@@ -274,7 +274,7 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn register_token(
         &mut self,
         ctx: BaseContext,
@@ -297,7 +297,7 @@ impl HatTokenTrait for Hat {
         self.propagate_sourced_token(ctx.tables, &res, Some(ctx.src_face), &router);
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_token(
         &mut self,
         ctx: BaseContext,
@@ -353,7 +353,7 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
     fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_token
@@ -375,6 +375,7 @@ impl HatTokenTrait for Hat {
             .any(|router| router != this_router)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_tokens_matching(
         &self,

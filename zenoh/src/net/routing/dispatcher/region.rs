@@ -34,10 +34,10 @@ impl Region {
 impl Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Region::North => f.write_str("N"),
-            Region::Local => f.write_str("L"),
-            Region::Undefined { mode } => write!(f, "U:{}", mode.short()),
-            Region::Subregion { id, mode } => write!(f, "S:{}:{}", id, mode.short()),
+            Region::North => f.write_str("north"),
+            Region::Local => f.write_str("local"),
+            Region::Undefined { mode } => write!(f, "undef:{mode}"),
+            Region::Subregion { id, mode } => write!(f, "south:{mode}:{id}"),
         }
     }
 }
@@ -59,6 +59,20 @@ impl<D> RegionMap<D> {
         let (mut main, others) = self
             .0
             .iter_mut()
+            .map(|(b, d)| (*b, d))
+            .partition::<hashbrown::HashMap<_, _>, _>(|(r, _)| r == region);
+
+        let Some(north) = main.remove(region) else {
+            unreachable!()
+        };
+
+        (north, RegionMap(others))
+    }
+
+    pub(crate) fn partition(&self, region: &Region) -> (&D, RegionMap<&D>) {
+        let (mut main, others) = self
+            .0
+            .iter()
             .map(|(b, d)| (*b, d))
             .partition::<hashbrown::HashMap<_, _>, _>(|(r, _)| r == region);
 

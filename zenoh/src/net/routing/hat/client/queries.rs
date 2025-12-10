@@ -33,20 +33,17 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            queries::merge_qabl_infos,
-            region::RegionMap,
-            resource::{FaceContext, NodeId, Resource},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
-        },
-        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources},
-        router::{Direction, DEFAULT_NODE_ID},
-        RoutingContext,
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        queries::merge_qabl_infos,
+        region::RegionMap,
+        resource::{FaceContext, NodeId, Resource},
+        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
     },
+    hat::{BaseContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources, UnregisterResult},
+    router::{Direction, DEFAULT_NODE_ID},
+    RoutingContext,
 };
 
 impl Hat {
@@ -102,7 +99,7 @@ lazy_static::lazy_static! {
 }
 
 impl HatQueriesTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
@@ -121,30 +118,23 @@ impl HatQueriesTrait for Hat {
         Vec::from_iter(qabls)
     }
 
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
     fn sourced_queriers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(expr = ?expr, rgn = %self.region))]
+    #[tracing::instrument(level = "debug", skip(tables, _nid), fields(%src_face) ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        source: NodeId,
+        _nid: NodeId,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
         let Some(key_expr) = expr.key_expr() else {
             return EMPTY_ROUTE.clone();
         };
-        let source_type = src_face.whatami;
-        tracing::trace!(
-            "compute_query_route({}, {:?}, {:?})",
-            key_expr,
-            source,
-            source_type
-        );
 
         let matches = expr
             .resource()
@@ -156,10 +146,9 @@ impl HatQueriesTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-            for face_ctx @ (_, ctx) in self.owned_face_contexts(&mres) {
+            for ctx in self.owned_face_contexts(&mres) {
                 if !self.owns(src_face) {
-                    if let Some(qabl) = QueryTargetQabl::new(face_ctx, expr, complete, &self.region)
-                    {
+                    if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         route.push(qabl);
                     }
@@ -197,47 +186,7 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    fn get_matching_queryables(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        let mut matching_queryables = HashMap::new();
-
-        tracing::trace!(
-            "get_matching_queryables({}; complete: {})",
-            key_expr,
-            complete
-        );
-
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
-                continue;
-            }
-            for (sid, ctx) in &mres.face_ctxs {
-                if match complete {
-                    true => ctx.qabl.is_some_and(|q| q.complete),
-                    false => ctx.qabl.is_some(),
-                } {
-                    matching_queryables
-                        .entry(*sid)
-                        .or_insert_with(|| ctx.face.clone());
-                }
-            }
-        }
-        matching_queryables
-    }
-
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx, _nid), ret)]
     fn register_queryable(
         &mut self,
         ctx: BaseContext,
@@ -248,40 +197,47 @@ impl HatQueriesTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
 
-        {
-            let res = get_mut_unchecked(&mut res);
-            match res.face_ctxs.get_mut(&ctx.src_face.id) {
-                Some(ctx) => {
-                    if ctx.qabl.is_none() {
-                        get_mut_unchecked(ctx).qabl = Some(*info);
-                    }
-                }
-                None => {
-                    let ctx = res
-                        .face_ctxs
-                        .entry(ctx.src_face.id)
-                        .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
-                    get_mut_unchecked(ctx).qabl = Some(*info);
-                }
-            }
-        }
-
         self.face_hat_mut(ctx.src_face)
             .remote_qabls
-            .insert(id, (res.clone(), *info));
+            .entry(id)
+            .and_modify(|(_, old_info)| *old_info = *info)
+            .or_insert_with(|| (res.clone(), *info));
+
+        let new_face_info = self
+            .face_hat(ctx.src_face)
+            .remote_qabls
+            .values()
+            .filter_map(|(r, i)| (r == &res).then_some(*i))
+            .reduce(merge_qabl_infos);
+
+        tracing::debug!(?new_face_info);
+
+        let res = get_mut_unchecked(&mut res);
+        match res.face_ctxs.get_mut(&ctx.src_face.id) {
+            Some(ctx) => {
+                get_mut_unchecked(ctx).qabl = new_face_info;
+            }
+            None => {
+                let ctx = res
+                    .face_ctxs
+                    .entry(ctx.src_face.id)
+                    .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
+                get_mut_unchecked(ctx).qabl = new_face_info;
+            }
+        }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx, _nid), ret)]
     fn unregister_queryable(
         &mut self,
         ctx: BaseContext,
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _nid: NodeId,
-    ) -> Option<Arc<Resource>> {
+    ) -> UnregisterResult {
         let Some(qabl) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) else {
             tracing::error!(id, "Unknown queryable");
-            return None;
+            return UnregisterResult::Noop;
         };
 
         if self
@@ -290,8 +246,8 @@ impl HatQueriesTrait for Hat {
             .values()
             .contains(&qabl)
         {
-            tracing::debug!(id, res = ?qabl.0, info = ?qabl.1, "Duplicated queryable");
-            return None;
+            tracing::trace!(id, res = ?qabl.0, info = ?qabl.1, "Duplicated queryable");
+            return UnregisterResult::Noop;
         };
 
         let (mut res, _) = qabl;
@@ -303,10 +259,10 @@ impl HatQueriesTrait for Hat {
             get_mut_unchecked(ctx).qabl = None;
         }
 
-        Some(res)
+        UnregisterResult::LastUnregistered { res }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
@@ -325,7 +281,7 @@ impl HatQueriesTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
     fn propagate_queryable(
         &mut self,
         ctx: BaseContext,
@@ -344,14 +300,17 @@ impl HatQueriesTrait for Hat {
             return;
         };
 
-        if self.face_hat(&dst_face).local_qabls.contains_key(&res) {
-            return;
-        }
+        // TODO(regions*): this didn't check if the info is different before.
+        // I need to make sure that all similar code paths are updated like this one is.
+        let id = match self.face_hat(&dst_face).local_qabls.get(&res) {
+            Some((_, old_info)) if old_info == &info => return,
+            Some((id, _)) => *id,
+            None => self
+                .face_hat(&dst_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst),
+        };
 
-        let id = self
-            .face_hat(&dst_face)
-            .next_id
-            .fetch_add(1, Ordering::SeqCst);
         self.face_hat_mut(&mut dst_face)
             .local_qabls
             .insert(res.clone(), (id, info));
@@ -375,7 +334,7 @@ impl HatQueriesTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "trace", skip(ctx))]
     fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
             tracing::debug!(
@@ -404,14 +363,15 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[tracing::instrument(level = "trace", ret)]
     fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
         self.owned_face_contexts(res)
-            .filter_map(|(_, ctx)| ctx.qabl)
+            .filter_map(|ctx| ctx.qabl)
             .reduce(merge_qabl_infos)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
+    #[allow(clippy::incompatible_msrv)]
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_queryables_matching(
         &self,
         tables: &TablesData,

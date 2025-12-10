@@ -134,7 +134,12 @@ impl Runtime {
         let (listeners, peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
             let guard = &self.state.config.lock().0;
             (
-                guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
+                guard
+                    .listen()
+                    .endpoints()
+                    .client()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 guard
                     .connect()
                     .endpoints()

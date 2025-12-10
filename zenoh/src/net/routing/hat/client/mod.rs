@@ -47,7 +47,6 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{
-            face::FaceId,
             interests::RemoteInterest,
             region::{Region, RegionMap},
         },
@@ -91,32 +90,31 @@ impl Hat {
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
-    pub(crate) fn owned_face_contexts<'a>(
-        &'a self,
-        res: &'a Resource,
-    ) -> impl Iterator<Item = (&'a FaceId, &'a Arc<FaceContext>)> {
-        // TODO(regions): move this method to a Hat trait
+    pub(crate) fn owned_face_contexts<'r>(
+        &'r self,
+        res: &'r Resource,
+    ) -> impl Iterator<Item = &'r Arc<FaceContext>> {
         res.face_ctxs
-            .iter()
-            .filter(move |(_, ctx)| self.owns(&ctx.face))
+            .values()
+            .filter(move |ctx| self.owns(&ctx.face))
     }
 
-    pub(crate) fn owned_faces<'hat, 'tbl>(
-        &'hat self,
-        tables: &'tbl TablesData,
-    ) -> impl Iterator<Item = &'tbl Arc<FaceState>> + 'hat
+    pub(crate) fn owned_faces<'h, 't>(
+        &'h self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> + 'h
     where
-        'tbl: 'hat,
+        't: 'h,
     {
         tables.faces.values().filter(|face| self.owns(face))
     }
 
-    pub(crate) fn owned_faces_mut<'hat, 'tbl>(
-        &'hat self,
-        tables: &'tbl mut TablesData,
-    ) -> impl Iterator<Item = &'tbl mut Arc<FaceState>> + 'hat
+    pub(crate) fn owned_faces_mut<'h, 't>(
+        &'h self,
+        tables: &'t mut TablesData,
+    ) -> impl Iterator<Item = &'t mut Arc<FaceState>> + 'h
     where
-        'tbl: 'hat,
+        't: 'h,
     {
         tables.faces.values_mut().filter(|face| self.owns(face))
     }
@@ -136,7 +134,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_remote(&self, face: &Arc<FaceState>, _nid: NodeId) -> Option<Remote> {
-        Some(face.clone())
+        Some(Remote(Box::new(face.clone())))
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
@@ -216,6 +214,7 @@ impl HatBaseTrait for Hat {
         out_face: &Arc<FaceState>,
         _expr: &RoutingExpr,
     ) -> bool {
+        // REVIEW(regions): Does this make sense given that only peers do multicast?
         src_face.id != out_face.id
             && out_face.mcast_group.is_none()
             && src_face.mcast_group.is_none()
@@ -279,4 +278,4 @@ impl HatFace {
 impl HatTrait for Hat {}
 
 #[allow(dead_code)] // FIXME(regions)
-type HatRemote = FaceState;
+type HatRemote = Arc<FaceState>;

@@ -173,7 +173,7 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
-            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()),
+            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()), // FIXME(regions): include the face id
         }
     }
 }
@@ -2449,6 +2449,30 @@ impl SessionInner {
                     }
                 }
             });
+
+        for ke in state
+            .remote_tokens
+            .values()
+            .filter(|ke| ke.intersects(key_expr))
+        {
+            callback.call(Reply {
+                result: Ok(Sample {
+                    key_expr: ke.to_owned(),
+                    payload: ZBytes::new(),
+                    kind: SampleKind::Put,
+                    encoding: Encoding::default(),
+                    timestamp: None,
+                    qos: QoS::default(),
+                    #[cfg(feature = "unstable")]
+                    reliability: Reliability::default(),
+                    #[cfg(feature = "unstable")]
+                    source_info: None,
+                    attachment: None,
+                }),
+                #[cfg(feature = "unstable")]
+                replier_id: None,
+            });
+        }
 
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();

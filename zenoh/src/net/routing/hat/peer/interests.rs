@@ -17,14 +17,13 @@ use std::{
 };
 
 use itertools::Itertools;
-use zenoh_protocol::{
-    core::WhatAmI,
-    network::{
-        declare::{self, queryable::ext::QueryableInfoType, QueryableId, TokenId},
-        interest::{self, InterestId, InterestMode},
-        Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
-        Interest,
-    },
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
+use zenoh_protocol::network::{
+    declare::{self, queryable::ext::QueryableInfoType, QueryableId, TokenId},
+    interest::{self, InterestId, InterestMode},
+    Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
+    Interest,
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -92,6 +91,7 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(ctx, msg), ret)]
     fn route_interest(
         &mut self,
@@ -101,7 +101,10 @@ impl HatInterestTrait for Hat {
         src: &Remote,
     ) -> Option<CurrentInterest> {
         debug_assert!(self.region().bound().is_north());
-        debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_eq!(
+            ctx.src_face.region.bound().is_north(),
+            ctx.src_face.whatami.is_peer()
+        );
 
         let interest = Arc::new(CurrentInterest {
             src: src.clone(),
@@ -110,43 +113,34 @@ impl HatInterestTrait for Hat {
             mode: msg.mode,
         });
 
-        let propagated_mode = if msg.mode.is_future() {
-            InterestMode::CurrentFuture
-        } else {
-            msg.mode
-        };
-
         let interests_timeout = ctx.tables.interests_timeout;
 
-        for mut dst_face in self
+        for mut dst in self
             .owned_faces(ctx.tables)
             .filter(|f| {
                 f.remote_bound.is_south()
-                    || (f.whatami == WhatAmI::Peer
+                    || (f.whatami.is_peer()
                         && msg.options.tokens()
                         && msg.mode == InterestMode::Current
                         // REVIEW(regions): is this necessary? (we don't do initial interest with gateways)
-                        && !initial_interest(f).map(|i| i.finalized).unwrap_or(true))
+                        && !initial_interest(f).is_none_or(|i| i.finalized))
             })
             .cloned()
-            .collect::<Vec<_>>()
+            .collect_vec()
         {
-            let id = self
-                .face_hat(&dst_face)
-                .next_id
-                .fetch_add(1, Ordering::SeqCst);
-            let dst_face_id = dst_face.id;
-            get_mut_unchecked(&mut dst_face).local_interests.insert(
+            let id = self.face_hat(&dst).next_id.fetch_add(1, Ordering::SeqCst);
+            let dst_id = dst.id;
+            get_mut_unchecked(&mut dst).local_interests.insert(
                 id,
                 InterestState::new(
-                    dst_face_id,
+                    dst_id,
                     msg.options,
                     res.clone(),
-                    propagated_mode == InterestMode::Future,
+                    msg.mode == InterestMode::Future,
                 ),
             );
             if msg.mode.is_current() {
-                let dst_face_mut = get_mut_unchecked(&mut dst_face);
+                let dst_face_mut = get_mut_unchecked(&mut dst);
                 let cancellation_token = dst_face_mut.task_controller.get_cancellation_token();
                 let rejection_token = dst_face_mut.task_controller.get_cancellation_token();
                 dst_face_mut.pending_current_interests.insert(
@@ -158,19 +152,17 @@ impl HatInterestTrait for Hat {
                     },
                 );
                 CurrentInterestCleanup::spawn_interest_clean_up_task(
-                    &dst_face,
+                    &dst,
                     ctx.tables_lock,
                     id,
                     interests_timeout,
                 );
             }
-            let wire_expr = res
-                .as_ref()
-                .map(|res| Resource::decl_key(res, &mut dst_face));
-            dst_face.primitives.send_interest(RoutingContext::with_expr(
+            let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, &mut dst));
+            dst.primitives.send_interest(RoutingContext::with_expr(
                 &mut Interest {
                     id,
-                    mode: propagated_mode,
+                    mode: msg.mode,
                     options: msg.options,
                     wire_expr,
                     ext_qos: interest::ext::QoSType::INTEREST,
@@ -276,15 +268,6 @@ impl HatInterestTrait for Hat {
             debug_assert!(self.region().bound().is_north());
             debug_assert!(ctx.src_face.region.bound().is_north());
 
-            if ctx.src_face.remote_bound.is_north() {
-                tracing::error!(
-                    id = interest_id,
-                    src = %ctx.src_face,
-                    "Received current interest finalization from non-gateway face"
-                );
-                return None;
-            }
-
             let Some(PendingCurrentInterest {
                 interest,
                 cancellation_token,
@@ -320,9 +303,7 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        let Some(PendingCurrentInterest { interest, .. }) = get_mut_unchecked(ctx.src_face)
-            .pending_current_interests
-            .remove(&interest_id)
+        let Some(pending_interest) = ctx.src_face.pending_current_interests.get(&interest_id)
         else {
             tracing::error!(
                 id = interest_id,
@@ -332,7 +313,9 @@ impl HatInterestTrait for Hat {
             return None;
         };
 
-        Arc::into_inner(interest)
+        tracing::trace!(interest = ?pending_interest.interest);
+
+        Some(pending_interest.interest.as_ref().clone())
     }
 
     #[tracing::instrument(level = "trace", skip(ctx), ret)]
@@ -530,7 +513,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx, msg))]
+    #[tracing::instrument(level = "trace", skip(ctx, msg), ret)]
     fn send_current_tokens(
         &self,
         ctx: BaseContext,
@@ -539,11 +522,23 @@ impl HatInterestTrait for Hat {
         other_matches: HashSet<Arc<Resource>>,
     ) {
         debug_assert!(self.owns(ctx.src_face));
-        debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_implies!(
+            ctx.src_face.region.bound().is_north(),
+            ctx.src_face.whatami.is_peer()
+        );
 
         let matches = other_matches.into_iter();
 
         for token in matches {
+            // TODO(regions*): is this necessary?
+            if self
+                .face_hat(ctx.src_face)
+                .local_tokens
+                .contains_key(&token)
+            {
+                continue;
+            }
+
             let token_id = if msg.mode.is_future() {
                 let id = self
                     .face_hat(ctx.src_face)
@@ -577,18 +572,23 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_current_token(
         &self,
         ctx: BaseContext,
         res: Arc<Resource>,
         interest: CurrentInterest,
     ) {
-        assert!(self.region().bound().is_south());
+        debug_assert!(self.region().bound().is_south());
 
         let dst = self.hat_remote(&interest.src);
 
-        assert!(dst.region.bound().is_south());
+        debug_assert!(dst.region.bound().is_south());
+
+        // TODO(regions*): is this necessary?
+        if self.face_hat(dst).local_tokens.contains_key(&res) {
+            return;
+        }
 
         // FIXME(regions*)
         // let wire_expr = Resource::decl_key(&res, &mut dst.clone());
@@ -631,7 +631,7 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx, msg))]
+    #[tracing::instrument(level = "trace", skip(ctx, msg), ret)]
     fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>) {
         if self
             .face_hat_mut(ctx.src_face)

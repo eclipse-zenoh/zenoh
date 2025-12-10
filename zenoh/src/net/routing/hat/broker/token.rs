@@ -35,86 +35,29 @@ use crate::net::routing::{
 use crate::zenoh_core::polyfill::*;
 
 impl Hat {
-    #[inline]
-    fn maybe_unpropagate_token(
-        &self,
-        dst_face: &mut Arc<FaceState>,
-        res: &Arc<Resource>,
-        send_declare: &mut SendDeclare,
-    ) {
-        if let Some(id) = self.face_hat_mut(dst_face).local_tokens.remove(res) {
-            send_declare(
-                &dst_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: declare::ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareToken(UndeclareToken {
-                            id,
-                            ext_wire_expr: WireExprType::null(),
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
-            );
-        } else if self
-            .face_hat(dst_face)
-            .remote_interests
-            .values()
-            .any(|i| i.options.tokens() && i.matches(res))
-        {
-            // Token has never been declared on this face.
-            // Send an Undeclare with a one shot generated id and a WireExpr ext.
-            send_declare(
-                &dst_face.primitives,
-                RoutingContext::with_expr(
-                    Declare {
-                        interest_id: None,
-                        ext_qos: declare::ext::QoSType::DECLARE,
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::UndeclareToken(UndeclareToken {
-                            id: TokenId::default(),
-                            ext_wire_expr: WireExprType {
-                                wire_expr: Resource::get_best_key(res, "", dst_face.id),
-                            },
-                        }),
-                    },
-                    res.expr().to_string(),
-                ),
-            );
-        }
-    }
-
     fn maybe_propagate_token(
         &self,
+        dst: &mut Arc<FaceState>,
         res: &Arc<Resource>,
-        dst_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        if self.face_hat(dst_face).local_tokens.contains_key(res) {
+        if self.face_hat(dst).local_tokens.contains_key(res) {
             return;
         };
 
-        if dst_face.region.bound().is_north()
+        if dst.region.bound().is_north()
             || self
-                .face_hat(dst_face)
+                .face_hat(dst)
                 .remote_interests
                 .values()
                 .any(|i| i.options.tokens() && i.matches(res))
         {
-            let id = self
-                .face_hat(dst_face)
-                .next_id
-                .fetch_add(1, Ordering::SeqCst);
-            self.face_hat_mut(dst_face)
-                .local_tokens
-                .insert(res.clone(), id);
-            let key_expr = Resource::decl_key(res, dst_face);
+            let id = self.face_hat(dst).next_id.fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(dst).local_tokens.insert(res.clone(), id);
+            let key_expr = Resource::decl_key(res, dst);
+            tracing::trace!(%dst);
             send_declare(
-                &dst_face.primitives,
+                &dst.primitives,
                 RoutingContext::with_expr(
                     Declare {
                         interest_id: None,
@@ -131,10 +74,64 @@ impl Hat {
             );
         }
     }
+
+    fn maybe_unpropagate_token(
+        &self,
+        dst: &mut Arc<FaceState>,
+        res: &Arc<Resource>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if let Some(id) = self.face_hat_mut(dst).local_tokens.remove(res) {
+            tracing::trace!(%dst);
+            send_declare(
+                &dst.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareToken(UndeclareToken {
+                            id,
+                            ext_wire_expr: WireExprType::null(),
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        } else if self
+            .face_hat(dst)
+            .remote_interests
+            .values()
+            .any(|i| i.options.tokens() && i.matches(res))
+        {
+            // Token has never been declared on this face.
+            // Send an Undeclare with a one shot generated id and a WireExpr ext.
+            tracing::trace!(%dst);
+            send_declare(
+                &dst.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareToken(UndeclareToken {
+                            id: TokenId::default(),
+                            ext_wire_expr: WireExprType {
+                                wire_expr: Resource::get_best_key(res, "", dst.id),
+                            },
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        }
+    }
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn register_token(
         &mut self,
         ctx: BaseContext,
@@ -167,7 +164,7 @@ impl HatTokenTrait for Hat {
             .insert(id, res.clone());
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_token(
         &mut self,
         ctx: BaseContext,
@@ -223,21 +220,18 @@ impl HatTokenTrait for Hat {
     fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool) {
         debug_assert_implies!(!other_tokens, self.owns(ctx.src_face));
 
-        for dst_face in self
-            .owned_faces_mut(ctx.tables)
-            .filter(|f| f.id != ctx.src_face.id)
-        {
-            self.maybe_propagate_token(&res, dst_face, ctx.send_declare);
+        // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
+        // session-local tokens in liveliness queries/subscribers.
+        for dst_face in self.owned_faces_mut(ctx.tables) {
+            self.maybe_propagate_token(dst_face, &res, ctx.send_declare);
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
+    #[tracing::instrument(level = "trace", skip(ctx), ret)]
     fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        for mut face in self
-            .owned_faces(ctx.tables)
-            .filter(|f| f.id != ctx.src_face.id)
-            .cloned()
-        {
+        // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
+        // session-local tokens in liveliness queries/subscribers.
+        for mut face in self.owned_faces(ctx.tables).cloned() {
             self.maybe_unpropagate_token(&mut face, &res, ctx.send_declare);
         }
     }
@@ -248,7 +242,7 @@ impl HatTokenTrait for Hat {
 
         if let Ok(face) = self
             .owned_face_contexts(&res)
-            .filter_map(|(_, ctx)| ctx.token.then_some(&ctx.face))
+            .filter_map(|ctx| ctx.token.then_some(&ctx.face))
             .exactly_one()
             .cloned()
             .as_mut()
@@ -259,9 +253,10 @@ impl HatTokenTrait for Hat {
 
     #[tracing::instrument(level = "trace", ret)]
     fn remote_tokens_of(&self, res: &Resource) -> bool {
-        self.owned_face_contexts(res).any(|(_, ctx)| ctx.token)
+        self.owned_face_contexts(res).any(|ctx| ctx.token)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_tokens_matching(
         &self,
