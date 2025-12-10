@@ -53,11 +53,10 @@ impl StatsKeysTree {
             return StatsKeys::default();
         }
         if let Some(cache) = cache() {
-            return if cache.generation.load(Ordering::Acquire) == self.generation {
-                unsafe { &*cache.keys.get() }.clone()
-            } else {
-                self.update_cache(cache, keyexpr)
-            };
+            if cache.generation.load(Ordering::Acquire) != self.generation {
+                self.update_cache(cache, keyexpr);
+            }
+            return unsafe { &*cache.keys.get() }.clone();
         }
         self.compute_keys(keyexpr)
     }
@@ -67,12 +66,17 @@ impl StatsKeysTree {
         &self,
         cache: &StatsKeyCache,
         keyexpr: impl FnOnce() -> Option<&'a keyexpr>,
-    ) -> StatsKeys {
-        let _guard = cache.mutex.lock().unwrap();
+    ) {
+        // Compute the key before locking, in order to shorten the critical section.
+        // The keys may be computed twice, but it matters less than blocking on a lock.
         let keys = self.compute_keys(keyexpr);
-        unsafe { *cache.keys.get() = keys.clone() };
+        let _guard = cache.mutex.lock().unwrap();
+        // Do not override the cache if it has already been set.
+        if cache.generation.load(Ordering::Acquire) == self.generation {
+            return;
+        }
+        unsafe { *cache.keys.get() = keys };
         cache.generation.store(self.generation, Ordering::Release);
-        keys
     }
 
     #[cold]
