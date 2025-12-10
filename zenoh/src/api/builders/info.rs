@@ -277,7 +277,7 @@ impl IntoFuture for LinksBuilder<'_> {
     }
 }
 
-/// A builder returned by [`SessionInfo::transport_events()`](crate::session::SessionInfo::transport_events) that allows
+/// A builder returned by [`SessionInfo::transport_events_listener()`](crate::session::SessionInfo::transport_events_listener) that allows
 /// subscribing to transport lifecycle events.
 ///
 /// # Examples
@@ -288,7 +288,7 @@ impl IntoFuture for LinksBuilder<'_> {
 ///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let events = session.info()
-///     .transport_events()
+///     .transport_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
 ///     .await;
@@ -303,7 +303,7 @@ impl IntoFuture for LinksBuilder<'_> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
-pub struct TransportEventsBuilder<'a, Handler> {
+pub struct TransportEventsListenerBuilder<'a, Handler> {
     runtime: &'a DynamicRuntime,
     handler: Handler,
     history: bool,
@@ -312,7 +312,7 @@ pub struct TransportEventsBuilder<'a, Handler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a> TransportEventsBuilder<'a, DefaultHandler> {
+impl<'a> TransportEventsListenerBuilder<'a, DefaultHandler> {
     pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self {
             runtime,
@@ -325,7 +325,7 @@ impl<'a> TransportEventsBuilder<'a, DefaultHandler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
+impl<'a, Handler> TransportEventsListenerBuilder<'a, Handler> {
     /// Enable history - send events for existing transports before live events.
     pub fn history(mut self, enabled: bool) -> Self {
         self.history = enabled;
@@ -333,11 +333,11 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
     }
 
     /// Use a custom handler (channel, callback, etc.)
-    pub fn with<H>(self, handler: H) -> TransportEventsBuilder<'a, H>
+    pub fn with<H>(self, handler: H) -> TransportEventsListenerBuilder<'a, H>
     where
         H: IntoHandler<TransportEvent>,
     {
-        TransportEventsBuilder {
+        TransportEventsListenerBuilder {
             runtime: self.runtime,
             handler,
             history: self.history,
@@ -347,7 +347,7 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
     }
 
     /// Provide a callback to handle events
-    pub fn callback<F>(self, callback: F) -> TransportEventsBuilder<'a, Callback<TransportEvent>>
+    pub fn callback<F>(self, callback: F) -> TransportEventsListenerBuilder<'a, Callback<TransportEvent>>
     where
         F: Fn(TransportEvent) + Send + Sync + 'static,
     {
@@ -359,7 +359,7 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
     pub fn callback_mut<F>(
         self,
         callback: F,
-    ) -> TransportEventsBuilder<'a, Callback<TransportEvent>>
+    ) -> TransportEventsListenerBuilder<'a, Callback<TransportEvent>>
     where
         F: FnMut(TransportEvent) + Send + Sync + 'static,
     {
@@ -369,7 +369,7 @@ impl<'a, Handler> TransportEventsBuilder<'a, Handler> {
 
 #[cfg(feature = "unstable")]
 #[zenoh_macros::internal_trait]
-impl<Handler> CancellationTokenBuilderTrait for TransportEventsBuilder<'_, Handler> {
+impl<Handler> CancellationTokenBuilderTrait for TransportEventsListenerBuilder<'_, Handler> {
     /// Provide a cancellation token that can be used to interrupt the transport events subscription.
     ///
     /// # Examples
@@ -381,7 +381,7 @@ impl<Handler> CancellationTokenBuilderTrait for TransportEventsBuilder<'_, Handl
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let ct = zenoh::cancellation::CancellationToken::default();
     /// let events = session.info()
-    ///     .transport_events()
+    ///     .transport_events_listener()
     ///     .with(flume::bounded(32))
     ///     .cancellation_token(ct.clone())
     ///     .await;
@@ -412,7 +412,7 @@ impl<Handler> CancellationTokenBuilderTrait for TransportEventsBuilder<'_, Handl
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Resolvable for TransportEventsBuilder<'_, Handler>
+impl<Handler> Resolvable for TransportEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
@@ -421,7 +421,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Wait for TransportEventsBuilder<'_, Handler>
+impl<Handler> Wait for TransportEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
@@ -442,7 +442,7 @@ where
             None
         };
         #[allow(unused_variables)] // id is only needed for unstable cancellation_token
-        let id = self.runtime.transport_events(callback, self.history);
+        let id = self.runtime.transport_events_listener(callback, self.history);
         #[cfg(feature = "unstable")]
         if let Some(cancellation_token) = cancellation_token {
             let runtime_clone = self.runtime.clone();
@@ -457,7 +457,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> IntoFuture for TransportEventsBuilder<'_, Handler>
+impl<Handler> IntoFuture for TransportEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
@@ -470,7 +470,7 @@ where
     }
 }
 
-/// A builder returned by [`SessionInfo::link_events()`](crate::session::SessionInfo::link_events) that allows
+/// A builder returned by [`SessionInfo::linkl_events_listener()`](crate::session::SessionInfo::linkl_events_listener) that allows
 /// subscribing to link lifecycle events.
 ///
 /// # Examples
@@ -481,7 +481,7 @@ where
 ///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let events = session.info()
-///     .link_events()
+///     .linkl_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
 ///     .await;
@@ -497,7 +497,7 @@ where
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
-pub struct LinkEventsBuilder<'a, Handler> {
+pub struct LinkEventsListenerBuilder<'a, Handler> {
     runtime: &'a DynamicRuntime,
     handler: Handler,
     history: bool,
@@ -507,7 +507,7 @@ pub struct LinkEventsBuilder<'a, Handler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a> LinkEventsBuilder<'a, DefaultHandler> {
+impl<'a> LinkEventsListenerBuilder<'a, DefaultHandler> {
     pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self {
             runtime,
@@ -521,7 +521,7 @@ impl<'a> LinkEventsBuilder<'a, DefaultHandler> {
 }
 
 #[zenoh_macros::unstable]
-impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
+impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
     /// Enable history - send events for existing links before live events.
     pub fn history(mut self, enabled: bool) -> Self {
         self.history = enabled;
@@ -529,11 +529,11 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
     }
 
     /// Use a custom handler (channel, callback, etc.)
-    pub fn with<H>(self, handler: H) -> LinkEventsBuilder<'a, H>
+    pub fn with<H>(self, handler: H) -> LinkEventsListenerBuilder<'a, H>
     where
         H: IntoHandler<LinkEvent>,
     {
-        LinkEventsBuilder {
+        LinkEventsListenerBuilder {
             runtime: self.runtime,
             handler,
             history: self.history,
@@ -552,7 +552,7 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let transport_zid = /* some ZenohId */;
     /// let events = session.info()
-    ///     .link_events()
+    ///     .linkl_events_listener()
     ///     .transport(transport_zid)
     ///     .with(flume::bounded(32))
     ///     .await;
@@ -564,7 +564,7 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
     }
 
     /// Provide a callback to handle events
-    pub fn callback<F>(self, callback: F) -> LinkEventsBuilder<'a, Callback<LinkEvent>>
+    pub fn callback<F>(self, callback: F) -> LinkEventsListenerBuilder<'a, Callback<LinkEvent>>
     where
         F: Fn(LinkEvent) + Send + Sync + 'static,
     {
@@ -573,7 +573,7 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
 
     /// Provide a mutable callback which is never called concurrently. If the callback can be accepted by
     /// [`callback`](Self::callback), prefer using that instead for better performance.
-    pub fn callback_mut<F>(self, callback: F) -> LinkEventsBuilder<'a, Callback<LinkEvent>>
+    pub fn callback_mut<F>(self, callback: F) -> LinkEventsListenerBuilder<'a, Callback<LinkEvent>>
     where
         F: FnMut(LinkEvent) + Send + Sync + 'static,
     {
@@ -583,7 +583,7 @@ impl<'a, Handler> LinkEventsBuilder<'a, Handler> {
 
 #[cfg(feature = "unstable")]
 #[zenoh_macros::internal_trait]
-impl<Handler> CancellationTokenBuilderTrait for LinkEventsBuilder<'_, Handler> {
+impl<Handler> CancellationTokenBuilderTrait for LinkEventsListenerBuilder<'_, Handler> {
     /// Provide a cancellation token that can be used to interrupt the link events subscription.
     ///
     /// # Examples
@@ -595,7 +595,7 @@ impl<Handler> CancellationTokenBuilderTrait for LinkEventsBuilder<'_, Handler> {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let ct = zenoh::cancellation::CancellationToken::default();
     /// let events = session.info()
-    ///     .link_events()
+    ///     .linkl_events_listener()
     ///     .with(flume::bounded(32))
     ///     .cancellation_token(ct.clone())
     ///     .await;
@@ -627,7 +627,7 @@ impl<Handler> CancellationTokenBuilderTrait for LinkEventsBuilder<'_, Handler> {
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Resolvable for LinkEventsBuilder<'_, Handler>
+impl<Handler> Resolvable for LinkEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,
@@ -636,7 +636,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> Wait for LinkEventsBuilder<'_, Handler>
+impl<Handler> Wait for LinkEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,
@@ -659,7 +659,7 @@ where
         #[allow(unused_variables)] // id is only needed for unstable cancellation_token
         let id = self
             .runtime
-            .link_events(callback, self.history, self.transport_zid);
+            .linkl_events_listener(callback, self.history, self.transport_zid);
         #[cfg(feature = "unstable")]
         if let Some(cancellation_token) = cancellation_token {
             let runtime_clone = self.runtime.clone();
@@ -674,7 +674,7 @@ where
 }
 
 #[zenoh_macros::unstable]
-impl<Handler> IntoFuture for LinkEventsBuilder<'_, Handler>
+impl<Handler> IntoFuture for LinkEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,

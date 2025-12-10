@@ -179,7 +179,7 @@ pub trait IRuntime: Send + Sync {
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     #[cfg(feature = "unstable")]
-    fn transport_events(
+    fn transport_events_listener(
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
         history: bool,
@@ -189,7 +189,7 @@ pub trait IRuntime: Send + Sync {
     fn cancel_transport_events(&self, id: usize);
 
     #[cfg(feature = "unstable")]
-    fn link_events(
+    fn linkl_events_listener(
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
         history: bool,
@@ -363,7 +363,7 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn transport_events(
+    fn transport_events_listener(
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
         history: bool,
@@ -396,7 +396,7 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn link_events(
+    fn linkl_events_listener(
         &self,
         callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
         history: bool,

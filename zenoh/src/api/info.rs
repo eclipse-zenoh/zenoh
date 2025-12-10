@@ -23,7 +23,7 @@ use zenoh_protocol::core::Locator;
 
 #[cfg(feature = "unstable")]
 use crate::api::{
-    builders::info::{LinkEventsBuilder, LinksBuilder, TransportEventsBuilder, TransportsBuilder},
+    builders::info::{LinkEventsListenerBuilder, LinksBuilder, TransportEventsListenerBuilder, TransportsBuilder},
     handlers::{CallbackParameter, DefaultHandler},
     sample::SampleKind,
 };
@@ -161,7 +161,7 @@ impl SessionInfo {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let events = session.info()
-    ///     .transport_events()
+    ///     .transport_events_listener()
     ///     .history(true)
     ///     .with(flume::bounded(32))
     ///     .await;
@@ -175,8 +175,8 @@ impl SessionInfo {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn transport_events(&self) -> TransportEventsBuilder<'_, DefaultHandler> {
-        TransportEventsBuilder::new(&self.runtime)
+    pub fn transport_events_listener(&self) -> TransportEventsListenerBuilder<'_, DefaultHandler> {
+        TransportEventsListenerBuilder::new(&self.runtime)
     }
 
     /// Subscribe to link lifecycle events.
@@ -189,7 +189,7 @@ impl SessionInfo {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let events = session.info()
-    ///     .link_events()
+    ///     .linkl_events_listener()
     ///     .history(true)
     ///     .with(flume::bounded(32))
     ///     .await;
@@ -204,8 +204,8 @@ impl SessionInfo {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn link_events(&self) -> LinkEventsBuilder<'_, DefaultHandler> {
-        LinkEventsBuilder::new(&self.runtime)
+    pub fn link_events_listener(&self) -> LinkEventsListenerBuilder<'_, DefaultHandler> {
+        LinkEventsListenerBuilder::new(&self.runtime)
     }
 }
 

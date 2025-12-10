@@ -196,7 +196,7 @@ mod tests {
         session2.close().await.unwrap();
     }
 
-    /// Test that transport_events() delivers events when transports open and close
+    /// Test that transport_events_listener() delivers events when transports open and close
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_transport_events() {
         zenoh_util::init_log_from_env_or("error");
@@ -214,7 +214,7 @@ mod tests {
         // Subscribe to transport events with history
         let events = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(true)
             .with(flume::bounded(32))
             .await;
@@ -267,7 +267,7 @@ mod tests {
         session1.close().await.unwrap();
     }
 
-    /// Test that link_events() delivers events when links are added and removed
+    /// Test that linkl_events_listener() delivers events when links are added and removed
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_link_events() {
         zenoh_util::init_log_from_env_or("error");
@@ -285,7 +285,7 @@ mod tests {
         // Subscribe to link events with history
         let events = session1
             .info()
-            .link_events()
+            .link_events_listener()
             .history(true)
             .with(flume::bounded(32))
             .await;
@@ -372,15 +372,15 @@ mod tests {
         tokio::time::sleep(SLEEP).await;
 
         // Subscribe to transport events WITH history - should get existing transport
-        let transport_events = session1
+        let transport_events_listener = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(true)
             .with(flume::bounded(32))
             .await;
 
         // Should immediately receive event for existing transport
-        let event = tokio::time::timeout(Duration::from_secs(5), transport_events.recv_async())
+        let event = tokio::time::timeout(Duration::from_secs(5), transport_events_listener.recv_async())
             .await
             .expect("Timeout waiting for history transport event")
             .expect("Channel closed");
@@ -389,15 +389,15 @@ mod tests {
         println!("History: Transport {}", event.transport().zid());
 
         // Subscribe to link events WITH history - should get existing link
-        let link_events = session1
+        let linkl_events_listener = session1
             .info()
-            .link_events()
+            .link_events_listener()
             .history(true)
             .with(flume::bounded(32))
             .await;
 
         // Should immediately receive event for existing link
-        let event = tokio::time::timeout(Duration::from_secs(5), link_events.recv_async())
+        let event = tokio::time::timeout(Duration::from_secs(5), linkl_events_listener.recv_async())
             .await
             .expect("Timeout waiting for history link event")
             .expect("Channel closed");
@@ -436,7 +436,7 @@ mod tests {
         let ct = CancellationToken::default();
         let _subscriber = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(false)
             .callback(move |_event| {
                 events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -526,7 +526,7 @@ mod tests {
         let ct = CancellationToken::default();
         let _subscriber = session1
             .info()
-            .link_events()
+            .link_events_listener()
             .history(false)
             .callback(move |_event| {
                 events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -621,7 +621,7 @@ mod tests {
         // Subscribe with a callback that takes time to execute
         let _events = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(false)
             .callback(move |_event| {
                 callback_started_clone.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -703,7 +703,7 @@ mod tests {
         // Subscribe with already-cancelled token
         let _subscriber = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(false)
             .callback(move |_event| {
                 events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -763,7 +763,7 @@ mod tests {
         let ct1 = CancellationToken::default();
         let _sub1 = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(false)
             .callback(move |_event| {
                 events1_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -774,7 +774,7 @@ mod tests {
         let ct2 = CancellationToken::default();
         let _sub2 = session1
             .info()
-            .transport_events()
+            .transport_events_listener()
             .history(false)
             .callback(move |_event| {
                 events2_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -951,7 +951,7 @@ mod tests {
         session3.close().await.unwrap();
     }
 
-    /// Test that link_events() can be filtered by transport ZID
+    /// Test that linkl_events_listener() can be filtered by transport ZID
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_link_events_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
@@ -991,7 +991,7 @@ mod tests {
         // Subscribe to link events with filter for target_zid
         let _events = session1
             .info()
-            .link_events()
+            .link_events_listener()
             .transport(target_zid)
             .history(false)
             .callback(move |_event| {
@@ -1051,7 +1051,7 @@ mod tests {
         }
 
         println!(
-            "Successfully verified link_events() filtering by transport (received {} events)",
+            "Successfully verified linkl_events_listener() filtering by transport (received {} events)",
             final_count
         );
 
