@@ -69,6 +69,20 @@ impl<D> RegionMap<D> {
         (north, RegionMap(others))
     }
 
+    pub(crate) fn partition(&self, region: &Region) -> (&D, RegionMap<&D>) {
+        let (mut main, others) = self
+            .0
+            .iter()
+            .map(|(b, d)| (*b, d))
+            .partition::<hashbrown::HashMap<_, _>, _>(|(r, _)| r == region);
+
+        let Some(north) = main.remove(region) else {
+            unreachable!()
+        };
+
+        (north, RegionMap(others))
+    }
+
     pub(crate) fn regions(&self) -> impl Iterator<Item = &Region> + '_ {
         self.0.keys()
     }

@@ -33,20 +33,17 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            queries::merge_qabl_infos,
-            region::RegionMap,
-            resource::{FaceContext, NodeId, Resource},
-            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
-        },
-        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources},
-        router::{Direction, DEFAULT_NODE_ID},
-        RoutingContext,
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        queries::merge_qabl_infos,
+        region::RegionMap,
+        resource::{FaceContext, NodeId, Resource},
+        tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
     },
+    hat::{BaseContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources},
+    router::{Direction, DEFAULT_NODE_ID},
+    RoutingContext,
 };
 
 impl Hat {
@@ -195,46 +192,6 @@ impl HatQueriesTrait for Hat {
 
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
-    }
-
-    fn get_matching_queryables(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        let mut matching_queryables = HashMap::new();
-
-        tracing::trace!(
-            "get_matching_queryables({}; complete: {})",
-            key_expr,
-            complete
-        );
-
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
-                continue;
-            }
-            for (sid, ctx) in &mres.face_ctxs {
-                if match complete {
-                    true => ctx.qabl.is_some_and(|q| q.complete),
-                    false => ctx.qabl.is_some(),
-                } {
-                    matching_queryables
-                        .entry(*sid)
-                        .or_insert_with(|| ctx.face.clone());
-                }
-            }
-        }
-        matching_queryables
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -411,6 +368,7 @@ impl HatQueriesTrait for Hat {
             .reduce(merge_qabl_infos)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_queryables_matching(
         &self,

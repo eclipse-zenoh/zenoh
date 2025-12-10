@@ -45,16 +45,13 @@ use super::{
     },
     RoutingContext,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-        routing::dispatcher::{
-            interests::{CurrentInterest, RemoteInterest},
-            region::{Region, RegionMap},
-        },
-        runtime::Runtime,
+use crate::net::{
+    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::{
+        interests::{CurrentInterest, RemoteInterest},
+        region::{Region, RegionMap},
     },
+    runtime::Runtime,
 };
 
 pub(crate) mod broker;
@@ -418,12 +415,6 @@ pub(crate) trait HatPubSubTrait {
         expr: &RoutingExpr,
         node_id: NodeId,
     ) -> Arc<Route>;
-
-    fn get_matching_subscriptions(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
@@ -494,13 +485,6 @@ pub(crate) trait HatQueriesTrait {
         expr: &RoutingExpr,
         source: NodeId,
     ) -> Arc<QueryTargetQablSet>;
-
-    fn get_matching_queryables(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatTokenTrait {

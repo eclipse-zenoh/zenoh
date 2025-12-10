@@ -80,7 +80,7 @@ impl Hat {
         Self { region }
     }
 
-    pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
+    pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
         face_state.hats[self.region].downcast_ref().unwrap()
     }
 

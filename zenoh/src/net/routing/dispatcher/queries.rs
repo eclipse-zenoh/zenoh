@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashMap,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -39,33 +38,20 @@ use super::{
     resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, TablesLock},
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::Face,
-            local_resources::{LocalResourceInfoTrait, LocalResources},
-            region::Region,
-            tables::Tables,
-        },
-        hat::{BaseContext, SendDeclare},
-        router::{get_or_set_route, QueryDirection, RouteBuilder},
+use crate::net::routing::{
+    dispatcher::{
+        face::Face,
+        local_resources::{LocalResourceInfoTrait, LocalResources},
+        region::Region,
+        tables::Tables,
     },
+    hat::{BaseContext, SendDeclare},
+    router::{get_or_set_route, QueryDirection, RouteBuilder},
 };
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
-}
-
-#[inline]
-pub(crate) fn get_matching_queryables(
-    tables: &Tables,
-    key_expr: &KeyExpr<'_>,
-    complete: bool,
-) -> HashMap<usize, Arc<FaceState>> {
-    // REVIEW(regions2): use the broker hat
-    tables.hats[Region::Local].get_matching_queryables(&tables.data, key_expr, complete)
 }
 
 impl Face {

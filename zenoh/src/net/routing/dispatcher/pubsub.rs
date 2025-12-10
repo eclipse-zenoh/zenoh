@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use zenoh_core::zread;
@@ -28,17 +28,14 @@ use super::{
     resource::Resource,
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::Face,
-            local_resources::{LocalResourceInfoTrait, LocalResources},
-            region::Region,
-        },
-        hat::{BaseContext, SendDeclare},
-        router::{get_or_set_route, Direction, RouteBuilder},
+use crate::net::routing::{
+    dispatcher::{
+        face::Face,
+        local_resources::{LocalResourceInfoTrait, LocalResources},
+        region::Region,
     },
+    hat::{BaseContext, SendDeclare},
+    router::{get_or_set_route, Direction, RouteBuilder},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -288,15 +285,6 @@ fn get_data_route(
         ),
         None => compute_route(),
     }
-}
-
-#[inline]
-pub(crate) fn get_matching_subscriptions(
-    tables: &Tables,
-    key_expr: &KeyExpr<'_>,
-) -> HashMap<usize, Arc<FaceState>> {
-    // REVIEW(regions2): use the broker hat
-    tables.hats[Region::Local].get_matching_subscriptions(&tables.data, key_expr)
 }
 
 pub fn route_data(

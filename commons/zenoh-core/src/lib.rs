@@ -177,6 +177,9 @@ where
 pub use zenoh_result::{likely, unlikely};
 
 /// Re-definitions of inaccessible [`std`] items for MSRV compatibility.
+///
+/// These definitions are likely to cause `incompatible_msrv` warnings from clippy,
+/// see https://github.com/rust-lang/rust-clippy/issues/12280.
 pub mod polyfill {
     // TODO: use rustversion?
 

@@ -33,21 +33,18 @@ use zenoh_protocol::{
 };
 
 use super::Hat;
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::network::Network,
-        routing::{
-            dispatcher::{
-                face::{FaceId, FaceState},
-                queries::merge_qabl_infos,
-                resource::{NodeId, Resource},
-                tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
-            },
-            hat::{BaseContext, HatBaseTrait, HatQueriesTrait, Sources},
-            router::Direction,
-            RoutingContext,
+use crate::net::{
+    protocol::network::Network,
+    routing::{
+        dispatcher::{
+            face::FaceState,
+            queries::merge_qabl_infos,
+            resource::{NodeId, Resource},
+            tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
+        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, Sources},
+        router::Direction,
+        RoutingContext,
     },
 };
 
@@ -409,56 +406,6 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    fn get_matching_queryables(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<FaceId, Arc<FaceState>> {
-        let mut matching_queryables = HashMap::new();
-
-        tracing::trace!(
-            "get_matching_queryables({}; complete: {})",
-            key_expr,
-            complete
-        );
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            if complete && !KeyExpr::keyexpr_include(mres.expr(), key_expr) {
-                continue;
-            }
-
-            let net = self.routers_net.as_ref().unwrap();
-            self.insert_faces_for_qbls(
-                &mut matching_queryables,
-                tables,
-                net,
-                &self.res_hat(&mres).router_qabls,
-                complete,
-            );
-
-            for (sid, ctx) in &mres.face_ctxs {
-                if match complete {
-                    true => ctx.qabl.is_some_and(|q| q.complete),
-                    false => ctx.qabl.is_some(),
-                } && ctx.face.whatami != WhatAmI::Router
-                {
-                    matching_queryables
-                        .entry(*sid)
-                        .or_insert_with(|| ctx.face.clone());
-                }
-            }
-        }
-        matching_queryables
-    }
-
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn register_queryable(
         &mut self,
@@ -523,6 +470,7 @@ impl HatQueriesTrait for Hat {
         self.unregister_node_queryables(&ctx.src_face.zid)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
     fn propagate_queryable(
         &mut self,
@@ -583,6 +531,7 @@ impl HatQueriesTrait for Hat {
             .reduce(merge_qabl_infos)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_queryables_matching(
         &self,
@@ -608,39 +557,5 @@ impl HatQueriesTrait for Hat {
                     .or_insert(info);
                 acc
             })
-    }
-}
-
-impl Hat {
-    #[inline]
-    fn insert_faces_for_qbls(
-        &self,
-        route: &mut HashMap<usize, Arc<FaceState>>,
-        tables: &TablesData,
-        net: &Network,
-        qbls: &HashMap<ZenohIdProto, QueryableInfoType>,
-        complete: bool,
-    ) {
-        let source = net.idx.index();
-        if net.trees.len() > source {
-            for qbl in qbls {
-                if complete && !qbl.1.complete {
-                    continue;
-                }
-                if let Some(qbl_idx) = net.get_idx(qbl.0) {
-                    if net.trees[source].directions.len() > qbl_idx.index() {
-                        if let Some(direction) = net.trees[source].directions[qbl_idx.index()] {
-                            if net.graph.contains_node(direction) {
-                                if let Some(face) = self.face(tables, &net.graph[direction].zid) {
-                                    route.entry(face.id).or_insert_with(|| face.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            tracing::trace!("Tree for node sid:{} not yet ready", source);
-        }
     }
 }

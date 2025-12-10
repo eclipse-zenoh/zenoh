@@ -375,6 +375,7 @@ impl HatTokenTrait for Hat {
             .any(|router| router != this_router)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_tokens_matching(
         &self,

@@ -26,23 +26,20 @@ use zenoh_protocol::network::declare::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            pubsub::SubscriberInfo,
-            region::RegionMap,
-            resource::{FaceContext, NodeId, Resource},
-            tables::{Route, RoutingExpr, TablesData},
-        },
-        hat::{
-            peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
-            BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources,
-        },
-        router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
-        RoutingContext,
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        pubsub::SubscriberInfo,
+        region::RegionMap,
+        resource::{FaceContext, NodeId, Resource},
+        tables::{Route, RoutingExpr, TablesData},
     },
+    hat::{
+        peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
+        BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources,
+    },
+    router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
+    RoutingContext,
 };
 
 impl Hat {
@@ -287,35 +284,6 @@ impl HatPubSubTrait for Hat {
         Arc::new(route.build())
     }
 
-    fn get_matching_subscriptions(
-        &self,
-        tables: &TablesData,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        let mut matching_subscriptions = HashMap::new();
-
-        tracing::trace!("get_matching_subscriptions({})", key_expr,);
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.ctx.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
-            for (fid, ctx) in &mres.face_ctxs {
-                if ctx.subs.is_some() {
-                    matching_subscriptions
-                        .entry(*fid)
-                        .or_insert_with(|| ctx.face.clone());
-                }
-            }
-        }
-        matching_subscriptions
-    }
-
     #[tracing::instrument(level = "trace", skip_all)]
     fn register_subscription(
         &mut self,
@@ -437,6 +405,7 @@ impl HatPubSubTrait for Hat {
             .reduce(|_, _| SubscriberInfo)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_subscriptions_matching(
         &self,

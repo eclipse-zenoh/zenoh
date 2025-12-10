@@ -81,6 +81,7 @@ impl HatInterestTrait for Hat {
         unreachable!()
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(ctx, msg))]
     fn send_current_subscriptions(
         &self,
@@ -192,6 +193,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(ctx, msg))]
     fn send_current_queryables(
         &self,
@@ -309,6 +311,7 @@ impl HatInterestTrait for Hat {
         }
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(ctx, msg))]
     fn send_current_tokens(
         &self,

@@ -86,7 +86,11 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
     },
-    net::routing::{dispatcher::region::Region, router::RouterBuilder},
+    net::routing::{
+        dispatcher::region::Region,
+        hat::{self, HatTrait},
+        router::RouterBuilder,
+    },
     GIT_VERSION,
 };
 
@@ -267,34 +271,44 @@ impl IRuntime for RuntimeState {
         let router = self.router();
         let tables = zread!(router.tables.tables);
 
-        let matches = match matching_type {
+        let (broker_hat, other_hats) = tables.hats.partition(&Region::Local);
+        let broker_hat = broker_hat
+            .as_any()
+            .downcast_ref::<hat::broker::Hat>()
+            .unwrap();
+
+        let key_expr = match &ns_key_expr {
+            Some(ns_ke) => ns_ke,
+            None => key_expr,
+        };
+
+        let Some(src_face) = tables.data.faces.get(&face_id) else {
+            tracing::error!(fid = face_id, "Unknown session face");
+            return MatchingStatus { matching: false };
+        };
+
+        let matching = match matching_type {
             crate::api::matching::MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                broker_hat.remote_subscriber_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                 )
             }
             crate::api::matching::MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                broker_hat.remote_queryable_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                     complete,
                 )
             }
         };
 
-        drop(tables);
-        let matching = match destination {
-            crate::sample::Locality::Any => !matches.is_empty(),
-            crate::sample::Locality::Remote => matches.values().any(|dir| dir.id != face_id),
-            crate::sample::Locality::SessionLocal => matches.values().any(|dir| dir.id == face_id),
-        };
         MatchingStatus { matching }
     }
 

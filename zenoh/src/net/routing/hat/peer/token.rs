@@ -264,6 +264,7 @@ impl HatTokenTrait for Hat {
         self.owned_face_contexts(res).any(|(_, ctx)| ctx.token)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(tables), ret)]
     fn remote_tokens_matching(
         &self,

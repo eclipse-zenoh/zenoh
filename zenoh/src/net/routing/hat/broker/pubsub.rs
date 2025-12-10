@@ -20,6 +20,7 @@ use std::{
 use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::network::declare::{
     self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
     UndeclareSubscriber,
@@ -28,18 +29,19 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
 use crate::{
-    key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
             face::FaceState,
             pubsub::SubscriberInfo,
+            region::RegionMap,
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources},
         router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
     },
+    sample::Locality,
 };
 
 impl Hat {
@@ -136,6 +138,53 @@ impl Hat {
             );
         }
     }
+
+    #[tracing::instrument(level = "debug", skip(tables, other_hats), ret)]
+    pub(crate) fn remote_subscriber_matching_status(
+        &self,
+        tables: &TablesData,
+        src_face: &FaceState,
+        other_hats: RegionMap<&dyn HatTrait>,
+        locality: Locality,
+        key_expr: &keyexpr,
+    ) -> bool {
+        debug_assert!(self.owns(src_face));
+
+        let Some(res) = Resource::get_resource(&tables.root_res, key_expr) else {
+            tracing::error!(keyexpr = %key_expr, "Unknown matching status resource");
+            return false;
+        };
+
+        tracing::trace!(?res);
+
+        let compute_other_matches = || {
+            other_hats.values().any(|hat| {
+                !hat.remote_subscriptions_matching(tables, Some(&res))
+                    .is_empty()
+            })
+        };
+
+        match locality {
+            Locality::SessionLocal => self
+                .face_hat(src_face)
+                .remote_subs
+                .values()
+                .any(|sub| res.matches(sub)),
+            Locality::Remote => {
+                self.owned_faces(tables)
+                    .filter(|f| f.id != src_face.id)
+                    .flat_map(|f| self.face_hat(f).remote_subs.values())
+                    .any(|sub| res.matches(sub))
+                    || compute_other_matches()
+            }
+            Locality::Any => {
+                self.owned_faces(tables)
+                    .flat_map(|f| self.face_hat(f).remote_subs.values())
+                    .any(|sub| res.matches(sub))
+                    || compute_other_matches()
+            }
+        }
+    }
 }
 
 impl HatPubSubTrait for Hat {
@@ -220,14 +269,6 @@ impl HatPubSubTrait for Hat {
         }
 
         Arc::new(route.build())
-    }
-
-    fn get_matching_subscriptions(
-        &self,
-        _tables: &TablesData,
-        _key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        unimplemented!()
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -372,6 +413,7 @@ impl HatPubSubTrait for Hat {
             .reduce(|_, _| SubscriberInfo)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_subscriptions_matching(
         &self,

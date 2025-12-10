@@ -20,7 +20,10 @@ use std::{
 use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
-use zenoh_keyexpr::include::{Includer, DEFAULT_INCLUDER};
+use zenoh_keyexpr::{
+    include::{Includer, DEFAULT_INCLUDER},
+    keyexpr,
+};
 use zenoh_protocol::network::{
     declare::{self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId},
     Declare, DeclareBody, DeclareQueryable, UndeclareQueryable,
@@ -29,18 +32,19 @@ use zenoh_sync::get_mut_unchecked;
 
 use super::Hat;
 use crate::{
-    key_expr::KeyExpr,
     net::routing::{
         dispatcher::{
             face::FaceState,
             queries::merge_qabl_infos,
+            region::RegionMap,
             resource::{NodeId, Resource},
             tables::{QueryTargetQablSet, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, SendDeclare, Sources},
+        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, HatTrait, SendDeclare, Sources},
         router::{FaceContext, QueryTargetQabl},
         RoutingContext,
     },
+    sample::Locality,
 };
 
 lazy_static::lazy_static! {
@@ -167,6 +171,59 @@ impl Hat {
             };
         }
     }
+
+    #[tracing::instrument(level = "debug", skip(tables, other_hats), ret)]
+    pub(crate) fn remote_queryable_matching_status(
+        &self,
+        tables: &TablesData,
+        src_face: &FaceState,
+        other_hats: RegionMap<&dyn HatTrait>,
+        locality: Locality,
+        key_expr: &keyexpr,
+        complete: bool,
+    ) -> bool {
+        debug_assert!(self.owns(src_face));
+
+        let Some(res) = Resource::get_resource(&tables.root_res, key_expr) else {
+            tracing::error!(keyexpr = %key_expr, "Unknown matching status resource");
+            return false;
+        };
+
+        tracing::trace!(?res);
+
+        let is_matching_info = |info: &QueryableInfoType| !complete || info.complete;
+
+        let compute_other_matches = || {
+            other_hats
+                .values()
+                .flat_map(|hat| {
+                    hat.remote_queryables_matching(tables, Some(&res))
+                        .into_values()
+                })
+                .any(|info| is_matching_info(&info))
+        };
+
+        match locality {
+            Locality::SessionLocal => self
+                .face_hat(src_face)
+                .remote_qabls
+                .values()
+                .any(|(qabl, info)| res.matches(qabl) && is_matching_info(info)),
+            Locality::Remote => {
+                self.owned_faces(tables)
+                    .filter(|f| f.id != src_face.id)
+                    .flat_map(|f| self.face_hat(f).remote_qabls.values())
+                    .any(|(qabl, info)| res.matches(qabl) && is_matching_info(info))
+                    || compute_other_matches()
+            }
+            Locality::Any => {
+                self.owned_faces(tables)
+                    .flat_map(|f| self.face_hat(f).remote_qabls.values())
+                    .any(|(qabl, info)| res.matches(qabl) && is_matching_info(info))
+                    || compute_other_matches()
+            }
+        }
+    }
 }
 
 impl HatQueriesTrait for Hat {
@@ -251,15 +308,6 @@ impl HatQueriesTrait for Hat {
 
         route.sort_by_key(|qabl| qabl.info.map_or(u16::MAX, |i| i.distance));
         Arc::new(route)
-    }
-
-    fn get_matching_queryables(
-        &self,
-        _tables: &TablesData,
-        _key_expr: &KeyExpr<'_>,
-        _complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        unimplemented!()
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -406,6 +454,7 @@ impl HatQueriesTrait for Hat {
             .reduce(merge_qabl_infos)
     }
 
+    #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
     fn remote_queryables_matching(
         &self,
