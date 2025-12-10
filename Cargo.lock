@@ -3741,12 +3741,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scoped-tls"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4075,9 +4069,9 @@ dependencies = [
 
 [[package]]
 name = "simd-adler32"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
+checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
 name = "siphasher"
@@ -6345,6 +6339,7 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "twox-hash",
+ "unzip-n",
  "zerofrom",
 ]
 
@@ -6502,7 +6497,6 @@ version = "1.7.0"
 dependencies = [
  "ahash",
  "prometheus-client",
- "scoped-tls",
  "serde_json",
  "smallvec",
  "zenoh-keyexpr",
