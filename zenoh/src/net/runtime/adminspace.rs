@@ -54,7 +54,7 @@ use crate::{
         queryable::{Query, QueryInner},
     },
     bytes::Encoding,
-    net::{primitives::Primitives, routing::dispatcher::region::Region},
+    net::primitives::Primitives,
     LONG_VERSION,
 };
 
@@ -327,10 +327,7 @@ impl AdminSpace {
             tracing::debug_span!("adminspace", zid = %ZenohIdProto::from(admin.zid).short())
                 .entered();
 
-        let primitives = runtime
-            .state
-            .router
-            .new_primitives(admin.clone(), Region::Local);
+        let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(&mut Declare {
@@ -530,33 +527,39 @@ impl Primitives for AdminSpace {
 
 impl crate::net::primitives::EPrimitives for AdminSpace {
     #[inline]
-    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<&mut Interest>) {
-        (self as &dyn Primitives).send_interest(ctx.msg)
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<&mut Interest>) -> bool {
+        (self as &dyn Primitives).send_interest(ctx.msg);
+        false
     }
 
     #[inline]
-    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<&mut Declare>) {
-        (self as &dyn Primitives).send_declare(ctx.msg)
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<&mut Declare>) -> bool {
+        (self as &dyn Primitives).send_declare(ctx.msg);
+        false
     }
 
     #[inline]
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        (self as &dyn Primitives).send_push(msg, reliability)
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
+        (self as &dyn Primitives).send_push(msg, reliability);
+        false
     }
 
     #[inline]
-    fn send_request(&self, msg: &mut Request) {
-        (self as &dyn Primitives).send_request(msg)
+    fn send_request(&self, msg: &mut Request) -> bool {
+        (self as &dyn Primitives).send_request(msg);
+        false
     }
 
     #[inline]
-    fn send_response(&self, msg: &mut Response) {
-        (self as &dyn Primitives).send_response(msg)
+    fn send_response(&self, msg: &mut Response) -> bool {
+        (self as &dyn Primitives).send_response(msg);
+        false
     }
 
     #[inline]
-    fn send_response_final(&self, msg: &mut ResponseFinal) {
-        (self as &dyn Primitives).send_response_final(msg)
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+        (self as &dyn Primitives).send_response_final(msg);
+        false
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

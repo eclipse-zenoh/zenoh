@@ -265,7 +265,11 @@ impl Hat {
                         tables_lock: &tables_lock,
                         tables: &mut tables.data,
                         src_face: &mut src_face,
-                        send_declare: &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+                        send_declare: &mut |p, m| {
+                            m.with_mut(|m| {
+                                p.send_declare(m);
+                            })
+                        },
                     },
                     interest.src_interest_id,
                     &interest.src,

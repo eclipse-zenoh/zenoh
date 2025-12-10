@@ -24,5 +24,7 @@ pub mod pubsub;
 pub mod queries;
 pub mod region;
 pub mod resource;
+#[cfg(feature = "stats")]
+mod stats;
 pub mod tables;
 pub mod token;

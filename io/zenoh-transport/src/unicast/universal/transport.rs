@@ -405,7 +405,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
         self.internal_schedule(msg)
     }
 

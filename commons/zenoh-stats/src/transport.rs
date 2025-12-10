@@ -7,8 +7,12 @@ use zenoh_protocol::{
 
 use crate::{
     histogram::Histogram,
-    labels::{MessageLabel, NetworkMessageDroppedPayloadLabels, TransportLabels},
-    LinkStats, ReasonLabel, StatsDirection, StatsRegistry, Tx,
+    keys::HistogramPerKey,
+    labels::{
+        MessageLabel, NetworkMessageDroppedPayloadLabels, NetworkMessagePayloadLabels,
+        ProtocolLabel, SpaceLabel, TransportLabels, SHM_NUM,
+    },
+    LinkStats, ReasonLabel, StatsDirection, StatsKeys, StatsRegistry, Tx,
 };
 
 #[derive(Debug, Clone)]
@@ -28,10 +32,16 @@ impl TransportStats {
             remote_group: group,
             remote_cn: cn,
         };
-        let tx_no_link = DropStats::new(registry.clone(), transport.clone(), ReasonLabel::NoLink);
+        let tx_no_link = DropStats::new(
+            registry.clone(),
+            transport.clone(),
+            ReasonLabel::NoLink,
+            None,
+        );
         Self(Arc::new(TransportStatsInner {
             registry,
             transport,
+            network_message_payload: Default::default(),
             tx_no_link,
         }))
     }
@@ -68,11 +78,51 @@ impl TransportStats {
     }
 
     pub fn drop_stats(&self, reason: ReasonLabel) -> DropStats {
-        DropStats::new(self.0.registry.clone(), self.0.transport.clone(), reason)
+        DropStats::new(
+            self.0.registry.clone(),
+            self.0.transport.clone(),
+            reason,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn observe_network_message_payload(
+        &self,
+        direction: StatsDirection,
+        message: MessageLabel,
+        priority: Priority,
+        payload_size: usize,
+        space: SpaceLabel,
+        keys: &StatsKeys,
+        shm: bool,
+    ) {
+        let (histogram, histogram_per_key) = self.0.network_message_payload[direction as usize]
+            [priority as usize][message as usize][shm as usize][space as usize]
+            .get_or_init(|| {
+                let labels = NetworkMessagePayloadLabels {
+                    space,
+                    message,
+                    priority: priority.into(),
+                    shm,
+                };
+                (
+                    self.registry()
+                        .network_message_payload(direction)
+                        .get_or_create_owned(self.transport(), None, &labels),
+                    self.registry()
+                        .network_message_payload_per_key(direction)
+                        .get_or_create_owned(self.transport(), None, &labels),
+                )
+            });
+        histogram.observe(payload_size as u64);
+        histogram_per_key.observe(keys, payload_size as u64);
     }
 
     pub fn tx_observe_no_link(&self, msg: NetworkMessageRef) {
-        self.0.tx_no_link.observe_network_message_dropped(Tx, msg);
+        self.0
+            .tx_no_link
+            .observe_network_message_dropped_payload(Tx, msg);
     }
 }
 
@@ -80,6 +130,9 @@ impl TransportStats {
 pub struct TransportStatsInner {
     registry: StatsRegistry,
     transport: TransportLabels,
+    #[allow(clippy::type_complexity)]
+    network_message_payload: [[[[[OnceLock<(Histogram, HistogramPerKey)>; SpaceLabel::NUM]; SHM_NUM];
+        MessageLabel::NUM]; Priority::NUM]; StatsDirection::NUM],
     tx_no_link: DropStats,
 }
 
@@ -97,40 +150,36 @@ impl DropStats {
         registry: StatsRegistry,
         transport: TransportLabels,
         reason: ReasonLabel,
+        protocol: Option<ProtocolLabel>,
     ) -> Self {
         Self(Arc::new(DropStatsInner {
             registry,
             transport,
             reason,
+            protocol,
             histograms: Default::default(),
         }))
     }
 
-    fn get_or_create_owned(
-        &self,
-        direction: StatsDirection,
-        msg: impl NetworkMessageExt,
-    ) -> Histogram {
-        let labels = NetworkMessageDroppedPayloadLabels {
-            message: MessageLabel::from(msg.body()),
-            priority: msg.priority().into(),
-            protocol: None,
-            reason: self.0.reason,
-        };
-        self.0
-            .registry
-            .network_message_dropped_payload(direction)
-            .get_or_create_owned(&self.0.transport, None, &labels)
-    }
-
-    pub fn observe_network_message_dropped(
+    pub fn observe_network_message_dropped_payload(
         &self,
         direction: StatsDirection,
         msg: impl NetworkMessageExt,
     ) {
         self.0.histograms[direction as usize][msg.priority() as usize]
             [MessageLabel::from(msg.body()) as usize]
-            .get_or_init(|| self.get_or_create_owned(direction, msg.as_ref()))
+            .get_or_init(|| {
+                let labels = NetworkMessageDroppedPayloadLabels {
+                    message: MessageLabel::from(msg.body()),
+                    priority: msg.priority().into(),
+                    protocol: self.0.protocol.clone(),
+                    reason: self.0.reason,
+                };
+                self.0
+                    .registry
+                    .network_message_dropped_payload(direction)
+                    .get_or_create_owned(&self.0.transport, None, &labels)
+            })
             .observe(msg.payload_size().unwrap_or_default() as u64)
     }
 }
@@ -140,5 +189,6 @@ struct DropStatsInner {
     registry: StatsRegistry,
     transport: TransportLabels,
     reason: ReasonLabel,
+    protocol: Option<ProtocolLabel>,
     histograms: [[[OnceLock<Histogram>; MessageLabel::NUM]; Priority::NUM]; StatsDirection::NUM],
 }

@@ -328,14 +328,9 @@ pub fn route_data(
     let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
     #[cfg(feature = "stats")]
-    let is_admin = expr.is_admin();
+    let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &rtables);
     #[cfg(feature = "stats")]
-    let payload_size = msg.payload_size();
-    #[cfg(feature = "stats")]
-    let stats_keys = expr.stats_keys(&rtables.data.stats_keys);
-    #[cfg(feature = "stats")]
-    zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
-
+    payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
     let mut dirs = RouteBuilder::<Direction>::new();
 
     for (bound, hat) in rtables.hats.iter() {
@@ -351,12 +346,10 @@ pub fn route_data(
     }
 
     let send_push = |dst_face: &FaceState, msg: &mut Push, reliability: Reliability| {
-        #[cfg(not(feature = "stats"))]
-        dst_face.primitives.send_push(msg, reliability);
-        #[cfg(feature = "stats")]
-        zenoh_stats::with_tx_observe_network_message(is_admin, payload_size, &stats_keys, || {
-            dst_face.primitives.send_push(msg, reliability)
-        });
+        if dst_face.primitives.send_push(msg, reliability) {
+            #[cfg(feature = "stats")]
+            payload_observer.observe_payload(zenoh_stats::Tx, dst_face, msg);
+        }
     };
 
     let mut dirs_iter = dirs.build().into_iter();

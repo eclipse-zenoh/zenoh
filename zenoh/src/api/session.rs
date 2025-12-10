@@ -3054,33 +3054,39 @@ impl Primitives for WeakSession {
 
 impl crate::net::primitives::EPrimitives for WeakSession {
     #[inline]
-    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<&mut Interest>) {
-        (self as &dyn Primitives).send_interest(ctx.msg)
+    fn send_interest(&self, ctx: crate::net::routing::RoutingContext<&mut Interest>) -> bool {
+        (self as &dyn Primitives).send_interest(ctx.msg);
+        false
     }
 
     #[inline]
-    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<&mut Declare>) {
-        (self as &dyn Primitives).send_declare(ctx.msg)
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<&mut Declare>) -> bool {
+        (self as &dyn Primitives).send_declare(ctx.msg);
+        false
     }
 
     #[inline]
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        (self as &dyn Primitives).send_push(msg, reliability)
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
+        (self as &dyn Primitives).send_push(msg, reliability);
+        false
     }
 
     #[inline]
-    fn send_request(&self, msg: &mut Request) {
-        (self as &dyn Primitives).send_request(msg)
+    fn send_request(&self, msg: &mut Request) -> bool {
+        (self as &dyn Primitives).send_request(msg);
+        false
     }
 
     #[inline]
-    fn send_response(&self, msg: &mut Response) {
-        (self as &dyn Primitives).send_response(msg)
+    fn send_response(&self, msg: &mut Response) -> bool {
+        (self as &dyn Primitives).send_response(msg);
+        false
     }
 
     #[inline]
-    fn send_response_final(&self, msg: &mut ResponseFinal) {
-        (self as &dyn Primitives).send_response_final(msg)
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+        (self as &dyn Primitives).send_response_final(msg);
+        false
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

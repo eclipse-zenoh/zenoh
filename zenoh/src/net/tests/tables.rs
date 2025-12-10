@@ -11,17 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{str::FromStr, sync::Arc};
 
-use std::{convert::TryInto, sync::Arc};
-
-use uhlc::HLC;
-use zenoh_buffers::ZBuf;
-use zenoh_config::Config;
+use zenoh_config::{Config, ZenohId};
 use zenoh_core::zlock;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Encoding, ExprId, Reliability, WhatAmI, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, EMPTY_EXPR_ID},
     network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
-    zenoh::{PushBody, Put},
+    zenoh::Put,
 };
 
 use crate::{
@@ -32,7 +29,6 @@ use crate::{
             dispatcher::{
                 face::{Face, FaceState},
                 pubsub::SubscriberInfo,
-                region::Region,
                 tables::TablesData,
             },
             router::*,
@@ -41,19 +37,24 @@ use crate::{
     },
 };
 
+fn new_router() -> Router {
+    let mut config = Config::default();
+    config
+        .set_id(Some(ZenohId::from_str("1").unwrap()))
+        .unwrap();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    RouterBuilder::new(&config).build().unwrap()
+}
+
 #[test]
 fn base_test() {
-    let config = Config::default();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives, Region::North);
+    let face = router.new_primitives(primitives);
     register_expr(&tables, &mut face.state.clone(), 1, &"one/two/three".into());
+
     register_expr(
         &tables,
         &mut face.state.clone(),
@@ -68,7 +69,11 @@ fn base_test() {
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     TablesData::print(&zread!(tables.tables).data);
@@ -128,21 +133,15 @@ fn match_test() {
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives, Region::North);
+    let face = Arc::downgrade(&router.new_primitives(primitives).state);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
-            &mut face.state.clone(),
+            &mut face.upgrade().unwrap(),
             i.try_into().unwrap(),
             &(*key_expr).into(),
         );
@@ -155,9 +154,9 @@ fn match_test() {
                 .iter()
                 .any(|m| m.upgrade().unwrap().expr() == key_expr2.as_str())
             {
-                assert!(key_expr1.intersects(key_expr2));
+                assert!(dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             } else {
-                assert!(!key_expr1.intersects(key_expr2));
+                assert!(!dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             }
         }
     }
@@ -165,17 +164,11 @@ fn match_test() {
 
 #[test]
 fn multisub_test() {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = router.new_primitives(primitives, Region::North);
+    let face0 = &router.new_primitives(primitives);
 
     // --------------
     let sub_info = SubscriberInfo;
@@ -184,7 +177,11 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres = Resource::get_resource(zread!(tables.tables).data._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
@@ -197,17 +194,25 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     assert!(res.upgrade().is_some());
 
     face0.undeclare_subscription(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
-        m.with_mut(|m| p.send_declare(m))
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
     });
     assert!(res.upgrade().is_some());
 
     face0.undeclare_subscription(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
-        m.with_mut(|m| p.send_declare(m))
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
     });
     assert!(res.upgrade().is_none());
 
@@ -216,17 +221,11 @@ fn multisub_test() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn clean_test() {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = &router.new_primitives(primitives, Region::North);
+    let face0 = &router.new_primitives(primitives);
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
@@ -286,7 +285,11 @@ async fn clean_test() {
         &"todrop1/todrop11".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres2 =
         Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop11")
@@ -300,7 +303,11 @@ async fn clean_test() {
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres3 =
         Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop12")
@@ -311,7 +318,9 @@ async fn clean_test() {
     assert!(res3.upgrade().is_some());
 
     face0.undeclare_subscription(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
-        m.with_mut(|m| p.send_declare(m))
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
     });
 
     println!("COUNT2: {}", res3.strong_count());
@@ -321,7 +330,9 @@ async fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     face0.undeclare_subscription(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
-        m.with_mut(|m| p.send_declare(m))
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
     });
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -339,7 +350,11 @@ async fn clean_test() {
         &"todrop3".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
@@ -348,7 +363,9 @@ async fn clean_test() {
     assert!(res1.upgrade().is_some());
 
     face0.undeclare_subscription(2, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
-        m.with_mut(|m| p.send_declare(m))
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
     });
     assert!(res1.upgrade().is_some());
 
@@ -363,14 +380,22 @@ async fn clean_test() {
         &"todrop5".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     face0.declare_subscription(
         4,
         &"todrop6".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop4")
@@ -442,7 +467,7 @@ impl ClientPrimitives {
     }
 
     #[allow(dead_code)]
-    fn get_last_key(&self) -> Option<WireExpr<'static>> {
+    fn get_last_key(&self) -> Option<WireExpr<'_>> {
         self.data.lock().unwrap().as_ref().cloned()
     }
 }
@@ -481,9 +506,11 @@ impl Primitives for ClientPrimitives {
 }
 
 impl EPrimitives for ClientPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) {}
+    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) -> bool {
+        false
+    }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) {
+    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) -> bool {
         match &ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
@@ -494,21 +521,31 @@ impl EPrimitives for ClientPrimitives {
             }
             _ => (),
         }
+        false
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+    ) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) -> bool {
+        false
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -517,20 +554,13 @@ impl EPrimitives for ClientPrimitives {
 
 #[test]
 fn client_test() {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
-
+    let router = new_router();
     let tables = router.tables.clone();
 
     let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = router.new_primitives(primitives0.clone(), Region::North);
+    let face0 = router.new_primitives(primitives0.clone());
     register_expr(&tables, &mut face0.state.clone(), 11, &"test/client".into());
     Primitives::send_declare(
         primitives0.as_ref(),
@@ -550,7 +580,11 @@ fn client_test() {
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     register_expr(
         &tables,
@@ -573,7 +607,7 @@ fn client_test() {
     );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = router.new_primitives(primitives1.clone(), Region::North);
+    let face1 = router.new_primitives(primitives1.clone());
     register_expr(&tables, &mut face1.state.clone(), 21, &"test/client".into());
     Primitives::send_declare(
         primitives1.as_ref(),
@@ -593,7 +627,11 @@ fn client_test() {
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     register_expr(
         &tables,
@@ -616,7 +654,7 @@ fn client_test() {
     );
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = router.new_primitives(primitives2.clone(), Region::North);
+    let face2 = router.new_primitives(primitives2.clone());
     register_expr(&tables, &mut face2.state.clone(), 31, &"test/client".into());
     Primitives::send_declare(
         primitives2.as_ref(),
@@ -636,7 +674,11 @@ fn client_test() {
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     primitives0.clear_data();
@@ -649,22 +691,7 @@ fn client_test() {
             face,
             &mut Push {
                 wire_expr,
-                ext_qos: ext::QoSType::DEFAULT,
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType {
-                    node_id: DEFAULT_NODE_ID,
-                },
-
-                payload: PushBody::Put(Put {
-                    timestamp: None,
-                    encoding: Encoding::empty(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_unknown: vec![],
-                    payload: ZBuf::empty(),
-                    ext_attachment: None,
-                }),
+                ..Put::default().into()
             },
             Reliability::Reliable,
         );
@@ -755,18 +782,12 @@ fn client_test() {
 
 #[test]
 fn get_best_key_test() {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
+    let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face1 = router.new_primitives(primitives.clone(), Region::North);
-    let face2 = router.new_primitives(primitives.clone(), Region::North);
-    let face3 = router.new_primitives(primitives, Region::North);
+    let face1 = router.new_primitives(primitives.clone());
+    let face2 = router.new_primitives(primitives.clone());
+    let face3 = router.new_primitives(primitives);
 
     let root = zread!(router.tables.tables).data._get_root().clone();
     let register_expr = |face: &Face, id: ExprId, expr: &str| {
@@ -807,16 +828,10 @@ fn get_best_key_test() {
 
 #[test]
 fn big_key_expr() {
-    let mut config = Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    let router = RouterBuilder::new(&config)
-        .hlc(Arc::new(HLC::default()))
-        .hat(Region::North, WhatAmI::Client)
-        .build()
-        .unwrap();
+    let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives.clone(), Region::North);
+    let face = router.new_primitives(primitives.clone());
 
     let root = zread!(router.tables.tables).data._get_root().clone();
     let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();

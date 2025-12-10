@@ -37,7 +37,6 @@ shared-memory = ["zenoh-protocol/shared-memory"]
 [dependencies]
 ahash = { workspace = true, features = ["default"] }
 prometheus-client = { workspace = true }
-scoped-tls = { workspace = true }
 serde_json = { workspace = true }
 smallvec = { workspace = true }
 zenoh-keyexpr = { workspace = true }

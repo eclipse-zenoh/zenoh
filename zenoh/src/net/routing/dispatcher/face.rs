@@ -128,8 +128,11 @@ pub struct FaceState {
     pub(crate) hats: RegionMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
+    #[cfg(feature = "stats")]
+    pub(crate) stats: Option<zenoh_stats::TransportStats>,
 }
 
+// FIXME(regions): expose constructor fields as a struct
 pub(crate) struct FaceStateBuilder(FaceState);
 
 impl FaceStateBuilder {
@@ -160,6 +163,8 @@ impl FaceStateBuilder {
             hats,
             task_controller: TaskController::default(),
             is_local: false,
+            #[cfg(feature = "stats")]
+            stats: None,
         })
     }
 
@@ -183,6 +188,12 @@ impl FaceStateBuilder {
 
     pub(crate) fn local(mut self, is_local: bool) -> Self {
         self.0.is_local = is_local;
+        self
+    }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn stats(mut self, stats: zenoh_stats::TransportStats) -> Self {
+        self.0.stats = Some(stats);
         self
     }
 

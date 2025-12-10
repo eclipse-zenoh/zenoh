@@ -112,13 +112,6 @@ impl<'a> RoutingExpr<'a> {
             self.prefix.expr().starts_with(admin_prefix)
         }
     }
-
-    #[cfg(feature = "stats")]
-    pub(crate) fn stats_keys(&self, tree: &zenoh_stats::StatsKeysTree) -> zenoh_stats::StatsKeys {
-        let cache = || Some(&self.resource()?.ctx.as_ref()?.stats_keys);
-        // SAFETY: the tree is always the table's one
-        unsafe { tree.get_keys(cache, || self.key_expr()) }
-    }
 }
 
 pub(crate) struct TablesData {

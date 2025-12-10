@@ -216,16 +216,16 @@ impl Router {
         Arc::new(face)
     }
 
+    // FIXME(regions): name
     pub(crate) fn new_primitives(
         &self,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
-        region: Region,
     ) -> Arc<Face> {
         self.new_face(|tables| {
             FaceStateBuilder::new(
                 tables.data.new_face_id(),
                 tables.data.zid,
-                region,
+                Region::Local,
                 Bound::North,
                 primitives.clone(),
                 tables.hats.map_ref(|hat| hat.new_face()),
@@ -335,18 +335,31 @@ impl Router {
         let fid = tables.data.face_counter;
         tables.data.face_counter += 1;
         let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
-        let face = Arc::new(
-            FaceStateBuilder::new(
-                fid,
-                ZenohIdProto::from_str("1").unwrap(),
-                region,
-                Bound::North, // TODO
-                mux.clone(),
-                tables.hats.map_ref(|hat| hat.new_face()),
-            )
-            .multicast_groups(transport)
-            .build(),
-        );
+
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
+
+        let face_state_builder = FaceStateBuilder::new(
+            fid,
+            ZenohIdProto::from_str("1").unwrap(),
+            region,
+            Bound::North, // TODO
+            mux.clone(),
+            tables.hats.map_ref(|hat| hat.new_face()),
+        )
+        .multicast_groups(transport);
+
+        #[cfg(feature = "stats")]
+        let face_state_builder = {
+            if let Some(stats) = stats {
+                face_state_builder.stats(stats)
+            } else {
+                face_state_builder
+            }
+        };
+
+        let face = Arc::new(face_state_builder.build());
+
         face.set_interceptors_from_factories(
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
@@ -375,6 +388,9 @@ impl Router {
         tables.data.face_counter += 1;
         let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
 
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
+
         let face_state_builder = FaceStateBuilder::new(
             fid,
             peer.zid,
@@ -386,6 +402,15 @@ impl Router {
         .multicast_groups(transport)
         .ingress_interceptors(interceptor.clone())
         .whatami(WhatAmI::Client);
+
+        #[cfg(feature = "stats")]
+        let face_state_builder = {
+            if let Some(stats) = stats {
+                face_state_builder.stats(stats)
+            } else {
+                face_state_builder
+            }
+        };
 
         let face_state = Arc::new(face_state_builder.build());
 

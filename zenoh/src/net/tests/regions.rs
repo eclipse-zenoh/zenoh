@@ -97,7 +97,11 @@ fn test_client_to_client_query_route_computation() {
         &WireExpr::from("a/b/**"),
         &QueryableInfoType::DEFAULT,
         DEFAULT_NODE_ID,
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     let mut msg = new_request(1, WireExpr::from("a/b/1"));
@@ -441,30 +445,38 @@ impl EPrimitives for RequestBuffer {
     fn send_interest(
         &self,
         _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Interest>,
-    ) {
+    ) -> bool {
+        false
     }
 
     fn send_declare(
         &self,
         _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Declare>,
-    ) {
+    ) -> bool {
+        false
     }
 
     fn send_push(
         &self,
         _msg: &mut zenoh_protocol::network::Push,
         _reliability: zenoh_protocol::core::Reliability,
-    ) {
+    ) -> bool {
+        false
     }
 
-    fn send_request(&self, msg: &mut Request) {
+    fn send_request(&self, msg: &mut Request) -> bool {
         let mut buf = self.0.lock().unwrap();
         buf.push(msg.clone());
+        true
     }
 
-    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) -> bool {
+        false
+    }
 
-    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Default)]
@@ -479,29 +491,38 @@ impl EPrimitives for InterestBuffer {
     fn send_interest(
         &self,
         ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Interest>,
-    ) {
+    ) -> bool {
         let mut buf = self.0.lock().unwrap();
         buf.push(ctx.msg.clone());
+        true
     }
 
     fn send_declare(
         &self,
         _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Declare>,
-    ) {
+    ) -> bool {
+        false
     }
 
     fn send_push(
         &self,
         _msg: &mut zenoh_protocol::network::Push,
         _reliability: zenoh_protocol::core::Reliability,
-    ) {
+    ) -> bool {
+        false
     }
 
-    fn send_request(&self, _msg: &mut Request) {}
+    fn send_request(&self, _msg: &mut Request) -> bool {
+        false
+    }
 
-    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) -> bool {
+        false
+    }
 
-    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Default)]
@@ -516,29 +537,38 @@ impl EPrimitives for DeclarationBuffer {
     fn send_interest(
         &self,
         _ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Interest>,
-    ) {
+    ) -> bool {
+        false
     }
 
     fn send_declare(
         &self,
         ctx: crate::net::routing::RoutingContext<&mut zenoh_protocol::network::Declare>,
-    ) {
+    ) -> bool {
         let mut buf = self.0.lock().unwrap();
         buf.push(ctx.msg.clone());
+        true
     }
 
     fn send_push(
         &self,
         _msg: &mut zenoh_protocol::network::Push,
         _reliability: zenoh_protocol::core::Reliability,
-    ) {
+    ) -> bool {
+        false
     }
 
-    fn send_request(&self, _msg: &mut Request) {}
+    fn send_request(&self, _msg: &mut Request) -> bool {
+        false
+    }
 
-    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) -> bool {
+        false
+    }
 
-    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) -> bool {
+        false
+    }
 }
 
 fn new_request(id: u32, wire_expr: WireExpr<'static>) -> Request {
@@ -564,5 +594,9 @@ fn new_request(id: u32, wire_expr: WireExpr<'static>) -> Request {
 
 fn default_send_declare() -> impl FnMut(&Arc<dyn EPrimitives + Send + Sync>, RoutingContext<Declare>)
 {
-    |p, m| m.with_mut(|m| p.send_declare(m))
+    |p, m| {
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
+    }
 }
