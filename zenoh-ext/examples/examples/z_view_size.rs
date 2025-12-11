@@ -13,7 +13,7 @@
 //
 use std::{sync::Arc, time::Duration};
 
-use clap::Parser;
+use clap::{arg, Parser};
 use zenoh::config::Config;
 use zenoh_ext::group::*;
 use zenoh_ext_examples::CommonArgs;
