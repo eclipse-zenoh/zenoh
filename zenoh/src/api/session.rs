@@ -1913,7 +1913,7 @@ impl SessionInner {
         tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
-            current: std::sync::Mutex::new(false),
+            current: Mutex::new(false),
             destination,
             key_expr: key_expr.clone().into_owned(),
             match_type,
