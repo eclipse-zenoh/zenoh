@@ -388,6 +388,8 @@ pub mod session {
 
     #[zenoh_macros::internal]
     pub use crate::api::builders::session::{init, InitBuilder};
+    #[zenoh_macros::internal]
+    pub use crate::api::session::WeakSessionInternal as WeakSession;
     pub use crate::api::{
         builders::{
             close::CloseBuilder,

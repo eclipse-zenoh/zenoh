@@ -178,7 +178,7 @@ impl Wait for QuerierBuilder<'_, '_> {
             .0
             .declare_querier_inner(key_expr.clone(), self.destination)?;
         Ok(Querier {
-            session: self.session.downgrade(),
+            session: self.session.to_weak(),
             id,
             key_expr,
             qos: self.qos.into(),

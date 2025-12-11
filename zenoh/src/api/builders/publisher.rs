@@ -489,7 +489,7 @@ impl Wait for PublisherBuilder<'_, '_> {
             .0
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
-            session: self.session.downgrade(),
+            session: self.session.to_weak(),
             id,
             key_expr,
             encoding: self.encoding,

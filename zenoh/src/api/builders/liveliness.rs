@@ -53,7 +53,7 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
             .0
             .declare_liveliness_inner(&key_expr)
             .map(|id| LivelinessToken {
-                session: self.session.downgrade(),
+                session: self.session.to_weak(),
                 id,
                 undeclare_on_drop: true,
             })
@@ -265,7 +265,7 @@ where
             )
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
-                    session: self.session.downgrade(),
+                    session: self.session.to_weak(),
                     id: sub_state.id,
                     key_expr: sub_state.key_expr.clone(),
                     kind: SubscriberKind::LivelinessSubscriber,
