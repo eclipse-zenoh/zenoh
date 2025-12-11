@@ -637,6 +637,10 @@ impl Drop for Session {
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
 pub(crate) type WeakSession = Arc<SessionInner>;
 
+/// A weak reference to the session.
+// `WeakSession` cannot be exposed as it gives access to the session internal,
+// but we need  a type that deref to a regular session (in order to call session method).
+// It is reexported and exposed as `WeakSession` in the API.
 #[zenoh_macros::internal]
 #[derive(Clone)]
 pub struct WeakSessionInternal(WeakSession);
