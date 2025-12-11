@@ -13,7 +13,7 @@ use std::time::Duration;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::Parser;
+use clap::{arg, Parser};
 use zenoh::{config::Config, key_expr::KeyExpr};
 use zenoh_config::ModeDependentValue;
 use zenoh_ext::{AdvancedPublisherBuilderExt, CacheConfig, MissDetectionConfig};
