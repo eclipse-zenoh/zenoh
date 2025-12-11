@@ -588,8 +588,13 @@ impl fmt::Debug for SessionInner {
 pub struct Session(pub(crate) Arc<SessionInner>);
 
 impl Session {
-    pub(crate) fn downgrade(&self) -> WeakSession {
-        WeakSession::new(&self.0)
+    pub(crate) fn to_weak(&self) -> WeakSession {
+        self.0.clone()
+    }
+
+    #[zenoh_macros::internal]
+    pub fn downgrade(&self) -> WeakSessionInternal {
+        WeakSessionInternal(self.to_weak())
     }
 
     #[cfg(feature = "internal")]
@@ -621,7 +626,6 @@ impl Drop for Session {
 }
 
 /// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
-/// It provides weak-like semantics to the arc-like session, without using [`Weak`].
 /// Notably, it allows establishing reference cycles inside the session for the primitive
 /// implementation.
 /// When all `Session` instances are dropped, [`Session::close`] is called and cleans
@@ -629,31 +633,25 @@ impl Drop for Session {
 ///
 /// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
+pub(crate) type WeakSession = Arc<SessionInner>;
+
+#[zenoh_macros::internal]
 #[derive(Clone)]
-pub(crate) struct WeakSession(Arc<SessionInner>);
+pub struct WeakSessionInternal(WeakSession);
 
-impl WeakSession {
-    fn new(session: &Arc<SessionInner>) -> Self {
-        Self(session.clone())
-    }
-
-    #[zenoh_macros::internal]
-    pub(crate) fn session(&self) -> &Session {
-        Session::ref_cast(&self.0)
-    }
-}
-
-impl fmt::Debug for WeakSession {
+#[zenoh_macros::internal]
+impl fmt::Debug for WeakSessionInternal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl Deref for WeakSession {
-    type Target = Arc<SessionInner>;
+#[zenoh_macros::internal]
+impl Deref for WeakSessionInternal {
+    type Target = Session;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        Session::ref_cast(&self.0)
     }
 }
 
@@ -697,13 +695,13 @@ impl Session {
                 face_id: OnceCell::new(),
             }));
 
-            runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
-            let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
+            runtime.new_handler(Arc::new(admin::Handler::new(session.to_weak())));
+            let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.to_weak()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
             session.0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
 
-            admin::init(session.downgrade());
+            admin::init(session.to_weak());
 
             session
         })
@@ -2009,7 +2007,7 @@ impl SessionInner {
                 // TODO: check which ZRuntime should be used
                 self.task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = WeakSession::new(self);
+                        let session = self.clone();
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -2261,7 +2259,7 @@ impl SessionInner {
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = WeakSession::new(self);
+                let session = self.clone();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2380,7 +2378,7 @@ impl SessionInner {
         let token = self.task_controller.get_cancellation_token();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = WeakSession::new(self);
+                let session = self.clone();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2473,7 +2471,7 @@ impl SessionInner {
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
-                Arc::new(WeakSession::new(self))
+                Arc::new(self.clone())
             } else {
                 primitives
             },
