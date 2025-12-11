@@ -33,10 +33,6 @@ async fn test_adminspace_wonly() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(false).unwrap();
         c.adminspace.permissions.set_write(true).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -72,10 +68,6 @@ async fn test_adminspace_read() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -287,10 +279,6 @@ async fn test_adminspace_ronly() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -320,10 +308,6 @@ async fn test_adminspace_write() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(true).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
