@@ -221,8 +221,8 @@ impl<Handler> Subscriber<Handler> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> &crate::Session {
-        crate::Session::ref_cast(&self.inner.session)
+    pub fn session(&self) -> &WeakSession {
+        &self.inner.session
     }
 }
 

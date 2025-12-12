@@ -220,7 +220,7 @@ where
             .declare_subscriber_inner(&key_expr, self.origin, callback)
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
-                    session: session.to_weak(),
+                    session: session.downgrade(),
                     id: sub_state.id,
                     key_expr: sub_state.key_expr.clone(),
                     kind: SubscriberKind::Subscriber,

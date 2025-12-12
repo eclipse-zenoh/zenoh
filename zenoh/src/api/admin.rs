@@ -154,10 +154,10 @@ pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Que
     }
 
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for peer in session.runtime.get_transports_unicast_peers() {
+        for peer in session.runtime().get_transports_unicast_peers() {
             reply_peer(prefix, own_zid, &query, peer, false);
         }
-        for transport_peers in session.runtime.get_transports_multicast_peers() {
+        for transport_peers in session.runtime().get_transports_multicast_peers() {
             for peer in transport_peers {
                 reply_peer(prefix, own_zid, &query, peer, true);
             }

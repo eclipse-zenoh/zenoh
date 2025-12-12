@@ -232,7 +232,7 @@ where
             .declare_queryable_inner(&ke, self.complete, self.origin, callback)
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
-                    session: self.session.to_weak(),
+                    session: self.session.downgrade(),
                     id: qable_state.id,
                     undeclare_on_drop: true,
                     key_expr: ke.into_owned(),
