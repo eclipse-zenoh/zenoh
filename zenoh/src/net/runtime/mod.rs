@@ -76,15 +76,15 @@ use super::{
     },
 };
 #[cfg(feature = "unstable")]
-use crate::api::info::Transport;
+use crate::api::{handlers::Callback, info::{LinkEvent, Transport, TransportEvent}};
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 #[cfg(feature = "unstable")]
 use crate::api::{
-    handlers::{Callback, CallbackParameter},
-    info::{Link, LinkEvent, TransportEvent},
+    handlers::{CallbackParameter},
+    info::{Link},
     sample::SampleKind,
 };
 #[cfg(feature = "internal")]
@@ -138,13 +138,13 @@ pub(crate) struct RuntimeState {
     stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "unstable")]
     transport_event_callbacks: std::sync::RwLock<
-        HashMap<usize, crate::api::handlers::Callback<crate::api::info::TransportEvent>>,
+        HashMap<usize, Callback<TransportEvent>>,
     >,
     #[cfg(feature = "unstable")]
     transport_event_callback_counter: AtomicUsize,
     #[cfg(feature = "unstable")]
     link_event_callbacks: std::sync::RwLock<
-        HashMap<usize, crate::api::handlers::Callback<crate::api::info::LinkEvent>>,
+        HashMap<usize, Callback<LinkEvent>>,
     >,
     #[cfg(feature = "unstable")]
     link_event_callback_counter: AtomicUsize,
@@ -181,7 +181,7 @@ pub trait IRuntime: Send + Sync {
     #[cfg(feature = "unstable")]
     fn transport_events_listener(
         &self,
-        callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
+        callback: Callback<TransportEvent>,
         history: bool,
     ) -> usize;
 
@@ -191,7 +191,7 @@ pub trait IRuntime: Send + Sync {
     #[cfg(feature = "unstable")]
     fn linkl_events_listener(
         &self,
-        callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
+        callback: Callback<LinkEvent>,
         history: bool,
         transport_zid: Option<ZenohId>,
     ) -> usize;
@@ -365,7 +365,7 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "unstable")]
     fn transport_events_listener(
         &self,
-        callback: crate::api::handlers::Callback<crate::api::info::TransportEvent>,
+        callback: Callback<TransportEvent>,
         history: bool,
     ) -> usize {
         // If history enabled, send Put events for existing transports
@@ -398,7 +398,7 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "unstable")]
     fn linkl_events_listener(
         &self,
-        callback: crate::api::handlers::Callback<crate::api::info::LinkEvent>,
+        callback: Callback<LinkEvent>,
         history: bool,
         transport_zid: Option<ZenohId>,
     ) -> usize {

@@ -14,9 +14,12 @@
 
 use std::future::{IntoFuture, Ready};
 
+use tracing::error;
 use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
+use zenoh_result::ZResult;
 
+use crate::api::session::UndeclarableSealed;
 use crate::handlers::locked;
 use crate::session::{Link, LinkEvent};
 use crate::{
@@ -97,6 +100,170 @@ impl IntoFuture for LinksBuilder<'_> {
     }
 }
 
+pub(crate) struct LinkEventsListenerInner {
+    pub(crate) runtime: DynamicRuntime,
+    pub(crate) id: usize,
+    pub(crate) undeclare_on_drop: bool,
+}
+
+impl std::fmt::Debug for LinkEventsListenerInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("LinkEventsListenerInner")
+            .field("id", &self.id)
+            .field("undeclare_on_drop", &self.undeclare_on_drop)
+            .finish()
+    }
+}
+
+/// A listener that sends notifications when link lifecycle events occur.
+///
+/// Call [`undeclare()`](LinkEventsListener::undeclare) to stop receiving events.
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::sample::SampleKind;
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let listener = session.info()
+///     .link_events_listener()
+///     .history(true)
+///     .with(flume::bounded(32))
+///     .await;
+///
+/// while let Ok(event) = listener.recv_async().await {
+///     match event.kind() {
+///         SampleKind::Put => println!("Link added: {} -> {}",
+///             event.link().src(), event.link().dst()),
+///         SampleKind::Delete => println!("Link removed"),
+///     }
+/// }
+///
+/// // Cleanup
+/// listener.undeclare().await.unwrap();
+/// # }
+/// ```
+#[derive(Debug)]
+#[zenoh_macros::unstable]
+pub struct LinkEventsListener<Handler> {
+    pub(crate) inner: LinkEventsListenerInner,
+    pub(crate) handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> LinkEventsListener<Handler> {
+    /// Undeclare the listener and stop receiving events.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let listener = session.info()
+    ///     .link_events_listener()
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    /// listener.undeclare().await.unwrap();
+    /// # }
+    /// ```
+    #[inline]
+    pub fn undeclare(self) -> LinkEventsListenerUndeclaration<Handler>
+    where
+        Handler: Send,
+    {
+        self.undeclare_inner(())
+    }
+
+    fn undeclare_impl(&mut self) -> ZResult<()> {
+        // Set flag first to avoid double panic
+        self.inner.undeclare_on_drop = false;
+        // Call runtime's cancel method with the stored id
+        self.inner.runtime.cancel_link_events(self.inner.id);
+        Ok(())
+    }
+
+    /// Returns a reference to this listener's handler.
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this listener's handler.
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = !background;
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Drop for LinkEventsListener<Handler> {
+    fn drop(&mut self) {
+        if self.inner.undeclare_on_drop {
+            if let Err(error) = self.undeclare_impl() {
+                error!(error);
+            }
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler: Send> UndeclarableSealed<()> for LinkEventsListener<Handler> {
+    type Undeclaration = LinkEventsListenerUndeclaration<Handler>;
+
+    fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
+        LinkEventsListenerUndeclaration(self)
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> std::ops::Deref for LinkEventsListener<Handler> {
+    type Target = Handler;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handler
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> std::ops::DerefMut for LinkEventsListener<Handler> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handler
+    }
+}
+
+/// A [`Resolvable`] returned by [`LinkEventsListener::undeclare`]
+#[zenoh_macros::unstable]
+pub struct LinkEventsListenerUndeclaration<Handler>(LinkEventsListener<Handler>);
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for LinkEventsListenerUndeclaration<Handler> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Wait for LinkEventsListenerUndeclaration<Handler> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        self.0.undeclare_impl()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
 
 /// A builder returned by [`SessionInfo::linkl_events_listener()`](crate::session::SessionInfo::linkl_events_listener) that allows
 /// subscribing to link lifecycle events.
@@ -209,7 +376,7 @@ where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,
 {
-    type To = Handler::Handler;
+    type To = LinkEventsListener<Handler::Handler>;
 }
 
 #[zenoh_macros::unstable]
@@ -220,11 +387,18 @@ where
 {
     fn wait(self) -> Self::To {
         let (callback, handler) = self.handler.into_handler();
-        #[allow(unused_variables)] // id is only needed for unstable cancellation_token
         let id = self
             .runtime
             .linkl_events_listener(callback, self.history, self.transport_zid);
-        handler
+
+        LinkEventsListener {
+            inner: LinkEventsListenerInner {
+                runtime: self.runtime.clone(),
+                id,
+                undeclare_on_drop: true,
+            },
+            handler,
+        }
     }
 }
 

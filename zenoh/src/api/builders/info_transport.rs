@@ -14,9 +14,12 @@
 
 use std::future::{IntoFuture, Ready};
 
+use tracing::error;
 use zenoh_core::{Resolvable, Wait};
+use zenoh_result::ZResult;
 
 use crate::{
+    api::session::UndeclarableSealed,
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
     session::{Transport, TransportEvent},
@@ -63,6 +66,170 @@ impl Wait for TransportsBuilder<'_> {
 
 #[zenoh_macros::unstable]
 impl IntoFuture for TransportsBuilder<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+pub(crate) struct TransportEventsListenerInner {
+    pub(crate) runtime: DynamicRuntime,
+    pub(crate) id: usize,
+    pub(crate) undeclare_on_drop: bool,
+}
+
+impl std::fmt::Debug for TransportEventsListenerInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("TransportEventsListenerInner")
+            .field("id", &self.id)
+            .field("undeclare_on_drop", &self.undeclare_on_drop)
+            .finish()
+    }
+}
+
+/// A listener that sends notifications when transport lifecycle events occur.
+///
+/// Call [`undeclare()`](TransportEventsListener::undeclare) to stop receiving events.
+///
+/// # Examples
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::sample::SampleKind;
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let listener = session.info()
+///     .transport_events_listener()
+///     .history(true)
+///     .with(flume::bounded(32))
+///     .await;
+///
+/// while let Ok(event) = listener.recv_async().await {
+///     match event.kind() {
+///         SampleKind::Put => println!("Transport opened: {}", event.transport().zid()),
+///         SampleKind::Delete => println!("Transport closed"),
+///     }
+/// }
+///
+/// // Cleanup
+/// listener.undeclare().await.unwrap();
+/// # }
+/// ```
+#[derive(Debug)]
+#[zenoh_macros::unstable]
+pub struct TransportEventsListener<Handler> {
+    pub(crate) inner: TransportEventsListenerInner,
+    pub(crate) handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> TransportEventsListener<Handler> {
+    /// Undeclare the listener and stop receiving events.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let listener = session.info()
+    ///     .transport_events_listener()
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    /// listener.undeclare().await.unwrap();
+    /// # }
+    /// ```
+    #[inline]
+    pub fn undeclare(self) -> TransportEventsListenerUndeclaration<Handler>
+    where
+        Handler: Send,
+    {
+        self.undeclare_inner(())
+    }
+
+    fn undeclare_impl(&mut self) -> ZResult<()> {
+        // Set flag first to avoid double panic
+        self.inner.undeclare_on_drop = false;
+        // Call runtime's cancel method with the stored id
+        self.inner.runtime.cancel_transport_events(self.inner.id);
+        Ok(())
+    }
+
+    /// Returns a reference to this listener's handler.
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    pub fn handler(&self) -> &Handler {
+        &self.handler
+    }
+
+    /// Returns a mutable reference to this listener's handler.
+    /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
+    /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    pub fn handler_mut(&mut self) -> &mut Handler {
+        &mut self.handler
+    }
+
+    #[zenoh_macros::internal]
+    pub fn set_background(&mut self, background: bool) {
+        self.inner.undeclare_on_drop = !background;
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Drop for TransportEventsListener<Handler> {
+    fn drop(&mut self) {
+        if self.inner.undeclare_on_drop {
+            if let Err(error) = self.undeclare_impl() {
+                error!(error);
+            }
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler: Send> UndeclarableSealed<()> for TransportEventsListener<Handler> {
+    type Undeclaration = TransportEventsListenerUndeclaration<Handler>;
+
+    fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
+        TransportEventsListenerUndeclaration(self)
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> std::ops::Deref for TransportEventsListener<Handler> {
+    type Target = Handler;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handler
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> std::ops::DerefMut for TransportEventsListener<Handler> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handler
+    }
+}
+
+/// A [`Resolvable`] returned by [`TransportEventsListener::undeclare`]
+#[zenoh_macros::unstable]
+pub struct TransportEventsListenerUndeclaration<Handler>(TransportEventsListener<Handler>);
+
+#[zenoh_macros::unstable]
+impl<Handler> Resolvable for TransportEventsListenerUndeclaration<Handler> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> Wait for TransportEventsListenerUndeclaration<Handler> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
+        self.0.undeclare_impl()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
@@ -164,7 +331,7 @@ where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
 {
-    type To = Handler::Handler;
+    type To = TransportEventsListener<Handler::Handler>;
 }
 
 #[zenoh_macros::unstable]
@@ -175,11 +342,18 @@ where
 {
     fn wait(self) -> Self::To {
         let (callback, handler) = self.handler.into_handler();
-        #[allow(unused_variables)] // id is only needed for unstable cancellation_token
         let id = self
             .runtime
             .transport_events_listener(callback, self.history);
-        handler
+
+        TransportEventsListener {
+            inner: TransportEventsListenerInner {
+                runtime: self.runtime.clone(),
+                id,
+                undeclare_on_drop: true,
+            },
+            handler,
+        }
     }
 }
 

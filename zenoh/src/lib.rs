@@ -390,8 +390,14 @@ pub mod session {
     pub use crate::api::builders::session::{init, InitBuilder};
     #[zenoh_macros::unstable]
     pub use crate::api::{
-        builders::info_links::{LinkEventsListenerBuilder, LinksBuilder},
-        builders::info_transport::{TransportEventsListenerBuilder, TransportsBuilder},
+        builders::info_links::{
+            LinkEventsListener, LinkEventsListenerBuilder, LinkEventsListenerUndeclaration,
+            LinksBuilder,
+        },
+        builders::info_transport::{
+            TransportEventsListener, TransportEventsListenerBuilder,
+            TransportEventsListenerUndeclaration, TransportsBuilder,
+        },
         info::{Link, LinkEvent, Transport, TransportEvent},
     };
     pub use crate::api::{
