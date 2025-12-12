@@ -22,8 +22,11 @@ use zenoh_core::{Resolve, ResolveClosure};
 use zenoh_protocol::core::Locator;
 
 #[cfg(feature = "unstable")]
+use crate::api::builders::info_links::{LinkEventsListenerBuilder, LinksBuilder};
+#[cfg(feature = "unstable")]
+use crate::api::builders::info_transport::{TransportEventsListenerBuilder, TransportsBuilder};
+#[cfg(feature = "unstable")]
 use crate::api::{
-    builders::info::{LinkEventsListenerBuilder, LinksBuilder},
     handlers::{CallbackParameter, DefaultHandler},
     sample::SampleKind,
 };
@@ -32,7 +35,6 @@ use crate::{
     net::runtime::DynamicRuntime,
 };
 
-use super::builders::info_transport::{TransportEventsListenerBuilder, TransportsBuilder};
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
 ///
@@ -177,7 +179,7 @@ impl SessionInfo {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn transport_events_listener(&self) -> TransportEventsListenerBuilder<'_,DefaultHandler> {
+    pub fn transport_events_listener(&self) -> TransportEventsListenerBuilder<'_, DefaultHandler> {
         TransportEventsListenerBuilder::new(&self.runtime)
     }
 

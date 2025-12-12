@@ -380,10 +380,13 @@ mod tests {
             .await;
 
         // Should immediately receive event for existing transport
-        let event = tokio::time::timeout(Duration::from_secs(5), transport_events_listener.recv_async())
-            .await
-            .expect("Timeout waiting for history transport event")
-            .expect("Channel closed");
+        let event = tokio::time::timeout(
+            Duration::from_secs(5),
+            transport_events_listener.recv_async(),
+        )
+        .await
+        .expect("Timeout waiting for history transport event")
+        .expect("Channel closed");
 
         assert!(event.is_open(), "History event should be Put (opened)");
         println!("History: Transport {}", event.transport().zid());
@@ -397,10 +400,11 @@ mod tests {
             .await;
 
         // Should immediately receive event for existing link
-        let event = tokio::time::timeout(Duration::from_secs(5), linkl_events_listener.recv_async())
-            .await
-            .expect("Timeout waiting for history link event")
-            .expect("Channel closed");
+        let event =
+            tokio::time::timeout(Duration::from_secs(5), linkl_events_listener.recv_async())
+                .await
+                .expect("Timeout waiting for history link event")
+                .expect("Channel closed");
 
         assert!(event.is_added(), "History event should be Put (added)");
         println!(

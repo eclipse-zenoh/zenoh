@@ -14,6 +14,8 @@
 
 pub(crate) mod close;
 pub(crate) mod info;
+pub(crate) mod info_links;
+pub(crate) mod info_transport;
 pub(crate) mod liveliness;
 pub(crate) mod matching_listener;
 pub(crate) mod publisher;
@@ -25,4 +27,3 @@ pub(crate) mod sample;
 pub(crate) mod scouting;
 pub(crate) mod session;
 pub(crate) mod subscriber;
-pub(crate) mod info_transport;
