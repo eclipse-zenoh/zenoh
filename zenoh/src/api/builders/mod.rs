@@ -25,3 +25,4 @@ pub(crate) mod sample;
 pub(crate) mod scouting;
 pub(crate) mod session;
 pub(crate) mod subscriber;
+pub(crate) mod info_transport;
