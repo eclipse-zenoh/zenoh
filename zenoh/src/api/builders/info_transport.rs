@@ -268,7 +268,7 @@ impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
-pub struct TransportEventsListenerBuilder<'a, Handler> {
+pub struct TransportEventsListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     session: &'a WeakSession,
     handler: Handler,
     history: bool,
@@ -330,6 +330,40 @@ impl<'a, Handler> TransportEventsListenerBuilder<'a, Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<'a> TransportEventsListenerBuilder<'a, Callback<TransportEvent>> {
+    /// Run the listener in the background, automatically dropping the handler when done.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// // no need to assign and keep a variable for a background listener
+    /// session.info()
+    ///     .transport_events_listener()
+    ///     .callback(|event| {
+    ///         match event.kind() {
+    ///             SampleKind::Put => println!("Transport opened: {}", event.transport().zid()),
+    ///             SampleKind::Delete => println!("Transport closed"),
+    ///         }
+    ///     })
+    ///     .background()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub fn background(self) -> TransportEventsListenerBuilder<'a, Callback<TransportEvent>, true> {
+        TransportEventsListenerBuilder {
+            session: self.session,
+            handler: self.handler,
+            history: self.history,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> Resolvable for TransportEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<TransportEvent> + Send,
@@ -368,6 +402,34 @@ where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
 {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+#[zenoh_macros::unstable]
+impl Resolvable for TransportEventsListenerBuilder<'_, Callback<TransportEvent>, true> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for TransportEventsListenerBuilder<'_, Callback<TransportEvent>, true> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        let state = self
+            .session
+            .declare_transport_events_listener_inner(self.handler, self.history)?;
+        // Set the listener to not undeclare on drop (background mode)
+        // Note: We can't access the listener to set background flag, so we just don't keep a reference
+        // The listener will live until explicitly undeclared or session closes
+        drop(state);
+        Ok(())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for TransportEventsListenerBuilder<'_, Callback<TransportEvent>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 
