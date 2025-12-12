@@ -28,6 +28,7 @@ use crate::api::builders::info_transport::{TransportEventsListenerBuilder, Trans
 #[cfg(feature = "unstable")]
 use crate::api::{
     handlers::{CallbackParameter, DefaultHandler},
+    session::WeakSession,
     sample::SampleKind,
 };
 use crate::{
@@ -53,6 +54,8 @@ use crate::{
 /// ```
 pub struct SessionInfo {
     pub(crate) runtime: DynamicRuntime,
+    #[cfg(feature = "unstable")]
+    pub(crate) session: WeakSession,
 }
 
 impl SessionInfo {
@@ -180,7 +183,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn transport_events_listener(&self) -> TransportEventsListenerBuilder<'_, DefaultHandler> {
-        TransportEventsListenerBuilder::new(&self.runtime)
+        TransportEventsListenerBuilder::new(&self.session)
     }
 
     /// Subscribe to link lifecycle events.

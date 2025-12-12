@@ -74,7 +74,7 @@ use super::{
     },
 };
 #[cfg(feature = "unstable")]
-use crate::api::{handlers::Callback, info::{LinkEvent, Transport, TransportEvent}};
+use crate::api::{handlers::Callback, info::{LinkEvent, Transport}};
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
@@ -135,12 +135,6 @@ pub(crate) struct RuntimeState {
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "unstable")]
-    transport_event_callbacks: std::sync::RwLock<
-        HashMap<u32, Callback<TransportEvent>>,
-    >,
-    #[cfg(feature = "unstable")]
-    transport_event_callback_counter: AtomicU32,
-    #[cfg(feature = "unstable")]
     link_event_callbacks: std::sync::RwLock<
         HashMap<u32, Callback<LinkEvent>>,
     >,
@@ -177,16 +171,6 @@ pub trait IRuntime: Send + Sync {
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     #[cfg(feature = "unstable")]
-    fn transport_events_listener(
-        &self,
-        callback: Callback<TransportEvent>,
-        history: bool,
-    ) -> u32;
-
-    #[cfg(feature = "unstable")]
-    fn cancel_transport_events(&self, id: u32);
-
-    #[cfg(feature = "unstable")]
     fn linkl_events_listener(
         &self,
         callback: Callback<LinkEvent>,
@@ -196,9 +180,6 @@ pub trait IRuntime: Send + Sync {
 
     #[cfg(feature = "unstable")]
     fn cancel_link_events(&self, id: u32);
-
-    #[cfg(feature = "unstable")]
-    fn broadcast_transport_event(&self, kind: crate::api::sample::SampleKind, peer: &TransportPeer);
 
     #[cfg(feature = "unstable")]
     fn broadcast_link_event(
@@ -361,39 +342,6 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn transport_events_listener(
-        &self,
-        callback: Callback<TransportEvent>,
-        history: bool,
-    ) -> u32 {
-        // If history enabled, send Put events for existing transports
-        if history {
-            for transport in self.get_transports() {
-                let event = TransportEvent {
-                    kind: SampleKind::Put,
-                    transport,
-                };
-                callback.call(TransportEvent::from_message(event));
-            }
-        }
-
-        // Generate unique ID and register callback for future events
-        let id = self
-            .transport_event_callback_counter
-            .fetch_add(1, Ordering::Relaxed);
-        self.transport_event_callbacks
-            .write()
-            .unwrap()
-            .insert(id, callback);
-        id
-    }
-
-    #[cfg(feature = "unstable")]
-    fn cancel_transport_events(&self, id: u32) {
-        self.transport_event_callbacks.write().unwrap().remove(&id);
-    }
-
-    #[cfg(feature = "unstable")]
     fn linkl_events_listener(
         &self,
         callback: Callback<LinkEvent>,
@@ -437,31 +385,6 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "unstable")]
     fn cancel_link_events(&self, id: u32) {
         self.link_event_callbacks.write().unwrap().remove(&id);
-    }
-
-    #[cfg(feature = "unstable")]
-    fn broadcast_transport_event(
-        &self,
-        kind: crate::api::sample::SampleKind,
-        peer: &TransportPeer,
-    ) {
-        use crate::api::{
-            handlers::CallbackParameter,
-            info::{Transport, TransportEvent},
-        };
-
-        let event = TransportEvent {
-            kind,
-            transport: Transport {
-                zid: peer.zid.into(),
-                whatami: peer.whatami,
-            },
-        };
-
-        let callbacks = self.transport_event_callbacks.read().unwrap();
-        for callback in callbacks.values() {
-            callback.call(TransportEvent::from_message(event.clone()));
-        }
     }
 
     #[cfg(feature = "unstable")]
@@ -765,10 +688,6 @@ impl RuntimeBuilder {
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
-                #[cfg(feature = "unstable")]
-                transport_event_callbacks: std::sync::RwLock::new(HashMap::new()),
-                #[cfg(feature = "unstable")]
-                transport_event_callback_counter: AtomicU32::new(0),
                 #[cfg(feature = "unstable")]
                 link_event_callbacks: std::sync::RwLock::new(HashMap::new()),
                 #[cfg(feature = "unstable")]

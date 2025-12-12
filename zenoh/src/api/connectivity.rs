@@ -49,7 +49,6 @@ impl TransportEventHandler for ConnectivityHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Broadcast transport opened event
         self.session
-            .runtime
             .broadcast_transport_event(SampleKind::Put, &peer);
 
         // Return ConnectivityPeerHandler
@@ -102,7 +101,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     fn closed(&self) {
         // Broadcast transport closed event
         self.session
-            .runtime
             .broadcast_transport_event(SampleKind::Delete, &self.peer);
     }
 
@@ -123,7 +121,6 @@ impl TransportMulticastEventHandler for ConnectivityMulticastHandler {
         // Broadcast transport opened event
 
         self.session
-            .runtime
             .broadcast_transport_event(SampleKind::Put, &peer);
 
         // Return ConnectivityPeerHandler

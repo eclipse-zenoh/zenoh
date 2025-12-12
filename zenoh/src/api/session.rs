@@ -123,6 +123,21 @@ zconfigurable! {
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
 }
 
+#[cfg(feature = "unstable")]
+pub(crate) struct TransportEventsListenerState {
+    pub(crate) id: Id,
+    pub(crate) callback: Callback<crate::api::info::TransportEvent>,
+}
+
+#[cfg(feature = "unstable")]
+impl fmt::Debug for TransportEventsListenerState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("TransportEventsListenerState")
+            .field("id", &self.id)
+            .finish()
+    }
+}
+
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
@@ -139,6 +154,8 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) remote_queryables: HashMap<Id, (KeyExpr<'static>, bool)>,
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) transport_events_listeners: HashMap<Id, Arc<TransportEventsListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
@@ -168,6 +185,8 @@ impl SessionState {
             queryables: HashMap::new(),
             remote_queryables: HashMap::new(),
             matching_listeners: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            transport_events_listeners: HashMap::new(),
             queries: HashMap::new(),
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
@@ -904,6 +923,8 @@ impl Session {
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
             runtime: self.0.runtime.deref().clone(),
+            #[cfg(feature = "unstable")]
+            session: self.downgrade(),
         }
     }
 
@@ -2087,6 +2108,76 @@ impl SessionInner {
             Ok(())
         } else {
             Err(zerror!("Unable to find MatchingListener").into())
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn declare_transport_events_listener_inner(
+        &self,
+        callback: Callback<crate::api::info::TransportEvent>,
+        history: bool,
+    ) -> ZResult<Arc<TransportEventsListenerState>> {
+        let mut state = zwrite!(self.state);
+        let id = self.runtime.next_id();
+        trace!("declare_transport_events_listener_inner() => {id}");
+
+        let listener_state = Arc::new(TransportEventsListenerState { id, callback });
+
+        state.transport_events_listeners.insert(id, listener_state.clone());
+        drop(state); // Release lock before calling history
+
+        // Send history if requested
+        if history {
+            for transport in self.runtime.get_transports() {
+                let event = crate::api::info::TransportEvent {
+                    kind: SampleKind::Put,
+                    transport,
+                };
+                listener_state.callback.call(event);
+            }
+        }
+
+        Ok(listener_state)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn undeclare_transport_events_listener_inner(&self, sid: Id) -> ZResult<()> {
+        let state = {
+            let mut state = zwrite!(self.state);
+            if state.primitives.is_none() {
+                return Ok(());
+            }
+
+            state.transport_events_listeners.remove(&sid)
+        };
+
+        if let Some(state) = state {
+            trace!("undeclare_transport_events_listener_inner({:?})", state);
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find TransportEventsListener").into())
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn broadcast_transport_event(
+        &self,
+        kind: SampleKind,
+        peer: &zenoh_transport::TransportPeer,
+    ) {
+        use crate::api::info::Transport;
+
+        let state = zread!(self.state);
+        let transport = Transport {
+            zid: peer.zid.into(),
+            whatami: peer.whatami,
+        };
+
+        let event = crate::api::info::TransportEvent { kind, transport };
+
+        // Call all registered callbacks
+        for listener in state.transport_events_listeners.values() {
+            listener.callback.call(event.clone());
         }
     }
 

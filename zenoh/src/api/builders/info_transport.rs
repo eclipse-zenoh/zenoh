@@ -19,7 +19,7 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use crate::{
-    api::{session::UndeclarableSealed, Id},
+    api::{session::UndeclarableSealed, Id, session::WeakSession},
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
     session::{Transport, TransportEvent},
@@ -75,7 +75,7 @@ impl IntoFuture for TransportsBuilder<'_> {
 }
 
 pub(crate) struct TransportEventsListenerInner {
-    pub(crate) runtime: DynamicRuntime,
+    pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -151,9 +151,8 @@ impl<Handler> TransportEventsListener<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // Set flag first to avoid double panic
         self.inner.undeclare_on_drop = false;
-        // Call runtime's cancel method with the stored id
-        self.inner.runtime.cancel_transport_events(self.inner.id);
-        Ok(())
+        // Call session's undeclare method with the stored id
+        self.inner.session.undeclare_transport_events_listener_inner(self.inner.id)
     }
 
     /// Returns a reference to this listener's handler.
@@ -265,16 +264,16 @@ impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
 pub struct TransportEventsListenerBuilder<'a, Handler> {
-    runtime: &'a DynamicRuntime,
+    session: &'a WeakSession,
     handler: Handler,
     history: bool,
 }
 
 #[zenoh_macros::unstable]
 impl<'a> TransportEventsListenerBuilder<'a, DefaultHandler> {
-    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+    pub(crate) fn new(session: &'a WeakSession) -> Self {
         Self {
-            runtime,
+            session,
             handler: DefaultHandler::default(),
             history: false,
         }
@@ -295,7 +294,7 @@ impl<'a, Handler> TransportEventsListenerBuilder<'a, Handler> {
         H: IntoHandler<TransportEvent>,
     {
         TransportEventsListenerBuilder {
-            runtime: self.runtime,
+            session: self.session,
             handler,
             history: self.history,
         }
@@ -342,14 +341,15 @@ where
 {
     fn wait(self) -> Self::To {
         let (callback, handler) = self.handler.into_handler();
-        let id = self
-            .runtime
-            .transport_events_listener(callback, self.history);
+        let state = self
+            .session
+            .declare_transport_events_listener_inner(callback, self.history)
+            .expect("Failed to declare transport events listener");
 
         TransportEventsListener {
             inner: TransportEventsListenerInner {
-                runtime: self.runtime.clone(),
-                id,
+                session: self.session.clone(),
+                id: state.id,
                 undeclare_on_drop: true,
             },
             handler,
