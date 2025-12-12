@@ -22,8 +22,6 @@ pub mod orchestrator;
 
 #[cfg(feature = "unstable")]
 use std::collections::HashMap;
-#[cfg(feature = "unstable")]
-use std::sync::atomic::AtomicUsize;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -138,16 +136,16 @@ pub(crate) struct RuntimeState {
     stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "unstable")]
     transport_event_callbacks: std::sync::RwLock<
-        HashMap<usize, Callback<TransportEvent>>,
+        HashMap<u32, Callback<TransportEvent>>,
     >,
     #[cfg(feature = "unstable")]
-    transport_event_callback_counter: AtomicUsize,
+    transport_event_callback_counter: AtomicU32,
     #[cfg(feature = "unstable")]
     link_event_callbacks: std::sync::RwLock<
-        HashMap<usize, Callback<LinkEvent>>,
+        HashMap<u32, Callback<LinkEvent>>,
     >,
     #[cfg(feature = "unstable")]
-    link_event_callback_counter: AtomicUsize,
+    link_event_callback_counter: AtomicU32,
 }
 
 #[allow(private_interfaces)]
@@ -183,10 +181,10 @@ pub trait IRuntime: Send + Sync {
         &self,
         callback: Callback<TransportEvent>,
         history: bool,
-    ) -> usize;
+    ) -> u32;
 
     #[cfg(feature = "unstable")]
-    fn cancel_transport_events(&self, id: usize);
+    fn cancel_transport_events(&self, id: u32);
 
     #[cfg(feature = "unstable")]
     fn linkl_events_listener(
@@ -194,10 +192,10 @@ pub trait IRuntime: Send + Sync {
         callback: Callback<LinkEvent>,
         history: bool,
         transport_zid: Option<ZenohId>,
-    ) -> usize;
+    ) -> u32;
 
     #[cfg(feature = "unstable")]
-    fn cancel_link_events(&self, id: usize);
+    fn cancel_link_events(&self, id: u32);
 
     #[cfg(feature = "unstable")]
     fn broadcast_transport_event(&self, kind: crate::api::sample::SampleKind, peer: &TransportPeer);
@@ -367,7 +365,7 @@ impl IRuntime for RuntimeState {
         &self,
         callback: Callback<TransportEvent>,
         history: bool,
-    ) -> usize {
+    ) -> u32 {
         // If history enabled, send Put events for existing transports
         if history {
             for transport in self.get_transports() {
@@ -391,7 +389,7 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn cancel_transport_events(&self, id: usize) {
+    fn cancel_transport_events(&self, id: u32) {
         self.transport_event_callbacks.write().unwrap().remove(&id);
     }
 
@@ -401,7 +399,7 @@ impl IRuntime for RuntimeState {
         callback: Callback<LinkEvent>,
         history: bool,
         transport_zid: Option<ZenohId>,
-    ) -> usize {
+    ) -> u32 {
         // If history enabled, send Put events for existing links
         if history {
             for link in self.get_links(transport_zid) {
@@ -437,7 +435,7 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn cancel_link_events(&self, id: usize) {
+    fn cancel_link_events(&self, id: u32) {
         self.link_event_callbacks.write().unwrap().remove(&id);
     }
 
@@ -770,11 +768,11 @@ impl RuntimeBuilder {
                 #[cfg(feature = "unstable")]
                 transport_event_callbacks: std::sync::RwLock::new(HashMap::new()),
                 #[cfg(feature = "unstable")]
-                transport_event_callback_counter: AtomicUsize::new(0),
+                transport_event_callback_counter: AtomicU32::new(0),
                 #[cfg(feature = "unstable")]
                 link_event_callbacks: std::sync::RwLock::new(HashMap::new()),
                 #[cfg(feature = "unstable")]
-                link_event_callback_counter: AtomicUsize::new(0),
+                link_event_callback_counter: AtomicU32::new(0),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);

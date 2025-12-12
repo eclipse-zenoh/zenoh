@@ -19,7 +19,7 @@ use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
-use crate::api::session::UndeclarableSealed;
+use crate::api::{session::UndeclarableSealed, Id};
 use crate::handlers::locked;
 use crate::session::{Link, LinkEvent};
 use crate::{
@@ -102,7 +102,7 @@ impl IntoFuture for LinksBuilder<'_> {
 
 pub(crate) struct LinkEventsListenerInner {
     pub(crate) runtime: DynamicRuntime,
-    pub(crate) id: usize,
+    pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
 

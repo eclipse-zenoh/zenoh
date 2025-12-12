@@ -19,7 +19,7 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use crate::{
-    api::session::UndeclarableSealed,
+    api::{session::UndeclarableSealed, Id},
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
     session::{Transport, TransportEvent},
@@ -76,7 +76,7 @@ impl IntoFuture for TransportsBuilder<'_> {
 
 pub(crate) struct TransportEventsListenerInner {
     pub(crate) runtime: DynamicRuntime,
-    pub(crate) id: usize,
+    pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
 
