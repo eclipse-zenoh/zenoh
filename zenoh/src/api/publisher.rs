@@ -384,8 +384,8 @@ impl<'a> Publisher<'a> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> &crate::Session {
-        crate::Session::ref_cast(&self.session)
+    pub fn session(&self) -> &WeakSession {
+        &self.session
     }
 }
 
