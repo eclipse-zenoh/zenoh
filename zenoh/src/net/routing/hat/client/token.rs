@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    collections::HashMap,
+    sync::{atomic::Ordering, Arc},
+};
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::network::{
@@ -26,7 +29,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::{face_hat, face_hat_mut, HatCode, HatFace};
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::Tables},
-    hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare},
+    hat::{CurrentFutureTrait, HatTokenTrait, SendDeclare, Sources},
     router::{NodeId, Resource, SessionContext},
     RoutingContext,
 };
@@ -408,5 +411,23 @@ impl HatTokenTrait for HatCode {
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>> {
         forget_simple_token(tables, face, id, res, send_declare)
+    }
+
+    fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known tokens (keys)
+        let mut tokens = HashMap::new();
+        for face in tables.faces.values() {
+            for token in face_hat!(face).remote_tokens.values() {
+                // Insert the key in the list of known tokens
+                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
+                // Append face as a token source in the proper list
+                match face.whatami {
+                    WhatAmI::Router => srcs.routers.push(face.zid),
+                    WhatAmI::Peer => srcs.peers.push(face.zid),
+                    WhatAmI::Client => srcs.clients.push(face.zid),
+                }
+            }
+        }
+        Vec::from_iter(tokens)
     }
 }
