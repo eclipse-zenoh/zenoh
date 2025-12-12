@@ -31,9 +31,15 @@ impl TransportUnicastLowlatency {
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessageMut,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
+            #[cfg(feature = "stats")]
+            stats.inc_network_message(
+                zenoh_stats::Rx,
+                zenoh_protocol::network::NetworkMessageExt::as_ref(&msg),
+            );
             #[cfg(feature = "shared-memory")]
             {
                 if let Some(shm_context) = &self.shm_context {
@@ -72,9 +78,7 @@ impl TransportUnicastLowlatency {
             tracing::trace!("Received: {:?}", msg);
 
             #[cfg(feature = "stats")]
-            {
-                stats.inc_transport_message(zenoh_stats::Rx, 1);
-            }
+            stats.inc_transport_message(zenoh_stats::Rx, 1);
 
             match msg.body {
                 zenoh_protocol::transport::TransportBodyLowLatency::Close(_) => {
@@ -82,12 +86,11 @@ impl TransportUnicastLowlatency {
                 }
                 zenoh_protocol::transport::TransportBodyLowLatency::KeepAlive(_) => {}
                 zenoh_protocol::transport::TransportBodyLowLatency::Network(mut msg) => {
-                    #[cfg(not(feature = "stats"))]
-                    let _ = self.trigger_callback(msg.as_mut());
-                    #[cfg(feature = "stats")]
-                    let _ = stats.with_rx_observe_network_message(msg.as_mut(), |msg| {
-                        self.trigger_callback(msg)
-                    });
+                    let _ = self.trigger_callback(
+                        msg.as_mut(),
+                        #[cfg(feature = "stats")]
+                        stats,
+                    );
                 }
             }
         }

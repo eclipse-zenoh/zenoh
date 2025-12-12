@@ -404,13 +404,9 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
             let expr = RoutingExpr::new(&prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let is_admin = expr.is_admin();
+            let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &rtables);
             #[cfg(feature = "stats")]
-            let payload_size = msg.payload_size();
-            #[cfg(feature = "stats")]
-            let stats_keys = expr.stats_keys(&rtables.stats_keys);
-            #[cfg(feature = "stats")]
-            zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
+            payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
 
             if tables_ref.hat_code.ingress_filter(&rtables, face, &expr) {
                 let route = get_query_route(
@@ -478,15 +474,10 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                             ext_timeout: msg.ext_timeout,
                             payload: msg.payload.clone(),
                         };
-                        #[cfg(not(feature = "stats"))]
-                        outface.primitives.send_request(msg);
-                        #[cfg(feature = "stats")]
-                        zenoh_stats::with_tx_observe_network_message(
-                            is_admin,
-                            payload_size,
-                            &stats_keys,
-                            || outface.primitives.send_request(msg),
-                        );
+                        if outface.primitives.send_request(msg) {
+                            #[cfg(feature = "stats")]
+                            payload_observer.observe_payload(zenoh_stats::Tx, &outface, msg);
+                        }
                     }
                 }
             } else {
@@ -530,19 +521,13 @@ pub(crate) fn route_send_response(
     #[cfg(feature = "stats")]
     let tables = zread!(tables_ref.tables);
     #[cfg(feature = "stats")]
-    let (is_admin, stats_keys) =
-        match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
-            Some(prefix) => {
-                let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
-                let stats_keys = expr.stats_keys(&tables.stats_keys);
-                (expr.is_admin(), stats_keys)
-            }
-            None => (false, Default::default()),
-        };
+    let expr = tables
+        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+        .map(|prefix| RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref()));
     #[cfg(feature = "stats")]
-    let payload_size = msg.payload_size();
+    let payload_observer = super::stats::PayloadObserver::new(msg, expr.as_ref(), &tables);
     #[cfg(feature = "stats")]
-    zenoh_stats::rx_observe_network_message_finalize(is_admin, payload_size, &stats_keys);
+    payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
 
     match face.pending_queries.get(&msg.rid) {
         Some((query, _)) => {
@@ -558,15 +543,10 @@ pub(crate) fn route_send_response(
             drop(queries_lock);
 
             msg.rid = query.src_qid;
-            #[cfg(not(feature = "stats"))]
-            query.src_face.primitives.send_response(msg);
-            #[cfg(feature = "stats")]
-            zenoh_stats::with_tx_observe_network_message(
-                is_admin,
-                payload_size,
-                &stats_keys,
-                || query.src_face.primitives.send_response(msg),
-            );
+            if query.src_face.primitives.send_response(msg) {
+                #[cfg(feature = "stats")]
+                payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
+            }
         }
         None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
     }

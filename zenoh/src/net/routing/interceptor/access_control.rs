@@ -912,7 +912,7 @@ impl InterceptorTrait for IngressAclEnforcer {
         let allowed = self.filter_message(msg, ctx);
         #[cfg(feature = "stats")]
         if !allowed {
-            self.stats.observe_network_message_dropped(
+            self.stats.observe_network_message_dropped_payload(
                 super::stats_direction(InterceptorFlow::Ingress),
                 msg,
             );
@@ -961,7 +961,7 @@ impl InterceptorTrait for EgressAclEnforcer {
         let allowed = self.filter_message(msg, ctx);
         #[cfg(feature = "stats")]
         if !allowed {
-            self.stats.observe_network_message_dropped(
+            self.stats.observe_network_message_dropped_payload(
                 super::stats_direction(InterceptorFlow::Egress),
                 msg,
             );

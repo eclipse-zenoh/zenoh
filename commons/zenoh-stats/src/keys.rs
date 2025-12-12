@@ -53,11 +53,10 @@ impl StatsKeysTree {
             return StatsKeys::default();
         }
         if let Some(cache) = cache() {
-            return if cache.generation.load(Ordering::Acquire) == self.generation {
-                unsafe { &*cache.keys.get() }.clone()
-            } else {
-                self.update_cache(cache, keyexpr)
-            };
+            if cache.generation.load(Ordering::Acquire) != self.generation {
+                self.update_cache(cache, keyexpr);
+            }
+            return unsafe { &*cache.keys.get() }.clone();
         }
         self.compute_keys(keyexpr)
     }
@@ -67,12 +66,17 @@ impl StatsKeysTree {
         &self,
         cache: &StatsKeyCache,
         keyexpr: impl FnOnce() -> Option<&'a keyexpr>,
-    ) -> StatsKeys {
-        let _guard = cache.mutex.lock().unwrap();
+    ) {
+        // Compute the key before locking, in order to shorten the critical section.
+        // The keys may be computed twice, but it matters less than blocking on a lock.
         let keys = self.compute_keys(keyexpr);
-        unsafe { *cache.keys.get() = keys.clone() };
+        let _guard = cache.mutex.lock().unwrap();
+        // Do not override the cache if it has already been set.
+        if cache.generation.load(Ordering::Acquire) == self.generation {
+            return;
+        }
+        unsafe { *cache.keys.get() = keys };
         cache.generation.store(self.generation, Ordering::Release);
-        keys
     }
 
     #[cold]
@@ -147,7 +151,7 @@ impl HistogramPerKeyInner {
 pub(crate) struct HistogramPerKey(Arc<Mutex<HistogramPerKeyInner>>);
 
 impl HistogramPerKey {
-    pub fn new(buckets: HistogramBuckets, stats_keys: StatsKeysRegistry) -> Self {
+    pub(crate) fn new(buckets: HistogramBuckets, stats_keys: StatsKeysRegistry) -> Self {
         Self(Arc::new(Mutex::new(HistogramPerKeyInner {
             stats_keys,
             buckets,
@@ -155,10 +159,16 @@ impl HistogramPerKey {
         })))
     }
 
-    pub fn observe(&self, keys: &StatsKeys, value: u64) {
+    #[inline(always)]
+    pub(crate) fn observe(&self, keys: &StatsKeys, value: u64) {
         if keys.0.is_empty() {
             return;
         }
+        self.observe_cold(keys, value);
+    }
+
+    #[cold]
+    fn observe_cold(&self, keys: &StatsKeys, value: u64) {
         let inner = &mut *self.0.lock().unwrap();
         for key in keys.0.iter().copied() {
             let (sum, buckets) = inner.histogram(key);

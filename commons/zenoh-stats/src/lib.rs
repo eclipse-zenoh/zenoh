@@ -11,8 +11,8 @@ mod transport;
 
 pub use crate::{
     keys::{StatsKeyCache, StatsKeys, StatsKeysTree},
-    labels::{LocalityLabel, ReasonLabel, ResourceLabel},
-    link::{rx_observe_network_message_finalize, with_tx_observe_network_message, LinkStats},
+    labels::{LocalityLabel, MessageLabel, ReasonLabel, ResourceLabel, SpaceLabel},
+    link::LinkStats,
     registry::StatsRegistry,
     transport::{DropStats, TransportStats},
     StatsDirection::*,

@@ -286,7 +286,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
             );
             #[cfg(feature = "stats")]
             self.stats
-                .observe_network_message_dropped(stats_direction(self.flow), msg);
+                .observe_network_message_dropped_payload(stats_direction(self.flow), msg);
             false
         }
     }
