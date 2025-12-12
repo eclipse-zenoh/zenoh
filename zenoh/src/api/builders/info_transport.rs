@@ -19,7 +19,10 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
 use crate::{
-    api::{session::UndeclarableSealed, Id, session::WeakSession},
+    api::{
+        session::{UndeclarableSealed, WeakSession},
+        Id,
+    },
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
     session::{Transport, TransportEvent},
@@ -152,7 +155,9 @@ impl<Handler> TransportEventsListener<Handler> {
         // Set flag first to avoid double panic
         self.inner.undeclare_on_drop = false;
         // Call session's undeclare method with the stored id
-        self.inner.session.undeclare_transport_events_listener_inner(self.inner.id)
+        self.inner
+            .session
+            .undeclare_transport_events_listener_inner(self.inner.id)
     }
 
     /// Returns a reference to this listener's handler.

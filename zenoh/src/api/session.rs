@@ -2121,7 +2121,9 @@ impl SessionInner {
 
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
-        state.transport_events_listeners.insert(id, listener_state.clone());
+        state
+            .transport_events_listeners
+            .insert(id, listener_state.clone());
         drop(state); // Release lock before calling history
 
         // Send history if requested

@@ -17,6 +17,7 @@ use std::future::{IntoFuture, Ready};
 use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::core::WhatAmI;
+
 use crate::net::runtime::DynamicRuntime;
 
 /// A builder returned by [`SessionInfo::zid()`](crate::session::SessionInfo::zid) that allows

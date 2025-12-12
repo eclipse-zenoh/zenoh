@@ -73,18 +73,17 @@ use super::{
         router::Router,
     },
 };
-#[cfg(feature = "unstable")]
-use crate::api::{handlers::Callback, info::{LinkEvent, Transport}};
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 #[cfg(feature = "unstable")]
 use crate::api::{
-    handlers::{CallbackParameter},
-    info::{Link},
-    sample::SampleKind,
+    handlers::Callback,
+    info::{LinkEvent, Transport},
 };
+#[cfg(feature = "unstable")]
+use crate::api::{handlers::CallbackParameter, info::Link, sample::SampleKind};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -135,9 +134,7 @@ pub(crate) struct RuntimeState {
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "unstable")]
-    link_event_callbacks: std::sync::RwLock<
-        HashMap<u32, Callback<LinkEvent>>,
-    >,
+    link_event_callbacks: std::sync::RwLock<HashMap<u32, Callback<LinkEvent>>>,
     #[cfg(feature = "unstable")]
     link_event_callback_counter: AtomicU32,
 }

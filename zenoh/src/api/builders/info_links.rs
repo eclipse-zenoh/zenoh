@@ -19,12 +19,11 @@ use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
-use crate::api::{session::UndeclarableSealed, Id};
-use crate::handlers::locked;
-use crate::session::{Link, LinkEvent};
 use crate::{
-    handlers::{Callback, DefaultHandler, IntoHandler},
+    api::{session::UndeclarableSealed, Id},
+    handlers::{locked, Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
+    session::{Link, LinkEvent},
 };
 
 /// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
