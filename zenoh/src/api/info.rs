@@ -25,15 +25,14 @@ use zenoh_protocol::core::Locator;
 use crate::api::builders::info_links::{LinkEventsListenerBuilder, LinksBuilder};
 #[cfg(feature = "unstable")]
 use crate::api::builders::info_transport::{TransportEventsListenerBuilder, TransportsBuilder};
+use crate::api::{
+    builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
+    session::WeakSession,
+};
 #[cfg(feature = "unstable")]
 use crate::api::{
     handlers::{CallbackParameter, DefaultHandler},
-    session::WeakSession,
     sample::SampleKind,
-};
-use crate::{
-    api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
-    net::runtime::DynamicRuntime,
 };
 
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
@@ -53,8 +52,6 @@ use crate::{
 /// # }
 /// ```
 pub struct SessionInfo {
-    pub(crate) runtime: DynamicRuntime,
-    #[cfg(feature = "unstable")]
     pub(crate) session: WeakSession,
 }
 
@@ -70,7 +67,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn zid(&self) -> ZenohIdBuilder<'_> {
-        ZenohIdBuilder::new(&self.runtime)
+        ZenohIdBuilder::new(&self.session.runtime)
     }
 
     /// Return the [`ZenohId`](crate::session::ZenohId) of the zenoh routers this process is currently connected to,
@@ -87,7 +84,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn routers_zid(&self) -> RoutersZenohIdBuilder<'_> {
-        RoutersZenohIdBuilder::new(&self.runtime)
+        RoutersZenohIdBuilder::new(&self.session.runtime)
     }
 
     /// Return the [`ZenohId`](crate::session::ZenohId) of the zenoh peers this process is currently connected to.
@@ -102,7 +99,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn peers_zid(&self) -> PeersZenohIdBuilder<'_> {
-        PeersZenohIdBuilder::new(&self.runtime)
+        PeersZenohIdBuilder::new(&self.session.runtime)
     }
 
     /// Return the locators on which the current zenoh [`Session`](crate::Session) is listening to.
@@ -119,7 +116,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
-        ResolveClosure::new(|| self.runtime.get_locators())
+        ResolveClosure::new(|| self.session.runtime.get_locators())
     }
 
     /// Return information about currently opened transport sessions. Transport session is a connection to an another zenoh node.
@@ -137,7 +134,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn transports(&self) -> TransportsBuilder<'_> {
-        TransportsBuilder::new(&self.runtime)
+        TransportsBuilder::new(&self.session.runtime)
     }
 
     /// Return information about links across all transports.
@@ -155,7 +152,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn links(&self) -> LinksBuilder<'_> {
-        LinksBuilder::new(&self.runtime)
+        LinksBuilder::new(&self.session.runtime)
     }
 
     /// Subscribe to transport lifecycle events.
@@ -212,7 +209,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn link_events_listener(&self) -> LinkEventsListenerBuilder<'_, DefaultHandler> {
-        LinkEventsListenerBuilder::new(&self.runtime)
+        LinkEventsListenerBuilder::new(&self.session.runtime)
     }
 }
 

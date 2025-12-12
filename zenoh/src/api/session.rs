@@ -922,8 +922,6 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            runtime: self.0.runtime.deref().clone(),
-            #[cfg(feature = "unstable")]
             session: self.downgrade(),
         }
     }
