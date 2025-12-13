@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[path = "common/mod.rs"]
+mod common;
+
 #[cfg(feature = "unstable")]
 mod tests {
     use std::{
@@ -21,6 +24,10 @@ mod tests {
 
     use zenoh::Config;
 
+    use crate::common::{close_session, open_session_unicast};
+
+    use super::common;
+
     const SLEEP: Duration = Duration::from_millis(100);
 
     /// Test that transports() returns an iterator of Transport objects
@@ -28,25 +35,7 @@ mod tests {
     async fn test_info_transports() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17447".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
-
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17447".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -83,8 +72,7 @@ mod tests {
             "Session2 should have at least one transport"
         );
 
-        session1.close().await.unwrap();
-        session2.close().await.unwrap();
+        close_session(session1, session2).await;
     }
 
     /// Test that links() returns an iterator of Link objects
@@ -92,25 +80,7 @@ mod tests {
     async fn test_info_links() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17448".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
-
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17448".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17448"]).await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -142,8 +112,7 @@ mod tests {
         let links2: Vec<_> = session2.info().links().await.collect();
         assert!(!links2.is_empty(), "Session2 should have at least one link");
 
-        session1.close().await.unwrap();
-        session2.close().await.unwrap();
+        close_session(session1, session2).await;
     }
 
     /// Test that the iterator pattern works correctly
@@ -151,25 +120,7 @@ mod tests {
     async fn test_info_iterator_pattern() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17449".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
-
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17449".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17449"]).await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -195,8 +146,7 @@ mod tests {
             "Should have iterated over at least one link"
         );
 
-        session1.close().await.unwrap();
-        session2.close().await.unwrap();
+        close_session(session1, session2).await;
     }
 
     /// Test that transport_events_listener() delivers events when transports open and close
@@ -351,25 +301,7 @@ mod tests {
     async fn test_event_history() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer with listener
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17452".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
-
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17452".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17452"]).await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -416,8 +348,7 @@ mod tests {
             event.link().dst()
         );
 
-        session1.close().await.unwrap();
-        session2.close().await.unwrap();
+        close_session(session1, session2).await;
     }
 
     /// Test that links() can be filtered by transport ZID
@@ -508,8 +439,7 @@ mod tests {
 
         println!("Successfully verified links() filtering by transport");
 
-        session1.close().await.unwrap();
-        session2.close().await.unwrap();
+        close_session(session1, session2).await;
         session3.close().await.unwrap();
     }
 
