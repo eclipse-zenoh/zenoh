@@ -22,11 +22,7 @@ mod tests {
         time::Duration,
     };
 
-    use zenoh::Config;
-
-    use crate::common::{close_session, open_session_unicast};
-
-    use super::common;
+    use crate::common::{close_session, open_session_connect, open_session_listen, open_session_unicast};
 
     const SLEEP: Duration = Duration::from_millis(100);
 
@@ -154,15 +150,7 @@ mod tests {
     async fn test_transport_events() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer with listener
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17450".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
+        let session1 = open_session_listen(&["tcp/127.0.0.1:17450"]).await;
 
         // Subscribe to transport events with history
         let events = session1
@@ -172,15 +160,7 @@ mod tests {
             .with(flume::bounded(32))
             .await;
 
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17450".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let session2 = open_session_connect(&["tcp/127.0.0.1:17450"]).await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -225,15 +205,7 @@ mod tests {
     async fn test_link_events() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer with listener
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17451".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
+        let session1 = open_session_listen(&["tcp/127.0.0.1:17451"]).await;
 
         // Subscribe to link events with history
         let events = session1
@@ -243,15 +215,7 @@ mod tests {
             .with(flume::bounded(32))
             .await;
 
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17451".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let session2 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -356,34 +320,9 @@ mod tests {
     async fn test_links_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer with listener
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17458".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
-
-        // Create two peers that connect to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17458".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
-
-        let mut config3 = Config::default();
-        config3
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17458".parse().unwrap()])
-            .unwrap();
-        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session3 = zenoh::open(config3).await.unwrap();
+        let session1 = open_session_listen(&["tcp/127.0.0.1:17458"]).await;
+        let session2 = open_session_connect(&["tcp/127.0.0.1:17458"]).await;
+        let session3 = open_session_connect(&["tcp/127.0.0.1:17458"]).await;
 
         // Wait for connections
         tokio::time::sleep(SLEEP).await;
@@ -448,25 +387,8 @@ mod tests {
     async fn test_link_events_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer with listener
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
-
-        // Create second peer first (we'll filter for this one)
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let session1 = open_session_listen(&["tcp/127.0.0.1:17459"]).await;
+        let session2 = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
 
         // Wait for connection
         tokio::time::sleep(SLEEP).await;
@@ -492,14 +414,7 @@ mod tests {
             .await;
 
         // Create third peer that connects - should NOT trigger events (different transport)
-        let mut config3 = Config::default();
-        config3
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
-            .unwrap();
-        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session3 = zenoh::open(config3).await.unwrap();
+        let session3 = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
 
         // Wait for potential events
         tokio::time::sleep(SLEEP).await;
@@ -515,18 +430,7 @@ mod tests {
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let mut config2_new = Config::default();
-        config2_new
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17459".parse().unwrap()])
-            .unwrap();
-        config2_new
-            .scouting
-            .multicast
-            .set_enabled(Some(false))
-            .unwrap();
-        let _session2_new = zenoh::open(config2_new).await.unwrap();
+        let _session2_new = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
 
         // Wait for events (poll with timeout)
         let start = std::time::Instant::now();
@@ -556,15 +460,7 @@ mod tests {
     async fn test_transport_events_background() {
         zenoh_util::init_log_from_env_or("error");
 
-        // Create first peer with listener
-        let mut config1 = Config::default();
-        config1
-            .listen
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17460".parse().unwrap()])
-            .unwrap();
-        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session1 = zenoh::open(config1).await.unwrap();
+        let session1 = open_session_listen(&["tcp/127.0.0.1:17460"]).await;
 
         // Track events using atomic counters
         let opened_count = Arc::new(AtomicUsize::new(0));
@@ -591,15 +487,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Create second peer that connects to first
-        let mut config2 = Config::default();
-        config2
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17460".parse().unwrap()])
-            .unwrap();
-        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session2 = zenoh::open(config2).await.unwrap();
+        let session2 = open_session_connect(&["tcp/127.0.0.1:17460"]).await;
 
         // Wait for connection to establish and event to be processed
         tokio::time::sleep(SLEEP * 2).await;
@@ -627,14 +515,7 @@ mod tests {
         println!("Received {} transport closed events", closed);
 
         // Verify the background listener is still working by creating another connection
-        let mut config3 = Config::default();
-        config3
-            .connect
-            .endpoints
-            .set(vec!["tcp/127.0.0.1:17460".parse().unwrap()])
-            .unwrap();
-        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let session3 = zenoh::open(config3).await.unwrap();
+        let session3 = open_session_connect(&["tcp/127.0.0.1:17460"]).await;
 
         tokio::time::sleep(SLEEP * 2).await;
 

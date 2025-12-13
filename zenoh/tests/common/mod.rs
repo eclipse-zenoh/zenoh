@@ -20,8 +20,7 @@ use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
-    // Open the sessions
+pub async fn open_session_listen(endpoints: &[&str]) -> Session {
     let mut config = zenoh::Config::default();
     config
         .listen
@@ -34,9 +33,10 @@ pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
-    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
+    ztimeout!(zenoh::open(config)).unwrap()
+}
 
+pub async fn open_session_connect(endpoints: &[&str]) -> Session {
     let mut config = zenoh::Config::default();
     config
         .connect
@@ -49,34 +49,22 @@ pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
         )
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
-    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
+    ztimeout!(zenoh::open(config)).unwrap()
+}
 
+pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
+    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
+    let peer01 = open_session_listen(endpoints).await;
+    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
+    let peer02 = open_session_connect(endpoints).await;
     (peer01, peer02)
 }
 
 pub async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
-    // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec![endpoint01.parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session: {endpoint01}");
-    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
-
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec![endpoint02.parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let peer01 = open_session_listen(&[endpoint01]).await;
     println!("[  ][02a] Opening peer02 session: {endpoint02}");
-    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
-
+    let peer02 = open_session_listen(&[endpoint02]).await;
     (peer01, peer02)
 }
 
