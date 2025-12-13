@@ -14,7 +14,10 @@
 
 #[cfg(feature = "unstable")]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        sync::{atomic::AtomicUsize, Arc},
+        time::Duration,
+    };
 
     use zenoh::Config;
 
@@ -544,7 +547,7 @@ mod tests {
         let target_zid = *transports[0].zid();
 
         // Track events received
-        let events_received = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events_received = Arc::new(AtomicUsize::new(0));
         let events_received_clone = events_received.clone();
 
         // Subscribe to link events with filter for target_zid
@@ -612,6 +615,108 @@ mod tests {
         println!(
             "Successfully verified linkl_events_listener() filtering by transport (received {} events)",
             final_count
+        );
+
+        session1.close().await.unwrap();
+        session3.close().await.unwrap();
+    }
+
+    /// Test that transport_events_listener() works in background mode
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events_background() {
+        zenoh_util::init_log_from_env_or("error");
+
+        // Create first peer with listener
+        let mut config1 = Config::default();
+        config1
+            .listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17460".parse().unwrap()])
+            .unwrap();
+        config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = zenoh::open(config1).await.unwrap();
+
+        // Track events using atomic counters
+        let opened_count = Arc::new(AtomicUsize::new(0));
+        let closed_count = Arc::new(AtomicUsize::new(0));
+        let opened_count_clone = opened_count.clone();
+        let closed_count_clone = closed_count.clone();
+
+        // Subscribe to transport events in background mode
+        // Note: We don't keep a reference to the listener - it runs in background
+        session1
+            .info()
+            .transport_events_listener()
+            .history(false)
+            .callback(move |event| {
+                if event.is_open() {
+                    opened_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    println!("Background: Transport opened: {}", event.transport().zid());
+                } else if event.is_closed() {
+                    closed_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    println!("Background: Transport closed");
+                }
+            })
+            .background()
+            .await
+            .unwrap();
+
+        // Create second peer that connects to first
+        let mut config2 = Config::default();
+        config2
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17460".parse().unwrap()])
+            .unwrap();
+        config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = zenoh::open(config2).await.unwrap();
+
+        // Wait for connection to establish and event to be processed
+        tokio::time::sleep(SLEEP * 2).await;
+
+        // Should have received at least one transport opened event
+        let opened = opened_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            opened > 0,
+            "Should have received at least one transport opened event, got {}",
+            opened
+        );
+        println!("Received {} transport opened events", opened);
+
+        // Close session2 to trigger transport close event
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP * 2).await;
+
+        // Should have received at least one transport closed event
+        let closed = closed_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            closed > 0,
+            "Should have received at least one transport closed event, got {}",
+            closed
+        );
+        println!("Received {} transport closed events", closed);
+
+        // Verify the background listener is still working by creating another connection
+        let mut config3 = Config::default();
+        config3
+            .connect
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:17460".parse().unwrap()])
+            .unwrap();
+        config3.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session3 = zenoh::open(config3).await.unwrap();
+
+        tokio::time::sleep(SLEEP * 2).await;
+
+        // Should have received another opened event
+        let opened_final = opened_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            opened_final > opened,
+            "Should have received additional transport opened event after new connection"
+        );
+        println!(
+            "Total transport opened events: {} (initial: {})",
+            opened_final, opened
         );
 
         session1.close().await.unwrap();
