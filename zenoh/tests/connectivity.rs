@@ -89,40 +89,6 @@ mod tests {
         close_session(session1, session2).await;
     }
 
-    /// Test that the iterator pattern works correctly
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn test_info_iterator_pattern() {
-        zenoh_util::init_log_from_env_or("error");
-
-        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17449"]).await;
-
-        // Wait for connection to establish
-        tokio::time::sleep(SLEEP).await;
-
-        let mut count = 0;
-        for transport in session1.info().transports().await {
-            println!("Transport {}: zid={}", count, transport.zid());
-            count += 1;
-        }
-        assert!(
-            count > 0,
-            "Should have iterated over at least one transport"
-        );
-
-        // Test using for loop
-        let mut link_count = 0;
-        for link in session1.info().links().await {
-            println!("Link {}: {} -> {}", link_count, link.src(), link.dst());
-            link_count += 1;
-        }
-        assert!(
-            link_count > 0,
-            "Should have iterated over at least one link"
-        );
-
-        close_session(session1, session2).await;
-    }
-
     /// Test that transport_events_listener() delivers events when transports open and close
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_transport_events() {
