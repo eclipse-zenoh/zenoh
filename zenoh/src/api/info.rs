@@ -15,14 +15,26 @@
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 
 #[cfg(feature = "unstable")]
+use zenoh_config::{wrappers::ZenohId, WhatAmI};
+#[cfg(feature = "unstable")]
 use zenoh_core::{Resolve, ResolveClosure};
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Locator;
 
-use crate::{
-    api::builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
-    net::runtime::DynamicRuntime,
+#[cfg(feature = "unstable")]
+use crate::api::builders::info_links::{LinkEventsListenerBuilder, LinksBuilder};
+#[cfg(feature = "unstable")]
+use crate::api::builders::info_transport::{TransportEventsListenerBuilder, TransportsBuilder};
+use crate::api::{
+    builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
+    session::WeakSession,
 };
+#[cfg(feature = "unstable")]
+use crate::api::{
+    handlers::{CallbackParameter, DefaultHandler},
+    sample::SampleKind,
+};
+
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
 ///
@@ -40,7 +52,7 @@ use crate::{
 /// # }
 /// ```
 pub struct SessionInfo {
-    pub(crate) runtime: DynamicRuntime,
+    pub(crate) session: WeakSession,
 }
 
 impl SessionInfo {
@@ -55,7 +67,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn zid(&self) -> ZenohIdBuilder<'_> {
-        ZenohIdBuilder::new(&self.runtime)
+        ZenohIdBuilder::new(&self.session.runtime)
     }
 
     /// Return the [`ZenohId`](crate::session::ZenohId) of the zenoh routers this process is currently connected to,
@@ -72,7 +84,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn routers_zid(&self) -> RoutersZenohIdBuilder<'_> {
-        RoutersZenohIdBuilder::new(&self.runtime)
+        RoutersZenohIdBuilder::new(&self.session.runtime)
     }
 
     /// Return the [`ZenohId`](crate::session::ZenohId) of the zenoh peers this process is currently connected to.
@@ -87,7 +99,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn peers_zid(&self) -> PeersZenohIdBuilder<'_> {
-        PeersZenohIdBuilder::new(&self.runtime)
+        PeersZenohIdBuilder::new(&self.session.runtime)
     }
 
     /// Return the locators on which the current zenoh [`Session`](crate::Session) is listening to.
@@ -104,6 +116,237 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
-        ResolveClosure::new(|| self.runtime.get_locators())
+        ResolveClosure::new(|| self.session.runtime.get_locators())
+    }
+
+    /// Return information about currently opened transport sessions. Transport session is a connection to an another zenoh node.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let transports = session.info().transports().await;
+    /// for transport in transports {
+    ///     println!("Transport: zid={}, whatami={:?}", transport.zid(), transport.whatami());
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn transports(&self) -> TransportsBuilder<'_> {
+        TransportsBuilder::new(&self.session.runtime)
+    }
+
+    /// Return information about links across all transports.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let links = session.info().links().await;
+    /// for link in links {
+    ///     println!("Link: {} -> {}", link.src(), link.dst());
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn links(&self) -> LinksBuilder<'_> {
+        LinksBuilder::new(&self.session.runtime)
+    }
+
+    /// Subscribe to transport lifecycle events.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let events = session.info()
+    ///     .transport_events_listener()
+    ///     .history(true)
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    ///
+    /// while let Ok(event) = events.recv_async().await {
+    ///     match event.kind() {
+    ///         SampleKind::Put => println!("Transport opened: {}", event.transport().zid()),
+    ///         SampleKind::Delete => println!("Transport closed"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn transport_events_listener(&self) -> TransportEventsListenerBuilder<'_, DefaultHandler> {
+        TransportEventsListenerBuilder::new(&self.session)
+    }
+
+    /// Subscribe to link lifecycle events.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let events = session.info()
+    ///     .linkl_events_listener()
+    ///     .history(true)
+    ///     .with(flume::bounded(32))
+    ///     .await;
+    ///
+    /// while let Ok(event) = events.recv_async().await {
+    ///     match event.kind() {
+    ///         SampleKind::Put => println!("Link added: {} -> {}",
+    ///             event.link().src(), event.link().dst()),
+    ///         SampleKind::Delete => println!("Link removed"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn link_events_listener(&self) -> LinkEventsListenerBuilder<'_, DefaultHandler> {
+        LinkEventsListenerBuilder::new(&self.session.runtime)
+    }
+}
+
+/// Represents a transport connection to a remote zenoh node.
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "unstable", derive(serde::Serialize))]
+pub struct Transport {
+    pub(crate) zid: ZenohId,
+    pub(crate) whatami: WhatAmI,
+}
+
+#[zenoh_macros::unstable]
+impl Transport {
+    /// Gets the ZenohId of the remote zenoh node.
+    #[inline]
+    pub fn zid(&self) -> &ZenohId {
+        &self.zid
+    }
+
+    /// Gets the type of the remote zenoh node (Router, Peer, or Client).
+    #[inline]
+    pub fn whatami(&self) -> WhatAmI {
+        self.whatami
+    }
+}
+
+/// Represents a physical link within a transport.
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "unstable", derive(serde::Serialize))]
+pub struct Link {
+    pub(crate) zid: ZenohId,
+    pub(crate) src: Locator,
+    pub(crate) dst: Locator,
+}
+
+#[zenoh_macros::unstable]
+impl Link {
+    /// Gets the ZenohId of the transport this link belongs to.
+    #[inline]
+    pub fn zid(&self) -> &ZenohId {
+        &self.zid
+    }
+
+    /// Gets the source locator (local endpoint).
+    #[inline]
+    pub fn src(&self) -> &Locator {
+        &self.src
+    }
+
+    /// Gets the destination locator (remote endpoint).
+    #[inline]
+    pub fn dst(&self) -> &Locator {
+        &self.dst
+    }
+}
+
+/// Event emitted when a transport is opened or closed
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransportEvent {
+    pub(crate) kind: SampleKind, // Put = opened, Delete = closed
+    pub(crate) transport: Transport,
+}
+
+#[zenoh_macros::unstable]
+impl TransportEvent {
+    /// Returns the kind of event (Put for opened, Delete for closed)
+    pub fn kind(&self) -> SampleKind {
+        self.kind
+    }
+
+    /// Returns a reference to the transport
+    pub fn transport(&self) -> &Transport {
+        &self.transport
+    }
+
+    /// Returns true if this is an "opened" event
+    pub fn is_open(&self) -> bool {
+        self.kind == SampleKind::Put
+    }
+
+    /// Returns true if this is a "closed" event
+    pub fn is_closed(&self) -> bool {
+        self.kind == SampleKind::Delete
+    }
+}
+
+#[zenoh_macros::unstable]
+impl CallbackParameter for TransportEvent {
+    type Message<'a> = Self;
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
+    }
+}
+
+/// Event emitted when a link is added or removed
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkEvent {
+    pub(crate) kind: SampleKind, // Put = added, Delete = removed
+    pub(crate) link: Link,
+}
+
+#[zenoh_macros::unstable]
+impl LinkEvent {
+    /// Returns the kind of event (Put for added, Delete for removed)
+    pub fn kind(&self) -> SampleKind {
+        self.kind
+    }
+
+    /// Returns a reference to the link
+    pub fn link(&self) -> &Link {
+        &self.link
+    }
+
+    /// Returns the ZenohId of the transport this link belongs to
+    pub fn transport_zid(&self) -> &ZenohId {
+        self.link.zid()
+    }
+
+    /// Returns true if this is an "added" event
+    pub fn is_added(&self) -> bool {
+        self.kind == SampleKind::Put
+    }
+
+    /// Returns true if this is a "removed" event
+    pub fn is_removed(&self) -> bool {
+        self.kind == SampleKind::Delete
+    }
+}
+
+#[zenoh_macros::unstable]
+impl CallbackParameter for LinkEvent {
+    type Message<'a> = Self;
+    fn from_message(msg: Self::Message<'_>) -> Self {
+        msg
     }
 }

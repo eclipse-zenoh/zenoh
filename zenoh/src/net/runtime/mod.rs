@@ -20,6 +20,8 @@
 mod adminspace;
 pub mod orchestrator;
 
+#[cfg(feature = "unstable")]
+use std::collections::HashMap;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -40,7 +42,7 @@ use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
-use zenoh_link::{EndPoint, Link};
+use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
     core::{Locator, WhatAmI, ZenohIdProto},
@@ -75,6 +77,13 @@ use super::{
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "unstable")]
+use crate::api::{
+    handlers::Callback,
+    info::{LinkEvent, Transport},
+};
+#[cfg(feature = "unstable")]
+use crate::api::{handlers::CallbackParameter, info::Link, sample::SampleKind};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -124,6 +133,10 @@ pub(crate) struct RuntimeState {
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
+    #[cfg(feature = "unstable")]
+    link_event_callbacks: std::sync::RwLock<HashMap<u32, Callback<LinkEvent>>>,
+    #[cfg(feature = "unstable")]
+    link_event_callback_counter: AtomicU32,
 }
 
 #[allow(private_interfaces)]
@@ -144,6 +157,34 @@ pub trait IRuntime: Send + Sync {
 
     fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
     fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
+
+    #[cfg(feature = "unstable")]
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
+
+    #[cfg(feature = "unstable")]
+    fn get_links(
+        &self,
+        transport_zid: Option<ZenohId>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
+
+    #[cfg(feature = "unstable")]
+    fn linkl_events_listener(
+        &self,
+        callback: Callback<LinkEvent>,
+        history: bool,
+        transport_zid: Option<ZenohId>,
+    ) -> u32;
+
+    #[cfg(feature = "unstable")]
+    fn cancel_link_events(&self, id: u32);
+
+    #[cfg(feature = "unstable")]
+    fn broadcast_link_event(
+        &self,
+        kind: crate::api::sample::SampleKind,
+        transport_zid: ZenohIdProto,
+        link: &zenoh_link::Link,
+    );
 
     fn new_primitives(
         &self,
@@ -242,6 +283,132 @@ impl IRuntime for RuntimeState {
             .into_iter()
             .filter_map(|t| t.get_peers().ok())
             .collect::<Vec<_>>()
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
+        Box::new(
+            zenoh_runtime::ZRuntime::Net
+                .block_in_place(self.manager.get_transports_unicast())
+                .into_iter()
+                .filter_map(|t| {
+                    t.get_zid().ok().and_then(|zid| {
+                        t.get_whatami().ok().map(|whatami| Transport {
+                            zid: zid.into(),
+                            whatami,
+                        })
+                    })
+                }),
+        )
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_links(
+        &self,
+        transport_zid: Option<ZenohId>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let transports =
+            zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
+
+        let transports = if let Some(filter_zid) = transport_zid {
+            transports
+                .into_iter()
+                .find(|t| t.get_zid().ok() == Some(filter_zid.into()))
+                .into_iter()
+                .collect()
+        } else {
+            transports
+        };
+
+        // Convert transport to links (returns empty vec if get_zid fails)
+        Box::new(transports.into_iter().flat_map(|t| {
+            let Ok(zid) = t.get_zid().map(Into::into) else {
+                return Vec::new();
+            };
+
+            t.get_links()
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |link| Link {
+                    zid,
+                    src: link.src,
+                    dst: link.dst,
+                })
+                .collect::<Vec<_>>()
+        }))
+    }
+
+    #[cfg(feature = "unstable")]
+    fn linkl_events_listener(
+        &self,
+        callback: Callback<LinkEvent>,
+        history: bool,
+        transport_zid: Option<ZenohId>,
+    ) -> u32 {
+        // If history enabled, send Put events for existing links
+        if history {
+            for link in self.get_links(transport_zid) {
+                let event = LinkEvent {
+                    kind: SampleKind::Put,
+                    link,
+                };
+                callback.call(LinkEvent::from_message(event));
+            }
+        }
+
+        // Wrap callback with filter if transport_zid is specified
+        let filtered_callback = if let Some(filter_zid) = transport_zid {
+            let callback_clone = callback.clone();
+            Callback::new(Arc::new(move |event: LinkEvent| {
+                if event.link().zid() == &filter_zid {
+                    callback_clone.call(event);
+                }
+            }))
+        } else {
+            callback
+        };
+
+        // Generate unique ID and register callback for future events
+        let id = self
+            .link_event_callback_counter
+            .fetch_add(1, Ordering::Relaxed);
+        self.link_event_callbacks
+            .write()
+            .unwrap()
+            .insert(id, filtered_callback);
+        id
+    }
+
+    #[cfg(feature = "unstable")]
+    fn cancel_link_events(&self, id: u32) {
+        self.link_event_callbacks.write().unwrap().remove(&id);
+    }
+
+    #[cfg(feature = "unstable")]
+    fn broadcast_link_event(
+        &self,
+        kind: crate::api::sample::SampleKind,
+        transport_zid: ZenohIdProto,
+        link: &zenoh_link::Link,
+    ) {
+        use crate::api::{
+            handlers::CallbackParameter,
+            info::{Link, LinkEvent},
+        };
+
+        let event = LinkEvent {
+            kind,
+            link: Link {
+                zid: transport_zid.into(),
+                src: link.src.clone(),
+                dst: link.dst.clone(),
+            },
+        };
+
+        let callbacks = self.link_event_callbacks.read().unwrap();
+        for callback in callbacks.values() {
+            callback.call(LinkEvent::from_message(event.clone()));
+        }
     }
 
     fn matching_status_remote(
@@ -518,6 +685,10 @@ impl RuntimeBuilder {
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
+                #[cfg(feature = "unstable")]
+                link_event_callbacks: std::sync::RwLock::new(HashMap::new()),
+                #[cfg(feature = "unstable")]
+                link_event_callback_counter: AtomicU32::new(0),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -758,14 +929,14 @@ impl TransportPeerEventHandler for RuntimeSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -830,14 +1001,14 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
