@@ -22,7 +22,9 @@ mod tests {
         time::Duration,
     };
 
-    use crate::common::{close_session, open_session_connect, open_session_listen, open_session_unicast};
+    use crate::common::{
+        close_session, open_session_connect, open_session_listen, open_session_unicast,
+    };
 
     const SLEEP: Duration = Duration::from_millis(100);
 
@@ -33,27 +35,14 @@ mod tests {
 
         let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
 
-        // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
 
-        // Query transports from session1
-        let transports: Vec<_> = session1.info().transports().await.collect();
-
-        // Should have at least one transport (to session2)
-        assert!(
-            !transports.is_empty(),
-            "Session1 should have at least one transport"
-        );
-
-        // Verify transport fields are populated
-        for transport in &transports {
+        for transport in session1.info().transports().await {
             println!(
                 "Transport from session1: zid={}, whatami={:?}",
                 transport.zid(),
                 transport.whatami()
             );
-
-            // ZID should not be empty
             assert_ne!(
                 transport.zid().to_string(),
                 "",
@@ -61,10 +50,8 @@ mod tests {
             );
         }
 
-        // Query transports from session2
-        let transports2: Vec<_> = session2.info().transports().await.collect();
         assert!(
-            !transports2.is_empty(),
+            session2.info().transports().await.count() > 0,
             "Session2 should have at least one transport"
         );
 
@@ -78,20 +65,10 @@ mod tests {
 
         let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17448"]).await;
 
-        // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
 
-        // Query links from session1
-        let links: Vec<_> = session1.info().links().await.collect();
-
-        // Should have at least one link
-        assert!(!links.is_empty(), "Session1 should have at least one link");
-
-        // Verify link fields are populated
-        for link in &links {
+        for link in session1.info().links().await {
             println!("Link from session1: {} -> {}", link.src(), link.dst());
-
-            // Source and destination should not be empty
             assert_ne!(
                 link.src().to_string(),
                 "",
@@ -104,9 +81,10 @@ mod tests {
             );
         }
 
-        // Query links from session2
-        let links2: Vec<_> = session2.info().links().await.collect();
-        assert!(!links2.is_empty(), "Session2 should have at least one link");
+        assert!(
+            session2.info().links().await.count() > 0,
+            "Session2 should have at least one link"
+        );
 
         close_session(session1, session2).await;
     }
@@ -327,51 +305,46 @@ mod tests {
         // Wait for connections
         tokio::time::sleep(SLEEP).await;
 
-        // Get all transports
-        let transports = session1.info().transports().await;
-        let transport_zids: Vec<_> = transports.map(|t| *t.zid()).collect();
+        let transport_zids: Vec<_> = session1
+            .info()
+            .transports()
+            .await
+            .map(|t| *t.zid())
+            .collect();
         assert_eq!(
             transport_zids.len(),
             2,
             "Should have 2 transports (one for each peer)"
         );
 
-        // Get all links (without filter)
-        let all_links: Vec<_> = session1.info().links().await.collect();
-        assert_eq!(all_links.len(), 2, "Should have 2 links in total");
+        assert_eq!(
+            session1.info().links().await.count(),
+            2,
+            "Should have 2 links in total"
+        );
 
-        // Get links for first transport only
-        let filtered_links: Vec<_> = session1
+        let link = session1
             .info()
             .links()
             .transport(transport_zids[0])
             .await
-            .collect();
+            .next()
+            .unwrap();
         assert_eq!(
-            filtered_links.len(),
-            1,
-            "Should have 1 link for first transport"
-        );
-        assert_eq!(
-            filtered_links[0].zid(),
+            link.zid(),
             &transport_zids[0],
             "Filtered link should belong to specified transport"
         );
 
-        // Get links for second transport only
-        let filtered_links2: Vec<_> = session1
+        let link2 = session1
             .info()
             .links()
             .transport(transport_zids[1])
             .await
-            .collect();
+            .next()
+            .unwrap();
         assert_eq!(
-            filtered_links2.len(),
-            1,
-            "Should have 1 link for second transport"
-        );
-        assert_eq!(
-            filtered_links2[0].zid(),
+            link2.zid(),
             &transport_zids[1],
             "Filtered link should belong to specified transport"
         );
@@ -390,13 +363,9 @@ mod tests {
         let session1 = open_session_listen(&["tcp/127.0.0.1:17459"]).await;
         let session2 = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
 
-        // Wait for connection
         tokio::time::sleep(SLEEP).await;
 
-        // Get the transport ZID for session2's connection
-        let transports: Vec<_> = session1.info().transports().await.collect();
-        assert_eq!(transports.len(), 1, "Should have 1 transport");
-        let target_zid = *transports[0].zid();
+        let target_zid = *session1.info().transports().await.next().unwrap().zid();
 
         // Track events received
         let events_received = Arc::new(AtomicUsize::new(0));

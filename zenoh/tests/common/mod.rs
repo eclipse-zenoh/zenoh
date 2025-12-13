@@ -15,6 +15,7 @@
 #![cfg(feature = "internal_config")]
 
 use std::time::Duration;
+
 use zenoh::Session;
 use zenoh_core::ztimeout;
 
