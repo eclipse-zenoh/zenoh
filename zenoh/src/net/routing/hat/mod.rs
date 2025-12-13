@@ -323,3 +323,24 @@ impl CurrentFutureTrait for InterestMode {
         self == &InterestMode::Current || self == &InterestMode::CurrentFuture
     }
 }
+
+/// Checks whether a token should be propagated from a src to a dst face.
+///
+/// A token is fresh if it is new to the infrastructure; i.e. redeclaration of the same
+/// resource should not result in propagation. Undeclaration the resource in question
+/// or declaration of a (potentially matching) resource should however result in propagation.
+fn is_fresh_token(
+    tables: &Tables,
+    res: &Arc<Resource>,
+    src_face: &Arc<FaceState>,
+    dst_face: &mut Arc<FaceState>,
+) -> bool {
+    // Is there any face that
+    !res.session_ctxs.values().any(|ctx| {
+        ctx.token // declared the token
+            && (ctx.face.id != src_face.id) // is not the face that just registered it
+            && (ctx.face.id != dst_face.id || dst_face.zid == tables.zid) // is not the face we are propagating to (except for local)
+            && (ctx.face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
+        // don't forward from/to router/peers
+    })
+}
