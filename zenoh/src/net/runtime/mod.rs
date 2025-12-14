@@ -392,11 +392,6 @@ impl IRuntime for RuntimeState {
         transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
     ) {
-        use crate::api::{
-            handlers::CallbackParameter,
-            info::{Link, LinkEvent},
-        };
-
         let event = LinkEvent {
             kind,
             link: Link {
