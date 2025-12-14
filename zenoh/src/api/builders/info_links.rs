@@ -29,12 +29,12 @@ use crate::api::handlers::locked;
 #[zenoh_macros::unstable]
 use crate::api::info::{Link, LinkEvent};
 #[zenoh_macros::unstable]
+use crate::api::Id;
+#[zenoh_macros::unstable]
 use crate::{
     api::session::{UndeclarableSealed, WeakSession},
     handlers::{Callback, DefaultHandler, IntoHandler},
 };
-#[zenoh_macros::unstable]
-use crate::api::Id;
 
 /// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
 /// access to information about links across all transport sessions. Multiple links can be established
@@ -473,9 +473,11 @@ impl Resolvable for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
 #[zenoh_macros::unstable]
 impl Wait for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
-        let state = self
-            .session
-            .declare_transport_links_listener_inner(self.handler, self.history, self.transport_zid)?;
+        let state = self.session.declare_transport_links_listener_inner(
+            self.handler,
+            self.history,
+            self.transport_zid,
+        )?;
         // Set the listener to not undeclare on drop (background mode)
         // Note: We can't access the listener to set background flag, so we just don't keep a reference
         // The listener will live until explicitly undeclared or session closes

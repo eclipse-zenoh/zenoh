@@ -72,12 +72,12 @@ use super::{
         router::Router,
     },
 };
+#[cfg(feature = "unstable")]
+use crate::api::info::{Link, Transport};
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
-#[cfg(feature = "unstable")]
-use crate::api::info::{Link, Transport};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
