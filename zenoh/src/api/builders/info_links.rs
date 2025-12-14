@@ -287,7 +287,7 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
 ///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let events = session.info()
-///     .linkl_events_listener()
+///     .links_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
 ///     .await;
@@ -352,7 +352,7 @@ impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let transport_zid = /* some ZenohId */;
     /// let events = session.info()
-    ///     .linkl_events_listener()
+    ///     .links_events_listener()
     ///     .transport(transport_zid)
     ///     .with(flume::bounded(32))
     ///     .await;
@@ -400,7 +400,7 @@ where
         let (callback, handler) = self.handler.into_handler();
         let id = self
             .runtime
-            .linkl_events_listener(callback, self.history, self.transport_zid);
+            .links_events_listener(callback, self.history, self.transport_zid);
 
         LinkEventsListener {
             inner: LinkEventsListenerInner {

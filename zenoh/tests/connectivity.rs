@@ -145,7 +145,7 @@ mod tests {
         session1.close().await.unwrap();
     }
 
-    /// Test that linkl_events_listener() delivers events when links are added and removed
+    /// Test that links_events_listener() delivers events when links are added and removed
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_link_events() {
         zenoh_util::init_log_from_env_or("error");
@@ -237,7 +237,7 @@ mod tests {
         println!("History: Transport {}", event.transport().zid());
 
         // Subscribe to link events WITH history - should get existing link
-        let linkl_events_listener = session1
+        let links_events_listener = session1
             .info()
             .link_events_listener()
             .history(true)
@@ -246,7 +246,7 @@ mod tests {
 
         // Should immediately receive event for existing link
         let event =
-            tokio::time::timeout(Duration::from_secs(5), linkl_events_listener.recv_async())
+            tokio::time::timeout(Duration::from_secs(5), links_events_listener.recv_async())
                 .await
                 .expect("Timeout waiting for history link event")
                 .expect("Channel closed");
@@ -322,7 +322,7 @@ mod tests {
         session3.close().await.unwrap();
     }
 
-    /// Test that linkl_events_listener() can be filtered by transport ZID
+    /// Test that links_events_listener() can be filtered by transport ZID
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_link_events_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
@@ -383,7 +383,7 @@ mod tests {
         }
 
         println!(
-            "Successfully verified linkl_events_listener() filtering by transport (received {} events)",
+            "Successfully verified links_events_listener() filtering by transport (received {} events)",
             final_count
         );
 

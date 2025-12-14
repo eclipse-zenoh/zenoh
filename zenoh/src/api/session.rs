@@ -70,7 +70,12 @@ use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
 use super::connectivity;
 #[cfg(feature = "unstable")]
-use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
+use crate::api::{
+    info::{Transport, TransportEvent},
+    query::ReplyKeyExpr,
+    sample::SourceInfo,
+    selector::ZenohParameters,
+};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -126,7 +131,7 @@ zconfigurable! {
 #[cfg(feature = "unstable")]
 pub(crate) struct TransportEventsListenerState {
     pub(crate) id: Id,
-    pub(crate) callback: Callback<crate::api::info::TransportEvent>,
+    pub(crate) callback: Callback<TransportEvent>,
 }
 
 #[cfg(feature = "unstable")]
@@ -2165,8 +2170,6 @@ impl SessionInner {
         kind: SampleKind,
         peer: &zenoh_transport::TransportPeer,
     ) {
-        use crate::api::info::Transport;
-
         let state = zread!(self.state);
         let transport = Transport {
             zid: peer.zid.into(),

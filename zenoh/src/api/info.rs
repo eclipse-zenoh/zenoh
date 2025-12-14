@@ -193,7 +193,7 @@ impl SessionInfo {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let events = session.info()
-    ///     .linkl_events_listener()
+    ///     .links_events_listener()
     ///     .history(true)
     ///     .with(flume::bounded(32))
     ///     .await;

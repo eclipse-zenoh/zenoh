@@ -80,10 +80,11 @@ use crate::api::plugins::PluginsManager;
 #[cfg(feature = "unstable")]
 use crate::api::{
     handlers::Callback,
+    handlers::CallbackParameter,
+    info::Link,
     info::{LinkEvent, Transport},
+    sample::SampleKind,
 };
-#[cfg(feature = "unstable")]
-use crate::api::{handlers::CallbackParameter, info::Link, sample::SampleKind};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -168,7 +169,7 @@ pub trait IRuntime: Send + Sync {
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     #[cfg(feature = "unstable")]
-    fn linkl_events_listener(
+    fn links_events_listener(
         &self,
         callback: Callback<LinkEvent>,
         history: bool,
@@ -181,7 +182,7 @@ pub trait IRuntime: Send + Sync {
     #[cfg(feature = "unstable")]
     fn broadcast_link_event(
         &self,
-        kind: crate::api::sample::SampleKind,
+        kind: SampleKind,
         transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
     );
@@ -339,7 +340,7 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn linkl_events_listener(
+    fn links_events_listener(
         &self,
         callback: Callback<LinkEvent>,
         history: bool,
@@ -387,7 +388,7 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "unstable")]
     fn broadcast_link_event(
         &self,
-        kind: crate::api::sample::SampleKind,
+        kind: SampleKind,
         transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
     ) {
