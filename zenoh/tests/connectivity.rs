@@ -13,15 +13,17 @@
 //
 
 #[cfg(feature = "unstable")]
+#[path = "common/mod.rs"]
+mod common;
+
+#[cfg(feature = "unstable")]
 mod tests {
-    #[path = "common/mod.rs"]
-    mod common;
     use std::{
         sync::{atomic::AtomicUsize, Arc},
         time::Duration,
     };
 
-    use common::{close_session, open_session_connect, open_session_listen, open_session_unicast};
+    use crate::common::{close_session, open_session_connect, open_session_listen, open_session_unicast};
 
     const SLEEP: Duration = Duration::from_millis(100);
 

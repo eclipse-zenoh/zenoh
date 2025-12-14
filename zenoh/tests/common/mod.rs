@@ -61,6 +61,7 @@ pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     (peer01, peer02)
 }
 
+#[allow(dead_code)]
 pub async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     println!("[  ][01a] Opening peer01 session: {endpoint01}");
     let peer01 = open_session_listen(&[endpoint01]).await;
