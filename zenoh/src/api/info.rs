@@ -287,16 +287,6 @@ impl TransportEvent {
     pub fn transport(&self) -> &Transport {
         &self.transport
     }
-
-    /// Returns true if this is an "opened" event
-    pub fn is_open(&self) -> bool {
-        self.kind == SampleKind::Put
-    }
-
-    /// Returns true if this is a "closed" event
-    pub fn is_closed(&self) -> bool {
-        self.kind == SampleKind::Delete
-    }
 }
 
 #[zenoh_macros::unstable]
@@ -330,16 +320,6 @@ impl LinkEvent {
     /// Returns the ZenohId of the transport this link belongs to
     pub fn transport_zid(&self) -> &ZenohId {
         self.link.zid()
-    }
-
-    /// Returns true if this is an "added" event
-    pub fn is_added(&self) -> bool {
-        self.kind == SampleKind::Put
-    }
-
-    /// Returns true if this is a "removed" event
-    pub fn is_removed(&self) -> bool {
-        self.kind == SampleKind::Delete
     }
 }
 

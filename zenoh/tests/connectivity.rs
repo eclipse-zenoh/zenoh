@@ -23,6 +23,8 @@ mod tests {
         time::Duration,
     };
 
+    use zenoh::sample::SampleKind;
+
     use crate::common::{
         close_session, open_session_connect, open_session_listen, open_session_unicast,
     };
@@ -116,7 +118,6 @@ mod tests {
             .expect("Timeout waiting for transport event")
             .expect("Channel closed");
 
-        assert!(event.is_open(), "Event should be an 'open' event");
         assert_eq!(
             event.kind(),
             zenoh::sample::SampleKind::Put,
@@ -134,7 +135,6 @@ mod tests {
             .expect("Timeout waiting for transport close event")
             .expect("Channel closed");
 
-        assert!(event.is_closed(), "Event should be a 'closed' event");
         assert_eq!(
             event.kind(),
             zenoh::sample::SampleKind::Delete,
@@ -171,7 +171,6 @@ mod tests {
             .expect("Timeout waiting for link event")
             .expect("Channel closed");
 
-        assert!(event.is_added(), "Event should be an 'added' event");
         assert_eq!(
             event.kind(),
             zenoh::sample::SampleKind::Put,
@@ -194,7 +193,6 @@ mod tests {
             .expect("Timeout waiting for link removal event")
             .expect("Channel closed");
 
-        assert!(event.is_removed(), "Event should be a 'removed' event");
         assert_eq!(
             event.kind(),
             zenoh::sample::SampleKind::Delete,
@@ -232,7 +230,10 @@ mod tests {
         .expect("Timeout waiting for history transport event")
         .expect("Channel closed");
 
-        assert!(event.is_open(), "History event should be Put (opened)");
+        assert!(
+            event.kind() == SampleKind::Put,
+            "History event should be Put (opened)"
+        );
         println!("History: Transport {}", event.transport().zid());
 
         // Subscribe to link events WITH history - should get existing link
@@ -250,7 +251,6 @@ mod tests {
                 .expect("Timeout waiting for history link event")
                 .expect("Channel closed");
 
-        assert!(event.is_added(), "History event should be Put (added)");
         println!(
             "History: Link {} -> {}",
             event.link().src(),
@@ -411,10 +411,11 @@ mod tests {
             .transport_events_listener()
             .history(false)
             .callback(move |event| {
-                if event.is_open() {
+                if event.kind() == SampleKind::Put {
                     opened_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     println!("Background: Transport opened: {}", event.transport().zid());
-                } else if event.is_closed() {
+                } else {
+                    // SampleKind::Delete
                     closed_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     println!("Background: Transport closed");
                 }
