@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+#[cfg(feature = "unstable")]
+use zenoh::sample::SampleKind;
 use zenoh::session::ZenohId;
 use zenoh_examples::CommonArgs;
 
@@ -35,6 +37,81 @@ async fn main() {
         "peers zid: {:?}",
         info.peers_zid().await.collect::<Vec<ZenohId>>()
     );
+
+    // Display current transports
+    #[cfg(feature = "unstable")]
+    {
+        println!("\ntransports:");
+        let transports = info.transports().await;
+        for transport in transports {
+            println!(
+                "  Transport: zid={}, whatami={:?}",
+                transport.zid(),
+                transport.whatami()
+            );
+        }
+
+        // Display current links
+        println!("\nlinks:");
+        let links = info.links().await;
+        for link in links {
+            println!(
+                "  Link: zid={}, src={} -> dst={}",
+                link.zid(),
+                link.src(),
+                link.dst()
+            );
+        }
+
+        println!("\nConnectivity events (Press CTRL-C to quit):");
+
+        // Set up transport events listener (using default handler)
+        let transport_events = info
+            .transport_events_listener()
+            .history(false) // Don't repeat transports we already printed
+            .await;
+
+        // Set up link events listener (using default handler)
+        let link_events = info
+            .link_events_listener()
+            .history(false) // Don't repeat links we already printed
+            .await;
+
+        // Listen for events until CTRL-C
+        loop {
+            tokio::select! {
+                Ok(event) = transport_events.recv_async() => {
+                    match event.kind() {
+                        SampleKind::Put => println!(
+                            "  [Transport Event] Opened: zid={}, whatami={:?}",
+                            event.transport().zid(),
+                            event.transport().whatami()
+                        ),
+                        SampleKind::Delete => println!(
+                            "  [Transport Event] Closed: zid={}",
+                            event.transport().zid()
+                        ),
+                    }
+                }
+                Ok(event) = link_events.recv_async() => {
+                    match event.kind() {
+                        SampleKind::Put => println!(
+                            "  [Link Event] Added: zid={}, src={} -> dst={}",
+                            event.link().zid(),
+                            event.link().src(),
+                            event.link().dst()
+                        ),
+                        SampleKind::Delete => println!(
+                            "  [Link Event] Removed: zid={}, src={} -> dst={}",
+                            event.link().zid(),
+                            event.link().src(),
+                            event.link().dst()
+                        ),
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
