@@ -21,7 +21,6 @@ mod adminspace;
 pub mod orchestrator;
 
 #[cfg(feature = "unstable")]
-use std::collections::HashMap;
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -78,13 +77,7 @@ use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 #[cfg(feature = "unstable")]
-use crate::api::{
-    handlers::Callback,
-    handlers::CallbackParameter,
-    info::Link,
-    info::{LinkEvent, Transport},
-    sample::SampleKind,
-};
+use crate::api::info::{Link, Transport};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -134,10 +127,6 @@ pub(crate) struct RuntimeState {
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
-    #[cfg(feature = "unstable")]
-    link_event_callbacks: std::sync::RwLock<HashMap<u32, Callback<LinkEvent>>>,
-    #[cfg(feature = "unstable")]
-    link_event_callback_counter: AtomicU32,
 }
 
 #[allow(private_interfaces)]
@@ -167,25 +156,6 @@ pub trait IRuntime: Send + Sync {
         &self,
         transport_zid: Option<ZenohId>,
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
-
-    #[cfg(feature = "unstable")]
-    fn links_events_listener(
-        &self,
-        callback: Callback<LinkEvent>,
-        history: bool,
-        transport_zid: Option<ZenohId>,
-    ) -> u32;
-
-    #[cfg(feature = "unstable")]
-    fn cancel_link_events(&self, id: u32);
-
-    #[cfg(feature = "unstable")]
-    fn broadcast_link_event(
-        &self,
-        kind: SampleKind,
-        transport_zid: ZenohIdProto,
-        link: &zenoh_link::Link,
-    );
 
     fn new_primitives(
         &self,
@@ -337,74 +307,6 @@ impl IRuntime for RuntimeState {
                 })
                 .collect::<Vec<_>>()
         }))
-    }
-
-    #[cfg(feature = "unstable")]
-    fn links_events_listener(
-        &self,
-        callback: Callback<LinkEvent>,
-        history: bool,
-        transport_zid: Option<ZenohId>,
-    ) -> u32 {
-        // If history enabled, send Put events for existing links
-        if history {
-            for link in self.get_links(transport_zid) {
-                let event = LinkEvent {
-                    kind: SampleKind::Put,
-                    link,
-                };
-                callback.call(LinkEvent::from_message(event));
-            }
-        }
-
-        // Wrap callback with filter if transport_zid is specified
-        let filtered_callback = if let Some(filter_zid) = transport_zid {
-            let callback_clone = callback.clone();
-            Callback::new(Arc::new(move |event: LinkEvent| {
-                if event.link().zid() == &filter_zid {
-                    callback_clone.call(event);
-                }
-            }))
-        } else {
-            callback
-        };
-
-        // Generate unique ID and register callback for future events
-        let id = self
-            .link_event_callback_counter
-            .fetch_add(1, Ordering::Relaxed);
-        self.link_event_callbacks
-            .write()
-            .unwrap()
-            .insert(id, filtered_callback);
-        id
-    }
-
-    #[cfg(feature = "unstable")]
-    fn cancel_link_events(&self, id: u32) {
-        self.link_event_callbacks.write().unwrap().remove(&id);
-    }
-
-    #[cfg(feature = "unstable")]
-    fn broadcast_link_event(
-        &self,
-        kind: SampleKind,
-        transport_zid: ZenohIdProto,
-        link: &zenoh_link::Link,
-    ) {
-        let event = LinkEvent {
-            kind,
-            link: Link {
-                zid: transport_zid.into(),
-                src: link.src.clone(),
-                dst: link.dst.clone(),
-            },
-        };
-
-        let callbacks = self.link_event_callbacks.read().unwrap();
-        for callback in callbacks.values() {
-            callback.call(LinkEvent::from_message(event.clone()));
-        }
     }
 
     fn matching_status_remote(
@@ -681,10 +583,6 @@ impl RuntimeBuilder {
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
-                #[cfg(feature = "unstable")]
-                link_event_callbacks: std::sync::RwLock::new(HashMap::new()),
-                #[cfg(feature = "unstable")]
-                link_event_callback_counter: AtomicU32::new(0),
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);

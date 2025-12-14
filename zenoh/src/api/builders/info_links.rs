@@ -30,11 +30,11 @@ use crate::api::handlers::locked;
 use crate::api::info::{Link, LinkEvent};
 #[zenoh_macros::unstable]
 use crate::{
-    api::session::UndeclarableSealed,
+    api::session::{UndeclarableSealed, WeakSession},
     handlers::{Callback, DefaultHandler, IntoHandler},
 };
 #[zenoh_macros::unstable]
-use crate::{api::Id, net::runtime::DynamicRuntime};
+use crate::api::Id;
 
 /// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
 /// access to information about links across all transport sessions. Multiple links can be established
@@ -54,15 +54,15 @@ use crate::{api::Id, net::runtime::DynamicRuntime};
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
 pub struct LinksBuilder<'a> {
-    runtime: &'a DynamicRuntime,
+    session: &'a WeakSession,
     transport_zid: Option<ZenohId>,
 }
 
 #[zenoh_macros::unstable]
 impl<'a> LinksBuilder<'a> {
-    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+    pub(crate) fn new(session: &'a WeakSession) -> Self {
         Self {
-            runtime,
+            session,
             transport_zid: None,
         }
     }
@@ -95,7 +95,7 @@ impl Resolvable for LinksBuilder<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LinksBuilder<'_> {
     fn wait(self) -> Self::To {
-        self.runtime.get_links(self.transport_zid)
+        self.session.runtime.get_links(self.transport_zid)
     }
 }
 
@@ -111,7 +111,7 @@ impl IntoFuture for LinksBuilder<'_> {
 
 #[zenoh_macros::unstable]
 pub(crate) struct LinkEventsListenerInner {
-    pub(crate) runtime: DynamicRuntime,
+    pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
@@ -189,9 +189,10 @@ impl<Handler> LinkEventsListener<Handler> {
     fn undeclare_impl(&mut self) -> ZResult<()> {
         // Set flag first to avoid double panic
         self.inner.undeclare_on_drop = false;
-        // Call runtime's cancel method with the stored id
-        self.inner.runtime.cancel_link_events(self.inner.id);
-        Ok(())
+        // Call session's undeclare method with the stored id
+        self.inner
+            .session
+            .undeclare_transport_links_listener_inner(self.inner.id)
     }
 
     /// Returns a reference to this listener's handler.
@@ -303,8 +304,8 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
-pub struct LinkEventsListenerBuilder<'a, Handler> {
-    runtime: &'a DynamicRuntime,
+pub struct LinkEventsListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
+    session: &'a WeakSession,
     handler: Handler,
     history: bool,
     transport_zid: Option<ZenohId>,
@@ -312,9 +313,9 @@ pub struct LinkEventsListenerBuilder<'a, Handler> {
 
 #[zenoh_macros::unstable]
 impl<'a> LinkEventsListenerBuilder<'a, DefaultHandler> {
-    pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
+    pub(crate) fn new(session: &'a WeakSession) -> Self {
         Self {
-            runtime,
+            session,
             handler: DefaultHandler::default(),
             history: false,
             transport_zid: None,
@@ -336,7 +337,7 @@ impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
         H: IntoHandler<LinkEvent>,
     {
         LinkEventsListenerBuilder {
-            runtime: self.runtime,
+            session: self.session,
             handler,
             history: self.history,
             transport_zid: self.transport_zid,
@@ -382,6 +383,42 @@ impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<'a> LinkEventsListenerBuilder<'a, Callback<LinkEvent>> {
+    /// Run the listener in the background, automatically dropping the handler when done.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::sample::SampleKind;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// // no need to assign and keep a variable for a background listener
+    /// session.info()
+    ///     .link_events_listener()
+    ///     .callback(|event| {
+    ///         match event.kind() {
+    ///             SampleKind::Put => println!("Link added: {} -> {}",
+    ///                 event.link().src(), event.link().dst()),
+    ///             SampleKind::Delete => println!("Link removed"),
+    ///         }
+    ///     })
+    ///     .background()
+    ///     .await
+    ///     .unwrap();
+    /// # }
+    /// ```
+    pub fn background(self) -> LinkEventsListenerBuilder<'a, Callback<LinkEvent>, true> {
+        LinkEventsListenerBuilder {
+            session: self.session,
+            handler: self.handler,
+            history: self.history,
+            transport_zid: self.transport_zid,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> Resolvable for LinkEventsListenerBuilder<'_, Handler>
 where
     Handler: IntoHandler<LinkEvent> + Send,
@@ -398,14 +435,15 @@ where
 {
     fn wait(self) -> Self::To {
         let (callback, handler) = self.handler.into_handler();
-        let id = self
-            .runtime
-            .links_events_listener(callback, self.history, self.transport_zid);
+        let state = self
+            .session
+            .declare_transport_links_listener_inner(callback, self.history, self.transport_zid)
+            .expect("Failed to declare link events listener");
 
         LinkEventsListener {
             inner: LinkEventsListenerInner {
-                runtime: self.runtime.clone(),
-                id,
+                session: self.session.clone(),
+                id: state.id,
                 undeclare_on_drop: true,
             },
             handler,
@@ -419,6 +457,35 @@ where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,
 {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = Ready<<Self as Resolvable>::To>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        std::future::ready(self.wait())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl Resolvable for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
+    type To = ZResult<()>;
+}
+
+#[zenoh_macros::unstable]
+impl Wait for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
+    fn wait(self) -> <Self as Resolvable>::To {
+        let state = self
+            .session
+            .declare_transport_links_listener_inner(self.handler, self.history, self.transport_zid)?;
+        // Set the listener to not undeclare on drop (background mode)
+        // Note: We can't access the listener to set background flag, so we just don't keep a reference
+        // The listener will live until explicitly undeclared or session closes
+        drop(state);
+        Ok(())
+    }
+}
+
+#[zenoh_macros::unstable]
+impl IntoFuture for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
 

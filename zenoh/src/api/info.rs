@@ -152,7 +152,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn links(&self) -> LinksBuilder<'_> {
-        LinksBuilder::new(&self.session.runtime)
+        LinksBuilder::new(&self.session)
     }
 
     /// Subscribe to transport lifecycle events.
@@ -209,7 +209,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn link_events_listener(&self) -> LinkEventsListenerBuilder<'_, DefaultHandler> {
-        LinkEventsListenerBuilder::new(&self.session.runtime)
+        LinkEventsListenerBuilder::new(&self.session)
     }
 }
 

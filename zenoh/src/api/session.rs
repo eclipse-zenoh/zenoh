@@ -143,6 +143,23 @@ impl fmt::Debug for TransportEventsListenerState {
     }
 }
 
+#[cfg(feature = "unstable")]
+pub(crate) struct LinkEventsListenerState {
+    pub(crate) id: Id,
+    pub(crate) callback: Callback<crate::api::info::LinkEvent>,
+    pub(crate) transport_zid: Option<zenoh_config::ZenohId>,
+}
+
+#[cfg(feature = "unstable")]
+impl fmt::Debug for LinkEventsListenerState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("LinkEventsListenerState")
+            .field("id", &self.id)
+            .field("transport_zid", &self.transport_zid)
+            .finish()
+    }
+}
+
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
@@ -161,6 +178,8 @@ pub(crate) struct SessionState {
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     #[cfg(feature = "unstable")]
     pub(crate) transport_events_listeners: HashMap<Id, Arc<TransportEventsListenerState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) link_events_listeners: HashMap<Id, Arc<LinkEventsListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
@@ -192,6 +211,8 @@ impl SessionState {
             matching_listeners: HashMap::new(),
             #[cfg(feature = "unstable")]
             transport_events_listeners: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            link_events_listeners: HashMap::new(),
             queries: HashMap::new(),
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
@@ -2181,6 +2202,93 @@ impl SessionInner {
         // Call all registered callbacks
         for listener in state.transport_events_listeners.values() {
             listener.callback.call(event.clone());
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn declare_transport_links_listener_inner(
+        &self,
+        callback: Callback<crate::api::info::LinkEvent>,
+        history: bool,
+        transport_zid: Option<zenoh_config::ZenohId>,
+    ) -> ZResult<Arc<LinkEventsListenerState>> {
+        let mut state = zwrite!(self.state);
+        let id = self.runtime.next_id();
+        trace!("declare_transport_links_listener_inner() => {id}");
+
+        let listener_state = Arc::new(LinkEventsListenerState {
+            id,
+            callback,
+            transport_zid,
+        });
+
+        state
+            .link_events_listeners
+            .insert(id, listener_state.clone());
+        drop(state); // Release lock before calling history
+
+        // Send history if requested
+        if history {
+            for link in self.runtime.get_links(transport_zid) {
+                let event = crate::api::info::LinkEvent {
+                    kind: SampleKind::Put,
+                    link,
+                };
+                listener_state.callback.call(event);
+            }
+        }
+
+        Ok(listener_state)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn undeclare_transport_links_listener_inner(&self, sid: Id) -> ZResult<()> {
+        let state = {
+            let mut state = zwrite!(self.state);
+            if state.primitives.is_none() {
+                return Ok(());
+            }
+
+            state.link_events_listeners.remove(&sid)
+        };
+
+        if let Some(state) = state {
+            trace!("undeclare_transport_links_listener_inner({:?})", state);
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find LinkEventsListener").into())
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn broadcast_link_event(
+        &self,
+        kind: SampleKind,
+        transport_zid: zenoh_protocol::core::ZenohIdProto,
+        link: &zenoh_link::Link,
+    ) {
+        use crate::api::info::Link;
+        let state = zread!(self.state);
+        let link_info = Link {
+            zid: transport_zid.into(),
+            src: link.src.clone(),
+            dst: link.dst.clone(),
+        };
+
+        let event = crate::api::info::LinkEvent {
+            kind,
+            link: link_info,
+        };
+
+        // Call all registered callbacks, filtering by transport_zid if specified
+        for listener in state.link_events_listeners.values() {
+            if let Some(filter_zid) = &listener.transport_zid {
+                if filter_zid == event.link.zid() {
+                    listener.callback.call(event.clone());
+                }
+            } else {
+                listener.callback.call(event.clone());
+            }
         }
     }
 

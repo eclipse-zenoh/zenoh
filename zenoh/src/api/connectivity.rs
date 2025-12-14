@@ -87,14 +87,12 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     fn new_link(&self, link: zenoh_link::Link) {
         // Broadcast link added event
         self.session
-            .runtime
             .broadcast_link_event(SampleKind::Put, self.peer_zid, &link);
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
         // Broadcast link removed event
         self.session
-            .runtime
             .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link);
     }
 
