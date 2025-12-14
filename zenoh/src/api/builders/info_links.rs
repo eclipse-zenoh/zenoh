@@ -156,6 +156,7 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 /// # }
 /// ```
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub struct LinkEventsListener<Handler> {
     pub(crate) inner: LinkEventsListenerInner,
     pub(crate) handler: Handler,
