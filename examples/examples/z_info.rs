@@ -44,23 +44,14 @@ async fn main() {
         println!("\ntransports:");
         let transports = info.transports().await;
         for transport in transports {
-            println!(
-                "  Transport: zid={}, whatami={:?}",
-                transport.zid(),
-                transport.whatami()
-            );
+            println!("{:?}", transport);
         }
 
         // Display current links
         println!("\nlinks:");
         let links = info.links().await;
         for link in links {
-            println!(
-                "  Link: zid={}, src={} -> dst={}",
-                link.zid(),
-                link.src(),
-                link.dst()
-            );
+            println!("{:?}", link);
         }
 
         println!("\nConnectivity events (Press CTRL-C to quit):");
@@ -82,31 +73,22 @@ async fn main() {
             tokio::select! {
                 Ok(event) = transport_events.recv_async() => {
                     match event.kind() {
-                        SampleKind::Put => println!(
-                            "  [Transport Event] Opened: zid={}, whatami={:?}",
-                            event.transport().zid(),
-                            event.transport().whatami()
-                        ),
-                        SampleKind::Delete => println!(
-                            "  [Transport Event] Closed: zid={}",
-                            event.transport().zid()
-                        ),
+                        SampleKind::Put => {
+                            println!("[Transport Event] Opened: {:?}", event.transport());
+                        }
+                        SampleKind::Delete => {
+                            println!("[Transport Event] Closed: {:?}", event.transport());
+                        }
                     }
                 }
                 Ok(event) = link_events.recv_async() => {
                     match event.kind() {
-                        SampleKind::Put => println!(
-                            "  [Link Event] Added: zid={}, src={} -> dst={}",
-                            event.link().zid(),
-                            event.link().src(),
-                            event.link().dst()
-                        ),
-                        SampleKind::Delete => println!(
-                            "  [Link Event] Removed: zid={}, src={} -> dst={}",
-                            event.link().zid(),
-                            event.link().src(),
-                            event.link().dst()
-                        ),
+                        SampleKind::Put => {
+                            println!("[Link Event] Added: {:?}", event.link());
+                        }
+                        SampleKind::Delete => {
+                            println!("[Link Event] Removed: {:?}", event.link());
+                        }
                     }
                 }
             }
