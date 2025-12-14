@@ -38,6 +38,8 @@ use zenoh_config::{
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -71,7 +73,7 @@ use super::builders::close::{CloseBuilder, Closeable, Closee};
 use super::connectivity;
 #[cfg(feature = "unstable")]
 use crate::api::{
-    info::{Transport, TransportEvent},
+    info::{LinkEvent, Transport, TransportEvent},
     query::ReplyKeyExpr,
     sample::SourceInfo,
     selector::ZenohParameters,
@@ -146,7 +148,7 @@ impl fmt::Debug for TransportEventsListenerState {
 #[cfg(feature = "unstable")]
 pub(crate) struct LinkEventsListenerState {
     pub(crate) id: Id,
-    pub(crate) callback: Callback<crate::api::info::LinkEvent>,
+    pub(crate) callback: Callback<LinkEvent>,
     pub(crate) transport_zid: Option<zenoh_config::ZenohId>,
 }
 
@@ -2208,7 +2210,7 @@ impl SessionInner {
     #[cfg(feature = "unstable")]
     pub(crate) fn declare_transport_links_listener_inner(
         &self,
-        callback: Callback<crate::api::info::LinkEvent>,
+        callback: Callback<LinkEvent>,
         history: bool,
         transport_zid: Option<zenoh_config::ZenohId>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
@@ -2230,7 +2232,7 @@ impl SessionInner {
         // Send history if requested
         if history {
             for link in self.runtime.get_links(transport_zid) {
-                let event = crate::api::info::LinkEvent {
+                let event = LinkEvent {
                     kind: SampleKind::Put,
                     link,
                 };
@@ -2264,7 +2266,7 @@ impl SessionInner {
     pub(crate) fn broadcast_link_event(
         &self,
         kind: SampleKind,
-        transport_zid: zenoh_protocol::core::ZenohIdProto,
+        transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
     ) {
         use crate::api::info::Link;
@@ -2275,7 +2277,7 @@ impl SessionInner {
             dst: link.dst.clone(),
         };
 
-        let event = crate::api::info::LinkEvent {
+        let event = LinkEvent {
             kind,
             link: link_info,
         };

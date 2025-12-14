@@ -19,6 +19,8 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
 use zenoh_result::ZResult;
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -73,7 +75,7 @@ impl TransportEventHandler for ConnectivityHandler {
 #[cfg(feature = "unstable")]
 pub(crate) struct ConnectivityPeerHandler {
     session: WeakSession,
-    peer_zid: zenoh_protocol::core::ZenohIdProto,
+    peer_zid: ZenohIdProto,
     peer: TransportPeer,
 }
 
