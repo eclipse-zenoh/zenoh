@@ -2117,7 +2117,7 @@ impl SessionInner {
     #[cfg(feature = "unstable")]
     pub(crate) fn declare_transport_events_listener_inner(
         &self,
-        callback: Callback<crate::api::info::TransportEvent>,
+        callback: Callback<TransportEvent>,
         history: bool,
     ) -> ZResult<Arc<TransportEventsListenerState>> {
         let mut state = zwrite!(self.state);
@@ -2134,7 +2134,7 @@ impl SessionInner {
         // Send history if requested
         if history {
             for transport in self.runtime.get_transports() {
-                let event = crate::api::info::TransportEvent {
+                let event = TransportEvent {
                     kind: SampleKind::Put,
                     transport,
                 };
@@ -2176,7 +2176,7 @@ impl SessionInner {
             whatami: peer.whatami,
         };
 
-        let event = crate::api::info::TransportEvent { kind, transport };
+        let event = TransportEvent { kind, transport };
 
         // Call all registered callbacks
         for listener in state.transport_events_listeners.values() {
