@@ -12,21 +12,29 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[zenoh_macros::unstable]
 use std::future::{IntoFuture, Ready};
 
+#[zenoh_macros::unstable]
 use tracing::error;
+#[zenoh_macros::unstable]
 use zenoh_config::ZenohId;
+#[zenoh_macros::unstable]
 use zenoh_core::{Resolvable, Wait};
+#[zenoh_macros::unstable]
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
 use crate::api::handlers::locked;
+#[zenoh_macros::unstable]
+use crate::api::info::{Link, LinkEvent};
+#[zenoh_macros::unstable]
 use crate::{
-    api::{session::UndeclarableSealed, Id},
+    api::session::UndeclarableSealed,
     handlers::{Callback, DefaultHandler, IntoHandler},
-    net::runtime::DynamicRuntime,
-    session::{Link, LinkEvent},
 };
+#[zenoh_macros::unstable]
+use crate::{api::Id, net::runtime::DynamicRuntime};
 
 /// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
 /// access to information about links across all transport sessions. Multiple links can be established
@@ -101,12 +109,14 @@ impl IntoFuture for LinksBuilder<'_> {
     }
 }
 
+#[zenoh_macros::unstable]
 pub(crate) struct LinkEventsListenerInner {
     pub(crate) runtime: DynamicRuntime,
     pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
 
+#[zenoh_macros::unstable]
 impl std::fmt::Debug for LinkEventsListenerInner {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("LinkEventsListenerInner")
@@ -145,7 +155,6 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 /// listener.undeclare().await.unwrap();
 /// # }
 /// ```
-#[derive(Debug)]
 #[zenoh_macros::unstable]
 pub struct LinkEventsListener<Handler> {
     pub(crate) inner: LinkEventsListenerInner,

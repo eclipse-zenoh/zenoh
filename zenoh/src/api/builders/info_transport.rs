@@ -12,22 +12,26 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[zenoh_macros::unstable]
 use std::future::{IntoFuture, Ready};
 
+#[zenoh_macros::unstable]
 use tracing::error;
+#[zenoh_macros::unstable]
 use zenoh_core::{Resolvable, Wait};
+#[zenoh_macros::unstable]
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
 use crate::api::handlers::locked;
+#[zenoh_macros::unstable]
+use crate::api::info::{Transport, TransportEvent};
+#[zenoh_macros::unstable]
 use crate::{
-    api::{
-        session::{UndeclarableSealed, WeakSession},
-        Id,
-    },
+    api::session::{UndeclarableSealed, WeakSession},
+    api::Id,
     handlers::{Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
-    session::{Transport, TransportEvent},
 };
 
 /// A builder returned by [`SessionInfo::transports()`](crate::session::SessionInfo::transports) that allows
@@ -79,12 +83,14 @@ impl IntoFuture for TransportsBuilder<'_> {
     }
 }
 
+#[zenoh_macros::unstable]
 pub(crate) struct TransportEventsListenerInner {
     pub(crate) session: WeakSession,
     pub(crate) id: Id,
     pub(crate) undeclare_on_drop: bool,
 }
 
+#[zenoh_macros::unstable]
 impl std::fmt::Debug for TransportEventsListenerInner {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("TransportEventsListenerInner")
@@ -122,7 +128,6 @@ impl std::fmt::Debug for TransportEventsListenerInner {
 /// listener.undeclare().await.unwrap();
 /// # }
 /// ```
-#[derive(Debug)]
 #[zenoh_macros::unstable]
 pub struct TransportEventsListener<Handler> {
     pub(crate) inner: TransportEventsListenerInner,
