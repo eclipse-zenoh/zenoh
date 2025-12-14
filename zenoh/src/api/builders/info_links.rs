@@ -19,9 +19,11 @@ use zenoh_config::ZenohId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
+#[zenoh_macros::unstable]
+use crate::api::handlers::locked;
 use crate::{
     api::{session::UndeclarableSealed, Id},
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    handlers::{Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
     session::{Link, LinkEvent},
 };
@@ -264,7 +266,7 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
     }
 }
 
-/// A builder returned by [`SessionInfo::linkl_events_listener()`](crate::session::SessionInfo::linkl_events_listener) that allows
+/// A builder returned by [`SessionInfo::link_events_listener()`](crate::session::SessionInfo::link_events_listener) that allows
 /// subscribing to link lifecycle events.
 ///
 /// # Examples

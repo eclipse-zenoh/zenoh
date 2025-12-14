@@ -18,12 +18,14 @@ use tracing::error;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
+#[zenoh_macros::unstable]
+use crate::api::handlers::locked;
 use crate::{
     api::{
         session::{UndeclarableSealed, WeakSession},
         Id,
     },
-    handlers::{locked, Callback, DefaultHandler, IntoHandler},
+    handlers::{Callback, DefaultHandler, IntoHandler},
     net::runtime::DynamicRuntime,
     session::{Transport, TransportEvent},
 };
