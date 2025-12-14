@@ -23,7 +23,9 @@ mod tests {
         time::Duration,
     };
 
-    use crate::common::{close_session, open_session_connect, open_session_listen, open_session_unicast};
+    use crate::common::{
+        close_session, open_session_connect, open_session_listen, open_session_unicast,
+    };
 
     const SLEEP: Duration = Duration::from_millis(100);
 
