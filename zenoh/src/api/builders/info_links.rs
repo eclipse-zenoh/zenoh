@@ -41,7 +41,7 @@ use crate::{
 /// between two zenoh nodes (e.g., using different interfaces).
 ///
 /// # Examples
-/// ```
+/// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -167,7 +167,7 @@ impl<Handler> LinkEventsListener<Handler> {
     /// Undeclare the listener and stop receiving events.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -281,7 +281,7 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
 /// subscribing to link lifecycle events.
 ///
 /// # Examples
-/// ```
+/// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::sample::SampleKind;

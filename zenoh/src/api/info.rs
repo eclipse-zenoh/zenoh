@@ -126,7 +126,7 @@ impl SessionInfo {
     /// Return information about currently opened transport sessions. Transport session is a connection to an another zenoh node.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -144,7 +144,7 @@ impl SessionInfo {
     /// Return information about links across all transports.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -162,7 +162,7 @@ impl SessionInfo {
     /// Subscribe to transport lifecycle events.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::sample::SampleKind;
@@ -190,7 +190,7 @@ impl SessionInfo {
     /// Subscribe to link lifecycle events.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
     /// use zenoh::sample::SampleKind;

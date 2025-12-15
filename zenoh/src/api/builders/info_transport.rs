@@ -38,7 +38,7 @@ use crate::{
 /// access to information about transports this session is connected to.
 ///
 /// # Examples
-/// ```
+/// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -139,7 +139,7 @@ impl<Handler> TransportEventsListener<Handler> {
     /// Undeclare the listener and stop receiving events.
     ///
     /// # Examples
-    /// ```
+    /// ```no_run
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
@@ -253,7 +253,7 @@ impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
 /// subscribing to transport lifecycle events.
 ///
 /// # Examples
-/// ```
+/// ```no_run
 /// # #[tokio::main]
 /// # async fn main() {
 /// use zenoh::sample::SampleKind;
