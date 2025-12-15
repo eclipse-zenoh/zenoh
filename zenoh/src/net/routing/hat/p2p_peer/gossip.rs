@@ -285,8 +285,7 @@ impl Network {
                 || self.links.values().any(|link| {
                     self.graph
                         .node_weight(idx)
-                        .map(|node| link.zid == node.zid)
-                        .unwrap_or(true)
+                        .is_some_and(|node| link.zid == node.zid)
                 }))
     }
 
@@ -552,29 +551,31 @@ impl Network {
         }
 
         // Send all nodes linkstate on new link
-        let idxs = self
-            .graph
-            .node_indices()
-            .filter(|&idx| {
-                self.gossip_multihop
-                    || self.links.values().any(|link| link.zid == zid)
-                    || (self.router_peers_failover_brokering
-                        && idx == self.idx
-                        && whatami == WhatAmI::Router)
-            })
-            .map(|idx| {
-                (
-                    idx,
-                    Details {
-                        zid: true,
-                        locators: self.propagate_locators(idx),
-                        links: (self.router_peers_failover_brokering
+        let idxs =
+            self.graph
+                .node_indices()
+                .filter(|&idx| {
+                    self.gossip_multihop
+                        || self.graph.node_weight(idx).is_some_and(|node| {
+                            self.links.values().any(|link| link.zid == node.zid)
+                        })
+                        || (self.router_peers_failover_brokering
                             && idx == self.idx
-                            && whatami == WhatAmI::Router),
-                    },
-                )
-            })
-            .collect();
+                            && whatami == WhatAmI::Router)
+                })
+                .map(|idx| {
+                    (
+                        idx,
+                        Details {
+                            zid: true,
+                            locators: self.propagate_locators(idx),
+                            links: (self.router_peers_failover_brokering
+                                && idx == self.idx
+                                && whatami == WhatAmI::Router),
+                        },
+                    )
+                })
+                .collect();
         self.send_on_link(idxs, &transport);
         free_index
     }
