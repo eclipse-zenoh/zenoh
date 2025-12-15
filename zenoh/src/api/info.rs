@@ -196,13 +196,13 @@ impl SessionInfo {
     /// use zenoh::sample::SampleKind;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let events = session.info()
-    ///     .links_events_listener()
+    /// let listener = session.info()
+    ///     .link_events_listener()
     ///     .history(true)
     ///     .with(flume::bounded(32))
     ///     .await;
     ///
-    /// while let Ok(event) = events.recv_async().await {
+    /// while let Ok(event) = listener.recv_async().await {
     ///     match event.kind() {
     ///         SampleKind::Put => println!("Link added: {} -> {}",
     ///             event.link().src(), event.link().dst()),

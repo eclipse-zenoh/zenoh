@@ -71,10 +71,12 @@ impl<'a> LinksBuilder<'a> {
     ///
     /// # Examples
     /// ```no_run
+    /// # use std::str::FromStr;
+    /// # use zenoh::session::ZenohId;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let transport_zid = /* some ZenohId */;
+    /// let transport_zid = ZenohId::from_str("1234567890abcdef").unwrap();
     /// let links = session.info().links().transport(transport_zid).await;
     /// for link in links {
     ///     println!("Link: {} -> {}", link.src(), link.dst());
@@ -287,13 +289,13 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
 /// use zenoh::sample::SampleKind;
 ///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let events = session.info()
-///     .links_events_listener()
+/// let listener = session.info()
+///     .link_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
 ///     .await;
 ///
-/// while let Ok(event) = events.recv_async().await {
+/// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {
 ///         SampleKind::Put => println!("Link added: {} -> {}",
 ///             event.link().src(), event.link().dst()),
@@ -348,12 +350,14 @@ impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
     ///
     /// # Examples
     /// ```no_run
+    /// # use std::str::FromStr;
+    /// # use zenoh::session::ZenohId;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let transport_zid = /* some ZenohId */;
-    /// let events = session.info()
-    ///     .links_events_listener()
+    /// let transport_zid = ZenohId::from_str("1234567890abcdef").unwrap();
+    /// let listener = session.info()
+    ///     .link_events_listener()
     ///     .transport(transport_zid)
     ///     .with(flume::bounded(32))
     ///     .await;
