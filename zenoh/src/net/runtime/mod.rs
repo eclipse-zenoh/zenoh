@@ -262,14 +262,8 @@ impl IRuntime for RuntimeState {
             zenoh_runtime::ZRuntime::Net
                 .block_in_place(self.manager.get_transports_unicast())
                 .into_iter()
-                .filter_map(|t| {
-                    t.get_zid().ok().and_then(|zid| {
-                        t.get_whatami().ok().map(|whatami| Transport {
-                            zid: zid.into(),
-                            whatami,
-                        })
-                    })
-                }),
+                .filter_map(|t| t.get_peer().ok())
+                .map(|ref peer| Transport::new(peer)),
         )
     }
 
@@ -300,11 +294,7 @@ impl IRuntime for RuntimeState {
             t.get_links()
                 .unwrap_or_default()
                 .into_iter()
-                .map(move |link| Link {
-                    zid,
-                    src: link.src,
-                    dst: link.dst,
-                })
+                .map(|ref link| Link::new(zid, link))
                 .collect::<Vec<_>>()
         }))
     }

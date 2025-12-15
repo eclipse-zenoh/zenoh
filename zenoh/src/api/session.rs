@@ -73,7 +73,7 @@ use super::builders::close::{CloseBuilder, Closeable, Closee};
 use super::connectivity;
 #[cfg(feature = "unstable")]
 use crate::api::{
-    info::{LinkEvent, Transport, TransportEvent},
+    info::{Link, LinkEvent, Transport, TransportEvent},
     query::ReplyKeyExpr,
     sample::SourceInfo,
     selector::ZenohParameters,
@@ -2193,15 +2193,11 @@ impl SessionInner {
         kind: SampleKind,
         peer: &zenoh_transport::TransportPeer,
     ) {
-        let state = zread!(self.state);
-        let transport = Transport {
-            zid: peer.zid.into(),
-            whatami: peer.whatami,
-        };
-
+        let transport = Transport::new(peer);
         let event = TransportEvent { kind, transport };
 
         // Call all registered callbacks
+        let state = zread!(self.state);
         for listener in state.transport_events_listeners.values() {
             listener.callback.call(event.clone());
         }
@@ -2269,20 +2265,13 @@ impl SessionInner {
         transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
     ) {
-        use crate::api::info::Link;
-        let state = zread!(self.state);
-        let link_info = Link {
-            zid: transport_zid.into(),
-            src: link.src.clone(),
-            dst: link.dst.clone(),
-        };
-
         let event = LinkEvent {
             kind,
-            link: link_info,
+            link: Link::new(transport_zid.into(), link),
         };
 
         // Call all registered callbacks, filtering by transport_zid if specified
+        let state = zread!(self.state);
         for listener in state.link_events_listeners.values() {
             if let Some(filter_zid) = &listener.transport_zid {
                 if filter_zid == event.link.zid() {
