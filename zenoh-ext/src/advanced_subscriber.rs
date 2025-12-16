@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cmp, collections::BTreeMap, future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -22,7 +22,7 @@ use zenoh::{
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
-    sample::{Locality, Sample, SampleKind, SourceSn},
+    sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
     KE_SUB,
