@@ -2143,16 +2143,14 @@ impl SessionInner {
         callback: Callback<TransportEvent>,
         history: bool,
     ) -> ZResult<Arc<TransportEventsListenerState>> {
-        let mut state = zwrite!(self.state);
         let id = self.runtime.next_id();
         trace!("declare_transport_events_listener_inner() => {id}");
 
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
-        state
+        zwrite!(self.state)
             .transport_events_listeners
             .insert(id, listener_state.clone());
-        drop(state); // Release lock before calling history
 
         // Send history if requested
         if history {
@@ -2210,7 +2208,6 @@ impl SessionInner {
         history: bool,
         transport_zid: Option<zenoh_config::ZenohId>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
-        let mut state = zwrite!(self.state);
         let id = self.runtime.next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
 
@@ -2220,10 +2217,9 @@ impl SessionInner {
             transport_zid,
         });
 
-        state
+        zwrite!(self.state)
             .link_events_listeners
             .insert(id, listener_state.clone());
-        drop(state); // Release lock before calling history
 
         // Send history if requested
         if history {

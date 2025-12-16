@@ -217,7 +217,9 @@ impl SessionInfo {
     }
 }
 
-/// Represents a transport connection to a remote zenoh node.
+/// Represents a remote zenoh node connected to this node. Only one transport per remote node exists.
+/// Each transport can have multiple corresponding [`Link`](crate::session::Link)s which represent
+/// actual established data links with various protocols.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
@@ -267,7 +269,9 @@ impl Transport {
     }
 }
 
-/// Represents a physical link within a transport.
+/// Describes a concrete link within a [`Transport`](crate::session::Transport).
+/// Zenoh can establish multiple links to the same remote zenoh node using different protocols
+/// (e.g., TCP, UDP, QUIC, etc.)
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
