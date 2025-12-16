@@ -92,6 +92,8 @@ impl TransportLinkUnicast {
 
     pub(crate) async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         let mut link = self.tx();
+        // This function is only used for handshake and close, so hardcoding
+        // Priority::Control is fine.
         link.send(msg, Priority::Control).await
     }
 
