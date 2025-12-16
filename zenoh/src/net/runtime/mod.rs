@@ -258,13 +258,19 @@ impl IRuntime for RuntimeState {
 
     #[cfg(feature = "unstable")]
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
-        Box::new(
-            zenoh_runtime::ZRuntime::Net
-                .block_in_place(self.manager.get_transports_unicast())
-                .into_iter()
-                .filter_map(|t| t.get_peer().ok())
-                .map(|ref peer| Transport::new(peer)),
-        )
+        let unicast_transports = zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_unicast())
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .map(|ref peer| Transport::new(peer, false));
+
+        let multicast_transports = zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_multicast())
+            .into_iter()
+            .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+            .map(|ref peer| Transport::new(&peer, true));
+
+        Box::new(unicast_transports.chain(multicast_transports))
     }
 
     #[cfg(feature = "unstable")]

@@ -217,7 +217,7 @@ impl SessionInfo {
     }
 }
 
-/// Represents a remote zenoh node connected to this node. Only one transport per remote node exists.
+/// Represents a connection to remote zenoh node.
 /// Each transport can have multiple corresponding [`Link`](crate::session::Link)s which represent
 /// actual established data links with various protocols.
 #[zenoh_macros::unstable]
@@ -229,17 +229,19 @@ pub struct Transport {
     pub(crate) is_qos: bool,
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
+    pub(crate) is_multicast: bool,
 }
 
 #[zenoh_macros::unstable]
 impl Transport {
-    pub(crate) fn new(peer: &TransportPeer) -> Self {
+    pub(crate) fn new(peer: &TransportPeer, is_multicast: bool) -> Self {
         Transport {
             zid: peer.zid.into(),
             whatami: peer.whatami,
             is_qos: peer.is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: peer.is_shm,
+            is_multicast,
         }
     }
 
@@ -266,6 +268,12 @@ impl Transport {
     #[inline]
     pub fn is_shm(&self) -> bool {
         self.is_shm
+    }
+
+    /// Returns whether this transport is multicast.
+    #[inline]
+    pub fn is_multicast(&self) -> bool {
+        self.is_multicast
     }
 }
 
