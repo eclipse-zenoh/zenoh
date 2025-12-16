@@ -327,7 +327,9 @@ impl<'a> LinkEventsListenerBuilder<'a, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
-    /// Enable history - send events for existing links before live events.
+    /// Enable history.
+    ///
+    /// Send events for existing links before live events.
     pub fn history(mut self, enabled: bool) -> Self {
         self.history = enabled;
         self

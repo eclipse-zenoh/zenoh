@@ -249,8 +249,7 @@ impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
     }
 }
 
-/// A builder returned by [`SessionInfo::transport_events_listener()`](crate::session::SessionInfo::transport_events_listener) that allows
-/// subscribing to transport lifecycle events.
+/// A builder returned by [`SessionInfo::transport_events_listener()`](crate::session::SessionInfo::transport_events_listener) that allows subscribing to transport lifecycle events.
 ///
 /// # Examples
 /// ```no_run
@@ -294,7 +293,9 @@ impl<'a> TransportEventsListenerBuilder<'a, DefaultHandler> {
 
 #[zenoh_macros::unstable]
 impl<'a, Handler> TransportEventsListenerBuilder<'a, Handler> {
-    /// Enable history - send events for existing transports before live events.
+    /// Enable history.
+    ///
+    /// Send events for existing transports before live events.
     pub fn history(mut self, enabled: bool) -> Self {
         self.history = enabled;
         self
