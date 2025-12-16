@@ -642,7 +642,7 @@ impl Deref for WeakSession {
     type Target = Session;
 
     fn deref(&self) -> &Self::Target {
-        Session::ref_cast(&self)
+        Session::ref_cast(self)
     }
 }
 
