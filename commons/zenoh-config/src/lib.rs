@@ -51,7 +51,7 @@ use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use wrappers::ZenohId;
 pub use zenoh_protocol::core::{
-    whatami, EndPoint, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
+    whatami, EndPoint, EndPoints, Locator, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor,
 };
 use zenoh_protocol::{
     core::{
@@ -446,8 +446,12 @@ pub fn peer() -> Config {
 pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config.connect.endpoints =
-        ModeDependentValue::Unique(peers.into_iter().map(|t| t.into()).collect());
+    config.connect.endpoints = ModeDependentValue::Unique(
+        peers
+            .into_iter()
+            .map(|t| EndPoints::Single(t.into()))
+            .collect(),
+    );
     config
 }
 
@@ -478,7 +482,7 @@ validated_struct::validator! {
             /// global timeout for full connect cycle
             pub timeout_ms: Option<ModeDependentValue<i64>>,
             /// The list of endpoints to connect to
-            pub endpoints: ModeDependentValue<Vec<EndPoint>>,
+            pub endpoints: ModeDependentValue<Vec<EndPoints>>,
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,

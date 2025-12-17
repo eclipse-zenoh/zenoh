@@ -18,7 +18,7 @@ use serde::{
     de::{self, IntoDeserializer, MapAccess, Visitor},
     Deserialize, Serialize,
 };
-use zenoh_protocol::core::{EndPoint, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
+use zenoh_protocol::core::{EndPoint, EndPoints, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor};
 
 use crate::AutoConnectStrategy;
 
@@ -302,6 +302,44 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<Vec<EndPoint>> {
 
         impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<Vec<EndPoint>>> {
             type Value = ModeDependentValue<Vec<EndPoint>>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("list of endpoints or mode dependent list of endpoints")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut v = seq.size_hint().map_or_else(Vec::new, Vec::with_capacity);
+
+                while let Some(s) = seq.next_element()? {
+                    v.push(s);
+                }
+                Ok(ModeDependentValue::Unique(v))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<Vec<EndPoints>> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<Vec<EndPoints>>> {
+            type Value = ModeDependentValue<Vec<EndPoints>>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("list of endpoints or mode dependent list of endpoints")

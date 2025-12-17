@@ -29,7 +29,7 @@ mod test {
         config::{WhatAmI, ZenohId},
         Config, Session,
     };
-    use zenoh_config::{EndPoint, ModeDependentValue};
+    use zenoh_config::{EndPoints, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -491,7 +491,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "tls/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -544,7 +544,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "tls/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -602,7 +602,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "quic/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -647,7 +647,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "quic/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -697,7 +697,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "tcp/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -721,7 +721,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "tcp/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -751,7 +751,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "quic/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
@@ -803,7 +803,7 @@ client2name:client2passwd";
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
                 "quic/127.0.0.1:{port}"
             )
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
             .unwrap();
         config
