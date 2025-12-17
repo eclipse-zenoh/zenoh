@@ -122,6 +122,12 @@ mod tests {
         assert!(WrappingSn(0) < WrappingSn(1));
         assert!(WrappingSn(u32::MAX) < WrappingSn(0));
         assert!(WrappingSn(0) > WrappingSn(u32::MAX));
+        assert!(WrappingSn(u32::MAX / 2 - 1) > WrappingSn(0));
+        assert!(WrappingSn(u32::MAX / 2 - 1) > WrappingSn(u32::MAX));
+        assert!(WrappingSn(u32::MAX / 2) > WrappingSn(0));
+        assert!(WrappingSn(u32::MAX / 2) < WrappingSn(u32::MAX));
+        assert!(WrappingSn(u32::MAX / 2 + 1) < WrappingSn(0));
+        assert!(WrappingSn(u32::MAX / 2 + 1) < WrappingSn(u32::MAX));
         assert!((WrappingSn(u32::MAX)..WrappingSn(1)).contains(&0));
     }
 }
