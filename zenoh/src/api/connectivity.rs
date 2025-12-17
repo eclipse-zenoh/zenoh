@@ -58,6 +58,7 @@ impl TransportEventHandler for ConnectivityHandler {
             session: self.session.clone(),
             peer_zid: peer.zid,
             peer,
+            is_multicast: false,
         }))
     }
 
@@ -77,6 +78,7 @@ pub(crate) struct ConnectivityPeerHandler {
     session: WeakSession,
     peer_zid: ZenohIdProto,
     peer: TransportPeer,
+    is_multicast: bool,
 }
 
 #[cfg(feature = "unstable")]
@@ -89,13 +91,13 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     fn new_link(&self, link: zenoh_link::Link) {
         // Broadcast link added event
         self.session
-            .broadcast_link_event(SampleKind::Put, self.peer_zid, &link);
+            .broadcast_link_event(SampleKind::Put, self.peer_zid, &link, self.is_multicast);
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
         // Broadcast link removed event
         self.session
-            .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link);
+            .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link, self.is_multicast);
     }
 
     fn closed(&self) {
@@ -128,6 +130,7 @@ impl TransportMulticastEventHandler for ConnectivityMulticastHandler {
             session: self.session.clone(),
             peer_zid: peer.zid,
             peer,
+            is_multicast: true,
         }))
     }
 

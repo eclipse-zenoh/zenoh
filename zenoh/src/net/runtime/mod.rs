@@ -154,7 +154,7 @@ pub trait IRuntime: Send + Sync {
     #[cfg(feature = "unstable")]
     fn get_links(
         &self,
-        transport_zid: Option<ZenohId>,
+        transport: Option<&Transport>,
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     fn new_primitives(
@@ -276,33 +276,49 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "unstable")]
     fn get_links(
         &self,
-        transport_zid: Option<ZenohId>,
+        transport: Option<&Transport>,
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
-        let transports =
-            zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
+        // Extract filter criteria from transport if provided
+        let filter_zid = transport.map(|t| t.zid().clone());
+        let filter_multicast = transport.map(|t| t.is_multicast());
 
-        let transports = if let Some(filter_zid) = transport_zid {
-            transports
-                .into_iter()
-                .find(|t| t.get_zid().ok() == Some(filter_zid.into()))
-                .into_iter()
-                .collect()
+        // Get peers from unicast transports
+        let unicast_peers = if filter_multicast == Some(true) {
+            // Skip unicast if filtering for multicast only
+            Vec::new()
         } else {
-            transports
+            self.get_transports_unicast_peers()
         };
 
-        // Convert transport to links (returns empty vec if get_zid fails)
-        Box::new(transports.into_iter().flat_map(|t| {
-            let Ok(zid) = t.get_zid().map(Into::into) else {
-                return Vec::new();
-            };
+        // Get peers from multicast transports
+        let multicast_peers: Vec<TransportPeer> = if filter_multicast == Some(false) {
+            // Skip multicast if filtering for unicast only
+            Vec::new()
+        } else {
+            self.get_transports_multicast_peers()
+                .into_iter()
+                .flatten()
+                .collect()
+        };
 
-            t.get_links()
-                .unwrap_or_default()
+        // Convert peers to links - same logic for both unicast and multicast
+        let peer_to_links = move |peer: TransportPeer| -> Vec<Link> {
+            let zid: ZenohId = peer.zid.into();
+            if let Some(ref filter_zid) = filter_zid {
+                if &zid != filter_zid {
+                    return Vec::new();
+                }
+            }
+            peer.links
                 .into_iter()
                 .map(|ref link| Link::new(zid, link))
-                .collect::<Vec<_>>()
-        }))
+                .collect()
+        };
+
+        let unicast_links = unicast_peers.into_iter().flat_map(peer_to_links);
+        let multicast_links = multicast_peers.into_iter().flat_map(peer_to_links);
+
+        Box::new(unicast_links.chain(multicast_links))
     }
 
     fn matching_status_remote(

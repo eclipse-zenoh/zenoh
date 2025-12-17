@@ -149,7 +149,7 @@ impl fmt::Debug for TransportEventsListenerState {
 pub(crate) struct LinkEventsListenerState {
     pub(crate) id: Id,
     pub(crate) callback: Callback<LinkEvent>,
-    pub(crate) transport_zid: Option<zenoh_config::ZenohId>,
+    pub(crate) transport: Option<Transport>,
 }
 
 #[cfg(feature = "unstable")]
@@ -157,7 +157,7 @@ impl fmt::Debug for LinkEventsListenerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("LinkEventsListenerState")
             .field("id", &self.id)
-            .field("transport_zid", &self.transport_zid)
+            .field("transport", &self.transport)
             .finish()
     }
 }
@@ -2206,7 +2206,7 @@ impl SessionInner {
         &self,
         callback: Callback<LinkEvent>,
         history: bool,
-        transport_zid: Option<zenoh_config::ZenohId>,
+        transport: Option<Transport>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
         let id = self.runtime.next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
@@ -2214,7 +2214,7 @@ impl SessionInner {
         let listener_state = Arc::new(LinkEventsListenerState {
             id,
             callback,
-            transport_zid,
+            transport: transport.clone(),
         });
 
         zwrite!(self.state)
@@ -2223,7 +2223,7 @@ impl SessionInner {
 
         // Send history if requested
         if history {
-            for link in self.runtime.get_links(transport_zid) {
+            for link in self.runtime.get_links(transport.as_ref()) {
                 let event = LinkEvent {
                     kind: SampleKind::Put,
                     link,
@@ -2260,17 +2260,21 @@ impl SessionInner {
         kind: SampleKind,
         transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
+        is_multicast: bool,
     ) {
         let event = LinkEvent {
             kind,
             link: Link::new(transport_zid.into(), link),
         };
 
-        // Call all registered callbacks, filtering by transport_zid if specified
+        // Call all registered callbacks, filtering by transport if specified
         let state = zread!(self.state);
         for listener in state.link_events_listeners.values() {
-            if let Some(filter_zid) = &listener.transport_zid {
-                if filter_zid == event.link.zid() {
+            if let Some(filter_transport) = &listener.transport {
+                // Filter by both zid and is_multicast
+                if filter_transport.zid() == event.link.zid()
+                    && filter_transport.is_multicast() == is_multicast
+                {
                     listener.callback.call(event.clone());
                 }
             } else {
