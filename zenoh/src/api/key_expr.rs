@@ -22,11 +22,11 @@ use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonize, ExprId, WireExpr},
-    network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
+    network::Mapping,
 };
 use zenoh_result::ZResult;
 
-use crate::api::session::{Session, SessionInner, UndeclarableSealed};
+use crate::api::session::{Session, UndeclarableSealed, WeakSession};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -542,24 +542,24 @@ impl<'a> KeyExpr<'a> {
     //pub(crate) fn is_optimized(&self, session: &Session) -> bool {
     //    matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
     //}
-    pub(crate) fn is_fully_optimized(&self, session: &SessionInner) -> bool {
+    pub(crate) fn is_fully_optimized(&self, session: &WeakSession) -> bool {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
                 session_id,
                 prefix_len,
                 ..
-            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
+            } if session.eid() == *session_id && key_expr.len() as u32 == *prefix_len => true,
             KeyExprInner::BorrowedWire {
                 key_expr,
                 session_id,
                 prefix_len,
                 ..
-            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
+            } if session.eid() == *session_id && key_expr.len() as u32 == *prefix_len => true,
             _ => false,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &SessionInner) -> WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &WeakSession) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
@@ -567,7 +567,7 @@ impl<'a> KeyExpr<'a> {
                 mapping,
                 prefix_len,
                 session_id,
-            } if session.id == *session_id => WireExpr {
+            } if session.eid() == *session_id => WireExpr {
                 scope: *expr_id,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
                 mapping: *mapping,
@@ -578,7 +578,7 @@ impl<'a> KeyExpr<'a> {
                 mapping,
                 prefix_len,
                 session_id,
-            } if session.id == *session_id => WireExpr {
+            } if session.eid() == *session_id => WireExpr {
                 scope: *expr_id,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
                 mapping: *mapping,
@@ -643,7 +643,7 @@ impl Wait for KeyExprUndeclaration<'_> {
                 session_id,
                 ..
             } if *prefix_len as usize == key_expr.len() => {
-                if *session_id == session.0.id {
+                if *session_id == session.0.eid() {
                     *expr_id
                 } else {
                     return Err(zerror!("Failed to undeclare {}, as it was declared by another Session", expr).into())
@@ -656,7 +656,7 @@ impl Wait for KeyExprUndeclaration<'_> {
                 session_id,
                 ..
             } if *prefix_len as usize == key_expr.len() => {
-                if *session_id == session.0.id {
+                if *session_id == session.0.eid() {
                     *expr_id
                 } else {
                     return Err(zerror!("Failed to undeclare {}, as it was declared by another Session", expr).into())
@@ -664,21 +664,7 @@ impl Wait for KeyExprUndeclaration<'_> {
             }
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
         };
-        tracing::trace!("undeclare_keyexpr({:?})", expr_id);
-        let mut state = zwrite!(session.0.state);
-        state.local_resources.remove(&expr_id);
-
-        let primitives = state.primitives()?;
-        drop(state);
-        primitives.send_declare(&mut zenoh_protocol::network::Declare {
-            interest_id: None,
-            ext_qos: declare::ext::QoSType::DECLARE,
-            ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
-        });
-
-        Ok(())
+        session.0.undeclare_keyexpr(expr_id)
     }
 }
 
