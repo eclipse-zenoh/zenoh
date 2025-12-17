@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{borrow::ToOwned, format, string::String};
+use alloc::{borrow::ToOwned, format, string::String, vec, vec::Vec};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
