@@ -38,8 +38,7 @@ async fn test_adminspace_wonly() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
     let root = router
@@ -77,8 +76,7 @@ async fn test_adminspace_read() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
     let router2 = {
@@ -89,8 +87,7 @@ async fn test_adminspace_read() {
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid2 = router2.zid();
     let peer = {
@@ -101,8 +98,7 @@ async fn test_adminspace_read() {
             .set(vec![MULTICAST_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
 
     let root = router
@@ -292,8 +288,7 @@ async fn test_adminspace_ronly() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
 
@@ -325,8 +320,7 @@ async fn test_adminspace_write() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
 

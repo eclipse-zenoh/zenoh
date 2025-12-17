@@ -973,7 +973,7 @@ impl Runtime {
             .endpoints()
             .get(self.whatami())
             .unwrap_or(&vec![])
-            .into_iter()
+            .iter()
             .flat_map(|e| e.as_vec())
             .map(|e| e.to_locator())
             .collect::<HashSet<_>>();
