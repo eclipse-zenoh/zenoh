@@ -272,14 +272,13 @@ mod tests {
         // Wait for connections
         tokio::time::sleep(SLEEP).await;
 
-        let transport_zids: Vec<_> = session1
+        let transports: Vec<_> = session1
             .info()
             .transports()
             .await
-            .map(|t| *t.zid())
             .collect();
         assert_eq!(
-            transport_zids.len(),
+            transports.len(),
             2,
             "Should have 2 transports (one for each peer)"
         );
@@ -293,26 +292,26 @@ mod tests {
         let link = session1
             .info()
             .links()
-            .transport(transport_zids[0])
+            .transport(transports[0].clone())
             .await
             .next()
             .unwrap();
         assert_eq!(
             link.zid(),
-            &transport_zids[0],
+            transports[0].zid(),
             "Filtered link should belong to specified transport"
         );
 
         let link2 = session1
             .info()
             .links()
-            .transport(transport_zids[1])
+            .transport(transports[1].clone())
             .await
             .next()
             .unwrap();
         assert_eq!(
             link2.zid(),
-            &transport_zids[1],
+            transports[1].zid(),
             "Filtered link should belong to specified transport"
         );
 
@@ -332,17 +331,17 @@ mod tests {
 
         tokio::time::sleep(SLEEP).await;
 
-        let target_zid = *session1.info().transports().await.next().unwrap().zid();
+        let target_transport = session1.info().transports().await.next().unwrap();
 
         // Track events received
         let events_received = Arc::new(AtomicUsize::new(0));
         let events_received_clone = events_received.clone();
 
-        // Subscribe to link events with filter for target_zid
+        // Subscribe to link events with filter for target_transport
         let _events = session1
             .info()
             .link_events_listener()
-            .transport(target_zid)
+            .transport(target_transport)
             .history(false)
             .callback(move |_event| {
                 events_received_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
