@@ -715,28 +715,6 @@ impl EndPoints {
             EndPoints::Vec(eps) => eps.clone(),
         }
     }
-
-    // Helper function to determine if all EndPoint in an EndPoints enum have the same proto/address
-    pub fn all_endpoints_have_same_proto_addr(&self) -> bool {
-        match &self {
-            EndPoints::Single(_) => true,
-            EndPoints::Vec(endpoints_vec) => {
-                if endpoints_vec.is_empty() {
-                    return true;
-                }
-                let first_ep_proto_addr = {
-                    let p = endpoints_vec[0].protocol().as_str();
-                    let a = endpoints_vec[0].address().as_str();
-                    format!("{}/{}", p, a)
-                };
-                endpoints_vec.iter().all(|ep| {
-                    let p = ep.protocol().as_str();
-                    let a = ep.address().as_str();
-                    format!("{}/{}", p, a) == first_ep_proto_addr
-                })
-            }
-        }
-    }
 }
 
 impl From<EndPoint> for EndPoints {

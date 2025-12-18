@@ -352,11 +352,6 @@ impl Runtime {
     async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
         let mut success_flag = false;
         for peer_group in peers {
-            // Check the peer_group has the same proto/host:port. If not, just ignore the group
-            if !peer_group.all_endpoints_have_same_proto_addr() {
-                continue;
-            }
-
             // Try to connect to each peer in the group
             let mut peers_to_retry = Vec::new();
             for peer in peer_group.as_vec() {
