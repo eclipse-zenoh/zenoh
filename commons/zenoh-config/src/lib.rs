@@ -28,6 +28,8 @@ pub mod wrappers;
 
 #[allow(unused_imports)]
 use std::convert::TryFrom;
+#[allow(unused_imports)]
+use std::str::FromStr;
 // This is a false positive from the rust analyser
 use std::{
     any::Any,
@@ -1199,6 +1201,28 @@ fn config_deser() {
             express: Some(true),
             reliability: Some(qos::ReliabilityConf::Reliable),
         })
+    );
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+                mode: "client",
+                connect: {
+                    endpoints: [
+                        ["tcp/127.0.0.1:7447?rel=0","tcp/127.0.0.1:7448?rel=1"],
+                    ]
+                }
+            }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(*config.mode(), Some(WhatAmI::Client));
+    let endpoints = config.connect().endpoints().client().unwrap();
+    assert_eq!(endpoints.len(), 1);
+    assert_eq!(
+        endpoints[0],
+        EndPoints::from_str("[tcp/127.0.0.1:7447?rel=0,tcp/127.0.0.1:7448?rel=1]").unwrap(),
     );
 
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());

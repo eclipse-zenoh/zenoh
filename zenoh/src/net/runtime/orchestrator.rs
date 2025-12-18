@@ -352,7 +352,7 @@ impl Runtime {
     async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
         let mut success_flag = false;
         for peer_group in peers {
-            // Try to connect to each peer in the group
+            // try to connect to each peer in the group
             let mut peers_to_retry = Vec::new();
             for peer in peer_group.as_vec() {
                 let endpoint = peer.clone();
@@ -381,13 +381,13 @@ impl Runtime {
             {
                 success_flag = true;
             }
-            // Any endpoint in the group is available, it's marked as success and break
+            // any endpoint in the group is available, it's marked as success and break
             if success_flag {
                 break;
             }
         }
 
-        // Return error if none of them succeeded
+        // return error if none of them succeeded
         if success_flag {
             Ok(())
         } else {

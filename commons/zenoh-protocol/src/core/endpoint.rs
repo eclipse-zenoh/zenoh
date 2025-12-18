@@ -696,7 +696,7 @@ impl EndPoint {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub enum EndPoints {
     Single(EndPoint),
     Vec(Vec<EndPoint>),
@@ -792,6 +792,23 @@ impl FromStr for EndPoints {
 
 #[test]
 fn endpoints() {
+    // Single
+    assert_eq!(
+        EndPoints::from_str("udp/127.0.0.1:7447").unwrap(),
+        EndPoints::Single(EndPoint::from_str("udp/127.0.0.1:7447").unwrap())
+    );
+    // Vec
+    assert_eq!(
+        EndPoints::from_str("[udp/127.0.0.1:7447?rel=0,udp/127.0.0.1:7447?rel=1]").unwrap(),
+        EndPoints::Vec(vec![
+            EndPoint::from_str("udp/127.0.0.1:7447?rel=0").unwrap(),
+            EndPoint::from_str("udp/127.0.0.1:7447?rel=1").unwrap()
+        ])
+    );
+}
+
+#[test]
+fn endpoint() {
     assert!(EndPoint::from_str("/").is_err());
     assert!(EndPoint::from_str("?").is_err());
     assert!(EndPoint::from_str("#").is_err());
