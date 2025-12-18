@@ -110,7 +110,7 @@ impl Link {
 #[derive(Default)]
 pub(crate) struct Changes {
     pub(crate) updated_nodes: Vec<(NodeIndex, Node)>,
-    pub(crate) removed_nodes: Vec<(NodeIndex, Node)>,
+    pub(crate) removed_nodes: Vec<(NodeIndex, ZenohIdProto)>,
 }
 
 #[derive(Clone)]
@@ -934,7 +934,7 @@ impl Network {
         free_index
     }
 
-    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
+    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|dest, _| dest != zid);
@@ -988,7 +988,7 @@ impl Network {
         }
     }
 
-    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, Node)> {
+    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
         let mut dfs_stack = vec![self.idx];
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
@@ -1007,7 +1007,7 @@ impl Network {
         for idx in self.graph.node_indices().collect::<Vec<NodeIndex>>() {
             if !visit_map.is_visited(&idx) {
                 tracing::debug!("Remove node {}", &self.graph[idx].zid);
-                removed.push((idx, self.graph.remove_node(idx).unwrap()));
+                removed.push((idx, self.graph.remove_node(idx).unwrap().zid));
             }
         }
         removed

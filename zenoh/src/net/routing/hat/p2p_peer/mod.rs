@@ -44,7 +44,6 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
-    gossip::Network,
     interests::interests_new_face,
     pubsub::{pubsub_new_face, undeclare_simple_subscription},
     queries::{queries_new_face, undeclare_simple_queryable},
@@ -58,7 +57,7 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::linkstate::LinkStateList,
+    protocol::{gossip::Gossip, linkstate::LinkStateList},
     routing::{
         dispatcher::{
             face::{Face, InterestState},
@@ -70,7 +69,6 @@ use crate::net::{
     runtime::Runtime,
 };
 
-mod gossip;
 mod interests;
 mod pubsub;
 mod queries;
@@ -99,7 +97,7 @@ use face_hat_mut;
 use crate::net::common::AutoConnect;
 
 struct HatTables {
-    gossip: Option<Network>,
+    gossip: Option<Gossip>,
 }
 
 impl HatTables {
@@ -132,7 +130,7 @@ impl HatBaseTrait for HatCode {
         drop(config_guard);
 
         if gossip {
-            hat_mut!(tables).gossip = Some(Network::new(
+            hat_mut!(tables).gossip = Some(Gossip::new(
                 "[Gossip]".to_string(),
                 tables.zid,
                 runtime,
