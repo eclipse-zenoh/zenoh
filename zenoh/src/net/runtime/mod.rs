@@ -145,13 +145,8 @@ pub trait IRuntime: Send + Sync {
     #[zenoh_macros::unstable]
     fn get_shm_provider(&self) -> ShmProviderState;
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
-
-    #[cfg(feature = "unstable")]
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
 
-    #[cfg(feature = "unstable")]
     fn get_links(
         &self,
         transport: Option<&Transport>,
@@ -238,22 +233,6 @@ impl IRuntime for RuntimeState {
 
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.transport_handlers).push(handler);
-    }
-
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
-        zenoh_runtime::ZRuntime::Net
-            .block_in_place(self.manager.get_transports_unicast())
-            .into_iter()
-            .filter_map(|t| t.get_peer().ok())
-            .collect::<Vec<_>>()
-    }
-
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
-        zenoh_runtime::ZRuntime::Net
-            .block_in_place(self.manager.get_transports_multicast())
-            .into_iter()
-            .filter_map(|t| t.get_peers().ok())
-            .collect::<Vec<_>>()
     }
 
     #[cfg(feature = "unstable")]
@@ -432,6 +411,22 @@ impl RuntimeState {
 
     async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.pending_connections.lock().await.remove(zid)
+    }
+
+    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_unicast())
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_multicast())
+            .into_iter()
+            .filter_map(|t| t.get_peers().ok())
+            .collect::<Vec<_>>()
     }
 
     #[cfg(feature = "unstable")]

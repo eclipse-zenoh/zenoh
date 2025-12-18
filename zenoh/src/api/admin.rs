@@ -28,7 +28,7 @@ use zenoh_protocol::{
     zenoh::{Del, PushBody, Put},
 };
 use zenoh_transport::{
-    TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+    TransportEventHandler, TransportMulticastEventHandler, TransportPeerEventHandler,
 };
 
 use crate as zenoh;
