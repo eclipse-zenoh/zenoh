@@ -2190,8 +2190,9 @@ impl SessionInner {
         &self,
         kind: SampleKind,
         peer: &zenoh_transport::TransportPeer,
+        is_multicast: bool,
     ) {
-        let transport = Transport::new(peer);
+        let transport = Transport::new(peer, is_multicast);
         let event = TransportEvent { kind, transport };
 
         // Call all registered callbacks

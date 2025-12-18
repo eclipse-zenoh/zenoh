@@ -51,7 +51,7 @@ impl TransportEventHandler for ConnectivityHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Broadcast transport opened event
         self.session
-            .broadcast_transport_event(SampleKind::Put, &peer);
+            .broadcast_transport_event(SampleKind::Put, &peer, false);
 
         // Return ConnectivityPeerHandler
         Ok(Arc::new(ConnectivityPeerHandler {
@@ -103,7 +103,7 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     fn closed(&self) {
         // Broadcast transport closed event
         self.session
-            .broadcast_transport_event(SampleKind::Delete, &self.peer);
+            .broadcast_transport_event(SampleKind::Delete, &self.peer, self.is_multicast);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -123,7 +123,7 @@ impl TransportMulticastEventHandler for ConnectivityMulticastHandler {
         // Broadcast transport opened event
 
         self.session
-            .broadcast_transport_event(SampleKind::Put, &peer);
+            .broadcast_transport_event(SampleKind::Put, &peer, true);
 
         // Return ConnectivityPeerHandler
         Ok(Arc::new(ConnectivityPeerHandler {

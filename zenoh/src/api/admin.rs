@@ -77,90 +77,93 @@ static KE_LINK: &keyexpr = ke!("link");
 
 pub(crate) fn init(session: WeakSession) {
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
+        // Normal adminspace queryable
+        let prefix = KE_AT / own_zid / KE_SESSION;
         let _admin_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(KE_AT / own_zid / KE_SESSION / KE_STARSTAR),
+            &KeyExpr::from(&prefix / KE_STARSTAR),
             true,
             Locality::SessionLocal,
             Callback::from({
                 let session = session.clone();
-                move |q| on_admin_query(&session, KE_AT, q)
+                move |q| on_admin_query(&session, &prefix, &prefix, q)
             }),
         );
 
-        let adv_prefix = KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
+        // Queryable simulating advanced publisher which allows advanced subscriber to receive historical data
+        let prefix = KE_AT / own_zid / KE_SESSION;
+        let adv_prefix = KE_ADV_PREFIX
+            / KE_PUB
+            / own_zid
+            / KE_EMPTY
+            / KE_EMPTY
+            / KE_AT
+            / KE_AT
+            / own_zid
+            / KE_SESSION;
 
         let _admin_adv_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),
+            &KeyExpr::from(&adv_prefix / KE_STARSTAR),
             true,
             Locality::SessionLocal,
             Callback::from({
                 let session = session.clone();
-                move |q| on_admin_query(&session, &adv_prefix, q)
+                move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
             }),
         );
     }
 }
 
-pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Query) {
-    fn reply_peer(
-        prefix: &keyexpr,
-        own_zid: &keyexpr,
+pub(crate) fn on_admin_query(
+    session: &WeakSession,
+    match_prefix: &keyexpr,
+    reply_prefix: &keyexpr,
+    query: Query,
+) {
+    fn reply<T: serde::Serialize>(
+        match_prefix: &keyexpr,
+        reply_prefix: &keyexpr,
+        key: &keyexpr,
         query: &Query,
-        peer: TransportPeer,
-        multicast: bool,
+        payload: &T,
     ) {
-        let zid = peer.zid.to_string();
-        let transport = if multicast {
-            KE_TRANSPORT_MULTICAST
-        } else {
-            KE_TRANSPORT_UNICAST
-        };
-        if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = prefix / own_zid / KE_SESSION / transport / zid;
-            if query.key_expr().intersects(&key_expr) {
-                match serde_json::to_vec(&peer) {
-                    Ok(bytes) => {
-                        let reply_expr = KE_AT / own_zid / KE_SESSION / transport / zid;
-                        let _ = query
-                            .reply(reply_expr, bytes)
-                            .encoding(Encoding::APPLICATION_JSON)
-                            .wait();
-                    }
-                    Err(e) => tracing::debug!("Admin query error: {}", e),
+        let match_keyexpr = match_prefix / key;
+        if query.key_expr().intersects(&match_keyexpr) {
+            let reply_keyexpr = reply_prefix / key;
+            match serde_json::to_vec(payload) {
+                Ok(bytes) => {
+                    let _ = query
+                        .reply(reply_keyexpr, bytes)
+                        .encoding(Encoding::APPLICATION_JSON)
+                        .wait();
                 }
-            }
-
-            for link in peer.links {
-                let mut s = DefaultHasher::new();
-                link.hash(&mut s);
-                if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr = prefix / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
-                    if query.key_expr().intersects(&key_expr) {
-                        match serde_json::to_vec(&link) {
-                            Ok(bytes) => {
-                                let reply_expr =
-                                    KE_AT / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
-                                let _ = query
-                                    .reply(reply_expr, bytes)
-                                    .encoding(Encoding::APPLICATION_JSON)
-                                    .wait();
-                            }
-                            Err(e) => tracing::debug!("Admin query error: {}", e),
-                        }
-                    }
-                }
+                Err(e) => tracing::debug!("Admin query error: {}", e),
             }
         }
     }
 
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for peer in session.runtime.get_transports_unicast_peers() {
-            reply_peer(prefix, own_zid, &query, peer, false);
-        }
-        for transport_peers in session.runtime.get_transports_multicast_peers() {
-            for peer in transport_peers {
-                reply_peer(prefix, own_zid, &query, peer, true);
-            }
+    for transport in session.runtime.get_transports() {
+        let transport_key = if transport.is_multicast {
+            KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
+        } else {
+            KE_TRANSPORT_UNICAST / &transport.zid.into_keyexpr()
+        };
+        reply(
+            match_prefix,
+            reply_prefix,
+            &transport_key,
+            &query,
+            &transport,
+        );
+        for link in session.runtime.get_links(Some(&transport)) {
+            let mut s = DefaultHasher::new();
+            link.hash(&mut s);
+            let link_hash = s.finish().to_string();
+            let Ok(link_key) = keyexpr::new(&link_hash) else {
+                tracing::debug!("Admin query error: unable to build keyexpr from link hash");
+                continue;
+            };
+            let link_key = KE_LINK / link_key;
+            reply(match_prefix, reply_prefix, &link_key, &query, &link);
         }
     }
 }

@@ -217,31 +217,32 @@ impl SessionInfo {
     }
 }
 
-/// Represents a connection to remote zenoh node.
+/// Transport is a connection established to zenoh peer node. 
+/// Multiple transports to the same peer can exist. At this moment it's possible
+/// to have both a unicast and a multicast transport to the same peer.
+/// 
 /// Each transport can have multiple corresponding [`Link`](crate::session::Link)s which represent
 /// actual established data links with various protocols.
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Transport {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) is_qos: bool,
+    pub(crate) is_multicast: bool,
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
-    pub(crate) is_multicast: bool,
 }
 
-#[zenoh_macros::unstable]
 impl Transport {
     pub(crate) fn new(peer: &TransportPeer, is_multicast: bool) -> Self {
         Transport {
             zid: peer.zid.into(),
             whatami: peer.whatami,
             is_qos: peer.is_qos,
+            is_multicast,
             #[cfg(feature = "shared-memory")]
             is_shm: peer.is_shm,
-            is_multicast,
         }
     }
 
@@ -280,8 +281,7 @@ impl Transport {
 /// Describes a concrete link within a [`Transport`](crate::session::Transport).
 /// Zenoh can establish multiple links to the same remote zenoh node using different protocols
 /// (e.g., TCP, UDP, QUIC, etc.)
-#[zenoh_macros::unstable]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Link {
     pub(crate) zid: ZenohId,
@@ -296,7 +296,6 @@ pub struct Link {
     pub(crate) reliability: Reliability,
 }
 
-#[zenoh_macros::unstable]
 impl Link {
     pub(crate) fn new(zid: ZenohId, link: &zenoh_link_commons::Link) -> Self {
         let auth_identifier = match &link.auth_identifier {
