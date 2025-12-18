@@ -31,6 +31,8 @@ use zenoh::{
     Resolvable, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_STARSTAR,
 };
 
+use crate::utils::WrappingSn;
+
 pub(crate) static KE_UHLC: &keyexpr = ke!("uhlc");
 #[zenoh_macros::unstable]
 kedefine!(
@@ -188,16 +190,16 @@ impl IntoFuture for AdvancedCacheBuilder<'_, '_, '_> {
 }
 
 #[zenoh_macros::unstable]
-fn decode_range(range: &str) -> (Bound<u32>, Bound<u32>) {
+fn decode_sn_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
     let mut split = range.split("..");
     let start = split
         .next()
-        .and_then(|s| s.parse::<u32>().ok().map(Bound::Included))
+        .and_then(|s| s.parse::<WrappingSn>().ok().map(Bound::Included))
         .unwrap_or(Bound::Unbounded);
     let end = split
         .next()
         .map(|s| {
-            s.parse::<u32>()
+            s.parse::<WrappingSn>()
                 .ok()
                 .map(Bound::Included)
                 .unwrap_or(Bound::Unbounded)
@@ -245,7 +247,7 @@ impl AdvancedCache {
                     let range = query
                         .parameters()
                         .get("_sn")
-                        .map(decode_range)
+                        .map(decode_sn_range)
                         .unwrap_or((Bound::Unbounded, Bound::Unbounded));
                     let max = query
                         .parameters()

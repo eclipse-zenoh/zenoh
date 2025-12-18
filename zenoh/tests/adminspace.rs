@@ -250,6 +250,33 @@ async fn test_adminspace_read() {
         .collect();
     assert_eq!(queriers, vec![] as Vec<String>);
 
+    let tokens: Vec<String> = router
+        .get(format!("@/{zid}/router/token/**"))
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.result().ok().unwrap().key_expr().to_string())
+        .collect();
+    assert_eq!(tokens, vec![] as Vec<String>);
+    let token = router.liveliness().declare_token("some/key").await.unwrap();
+    let tokens: Vec<String> = router
+        .get(format!("@/{zid}/router/token/**"))
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.result().ok().unwrap().key_expr().to_string())
+        .collect();
+    assert_eq!(tokens, vec![format!("@/{zid}/router/token/some/key")]);
+    token.undeclare().await.unwrap();
+    let tokens: Vec<String> = router
+        .get(format!("@/{zid}/router/token/**"))
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| r.result().ok().unwrap().key_expr().to_string())
+        .collect();
+    assert_eq!(tokens, vec![] as Vec<String>);
+
     let routes: Vec<String> = router
         .get(format!("@/{zid}/router/route/successor/**"))
         .await
@@ -267,6 +294,12 @@ async fn test_adminspace_read() {
         .into_iter()
         .next();
     assert!(route.is_some());
+
+    let count = router.get("@/**").await.unwrap().iter().count();
+    assert!(count > 0);
+
+    let count = router.get("@/*/**").await.unwrap().iter().count();
+    assert!(count > 0);
 
     peer.close().await.unwrap();
     router2.close().await.unwrap();

@@ -16,7 +16,10 @@ use std::{
     convert::TryInto,
     fmt, mem,
     ops::Deref,
-    sync::{atomic::Ordering, Arc, Mutex, RwLock, RwLockReadGuard},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock, RwLockReadGuard,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -569,7 +572,7 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
-    weak_counter: Mutex<usize>,
+    strong_counter: AtomicUsize,
     pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: EntityId,
@@ -651,16 +654,14 @@ impl fmt::Debug for Session {
 
 impl Clone for Session {
     fn clone(&self) -> Self {
-        let _weak = self.0.weak_counter.lock().unwrap();
+        self.0.strong_counter.fetch_add(1, Ordering::Relaxed);
         Self(self.0.clone())
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let weak = self.0.weak_counter.lock().unwrap();
-        if Arc::strong_count(&self.0) == *weak + /* the `Arc` currently dropped */ 1 {
-            drop(weak);
+        if self.0.strong_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
             if let Err(error) = self.close().wait() {
                 tracing::error!(error)
             }
@@ -675,34 +676,19 @@ impl Drop for Session {
 /// When all `Session` instances are dropped, [`Session::close`] is called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
-/// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
-/// to implement, because atomic manipulations to achieve these semantics would not have been
-/// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
-/// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
-/// performance penalty when it comes to session entities cloning/dropping.
-///
-/// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
+/// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
+#[derive(Clone)]
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
 impl WeakSession {
     fn new(session: &Arc<SessionInner>) -> Self {
-        let mut weak = session.weak_counter.lock().unwrap();
-        *weak += 1;
         Self(session.clone())
     }
 
     #[zenoh_macros::internal]
     pub(crate) fn session(&self) -> &Session {
         Session::ref_cast(&self.0)
-    }
-}
-
-impl Clone for WeakSession {
-    fn clone(&self) -> Self {
-        let mut weak = self.0.weak_counter.lock().unwrap();
-        *weak += 1;
-        Self(self.0.clone())
     }
 }
 
@@ -717,13 +703,6 @@ impl Deref for WeakSession {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl Drop for WeakSession {
-    fn drop(&mut self) {
-        let mut weak = self.0.weak_counter.lock().unwrap();
-        *weak -= 1;
     }
 }
 
@@ -759,7 +738,7 @@ impl Session {
                 publisher_qos.into(),
             ));
             let session = Session(Arc::new(SessionInner {
-                weak_counter: Mutex::new(0),
+                strong_counter: AtomicUsize::new(1),
                 runtime: runtime.clone(),
                 state,
                 id: runtime.next_id(),
@@ -956,7 +935,7 @@ impl Session {
 
     /// Returns the [`ShmProviderState`](ShmProviderState) associated with the current [`Session`](Session)’s [`Runtime`](Runtime).
     ///
-    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.  
+    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.
     /// This method exposes that provider so it can also be accessed at the application level.
     ///
     /// Note that the provider may not be immediately available or may be disabled via configuration.
@@ -1991,7 +1970,7 @@ impl SessionInner {
         tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
-            current: std::sync::Mutex::new(false),
+            current: Mutex::new(false),
             destination,
             key_expr: key_expr.clone().into_owned(),
             match_type,
