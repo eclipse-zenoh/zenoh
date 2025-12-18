@@ -77,9 +77,10 @@ pub struct AdminSpace {
     queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
-    /// Array of (handler, prefix_len) indexed by key expression prefix[/glob]
-    /// where prefix is the key expression @/{zid}/{whatami}/adminspace_key and glob is `**` or `*`
-    handlers: HashMap<OwnedKeyExpr, (Handler, usize)>,
+    /// Array of (handler, prefix) indexed by key expression prefix[/glob]
+    /// where prefix is the key expression `@/{zid}/{whatami}/{adminspace_key}`
+    /// and glob is `**` or `*`
+    handlers: HashMap<OwnedKeyExpr, (Handler, OwnedKeyExpr)>,
     context: Arc<AdminContext>,
 }
 
@@ -172,26 +173,22 @@ impl AdminSpace {
         let config = &mut runtime.config().lock().0;
         let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
-        let mut handlers: HashMap<OwnedKeyExpr, (Handler, usize)> = HashMap::new();
+        let mut handlers: HashMap<OwnedKeyExpr, (Handler, OwnedKeyExpr)> = HashMap::new();
         macro_rules! add_handler {
             ($key:expr, $glob:expr, $handler:expr) => {{
                 let key_expr = keyexpr::new($key).unwrap();
                 let glob_expr = keyexpr::new($glob).unwrap();
                 let prefix = &root_key / key_expr;
                 let full_key = &prefix / glob_expr;
-                handlers.insert(full_key, (Arc::new($handler), prefix.as_str().len()));
+                handlers.insert(full_key, (Arc::new($handler), prefix));
             }};
             ($key:expr, $handler:expr) => {{
                 let key_expr = keyexpr::new($key).unwrap();
                 let full_key = &root_key / key_expr;
-                let full_key_len = full_key.as_str().len();
-                handlers.insert(full_key, (Arc::new($handler), full_key_len));
+                handlers.insert(full_key.clone(), (Arc::new($handler), full_key));
             }};
             ($handler:expr) => {{
-                handlers.insert(
-                    root_key.clone(),
-                    (Arc::new($handler), root_key.as_str().len()),
-                );
+                handlers.insert(root_key.clone(), (Arc::new($handler), root_key.clone()));
             }};
         }
 
@@ -483,10 +480,8 @@ impl Primitives for AdminSpace {
                     attachment: query.ext_attachment.take().map(Into::into),
                 };
 
-                for (full_key, (handler, prefix_len)) in &self.handlers {
+                for (full_key, (handler, prefix)) in &self.handlers {
                     if key_expr.intersects(full_key) {
-                        let prefix_str = &key_expr.as_str()[..*prefix_len];
-                        let prefix = keyexpr::new(prefix_str).unwrap();
                         handler(prefix, &self.context, query.clone());
                     }
                 }
