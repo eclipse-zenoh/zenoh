@@ -18,7 +18,7 @@ use std::{
 };
 
 use zenoh_core::{Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr;
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
@@ -31,7 +31,10 @@ use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeerEventHandler,
 };
 
-use crate as zenoh;
+use crate::{
+    self as zenoh,
+    api::info::{Link, Transport},
+};
 use crate::{
     api::{
         encoding::Encoding,
@@ -75,6 +78,23 @@ static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
 
+fn ke_transport(transport: &Transport) -> OwnedKeyExpr {
+    if transport.is_multicast {
+        KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
+    } else {
+        KE_TRANSPORT_UNICAST / &transport.zid.into_keyexpr()
+    }
+}
+
+fn ke_link(link: &Link) -> OwnedKeyExpr {
+    let mut s = DefaultHasher::new();
+    link.hash(&mut s);
+    let link_hash = s.finish().to_string();
+    // link_hash is number, no disallowed characters, it is safe to use unchecked
+    let link_key = unsafe { keyexpr::from_str_unchecked(&link_hash) };
+    KE_LINK / link_key
+}
+
 pub(crate) fn init(session: WeakSession) {
     // Normal adminspace queryable
     let own_zid = session.zid().into_keyexpr();
@@ -110,6 +130,8 @@ pub(crate) fn init(session: WeakSession) {
             move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
         }),
     );
+
+    // Subscribe to transport events
 }
 
 fn reply<T: serde::Serialize>(
@@ -141,28 +163,17 @@ pub(crate) fn on_admin_query(
     query: Query,
 ) {
     for transport in session.runtime.get_transports() {
-        let transport_key = if transport.is_multicast {
-            KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
-        } else {
-            KE_TRANSPORT_UNICAST / &transport.zid.into_keyexpr()
-        };
+        let ke_transport = ke_transport(&transport);
         reply(
             match_prefix,
             reply_prefix,
-            &transport_key,
+            &ke_transport,
             &query,
             &transport,
         );
         for link in session.runtime.get_links(Some(&transport)) {
-            let mut s = DefaultHasher::new();
-            link.hash(&mut s);
-            let link_hash = s.finish().to_string();
-            let Ok(link_key) = keyexpr::new(&link_hash) else {
-                tracing::debug!("Admin query error: unable to build keyexpr from link hash");
-                continue;
-            };
-            let link_key = KE_LINK / link_key;
-            reply(match_prefix, reply_prefix, &link_key, &query, &link);
+            let ke_link = &ke_transport / &ke_link(&link);
+            reply(match_prefix, reply_prefix, &ke_link, &query, &link);
         }
     }
 }
