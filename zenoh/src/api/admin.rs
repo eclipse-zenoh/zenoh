@@ -76,40 +76,61 @@ static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
 
 pub(crate) fn init(session: WeakSession) {
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        // Normal adminspace queryable
-        let prefix = KE_AT / own_zid / KE_SESSION;
-        let _admin_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(&prefix / KE_STARSTAR),
-            true,
-            Locality::SessionLocal,
-            Callback::from({
-                let session = session.clone();
-                move |q| on_admin_query(&session, &prefix, &prefix, q)
-            }),
-        );
+    // Normal adminspace queryable
+    let own_zid = session.zid().into_keyexpr();
+    let prefix = KE_AT / &own_zid / KE_SESSION;
+    let _admin_qabl = session.declare_queryable_inner(
+        &KeyExpr::from(&prefix / KE_STARSTAR),
+        true,
+        Locality::SessionLocal,
+        Callback::from({
+            let session = session.clone();
+            move |q| on_admin_query(&session, &prefix, &prefix, q)
+        }),
+    );
 
-        // Queryable simulating advanced publisher which allows advanced subscriber to receive historical data
-        let prefix = KE_AT / own_zid / KE_SESSION;
-        let adv_prefix = KE_ADV_PREFIX
-            / KE_PUB
-            / own_zid
-            / KE_EMPTY
-            / KE_EMPTY
-            / KE_AT
-            / KE_AT
-            / own_zid
-            / KE_SESSION;
+    // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
+    let prefix = KE_AT / &own_zid / KE_SESSION;
+    let adv_prefix = KE_ADV_PREFIX
+        / KE_PUB
+        / &own_zid
+        / KE_EMPTY
+        / KE_EMPTY
+        / KE_AT
+        / KE_AT
+        / &own_zid
+        / KE_SESSION;
 
-        let _admin_adv_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(&adv_prefix / KE_STARSTAR),
-            true,
-            Locality::SessionLocal,
-            Callback::from({
-                let session = session.clone();
-                move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
-            }),
-        );
+    let _admin_adv_qabl = session.declare_queryable_inner(
+        &KeyExpr::from(&adv_prefix / KE_STARSTAR),
+        true,
+        Locality::SessionLocal,
+        Callback::from({
+            let session = session.clone();
+            move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
+        }),
+    );
+}
+
+fn reply<T: serde::Serialize>(
+    match_prefix: &keyexpr,
+    reply_prefix: &keyexpr,
+    key: &keyexpr,
+    query: &Query,
+    payload: &T,
+) {
+    let match_keyexpr = match_prefix / key;
+    if query.key_expr().intersects(&match_keyexpr) {
+        let reply_keyexpr = reply_prefix / key;
+        match serde_json::to_vec(payload) {
+            Ok(bytes) => {
+                let _ = query
+                    .reply(reply_keyexpr, bytes)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait();
+            }
+            Err(e) => tracing::debug!("Admin query error: {}", e),
+        }
     }
 }
 
@@ -119,28 +140,6 @@ pub(crate) fn on_admin_query(
     reply_prefix: &keyexpr,
     query: Query,
 ) {
-    fn reply<T: serde::Serialize>(
-        match_prefix: &keyexpr,
-        reply_prefix: &keyexpr,
-        key: &keyexpr,
-        query: &Query,
-        payload: &T,
-    ) {
-        let match_keyexpr = match_prefix / key;
-        if query.key_expr().intersects(&match_keyexpr) {
-            let reply_keyexpr = reply_prefix / key;
-            match serde_json::to_vec(payload) {
-                Ok(bytes) => {
-                    let _ = query
-                        .reply(reply_keyexpr, bytes)
-                        .encoding(Encoding::APPLICATION_JSON)
-                        .wait();
-                }
-                Err(e) => tracing::debug!("Admin query error: {}", e),
-            }
-        }
-    }
-
     for transport in session.runtime.get_transports() {
         let transport_key = if transport.is_multicast {
             KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
