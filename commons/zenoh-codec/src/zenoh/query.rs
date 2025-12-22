@@ -25,7 +25,13 @@ use zenoh_protocol::{
     },
 };
 
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+#[cfg(feature = "shared-memory")]
+use crate::zenoh::shm::{ZBufShmReader, ZBufShmWriter};
+use crate::{
+    common::extension,
+    zenoh::shm::{ZBufRCodec, ZBufRawReader, ZBufRawWriter},
+    RCodec, WCodec, Zenoh080, Zenoh080Header,
+};
 
 // Consolidation
 impl<W> WCodec<ConsolidationMode, &mut W> for Zenoh080
@@ -77,6 +83,8 @@ where
             ext_sinfo,
             ext_body,
             ext_attachment,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
         } = x;
 
@@ -92,6 +100,10 @@ where
             + (ext_body.is_some() as u8)
             + (ext_attachment.is_some() as u8)
             + (ext_unknown.len() as u8);
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += ext_shm.is_some() as u8;
+        }
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -112,11 +124,30 @@ where
         }
         if let Some(body) = ext_body.as_ref() {
             n_exts -= 1;
-            self.write(&mut *writer, (body, n_exts != 0))?;
+            #[cfg(feature = "shared-memory")]
+            if ext_shm.is_some() {
+                self.write(&mut *writer, (body, n_exts != 0, ZBufShmWriter {}))?;
+            } else {
+                self.write(&mut *writer, (body, n_exts != 0, ZBufRawWriter {}))?;
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.write(&mut *writer, (body, n_exts != 0, ZBufRawWriter {}))?;
+        }
+        #[cfg(feature = "shared-memory")]
+        if let Some(eshm) = ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (eshm, n_exts != 0))?;
         }
         if let Some(att) = ext_attachment.as_ref() {
             n_exts -= 1;
-            self.write(&mut *writer, (att, n_exts != 0))?;
+            #[cfg(feature = "shared-memory")]
+            if ext_shm.is_some() {
+                self.write(&mut *writer, (att, n_exts != 0, ZBufShmWriter {}))?;
+            } else {
+                self.write(&mut *writer, (att, n_exts != 0, ZBufRawWriter {}))?;
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.write(&mut *writer, (att, n_exts != 0, ZBufRawWriter {}))?;
         }
         for u in ext_unknown.iter() {
             n_exts -= 1;
@@ -166,6 +197,8 @@ where
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
         let mut ext_body: Option<ext::QueryBodyType> = None;
         let mut ext_attachment: Option<ext::AttachmentType> = None;
+        #[cfg(feature = "shared-memory")]
+        let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -178,13 +211,56 @@ where
                     ext_sinfo = Some(s);
                     has_ext = ext;
                 }
-                ext::QueryBodyType::SID | ext::QueryBodyType::VID => {
-                    let (s, ext): (ext::QueryBodyType, bool) = eodec.read(&mut *reader)?;
+                ext::QueryBodyType::VID => {
+                    let (s, ext): (ext::QueryBodyType, bool) = {
+                        fn read<ZBufR: ZBufRCodec, R: Reader>(
+                            reader: &mut R,
+                            codec: &Zenoh080Header,
+                        ) -> Result<(ext::QueryBodyType, bool), DidntRead> {
+                            let (a, ext, _): (ext::QueryBodyType, bool, ZBufR) =
+                                codec.read(reader)?;
+                            Ok((a, ext))
+                        }
+
+                        #[cfg(feature = "shared-memory")]
+                        if ext_sinfo.is_some() {
+                            read::<ZBufShmReader, R>(reader, &eodec)
+                        } else {
+                            read::<ZBufRawReader, R>(reader, &eodec)
+                        }
+                        #[cfg(not(feature = "shared-memory"))]
+                        read::<ZBufRawReader, R>(reader, &eodec)
+                    }?;
                     ext_body = Some(s);
                     has_ext = ext;
                 }
+                #[cfg(feature = "shared-memory")]
+                ext::Shm::ID => {
+                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
+                    has_ext = ext;
+                }
                 ext::Attachment::ID => {
-                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    let (a, ext): (ext::AttachmentType, bool) = {
+                        fn read<ZBufR: ZBufRCodec, R: Reader>(
+                            reader: &mut R,
+                            codec: &Zenoh080Header,
+                        ) -> Result<(ext::AttachmentType, bool), DidntRead>
+                        {
+                            let (a, ext, _): (ext::AttachmentType, bool, ZBufR) =
+                                codec.read(reader)?;
+                            Ok((a, ext))
+                        }
+
+                        #[cfg(feature = "shared-memory")]
+                        if ext_sinfo.is_some() {
+                            read::<ZBufShmReader, R>(reader, &eodec)
+                        } else {
+                            read::<ZBufRawReader, R>(reader, &eodec)
+                        }
+                        #[cfg(not(feature = "shared-memory"))]
+                        read::<ZBufRawReader, R>(reader, &eodec)
+                    }?;
                     ext_attachment = Some(a);
                     has_ext = ext;
                 }
@@ -200,6 +276,8 @@ where
             consolidation,
             parameters,
             ext_sinfo,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_body,
             ext_attachment,
             ext_unknown,

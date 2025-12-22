@@ -23,7 +23,7 @@ use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zerror, zlock, Wait};
 use zenoh_protocol::{
     network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
-    zenoh::{err::Err, query::Query, PushBody, Put, Reply, RequestBody, ResponseBody},
+    zenoh::{err::Err, ext::ShmType, query::Query, Del, PushBody, Put, RequestBody, ResponseBody},
 };
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -122,17 +122,21 @@ impl LazyShmProvider {
         }
     }
 
-    fn wrap_in_place(&self, slice: &mut ZSlice) {
+    fn wrap_in_place<const ID: u8>(&self, slice: &mut ZSlice, shm_ext: &mut Option<ShmType<ID>>) {
         if slice.len() < self.message_size_threshold {
             return;
         }
 
         if let ProviderInitState::Ready(provider) = self.try_get_provider() {
-            Self::_wrap_in_place(&provider, slice)
+            Self::_wrap_in_place(&provider, slice, shm_ext)
         }
     }
 
-    fn _wrap_in_place(shm_provider: &ShmProvider<PosixShmProviderBackend>, slice: &mut ZSlice) {
+    fn _wrap_in_place<const ID: u8>(
+        shm_provider: &ShmProvider<PosixShmProviderBackend>,
+        slice: &mut ZSlice,
+        shm_ext: &mut Option<ShmType<ID>>,
+    ) {
         if let Ok(mut shmbuf) = unsafe {
             shm_provider
             .alloc(slice.len())
@@ -142,6 +146,7 @@ impl LazyShmProvider {
             shmbuf.as_mut().copy_from_slice(slice);
             *slice = shmbuf.into();
             slice.kind = ZSliceKind::ShmPtr;
+            *shm_ext = Some(ShmType::new());
         }
     }
 }
@@ -183,13 +188,16 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
-            PushBody::Del(_) => {}
+            PushBody::Del(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
         },
         NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
         },
         NetworkBodyMut::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Reply(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
+            ResponseBody::Reply(b) => match &mut b.payload {
+                PushBody::Put(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
+                PushBody::Del(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
+            },
             ResponseBody::Err(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
         },
         NetworkBodyMut::ResponseFinal(_)
@@ -203,14 +211,17 @@ pub fn map_zmsg_to_shmbuf(msg: NetworkMessageMut, shmr: &ShmReader) -> ZResult<(
     match msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_shmbuf(shmr),
-            PushBody::Del(_) => Ok(()),
+            PushBody::Del(d) => d.map_to_shmbuf(shmr),
         },
         NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => b.map_to_shmbuf(shmr),
         },
         NetworkBodyMut::Response(Response { payload, .. }) => match payload {
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
-            ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Reply(b) => match &mut b.payload {
+                PushBody::Put(b) => b.map_to_shmbuf(shmr),
+                PushBody::Del(b) => b.map_to_shmbuf(shmr),
+            },
         },
         NetworkBodyMut::ResponseFinal(_)
         | NetworkBodyMut::Interest(_)
@@ -245,22 +256,24 @@ trait MapShm {
     );
 }
 
-fn map_to_partner<ShmCfg: PartnerShmConfig>(
+fn map_to_partner<ShmCfg: PartnerShmConfig, const ID: u8>(
     buf: &mut ZBuf,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &Option<Arc<LazyShmProvider>>,
+    shm_ext: &mut Option<ShmType<ID>>,
 ) {
     for zs in buf.zslices_mut() {
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
                 if let Some(shm_provider) = shm_provider {
                     // Implicit SHM optimization: try to convert to SHM buffer
-                    shm_provider.wrap_in_place(zs);
+                    shm_provider.wrap_in_place(zs, shm_ext);
                 }
             }
             Some(shmb) => {
                 if partner_shm_cfg.supports_protocol(shmb.protocol()) {
                     zs.kind = ZSliceKind::ShmPtr;
+                    *shm_ext = Some(ShmType::new());
                 }
             }
         }
@@ -316,14 +329,15 @@ impl MapShm for Put {
         let Self {
             payload,
             ext_attachment,
+            ext_shm,
             ..
         } = self;
 
         ext_attachment.inspect_mut(|val| {
-            map_to_partner(&mut val.buffer, partner_shm_cfg, shm_provider);
+            map_to_partner(&mut val.buffer, partner_shm_cfg, shm_provider, ext_shm);
         });
 
-        map_to_partner(payload, partner_shm_cfg, shm_provider);
+        map_to_partner(payload, partner_shm_cfg, shm_provider, ext_shm);
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
@@ -348,15 +362,16 @@ impl MapShm for Query {
         let Self {
             ext_body,
             ext_attachment,
+            ext_shm,
             ..
         } = self;
 
         ext_attachment.inspect_mut(|val| {
-            map_to_partner(&mut val.buffer, partner_shm_cfg, shm_provider);
+            map_to_partner(&mut val.buffer, partner_shm_cfg, shm_provider, ext_shm);
         });
 
         ext_body.inspect_mut(|val| {
-            map_to_partner(&mut val.payload, partner_shm_cfg, shm_provider);
+            map_to_partner(&mut val.payload, partner_shm_cfg, shm_provider, ext_shm);
         });
     }
 
@@ -375,37 +390,29 @@ impl MapShm for Query {
     }
 }
 
-// Impl - Reply
-impl MapShm for Reply {
+// Impl - Query
+impl MapShm for Del {
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
-        if let PushBody::Put(Put {
-            payload,
+        let Self {
             ext_attachment,
+            ext_shm,
             ..
-        }) = &mut self.payload
-        {
-            ext_attachment.inspect_mut(|val| {
-                map_to_partner(&mut val.buffer, partner_shm_cfg, shm_provider);
-            });
+        } = self;
 
-            map_to_partner(payload, partner_shm_cfg, shm_provider);
-        }
+        ext_attachment.inspect_mut(|val| {
+            map_to_partner(&mut val.buffer, partner_shm_cfg, shm_provider, ext_shm);
+        });
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
-        if let PushBody::Put(Put {
-            payload,
-            ext_attachment,
-            ..
-        }) = &mut self.payload
-        {
-            ext_attachment.try_inspect_mut(|val| map_to_shmbuf(&mut val.buffer, shmr))?;
-            map_to_shmbuf(payload, shmr)?;
-        }
+        let Self { ext_attachment, .. } = self;
+
+        ext_attachment.try_inspect_mut(|val| map_to_shmbuf(&mut val.buffer, shmr))?;
+
         Ok(())
     }
 }
@@ -417,8 +424,10 @@ impl MapShm for Err {
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
     ) {
-        let Self { payload, .. } = self;
-        map_to_partner(payload, partner_shm_cfg, shm_provider);
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_partner(payload, partner_shm_cfg, shm_provider, ext_shm);
     }
 
     fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {

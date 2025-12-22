@@ -25,7 +25,13 @@ use zenoh_protocol::{
     },
 };
 
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+#[cfg(feature = "shared-memory")]
+use crate::zenoh::shm::{ZBufShmReader, ZBufShmWriter};
+use crate::{
+    common::extension,
+    zenoh::shm::{ZBufRCodec, ZBufRawReader, ZBufRawWriter},
+    RCodec, WCodec, Zenoh080, Zenoh080Header,
+};
 
 impl<W> WCodec<&Del, &mut W> for Zenoh080
 where
@@ -38,6 +44,8 @@ where
             timestamp,
             ext_sinfo,
             ext_attachment,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
         } = x;
 
@@ -49,6 +57,10 @@ where
         let mut n_exts = (ext_sinfo.is_some()) as u8
             + (ext_attachment.is_some()) as u8
             + (ext_unknown.len() as u8);
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += ext_shm.is_some() as u8;
+        }
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -64,9 +76,21 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
+        #[cfg(feature = "shared-memory")]
+        if let Some(eshm) = ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (eshm, n_exts != 0))?;
+        }
         if let Some(att) = ext_attachment.as_ref() {
             n_exts -= 1;
-            self.write(&mut *writer, (att, n_exts != 0))?;
+            #[cfg(feature = "shared-memory")]
+            if ext_shm.is_some() {
+                self.write(&mut *writer, (att, n_exts != 0, ZBufShmWriter {}))?;
+            } else {
+                self.write(&mut *writer, (att, n_exts != 0, ZBufRawWriter {}))?;
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.write(&mut *writer, (att, n_exts != 0, ZBufRawWriter {}))?;
         }
         for u in ext_unknown.iter() {
             n_exts -= 1;
@@ -109,6 +133,8 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        #[cfg(feature = "shared-memory")]
+        let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();
 
@@ -122,8 +148,33 @@ where
                     ext_sinfo = Some(s);
                     has_ext = ext;
                 }
+                #[cfg(feature = "shared-memory")]
+                ext::Shm::ID => {
+                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
+                    has_ext = ext;
+                }
                 ext::Attachment::ID => {
-                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    let (a, ext): (ext::AttachmentType, bool) = {
+                        fn read<ZBufR: ZBufRCodec, R: Reader>(
+                            reader: &mut R,
+                            codec: &Zenoh080Header,
+                        ) -> Result<(ext::AttachmentType, bool), DidntRead>
+                        {
+                            let (a, ext, _): (ext::AttachmentType, bool, ZBufR) =
+                                codec.read(reader)?;
+                            Ok((a, ext))
+                        }
+
+                        #[cfg(feature = "shared-memory")]
+                        if ext_sinfo.is_some() {
+                            read::<ZBufShmReader, R>(reader, &eodec)
+                        } else {
+                            read::<ZBufRawReader, R>(reader, &eodec)
+                        }
+                        #[cfg(not(feature = "shared-memory"))]
+                        read::<ZBufRawReader, R>(reader, &eodec)
+                    }?;
                     ext_attachment = Some(a);
                     has_ext = ext;
                 }
@@ -138,6 +189,8 @@ where
         Ok(Del {
             timestamp,
             ext_sinfo,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_attachment,
             ext_unknown,
         })

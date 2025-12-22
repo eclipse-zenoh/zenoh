@@ -499,6 +499,8 @@ impl Query {
                     SampleKind::Delete => ReplyBody::Del(Del {
                         timestamp: sample.timestamp,
                         ext_sinfo,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
                         ext_attachment: sample.attachment.map(|a| a.into()),
                         ext_unknown: vec![],
                     }),

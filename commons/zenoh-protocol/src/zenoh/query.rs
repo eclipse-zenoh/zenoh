@@ -87,10 +87,14 @@ pub struct Query {
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_body: Option<ext::QueryBodyType>,
     pub ext_attachment: Option<ext::AttachmentType>,
+    #[cfg(feature = "shared-memory")]
+    pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
 }
 
 pub mod ext {
+    #[cfg(feature = "shared-memory")]
+    use crate::{common::ZExtUnit, zextunit};
     use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
@@ -98,11 +102,18 @@ pub mod ext {
     pub type SourceInfo = zextzbuf!(0x1, false);
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
 
+    /// # Shared Memory extension
+    /// Used to carry additional information about the shared-memory layout of data
+    #[cfg(feature = "shared-memory")]
+    pub type Shm = zextunit!(0x2, true);
+    #[cfg(feature = "shared-memory")]
+    pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
+
     /// # QueryBody extension
     /// Used to carry a body attached to the query
     /// Shared Memory extension is automatically defined by ValueType extension if
     /// #[cfg(feature = "shared-memory")] is defined.
-    pub type QueryBodyType = crate::zenoh::ext::ValueType<{ ZExtZBuf::<0x03>::id(false) }, 0x04>;
+    pub type QueryBodyType = crate::zenoh::ext::ValueType<{ ZExtZBuf::<0x03>::id(false) }>;
 
     /// # User attachment
     pub type Attachment = zextzbuf!(0x5, false);
@@ -133,6 +144,8 @@ impl Query {
         };
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let ext_body = rng.gen_bool(0.5).then_some(ext::QueryBodyType::rand());
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
@@ -148,6 +161,8 @@ impl Query {
             ext_sinfo,
             ext_body,
             ext_attachment,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
         }
     }
