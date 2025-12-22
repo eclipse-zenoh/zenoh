@@ -37,6 +37,7 @@ bincode = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 leb128 = { workspace = true }
+lru = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 tokio = { workspace = true, features = [
   "io-std",
@@ -45,6 +46,7 @@ tokio = { workspace = true, features = [
   "sync",
   "time",
 ] }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 uhlc = { workspace = true }
 zenoh = { workspace = true, default-features = false }
