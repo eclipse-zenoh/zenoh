@@ -584,12 +584,13 @@ async fn test_adminspace_transports_and_links() {
 
     // Parse and verify JSON from subscription
     let transport_bytes_sub = transport_sample_sub.payload().to_bytes();
-    let transport_json_sub: serde_json::Value =
-        serde_json::from_slice(&transport_bytes_sub)
-            .expect("Failed to parse transport JSON from subscription");
+    let transport_json_sub: serde_json::Value = serde_json::from_slice(&transport_bytes_sub)
+        .expect("Failed to parse transport JSON from subscription");
 
-    println!("\nTransport JSON from subscription:\n{}",
-             serde_json::to_string_pretty(&transport_json_sub).unwrap());
+    println!(
+        "\nTransport JSON from subscription:\n{}",
+        serde_json::to_string_pretty(&transport_json_sub).unwrap()
+    );
 
     // Verify transport JSON from subscription
     assert_json_field_eq!(transport_json_sub, "zid", &zid2.to_string());
@@ -608,7 +609,10 @@ async fn test_adminspace_transports_and_links() {
         "Should receive exactly one link notification"
     );
     assert!(
-        link_sample_sub.key_expr().as_str().contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")),
+        link_sample_sub
+            .key_expr()
+            .as_str()
+            .contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")),
         "Link key expression should contain the expected transport path"
     );
     assert_eq!(
@@ -618,12 +622,13 @@ async fn test_adminspace_transports_and_links() {
 
     // Parse and verify link JSON from subscription
     let link_bytes_sub = link_sample_sub.payload().to_bytes();
-    let link_json_sub: serde_json::Value =
-        serde_json::from_slice(&link_bytes_sub)
-            .expect("Failed to parse link JSON from subscription");
+    let link_json_sub: serde_json::Value = serde_json::from_slice(&link_bytes_sub)
+        .expect("Failed to parse link JSON from subscription");
 
-    println!("\nLink JSON from subscription:\n{}",
-             serde_json::to_string_pretty(&link_json_sub).unwrap());
+    println!(
+        "\nLink JSON from subscription:\n{}",
+        serde_json::to_string_pretty(&link_json_sub).unwrap()
+    );
 
     // Verify link JSON from subscription has all required fields
     assert_json_field!(link_json_sub, "src", str);
@@ -674,7 +679,10 @@ async fn test_adminspace_transports_and_links() {
         serde_json::from_slice(&transport_bytes).expect("Failed to parse transport JSON");
 
     // Print TransportPeer JSON
-    println!("TransportPeer JSON:\n{}", serde_json::to_string_pretty(&transport_json).unwrap());
+    println!(
+        "TransportPeer JSON:\n{}",
+        serde_json::to_string_pretty(&transport_json).unwrap()
+    );
 
     // Verify all TransportPeer fields using macro
     assert_json_field_eq!(transport_json, "zid", &zid2.to_string());
@@ -721,7 +729,10 @@ async fn test_adminspace_transports_and_links() {
         serde_json::from_slice(&link_bytes).expect("Failed to parse link JSON");
 
     // Print Link JSON
-    println!("\nLink JSON:\n{}", serde_json::to_string_pretty(&link_json).unwrap());
+    println!(
+        "\nLink JSON:\n{}",
+        serde_json::to_string_pretty(&link_json).unwrap()
+    );
     println!("\nNote: 'priorities' and 'reliability' are set via endpoint metadata (e.g., ?rel=1;prio=1-7)");
 
     // Verify all Link fields comprehensively
@@ -759,8 +770,3 @@ async fn test_adminspace_transports_and_links() {
     router2.close().await.unwrap();
     router1.close().await.unwrap();
 }
-
-// Note: The test_adminspace_transports_and_links test now includes both query-based
-// verification and subscription-based verification of transport and link events.
-// The adminspace publishes transport and link information which can be received
-// through both get queries and subscriptions.
