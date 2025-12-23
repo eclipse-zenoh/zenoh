@@ -753,11 +753,9 @@ async fn gc_task(statesref: Weak<Mutex<State>>, retention_period: Duration) {
         retention_period: Duration,
         now: Instant,
     ) -> Instant {
-        let mut oldest_access = now;
         while let Some((&key, state)) = states.peek_lru() {
             if now.duration_since(state.latest_access) <= retention_period {
-                oldest_access = oldest_access.min(state.latest_access);
-                break;
+                return state.latest_access;
             // if the publisher is still marked as alive, just update its latest access
             // (accessing the state will also move it to the back of the LRU list)
             } else if state.alive {
@@ -766,7 +764,7 @@ async fn gc_task(statesref: Weak<Mutex<State>>, retention_period: Duration) {
                 states.pop_lru();
             }
         }
-        oldest_access
+        now
     }
     // start by sleeping for the initial retention period
     tokio::time::sleep(retention_period).await;
