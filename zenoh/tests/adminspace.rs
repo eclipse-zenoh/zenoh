@@ -372,56 +372,113 @@ async fn test_adminspace_write() {
         .unwrap();
 }
 
-// Helper function to assert JSON field exists
-fn assert_json_field_exists(json: &serde_json::Value, path: &str, field_name: &str) {
-    assert!(
-        json.get(path).is_some(),
-        "JSON should have '{}' field",
-        field_name
-    );
-}
+/// Macro to assert JSON field properties with automatic error messages
+///
+/// Usage:
+/// - `assert_json_field!(json, "field", bool)` - Check field is boolean type
+/// - `assert_json_field!(json, "field", number)` - Check field is number type
+/// - `assert_json_field!(json, "field", str, |v| v == "expected")` - String validator
+/// - `assert_json_field!(json, "field", bool, |v| v)` - Boolean validator
+/// - `assert_json_field!(json, "field", number, |v| v > 0)` - Number validator
+macro_rules! assert_json_field {
+    // Check field is boolean type
+    ($json:expr, $field:expr, bool) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            assert!(
+                $json[field_name].is_boolean(),
+                "JSON field '{}' should be a boolean, got: {:?}",
+                field_name,
+                $json[field_name]
+            );
+        }
+    };
 
-// Helper function to assert JSON string field value
-fn assert_json_string(json: &serde_json::Value, path: &str, expected: &str, description: &str) {
-    assert_eq!(
-        json[path].as_str().unwrap(),
-        expected,
-        "{}",
-        description
-    );
-}
+    // Check field is number type
+    ($json:expr, $field:expr, number) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            assert!(
+                $json[field_name].is_number(),
+                "JSON field '{}' should be a number, got: {:?}",
+                field_name,
+                $json[field_name]
+            );
+        }
+    };
 
-// Helper function to assert JSON field is a boolean
-fn assert_json_bool_type(json: &serde_json::Value, path: &str, description: &str) {
-    assert!(json[path].is_boolean(), "{}", description);
-}
+    // String field validator
+    ($json:expr, $field:expr, str, $validator:expr) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            let str_val = $json[field_name].as_str()
+                .unwrap_or_else(|| panic!("JSON field '{}' should be a string", field_name));
+            let validator_fn = $validator;
+            assert!(
+                validator_fn(str_val),
+                "JSON field '{}' validation failed, got: '{}'",
+                field_name,
+                str_val
+            );
+        }
+    };
 
-// Helper function to assert JSON field is a number and optionally validate it
-fn assert_json_number(
-    json: &serde_json::Value,
-    path: &str,
-    validator: impl Fn(u64) -> bool,
-    description: &str,
-) {
-    let value = json[path].as_u64().unwrap();
-    assert!(validator(value), "{}, got: {}", description, value);
-}
+    // Boolean field validator
+    ($json:expr, $field:expr, bool, $validator:expr) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            let bool_val = $json[field_name].as_bool()
+                .unwrap_or_else(|| panic!("JSON field '{}' should be a boolean", field_name));
+            let validator_fn = $validator;
+            assert!(
+                validator_fn(bool_val),
+                "JSON field '{}' validation failed, got: {}",
+                field_name,
+                bool_val
+            );
+        }
+    };
 
-// Helper function to assert JSON string contains substring
-#[allow(dead_code)]
-fn assert_json_string_contains(
-    json: &serde_json::Value,
-    path: &str,
-    substring: &str,
-    description: &str,
-) {
-    let value = json[path].as_str().unwrap();
-    assert!(
-        value.contains(substring),
-        "{}, got: {}",
-        description,
-        value
-    );
+    // Number field validator
+    ($json:expr, $field:expr, number, $validator:expr) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            let value = $json[field_name].as_u64()
+                .unwrap_or_else(|| panic!("JSON field '{}' should be a number", field_name));
+            let validator_fn = $validator;
+            assert!(
+                validator_fn(value),
+                "JSON field '{}' validation failed, got: {}",
+                field_name,
+                value
+            );
+        }
+    };
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -519,22 +576,10 @@ async fn test_adminspace_transports_and_links() {
     let transport_json: serde_json::Value =
         serde_json::from_slice(&transport_bytes).expect("Failed to parse transport JSON");
 
-    // Verify TransportPeer fields using helper functions
-    assert_json_string(
-        &transport_json,
-        "zid",
-        &zid2.to_string(),
-        "Transport ZID should match router2's ZID",
-    );
-    assert_json_field_exists(&transport_json, "whatami", "whatami");
-    assert_json_string(
-        &transport_json,
-        "whatami",
-        "router",
-        "Transport whatami should be 'router'",
-    );
-    assert_json_field_exists(&transport_json, "is_qos", "is_qos");
-    assert_json_bool_type(&transport_json, "is_qos", "is_qos should be a boolean value");
+    // Verify TransportPeer fields using macro
+    assert_json_field!(transport_json, "zid", str, |v| v == &zid2.to_string());
+    assert_json_field!(transport_json, "whatami", str, |v| v == "router");
+    assert_json_field!(transport_json, "is_qos", bool);
 
     // Test 4: Query links for the unicast transport
     let links: Vec<String> = router1
@@ -571,12 +616,7 @@ async fn test_adminspace_transports_and_links() {
     let link_json: serde_json::Value =
         serde_json::from_slice(&link_bytes).expect("Failed to parse link JSON");
 
-    // Verify Link fields using helper functions
-    assert_json_field_exists(&link_json, "src", "src (source locator)");
-    assert_json_field_exists(&link_json, "dst", "dst (destination locator)");
-    assert_json_field_exists(&link_json, "mtu", "mtu");
-    assert_json_field_exists(&link_json, "is_streamed", "is_streamed");
-
+    // Verify Link fields using macro
     // Verify src and dst are valid locator strings
     let src_str = link_json["src"].as_str().unwrap();
     let dst_str = link_json["dst"].as_str().unwrap();
@@ -591,16 +631,13 @@ async fn test_adminspace_transports_and_links() {
         dst_str
     );
 
-    // Verify MTU is a positive number using helper
-    assert_json_number(&link_json, "mtu", |v| v > 0, "MTU should be positive");
+    // Verify MTU is a positive number using macro
+    assert_json_field!(link_json, "mtu", number, |v| v > 0);
+    assert_json_field!(link_json, "is_streamed", bool);
 
     // For TCP links, is_streamed should typically be true
     if src_str.contains("tcp/") {
-        assert_eq!(
-            link_json["is_streamed"].as_bool().unwrap(),
-            true,
-            "TCP links should be streamed"
-        );
+        assert_json_field!(link_json, "is_streamed", bool, |v| v);
     }
 
     // Test 6: Verify transport query with wildcard works for all transports
