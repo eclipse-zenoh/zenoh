@@ -16,8 +16,6 @@ use std::{
     cell::UnsafeCell,
     collections::HashMap,
     fmt,
-    future::poll_fn,
-    mem,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     time::Duration,

@@ -32,9 +32,9 @@ use zenoh_protocol::{
     transport::{KeepAlive, TransportMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
+use zenoh_sync::RecyclingObjectPool;
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
-use zenoh_sync::RecyclingObjectPool;
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "stats")]
