@@ -1,0 +1,37 @@
+#
+# Copyright (c) 2025 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+authors = [
+  "Dmitrii Bannov <dmitrii.bannov@zettascale.tech>",
+]
+categories = { workspace = true }
+description = "Internal crate for zenoh."
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+name = "zenoh-uring"
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+atomic-queue = { workspace = true }
+io-uring = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-result = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+zenoh-result = { workspace = true }
