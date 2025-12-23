@@ -107,7 +107,7 @@ impl Default for CacheConfig {
 impl CacheConfig {
     /// Specify how many samples to keep for each resource.
     ///
-    /// Builder will fail if `max_samples` is zero.
+    /// Builder will fail if `max_samples` is set to zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = depth;

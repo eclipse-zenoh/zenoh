@@ -77,7 +77,7 @@ impl HistoryConfig {
 
     /// Specify how many samples to query for each resource.
     ///
-    /// Builder will fail if `max_samples` is zero.
+    /// Builder will fail if `max_samples` is set to zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = Some(depth);
@@ -86,7 +86,7 @@ impl HistoryConfig {
 
     /// Specify the maximum age of samples to query.
     ///
-    /// Builder will fail if `max_age` is zero.
+    /// Builder will fail if `max_age` is set to zero.
     #[zenoh_macros::unstable]
     pub fn max_age(mut self, seconds: f64) -> Self {
         self.max_age = Some(seconds);
