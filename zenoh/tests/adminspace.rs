@@ -524,9 +524,9 @@ async fn test_adminspace_transports_and_links() {
     let (transport_tx, mut transport_rx) = tokio::sync::mpsc::unbounded_channel();
     let (link_tx, mut link_rx) = tokio::sync::mpsc::unbounded_channel();
 
-    // Subscribe to all unicast transports
+    // Subscribe to unicast transports only (single * matches one level)
     let transport_subscriber = router1
-        .declare_subscriber(format!("@/{zid1}/session/transport/unicast/**"))
+        .declare_subscriber(format!("@/{zid1}/session/transport/unicast/*"))
         .callback(move |sample| {
             transport_tx.send(sample).unwrap();
         })
@@ -535,7 +535,7 @@ async fn test_adminspace_transports_and_links() {
 
     // Subscribe to all links (we'll filter for the specific transport after router2 connects)
     let link_subscriber = router1
-        .declare_subscriber(format!("@/{zid1}/session/transport/unicast/**/link/**"))
+        .declare_subscriber(format!("@/{zid1}/session/transport/unicast/**/link/*"))
         .callback(move |sample| {
             link_tx.send(sample).unwrap();
         })
@@ -565,12 +565,15 @@ async fn test_adminspace_transports_and_links() {
     // Give time for subscription notifications to arrive
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Collect all transport samples and filter for the specific one
+    // Collect all transport samples - should be exactly one
     let transport_samples: Vec<_> = std::iter::from_fn(|| transport_rx.try_recv().ok()).collect();
-    let transport_sample_sub = transport_samples
-        .into_iter()
-        .find(|s| s.key_expr().as_str() == format!("@/{zid1}/session/transport/unicast/{zid2}"))
-        .expect("Should receive transport notification from subscriber");
+    assert_eq!(
+        transport_samples.len(),
+        1,
+        "Should receive exactly one transport notification, got {}",
+        transport_samples.len()
+    );
+    let transport_sample_sub = &transport_samples[0];
     assert_eq!(
         transport_sample_sub.key_expr().as_str(),
         format!("@/{zid1}/session/transport/unicast/{zid2}")
@@ -597,12 +600,19 @@ async fn test_adminspace_transports_and_links() {
     assert_json_field!(transport_json_sub, "is_shm", bool);
 
     // Test: Verify link subscription notification
-    // Collect all link samples and filter for the specific transport
+    // Collect all link samples - should be exactly one
     let link_samples: Vec<_> = std::iter::from_fn(|| link_rx.try_recv().ok()).collect();
-    let link_sample_sub = link_samples
-        .into_iter()
-        .find(|s| s.key_expr().as_str().contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")))
-        .expect("Should receive link notification from subscriber");
+    assert_eq!(
+        link_samples.len(),
+        1,
+        "Should receive exactly one link notification, got {}",
+        link_samples.len()
+    );
+    let link_sample_sub = &link_samples[0];
+    assert!(
+        link_sample_sub.key_expr().as_str().contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")),
+        "Link key expression should contain the expected transport path"
+    );
     assert_eq!(
         link_sample_sub.encoding(),
         &zenoh::bytes::Encoding::APPLICATION_JSON
