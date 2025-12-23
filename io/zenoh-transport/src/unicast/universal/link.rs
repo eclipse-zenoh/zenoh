@@ -25,8 +25,6 @@ use futures::{future::select_all, task::AtomicWaker};
 use tokio::task::JoinHandle;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_link::Link;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::Priority;
 use zenoh_protocol::{
     core::Priority,
     transport::{KeepAlive, TransportMessage},
@@ -37,8 +35,6 @@ use zenoh_sync::RecyclingObjectPool;
 use zenoh_sync::{event, Notifier, Waiter};
 
 use super::transport::TransportUnicastUniversal;
-#[cfg(feature = "stats")]
-use crate::common::stats::TransportStats;
 use crate::{
     common::{
         batch::{BatchConfig, RBatch},
@@ -234,7 +230,7 @@ async fn tx_task(
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     let keep_alive_tracker = TimeoutTracker::new(keep_alive);
     if link.inner.link.supports_priorities() {
@@ -407,7 +403,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
     transport: TransportUnicastUniversal,
     lease_tracker: TimeoutTracker,
     token: CancellationToken,
-    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
     pool: &RecyclingObjectPool<Box<[u8]>, F>,
 ) -> ZResult<()> {
     async fn read<F: Fn() -> Box<[u8]>>(
@@ -467,12 +463,15 @@ impl TimeoutTracker {
             latest_reset: Mutex::new(now),
             task: OnceLock::new(),
         });
-        let tracker = inner.clone();
-        let task = zenoh_runtime::ZRuntime::TX.spawn(async move {
+        let tracker = Arc::downgrade(&inner);
+        let task = tokio::spawn(async move {
             let mut latest_reset = now;
             loop {
-                tokio::time::sleep_until((latest_reset + tracker.timeout).into()).await;
+                tokio::time::sleep_until((latest_reset + timeout).into()).await;
                 let prev = latest_reset;
+                let Some(tracker) = tracker.upgrade() else {
+                    break;
+                };
                 latest_reset = *tracker.latest_reset.lock().unwrap();
                 if latest_reset <= prev {
                     latest_reset = Instant::now();
@@ -511,8 +510,6 @@ impl TimeoutTracker {
 
 impl Drop for TimeoutTracker {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.0) == 2 {
-            self.0.task.get().unwrap().abort();
-        }
+        self.0.task.get().unwrap().abort();
     }
 }
