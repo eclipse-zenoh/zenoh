@@ -32,7 +32,6 @@ internal = []
 unstable = ["zenoh/internal", "zenoh/unstable"]
 
 [dependencies]
-async-trait = { workspace = true }
 bincode = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
