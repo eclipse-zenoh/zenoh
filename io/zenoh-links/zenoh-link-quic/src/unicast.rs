@@ -49,6 +49,8 @@ use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
+const MULTISTREAM_CONFIG_KEY: &str = "multistream";
+
 /// Quic endpoint `multistream` config
 enum MultiStreamConfig {
     /// `multistream=false`
@@ -62,7 +64,7 @@ enum MultiStreamConfig {
 impl MultiStreamConfig {
     /// Parse multistream configuration.
     fn new(config: Config) -> ZResult<Self> {
-        Ok(match config.get("multistream") {
+        Ok(match config.get(MULTISTREAM_CONFIG_KEY) {
             Some("false") => Self::Disabled,
             Some("true") => Self::Enabled,
             None | Some("auto") => Self::Auto,
