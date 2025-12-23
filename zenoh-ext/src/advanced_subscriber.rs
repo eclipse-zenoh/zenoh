@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, num::NonZeroUsize, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
     handlers::{Callback, CallbackParameter, IntoHandler},
-    internal::{bail, zerror},
+    internal::bail,
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::SubscriberBuilder,
