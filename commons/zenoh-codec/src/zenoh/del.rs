@@ -167,7 +167,7 @@ where
                         }
 
                         #[cfg(feature = "shared-memory")]
-                        if ext_sinfo.is_some() {
+                        if ext_shm.is_some() {
                             read::<ZBufShmReader, R>(reader, &eodec)
                         } else {
                             read::<ZBufRawReader, R>(reader, &eodec)

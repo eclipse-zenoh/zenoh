@@ -122,6 +122,11 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
+        #[cfg(feature = "shared-memory")]
+        if let Some(eshm) = ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (eshm, n_exts != 0))?;
+        }
         if let Some(body) = ext_body.as_ref() {
             n_exts -= 1;
             #[cfg(feature = "shared-memory")]
@@ -132,11 +137,6 @@ where
             }
             #[cfg(not(feature = "shared-memory"))]
             self.write(&mut *writer, (body, n_exts != 0, ZBufRawWriter {}))?;
-        }
-        #[cfg(feature = "shared-memory")]
-        if let Some(eshm) = ext_shm.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (eshm, n_exts != 0))?;
         }
         if let Some(att) = ext_attachment.as_ref() {
             n_exts -= 1;
@@ -223,7 +223,7 @@ where
                         }
 
                         #[cfg(feature = "shared-memory")]
-                        if ext_sinfo.is_some() {
+                        if ext_shm.is_some() {
                             read::<ZBufShmReader, R>(reader, &eodec)
                         } else {
                             read::<ZBufRawReader, R>(reader, &eodec)
@@ -253,7 +253,7 @@ where
                         }
 
                         #[cfg(feature = "shared-memory")]
-                        if ext_sinfo.is_some() {
+                        if ext_shm.is_some() {
                             read::<ZBufShmReader, R>(reader, &eodec)
                         } else {
                             read::<ZBufRawReader, R>(reader, &eodec)

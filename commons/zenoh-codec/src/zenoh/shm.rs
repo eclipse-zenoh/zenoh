@@ -12,17 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::LCodec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZBuf,
 };
 
-use crate::Zenoh080Bounded;
 #[cfg(feature = "shared-memory")]
 use crate::Zenoh080Sliced;
-use crate::{RCodec, WCodec};
+use crate::{LCodec, RCodec, WCodec, Zenoh080Bounded};
 
 pub trait ZBufWCodec {
     fn write_zbuf<W: Writer>(writer: &mut W, zbuf: &ZBuf) -> Result<(), DidntWrite>;
@@ -51,7 +49,7 @@ impl ZBufWCodec for ZBufShmWriter {
     }
 }
 
-pub(crate)  struct ZBufRawWriter {}
+pub(crate) struct ZBufRawWriter {}
 
 impl ZBufWCodec for ZBufRawWriter {
     fn write_zbuf<W: Writer>(writer: &mut W, zbuf: &ZBuf) -> Result<(), DidntWrite> {
