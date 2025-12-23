@@ -14,6 +14,7 @@
 use std::{
     collections::VecDeque,
     future::{IntoFuture, Ready},
+    num::NonZeroUsize,
     ops::{Bound, RangeBounds},
     sync::{Arc, RwLock},
 };
@@ -88,7 +89,7 @@ impl QoSBuilderTrait for RepliesConfig {
 /// Configure an [`AdvancedPublisher`](crate::AdvancedPublisher) cache.
 #[zenoh_macros::unstable]
 pub struct CacheConfig {
-    max_samples: usize,
+    max_samples: NonZeroUsize,
     replies_config: RepliesConfig,
 }
 
@@ -96,7 +97,7 @@ pub struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            max_samples: 1,
+            max_samples: 1.try_into().unwrap(),
             replies_config: RepliesConfig::default(),
         }
     }
@@ -105,9 +106,16 @@ impl Default for CacheConfig {
 #[zenoh_macros::unstable]
 impl CacheConfig {
     /// Specify how many samples to keep for each resource.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `depth` is zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
-        self.max_samples = depth;
+        if depth == 0 {
+            panic!("`depth` must be greater than zero");
+        }
+        self.max_samples = depth.try_into().unwrap();
         self
     }
 
@@ -212,7 +220,7 @@ fn decode_sn_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
 #[zenoh_macros::unstable]
 pub struct AdvancedCache {
     cache: Arc<RwLock<VecDeque<Sample>>>,
-    max_samples: usize,
+    max_samples: NonZeroUsize,
     _queryable: Queryable<()>,
     _token: Option<LivelinessToken>,
 }
@@ -367,7 +375,7 @@ impl AdvancedCache {
     #[zenoh_macros::unstable]
     pub(crate) fn cache_sample(&self, sample: Sample) {
         if let Ok(mut queue) = self.cache.write() {
-            if queue.len() >= self.max_samples {
+            if queue.len() >= self.max_samples.get() {
                 queue.pop_front();
             }
             queue.push_back(sample);

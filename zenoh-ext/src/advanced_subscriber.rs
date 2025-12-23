@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, future::IntoFuture, num::NonZeroUsize, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -57,7 +57,7 @@ use crate::{
 #[zenoh_macros::unstable]
 pub struct HistoryConfig {
     liveliness: bool,
-    sample_depth: Option<usize>,
+    sample_depth: Option<NonZeroUsize>,
     age: Option<f64>,
 }
 
@@ -75,9 +75,16 @@ impl HistoryConfig {
     }
 
     /// Specify how many samples to query for each resource.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `depth` is zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
-        self.sample_depth = Some(depth);
+        if depth == 0 {
+            panic!("`depth` must be greater than zero");
+        }
+        self.sample_depth = Some(depth.try_into().unwrap());
         self
     }
 
@@ -404,7 +411,7 @@ struct State {
     key_expr: KeyExpr<'static>,
     retransmission: bool,
     period: Option<Period>,
-    history_depth: usize,
+    history_depth: Option<NonZeroUsize>,
     query_target: QueryTarget,
     query_timeout: Duration,
     callback: Callback<Sample>,
@@ -544,6 +551,10 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 
 #[zenoh_macros::unstable]
 fn handle_sample(states: &mut State, sample: Sample) -> bool {
+    // Maximum depth of query responses; if the query is not bounded with `_max`,
+    // then it can receive an arbitrary number of responses.
+    let max_history_depth = states.history_depth.map_or(usize::MAX, |depth| depth.get());
+
     if let Some(source_info) = sample.source_info().cloned() {
         #[inline]
         fn deliver_and_flush(
@@ -571,14 +582,14 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         });
         if state.last_delivered.is_none() && states.global_pending_queries != 0 {
             // Avoid going through the Map if history_depth == 1
-            if states.history_depth == 1 {
+            if max_history_depth == 1 {
                 state.last_delivered = Some(source_info.source_sn().into());
                 states.callback.call(sample);
             } else {
                 state
                     .pending_samples
                     .insert(source_info.source_sn().into(), sample);
-                if state.pending_samples.len() >= states.history_depth {
+                if state.pending_samples.len() >= max_history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
                         deliver_and_flush(sample, sn, &states.callback, state);
                     }
@@ -621,13 +632,13 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         });
         if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
             if (states.global_pending_queries == 0 && state.pending_queries == 0)
-                || states.history_depth == 1
+                || max_history_depth == 1
             {
                 state.last_delivered = Some(*timestamp);
                 states.callback.call(sample);
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
-                if state.pending_samples.len() >= states.history_depth {
+                if state.pending_samples.len() >= max_history_depth {
                     flush_timestamped_source(state, &states.callback);
                 }
             }
@@ -747,11 +758,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }),
             key_expr: key_expr.clone().into_owned(),
             retransmission: retransmission.is_some(),
-            history_depth: conf
-                .history
-                .as_ref()
-                .and_then(|h| h.sample_depth)
-                .unwrap_or_default(),
+            history_depth: conf.history.as_ref().and_then(|h| h.sample_depth),
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
@@ -1382,9 +1389,7 @@ fn flush_sequenced_source(
 #[inline]
 fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callback<Sample>) {
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        let mut pending_samples = BTreeMap::new();
-        std::mem::swap(&mut state.pending_samples, &mut pending_samples);
-        for (timestamp, sample) in pending_samples {
+        for (timestamp, sample) in std::mem::take(&mut state.pending_samples) {
             if state
                 .last_delivered
                 .map(|last| timestamp > last)
