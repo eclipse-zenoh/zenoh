@@ -374,29 +374,40 @@ async fn test_adminspace_write() {
 
 /// Macro to assert JSON field properties with automatic error messages
 ///
+/// Supports nested field paths using dot notation (e.g., "priorities.start")
+///
 /// Usage:
 /// - `assert_json_field!(json, "field", bool)` - Check field is boolean type
+/// - `assert_json_field!(json, "field.nested", str, |v| v == "expected")` - String validator with path
 /// - `assert_json_field!(json, "field", number)` - Check field is number type
 /// - `assert_json_field!(json, "field", array)` - Check field is array type
 /// - `assert_json_field!(json, "field", object)` - Check field is object type
-/// - `assert_json_field!(json, "field", str, |v| v == "expected")` - String validator
 /// - `assert_json_field!(json, "field", bool, |v| v)` - Boolean validator
 /// - `assert_json_field!(json, "field", number, |v| v > 0)` - Number validator
 macro_rules! assert_json_field {
     // Check field is boolean type
     ($json:expr, $field:expr, bool) => {
         {
-            let field_name = $field;
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
             assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            assert!(
-                $json[field_name].is_boolean(),
+                current.is_boolean(),
                 "JSON field '{}' should be a boolean, got: {:?}",
-                field_name,
-                $json[field_name]
+                field_path,
+                current
             );
         }
     };
@@ -404,17 +415,26 @@ macro_rules! assert_json_field {
     // Check field is number type
     ($json:expr, $field:expr, number) => {
         {
-            let field_name = $field;
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
             assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            assert!(
-                $json[field_name].is_number(),
+                current.is_number(),
                 "JSON field '{}' should be a number, got: {:?}",
-                field_name,
-                $json[field_name]
+                field_path,
+                current
             );
         }
     };
@@ -422,19 +442,28 @@ macro_rules! assert_json_field {
     // String field validator
     ($json:expr, $field:expr, str, $validator:expr) => {
         {
-            let field_name = $field;
-            assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            let str_val = $json[field_name].as_str()
-                .unwrap_or_else(|| panic!("JSON field '{}' should be a string", field_name));
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
+            let str_val = current.as_str()
+                .unwrap_or_else(|| panic!("JSON field '{}' should be a string", field_path));
             let validator_fn = $validator;
             assert!(
                 validator_fn(str_val),
                 "JSON field '{}' validation failed, got: '{}'",
-                field_name,
+                field_path,
                 str_val
             );
         }
@@ -443,19 +472,28 @@ macro_rules! assert_json_field {
     // Boolean field validator
     ($json:expr, $field:expr, bool, $validator:expr) => {
         {
-            let field_name = $field;
-            assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            let bool_val = $json[field_name].as_bool()
-                .unwrap_or_else(|| panic!("JSON field '{}' should be a boolean", field_name));
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
+            let bool_val = current.as_bool()
+                .unwrap_or_else(|| panic!("JSON field '{}' should be a boolean", field_path));
             let validator_fn = $validator;
             assert!(
                 validator_fn(bool_val),
                 "JSON field '{}' validation failed, got: {}",
-                field_name,
+                field_path,
                 bool_val
             );
         }
@@ -464,19 +502,28 @@ macro_rules! assert_json_field {
     // Number field validator
     ($json:expr, $field:expr, number, $validator:expr) => {
         {
-            let field_name = $field;
-            assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            let value = $json[field_name].as_u64()
-                .unwrap_or_else(|| panic!("JSON field '{}' should be a number", field_name));
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
+            let value = current.as_u64()
+                .unwrap_or_else(|| panic!("JSON field '{}' should be a number", field_path));
             let validator_fn = $validator;
             assert!(
                 validator_fn(value),
                 "JSON field '{}' validation failed, got: {}",
-                field_name,
+                field_path,
                 value
             );
         }
@@ -485,17 +532,26 @@ macro_rules! assert_json_field {
     // Check field is array type
     ($json:expr, $field:expr, array) => {
         {
-            let field_name = $field;
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
             assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            assert!(
-                $json[field_name].is_array(),
+                current.is_array(),
                 "JSON field '{}' should be an array, got: {:?}",
-                field_name,
-                $json[field_name]
+                field_path,
+                current
             );
         }
     };
@@ -503,17 +559,26 @@ macro_rules! assert_json_field {
     // Check field is object type
     ($json:expr, $field:expr, object) => {
         {
-            let field_name = $field;
+            let field_path = $field;
+            let parts: Vec<&str> = field_path.split('.').collect();
+            let mut current = &$json;
+
+            // Navigate to the field
+            for (i, part) in parts.iter().enumerate() {
+                assert!(
+                    current.get(part).is_some(),
+                    "JSON field '{}' does not exist (failed at '{}')",
+                    field_path,
+                    parts[..=i].join(".")
+                );
+                current = &current[part];
+            }
+
             assert!(
-                $json.get(field_name).is_some(),
-                "JSON field '{}' does not exist",
-                field_name
-            );
-            assert!(
-                $json[field_name].is_object(),
+                current.is_object(),
                 "JSON field '{}' should be an object, got: {:?}",
-                field_name,
-                $json[field_name]
+                field_path,
+                current
             );
         }
     };
@@ -523,6 +588,7 @@ macro_rules! assert_json_field {
 async fn test_adminspace_transports_and_links() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const ROUTER_ENDPOINT: &str = "tcp/localhost:31001";
+    const ROUTER_CONNECT_ENDPOINT: &str = "tcp/localhost:31001?rel=1;prio=1-7";
 
     zenoh_util::init_log_from_env_or("error");
 
@@ -542,6 +608,8 @@ async fn test_adminspace_transports_and_links() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
+        // Enable QoS for priorities and reliability support
+        c.transport.unicast.qos.set_enabled(true).unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -565,9 +633,11 @@ async fn test_adminspace_transports_and_links() {
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_CONNECT_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        // Enable QoS for priorities and reliability support
+        c.transport.unicast.qos.set_enabled(true).unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -614,16 +684,15 @@ async fn test_adminspace_transports_and_links() {
     let transport_json: serde_json::Value =
         serde_json::from_slice(&transport_bytes).expect("Failed to parse transport JSON");
 
+    // Print TransportPeer JSON
+    println!("TransportPeer JSON:\n{}", serde_json::to_string_pretty(&transport_json).unwrap());
+
     // Verify all TransportPeer fields using macro
-    // Required fields
     assert_json_field!(transport_json, "zid", str, |v: &str| v == &zid2.to_string());
     assert_json_field!(transport_json, "whatami", str, |v: &str| v == "router");
     assert_json_field!(transport_json, "is_qos", bool);
-
-    // Optional feature-gated field (is_shm may or may not be present)
-    if transport_json.get("is_shm").is_some() {
-        assert_json_field!(transport_json, "is_shm", bool);
-    }
+    #[cfg(feature = "shared-memory")]
+    assert_json_field!(transport_json, "is_shm", bool);
 
     // Note: 'links' field is skipped in serialization (see TransportPeer serde(skip))
 
@@ -662,57 +731,30 @@ async fn test_adminspace_transports_and_links() {
     let link_json: serde_json::Value =
         serde_json::from_slice(&link_bytes).expect("Failed to parse link JSON");
 
-    // Verify all Link fields comprehensively
+    // Print Link JSON
+    println!("\nLink JSON:\n{}", serde_json::to_string_pretty(&link_json).unwrap());
+    println!("\nNote: 'priorities' and 'reliability' are set via endpoint metadata (e.g., ?rel=1;prio=1-7)");
 
-    // Required field: src (source locator)
+    // Verify all Link fields comprehensively
     assert_json_field!(link_json, "src", str, |v: &str| {
         !v.is_empty() && (v.contains("tcp/") || v.contains("localhost"))
     });
-
-    // Required field: dst (destination locator)
     assert_json_field!(link_json, "dst", str, |v: &str| {
         !v.is_empty() && (v.contains("tcp/") || v.contains("localhost"))
     });
-
-    // Optional field: group (for multicast)
-    if link_json.get("group").is_some() {
-        // Group can be null or a locator string
-        if !link_json["group"].is_null() {
-            assert_json_field!(link_json, "group", str, |v: &str| !v.is_empty());
-        }
-    }
-
-    // Required field: mtu (must be positive)
     assert_json_field!(link_json, "mtu", number, |v: u64| v > 0);
-
-    // Required field: is_streamed (boolean)
-    assert_json_field!(link_json, "is_streamed", bool);
-
-    // For TCP links, is_streamed should be true
-    let src_str = link_json["src"].as_str().unwrap();
-    if src_str.contains("tcp/") {
-        assert_json_field!(link_json, "is_streamed", bool, |v: bool| v);
-    }
-
-    // Required field: interfaces (array of strings)
+    assert_json_field!(link_json, "is_streamed", bool, |v: bool| v);
     assert_json_field!(link_json, "interfaces", array);
 
-    // Note: auth_identifier field exists but has complex serialization format
-    // We verify its presence via macro when checking other required fields
+    // Verify priorities object and its nested fields
+    assert_json_field!(link_json, "priorities", object);
+    assert_json_field!(link_json, "priorities.start", str, |v: &str| !v.is_empty());
+    assert_json_field!(link_json, "priorities.end", str, |v: &str| !v.is_empty());
 
-    // Optional field: priorities (priority range) - checked only if not null
-    if !link_json.get("priorities").map_or(true, |v| v.is_null()) {
-        assert_json_field!(link_json, "priorities", object);
-    }
-
-    // Optional field: reliability - checked only if not null
-    if !link_json.get("reliability").map_or(true, |v| v.is_null()) {
-        // Reliability can be string or object depending on the variant
-        assert!(
-            link_json["reliability"].is_string() || link_json["reliability"].is_object(),
-            "Link 'reliability' should be a string or object when present"
-        );
-    }
+    // Verify reliability field
+    assert_json_field!(link_json, "reliability", str, |v: &str| {
+        v == "Reliable" || v == "BestEffort"
+    });
 
     // Test 6: Verify transport query with wildcard works for all transports
     let all_transports: Vec<String> = router1
