@@ -256,8 +256,8 @@ impl LinkUnicastQuic {
     ///
     /// There should be only one caller per priority.
     #[allow(clippy::mut_from_ref)]
-    unsafe fn write_stream(&self, priority: Priority) -> &mut quinn::SendStream {
-        unsafe { &mut *self.send[priority as usize].get() }
+    unsafe fn write_stream(&self, priority: Option<Priority>) -> &mut quinn::SendStream {
+        unsafe { &mut *self.send[priority.unwrap_or(Priority::Control) as usize].get() }
             .as_mut()
             .expect("multistream should have been started")
     }
@@ -270,8 +270,11 @@ impl LinkUnicastQuic {
     ///
     /// There should be only one caller per priority.
     #[allow(clippy::mut_from_ref)]
-    async unsafe fn read_stream(&self, priority: Priority) -> ZResult<&mut quinn::RecvStream> {
-        match unsafe { &mut *self.recv[priority as usize].get() }
+    async unsafe fn read_stream(
+        &self,
+        priority: Option<Priority>,
+    ) -> ZResult<&mut quinn::RecvStream> {
+        match unsafe { &mut *self.recv[priority.unwrap_or(Priority::Control) as usize].get() }
             .as_mut()
             .expect("multistream should have been started")
         {
@@ -308,7 +311,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8], priority: Priority) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize> {
         unsafe { self.write_stream(priority) }
             .write(buffer)
             .await
@@ -318,7 +321,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             })
     }
 
-    async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()> {
         unsafe { self.write_stream(priority) }
             .write_all(buffer)
             .await
@@ -328,7 +331,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             })
     }
 
-    async fn read(&self, buffer: &mut [u8], priority: Priority) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize> {
         let recv = unsafe { self.read_stream(priority).await? };
         recv.read(buffer)
             .await
@@ -348,7 +351,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8], priority: Priority) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()> {
         unsafe { self.read_stream(priority).await? }
             .read_exact(buffer)
             .await
