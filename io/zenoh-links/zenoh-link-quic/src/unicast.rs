@@ -167,6 +167,8 @@ impl RecvStream {
             // hence the `+ 1`
             let prio = recv.id().index() as usize + 1;
             if let Some(tx) = priority_txs.remove(&prio) {
+                // If the channel is closed, then the link is closed, so we don't care
+                // as `accept_uni` above should fail quickly after
                 tx.send(recv).ok();
             }
         }
