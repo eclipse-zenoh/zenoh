@@ -746,7 +746,7 @@ fn periodic_query(statesref: &Arc<Mutex<State>>, source_id: EntityGlobalId) {
 /// Garbage collects the source states' lists.
 ///
 /// Reclamation is based on `SourceState::latest_access`; alive publishers are not reclaimed.
-async fn gc_task(statesref: Weak<Mutex<State>>, retention_period: Option<Duration>) {
+async fn gc_task(statesref: Weak<Mutex<State>>, retention_period: Duration) {
     /// Garbage collect a lists and return the oldest access.
     fn garbage_collect<K: Copy + Eq + Hash, T>(
         states: &mut LruCache<K, SourceState<T>>,
@@ -768,8 +768,6 @@ async fn gc_task(statesref: Weak<Mutex<State>>, retention_period: Option<Duratio
         }
         oldest_access
     }
-    let retention_period =
-        retention_period.unwrap_or(RecoveryConfig::<true>::RETENTION_PERIOD_DEFAULT);
     // start by sleeping for the initial retention period
     tokio::time::sleep(retention_period).await;
     loop {
@@ -808,6 +806,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
         let session = conf.session.clone();
+        let retention_period = retransmission
+            .as_ref()
+            .and_then(|r| r.retention_period)
+            .unwrap_or(RecoveryConfig::<true>::RETENTION_PERIOD_DEFAULT);
         let statesref = Arc::new_cyclic(|weak| {
             Mutex::new(State {
                 next_id: 0,
@@ -828,10 +830,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 callback: callback.clone(),
                 miss_handlers: HashMap::new(),
                 token: None,
-                _gc_task: AbortOnDropHandle::new(ZRuntime::Application.spawn(gc_task(
-                    weak.clone(),
-                    retransmission.as_ref().and_then(|r| r.retention_period),
-                ))),
+                _gc_task: AbortOnDropHandle::new(
+                    ZRuntime::Application.spawn(gc_task(weak.clone(), retention_period)),
+                ),
             })
         });
 
