@@ -411,7 +411,7 @@ struct State {
     key_expr: KeyExpr<'static>,
     retransmission: bool,
     period: Option<Period>,
-    history_depth: Option<NonZeroUsize>,
+    max_history_depth: NonZeroUsize,
     query_target: QueryTarget,
     query_timeout: Duration,
     callback: Callback<Sample>,
@@ -551,10 +551,6 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 
 #[zenoh_macros::unstable]
 fn handle_sample(states: &mut State, sample: Sample) -> bool {
-    // Maximum depth of query responses; if the query is not bounded with `_max`,
-    // then it can receive an arbitrary number of responses.
-    let max_history_depth = states.history_depth.map_or(usize::MAX, |depth| depth.get());
-
     if let Some(source_info) = sample.source_info().cloned() {
         #[inline]
         fn deliver_and_flush(
@@ -582,14 +578,14 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         });
         if state.last_delivered.is_none() && states.global_pending_queries != 0 {
             // Avoid going through the Map if history_depth == 1
-            if max_history_depth == 1 {
+            if states.max_history_depth.get() == 1 {
                 state.last_delivered = Some(source_info.source_sn().into());
                 states.callback.call(sample);
             } else {
                 state
                     .pending_samples
                     .insert(source_info.source_sn().into(), sample);
-                if state.pending_samples.len() >= max_history_depth {
+                if state.pending_samples.len() >= states.max_history_depth.get() {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
                         deliver_and_flush(sample, sn, &states.callback, state);
                     }
@@ -632,13 +628,13 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         });
         if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
             if (states.global_pending_queries == 0 && state.pending_queries == 0)
-                || max_history_depth == 1
+                || states.max_history_depth.get() == 1
             {
                 state.last_delivered = Some(*timestamp);
                 states.callback.call(sample);
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
-                if state.pending_samples.len() >= max_history_depth {
+                if state.pending_samples.len() >= states.max_history_depth.get() {
                     flush_timestamped_source(state, &states.callback);
                 }
             }
@@ -743,6 +739,12 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
         let session = conf.session.clone();
+        let max_history_depth = conf
+            .history
+            .as_ref()
+            .and_then(|h| h.sample_depth)
+            // If the query is not bounded with `_max`, then it can receive unbounded number of responses
+            .unwrap_or(NonZeroUsize::MAX);
         let statesref = Arc::new(Mutex::new(State {
             next_id: 0,
             sequenced_states: HashMap::new(),
@@ -758,7 +760,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }),
             key_expr: key_expr.clone().into_owned(),
             retransmission: retransmission.is_some(),
-            history_depth: conf.history.as_ref().and_then(|h| h.sample_depth),
+            max_history_depth,
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: callback.clone(),
