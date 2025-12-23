@@ -562,26 +562,15 @@ async fn test_adminspace_transports_and_links() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Test: Verify transport subscription notification
-    // Collect transport samples from subscription (should receive notification about new transport)
-    let mut transport_sub_sample = None;
-    for _ in 0..10 {
-        if let Ok(sample) = transport_rx.try_recv() {
-            let key = sample.key_expr().to_string();
-            // Look for the specific transport notification (not the link notifications)
-            if key == format!("@/{zid1}/session/transport/unicast/{zid2}") {
-                transport_sub_sample = Some(sample);
-                break;
-            }
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    // Give time for subscription notifications to arrive
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
-    assert!(
-        transport_sub_sample.is_some(),
-        "Should receive transport notification from subscriber"
-    );
-
-    let transport_sample_sub = transport_sub_sample.unwrap();
+    // Collect all transport samples and filter for the specific one
+    let transport_samples: Vec<_> = std::iter::from_fn(|| transport_rx.try_recv().ok()).collect();
+    let transport_sample_sub = transport_samples
+        .into_iter()
+        .find(|s| s.key_expr().as_str() == format!("@/{zid1}/session/transport/unicast/{zid2}"))
+        .expect("Should receive transport notification from subscriber");
     assert_eq!(
         transport_sample_sub.key_expr().as_str(),
         format!("@/{zid1}/session/transport/unicast/{zid2}")
@@ -608,26 +597,12 @@ async fn test_adminspace_transports_and_links() {
     assert_json_field!(transport_json_sub, "is_shm", bool);
 
     // Test: Verify link subscription notification
-    // Collect link samples from subscription
-    let mut link_sub_sample = None;
-    for _ in 0..10 {
-        if let Ok(sample) = link_rx.try_recv() {
-            let key = sample.key_expr().to_string();
-            // Look for link notifications for this specific transport
-            if key.contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")) {
-                link_sub_sample = Some(sample);
-                break;
-            }
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-
-    assert!(
-        link_sub_sample.is_some(),
-        "Should receive link notification from subscriber"
-    );
-
-    let link_sample_sub = link_sub_sample.unwrap();
+    // Collect all link samples and filter for the specific transport
+    let link_samples: Vec<_> = std::iter::from_fn(|| link_rx.try_recv().ok()).collect();
+    let link_sample_sub = link_samples
+        .into_iter()
+        .find(|s| s.key_expr().as_str().contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")))
+        .expect("Should receive link notification from subscriber");
     assert_eq!(
         link_sample_sub.encoding(),
         &zenoh::bytes::Encoding::APPLICATION_JSON
