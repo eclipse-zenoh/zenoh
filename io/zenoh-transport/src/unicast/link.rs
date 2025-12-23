@@ -92,9 +92,7 @@ impl TransportLinkUnicast {
 
     pub(crate) async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         let mut link = self.tx();
-        // This function is only used for handshake and close, so hardcoding
-        // Priority::Control is fine.
-        link.send(msg, Priority::Control).await
+        link.send(msg, None).await
     }
 
     pub(crate) async fn recv(&self) -> ZResult<TransportMessage> {
@@ -148,7 +146,7 @@ impl TransportLinkUnicastTx {
     pub(crate) async fn send_batch(
         &mut self,
         batch: &mut WBatch,
-        priority: Priority,
+        priority: Option<Priority>,
     ) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
@@ -178,7 +176,7 @@ impl TransportLinkUnicastTx {
     pub(crate) async fn send(
         &mut self,
         msg: &TransportMessage,
-        priority: Priority,
+        priority: Option<Priority>,
     ) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
 
@@ -214,7 +212,7 @@ pub(crate) struct TransportLinkUnicastRx {
 }
 
 impl TransportLinkUnicastRx {
-    pub async fn recv_batch<C, T>(&mut self, buff: C, priority: Priority) -> ZResult<RBatch>
+    pub async fn recv_batch<C, T>(&mut self, buff: C, priority: Option<Priority>) -> ZResult<RBatch>
     where
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,
@@ -257,10 +255,7 @@ impl TransportLinkUnicastRx {
     pub async fn recv(&mut self) -> ZResult<TransportMessage> {
         let mtu = self.config.batch.mtu as usize;
         let mut batch = self
-            .recv_batch(
-                || zenoh_buffers::vec::uninit(mtu).into_boxed_slice(),
-                Priority::Control,
-            )
+            .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice(), None)
             .await?;
         let msg = batch
             .decode()
@@ -307,11 +302,11 @@ impl MaybeOpenAck {
                     // Then then we re-enable it, in case it was enabled, after the OpenAck has been sent.
                     let compression = self.link.inner.config.batch.is_compression;
                     self.link.inner.config.batch.is_compression = false;
-                    self.link.send(&msg.into(), Priority::Control).await?;
+                    self.link.send(&msg.into(), None).await?;
                     self.link.inner.config.batch.is_compression = compression;
                 },
                 {
-                    self.link.send(&msg.into(), Priority::Control).await?;
+                    self.link.send(&msg.into(), None).await?;
                 }
             )
         }

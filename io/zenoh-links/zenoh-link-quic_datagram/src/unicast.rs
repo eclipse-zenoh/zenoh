@@ -100,20 +100,20 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8], _priority: Priority) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         let amt = buffer.len();
         self.connection
             .send_datagram(Bytes::copy_from_slice(buffer))?;
         Ok(amt)
     }
 
-    async fn write_all(&self, buffer: &[u8], _priority: Priority) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.connection
             .send_datagram(Bytes::copy_from_slice(buffer))?;
         Ok(())
     }
 
-    async fn read(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         let bytes = self.connection.read_datagram().await?;
         buffer
             .get_mut(..bytes.len())
@@ -128,7 +128,7 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
         Ok(bytes.len())
     }
 
-    async fn read_exact(&self, _: &mut [u8], _priority: Priority) -> ZResult<()> {
+    async fn read_exact(&self, _: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         unreachable!()
     }
 

@@ -126,7 +126,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn write(&self, buffer: &[u8], _priority: Priority) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -134,7 +134,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8], _priority: Priority) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -142,7 +142,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -150,7 +150,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8], _priority: Priority) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _ = self
             .get_mut_socket()
             .read_exact(buffer)

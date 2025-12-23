@@ -242,7 +242,7 @@ async fn tx_task(
             let stats = stats.clone();
             zenoh_runtime::ZRuntime::TX.spawn(async move {
                 write_loop(
-                    pipeline.priority(),
+                    Some(pipeline.priority()),
                     pipeline,
                     &mut link,
                     keep_alive_tracker,
@@ -257,7 +257,7 @@ async fn tx_task(
         res.unwrap()?;
     } else {
         write_loop(
-            Priority::Control,
+            None,
             pipeline,
             link,
             keep_alive_tracker,
@@ -271,7 +271,7 @@ async fn tx_task(
 }
 
 async fn write_loop(
-    write_priority: Priority,
+    write_priority: Option<Priority>,
     mut pipeline: impl PipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive_tracker: TimeoutTracker,
@@ -285,7 +285,7 @@ async fn write_loop(
                     // The queue has been disabled: break the tx loop, drain the queue, and exit
                     break
                 };
-                debug_assert!(write_priority == Priority::Control || priority == write_priority);
+                debug_assert!(write_priority.is_none() || write_priority == Some(priority));
                 link.send_batch(&mut batch, write_priority).await?;
                 // inform the latest message tracker that a message has been sent
                 keep_alive_tracker.reset();
@@ -299,13 +299,13 @@ async fn write_loop(
                 // Reinsert the batch into the queue
                 pipeline.refill(batch, priority);
             },
-            _ = keep_alive_tracker.wait_if(write_priority == Priority::Control) => {
+            _ = keep_alive_tracker.wait_if(write_priority.unwrap_or(Priority::Control) == Priority::Control) => {
                 // A timeout occurred, no control/data messages have been sent during
                 // the keep_alive period, we need to send a KeepAlive message
                 let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.send(&message, Priority::Control).await?;
+                let n = link.send(&message, Some(Priority::Control)).await?;
 
                 #[cfg(feature = "stats")]
                 {
@@ -319,15 +319,18 @@ async fn write_loop(
 
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
-    for (mut b, prio) in batches.drain(..) {
-        tokio::time::timeout(keep_alive_tracker.timeout(), link.send_batch(&mut b, prio))
-            .await
-            .map_err(|_| {
-                zerror!(
-                    "{link}: flush failed after {} ms",
-                    keep_alive_tracker.timeout().as_millis()
-                )
-            })??;
+    for (mut b, _) in batches.drain(..) {
+        tokio::time::timeout(
+            keep_alive_tracker.timeout(),
+            link.send_batch(&mut b, write_priority),
+        )
+        .await
+        .map_err(|_| {
+            zerror!(
+                "{link}: flush failed after {} ms",
+                keep_alive_tracker.timeout().as_millis()
+            )
+        })??;
 
         #[cfg(feature = "stats")]
         {
@@ -368,7 +371,7 @@ async fn rx_task(
             let pool = pool.clone();
             zenoh_runtime::ZRuntime::RX.spawn(async move {
                 read_loop(
-                    Priority::try_from(prio).unwrap(),
+                    Some(Priority::try_from(prio).unwrap()),
                     &mut link,
                     transport,
                     lease_tracker,
@@ -384,7 +387,7 @@ async fn rx_task(
         res.unwrap()
     } else {
         read_loop(
-            Priority::Control,
+            None,
             link,
             transport,
             lease_tracker,
@@ -398,7 +401,7 @@ async fn rx_task(
 }
 
 async fn read_loop<F: Fn() -> Box<[u8]>>(
-    priority: Priority,
+    priority: Option<Priority>,
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease_tracker: TimeoutTracker,
@@ -408,7 +411,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
 ) -> ZResult<()> {
     async fn read<F: Fn() -> Box<[u8]>>(
         link: &mut TransportLinkUnicastRx,
-        priority: Priority,
+        priority: Option<Priority>,
         pool: &RecyclingObjectPool<Box<[u8]>, F>,
     ) -> ZResult<RBatch> {
         let batch = link
@@ -434,7 +437,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
                 }
                 transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
             }
-            _ = lease_tracker.wait_if(priority == Priority::Control) => {
+            _ = lease_tracker.wait_if(priority.unwrap_or(Priority::Control) == Priority::Control) => {
                 bail!("{link}: expired after {} milliseconds", lease_tracker.timeout().as_millis());
             }
             _ = token.cancelled() => return Ok(()),

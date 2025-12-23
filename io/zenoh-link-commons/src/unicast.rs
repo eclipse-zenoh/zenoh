@@ -57,10 +57,10 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn supports_priorities(&self) -> bool {
         false
     }
-    async fn write(&self, buffer: &[u8], priority: Priority) -> ZResult<usize>;
-    async fn write_all(&self, buffer: &[u8], priority: Priority) -> ZResult<()>;
-    async fn read(&self, buffer: &mut [u8], priority: Priority) -> ZResult<usize>;
-    async fn read_exact(&self, buffer: &mut [u8], priority: Priority) -> ZResult<()>;
+    async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize>;
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()>;
+    async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize>;
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
 }
 
