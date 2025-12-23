@@ -565,15 +565,14 @@ async fn test_adminspace_transports_and_links() {
     // Give time for subscription notifications to arrive
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Collect all transport samples - should be exactly one
-    let transport_samples: Vec<_> = std::iter::from_fn(|| transport_rx.try_recv().ok()).collect();
-    assert_eq!(
-        transport_samples.len(),
-        1,
-        "Should receive exactly one transport notification, got {}",
-        transport_samples.len()
+    // Receive exactly one transport sample
+    let transport_sample_sub = transport_rx
+        .try_recv()
+        .expect("Should receive transport notification");
+    assert!(
+        transport_rx.try_recv().is_err(),
+        "Should receive exactly one transport notification"
     );
-    let transport_sample_sub = &transport_samples[0];
     assert_eq!(
         transport_sample_sub.key_expr().as_str(),
         format!("@/{zid1}/session/transport/unicast/{zid2}")
@@ -600,15 +599,14 @@ async fn test_adminspace_transports_and_links() {
     assert_json_field!(transport_json_sub, "is_shm", bool);
 
     // Test: Verify link subscription notification
-    // Collect all link samples - should be exactly one
-    let link_samples: Vec<_> = std::iter::from_fn(|| link_rx.try_recv().ok()).collect();
-    assert_eq!(
-        link_samples.len(),
-        1,
-        "Should receive exactly one link notification, got {}",
-        link_samples.len()
+    // Receive exactly one link sample
+    let link_sample_sub = link_rx
+        .try_recv()
+        .expect("Should receive link notification");
+    assert!(
+        link_rx.try_recv().is_err(),
+        "Should receive exactly one link notification"
     );
-    let link_sample_sub = &link_samples[0];
     assert!(
         link_sample_sub.key_expr().as_str().contains(&format!("@/{zid1}/session/transport/unicast/{zid2}/link/")),
         "Link key expression should contain the expected transport path"
