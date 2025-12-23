@@ -20,7 +20,7 @@ use std::{
 };
 
 use zenoh::{
-    internal::{bail, traits::QoSBuilderTrait},
+    internal::{bail, traits::QoSBuilderTrait, zerror},
     key_expr::{
         format::{ke, kedefine},
         keyexpr, KeyExpr,
@@ -89,7 +89,7 @@ impl QoSBuilderTrait for RepliesConfig {
 /// Configure an [`AdvancedPublisher`](crate::AdvancedPublisher) cache.
 #[zenoh_macros::unstable]
 pub struct CacheConfig {
-    max_samples: NonZeroUsize,
+    max_samples: usize,
     replies_config: RepliesConfig,
 }
 
@@ -97,7 +97,7 @@ pub struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            max_samples: 1.try_into().unwrap(),
+            max_samples: 1,
             replies_config: RepliesConfig::default(),
         }
     }
@@ -107,15 +107,10 @@ impl Default for CacheConfig {
 impl CacheConfig {
     /// Specify how many samples to keep for each resource.
     ///
-    /// # Panics
-    ///
-    /// Panics if `depth` is zero.
+    /// Builder will fail if `max_samples` is zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
-        if depth == 0 {
-            panic!("`depth` must be greater than zero");
-        }
-        self.max_samples = depth.try_into().unwrap();
+        self.max_samples = depth;
         self
     }
 
@@ -364,9 +359,14 @@ impl AdvancedCache {
             None
         };
 
+        let max_samples = conf
+            .history
+            .max_samples
+            .try_into()
+            .map_err(|_| zerror!("max_samples must not be zero"))?;
         Ok(AdvancedCache {
             cache,
-            max_samples: conf.history.max_samples,
+            max_samples,
             _queryable: queryable,
             _token: token,
         })
