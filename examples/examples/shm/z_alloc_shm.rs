@@ -32,25 +32,9 @@ async fn main() {
 
 async fn run() -> zenoh::Result<()> {
     // Create an SHM provider
-    let provider = {
-        // Option 1: simple way to create default ShmProvider initialized with default-configured
-        {
-            // SHM backend (PosixShmProviderBackend)
-            let _simple =
-                ShmProviderBuilder::default_backend(MemoryLayout::try_from(42).unwrap()).wait()?;
-        }
-
-        // Option 2: comprehensive ShmProvider creation
-        {
-            // Create specific backed
-            // NOTE: For extended PosixShmProviderBackend API please check z_posix_shm_provider.rs
-            let comprehensive =
-                PosixShmProviderBackend::builder((65536, AllocAlignment::ALIGN_8_BYTES)).wait()?;
-
-            // ...and an SHM provider with specified backend
-            ShmProviderBuilder::backend(comprehensive).wait()
-        }
-    };
+    // Note: for SHM provider creation API, please see z_shm_provider.rs
+    let provider =
+        ShmProviderBuilder::default_backend((65536, AllocAlignment::ALIGN_8_BYTES)).wait()?;
 
     // Allocate SHM buffer
 
