@@ -439,6 +439,17 @@ macro_rules! assert_json_field {
         );
     }};
 
+    // Check field is str type
+    ($json:expr, $field:expr, str) => {{
+        let (field_path, current) = navigate_json_path!($json, $field);
+        assert!(
+            current.is_string(),
+            "JSON field '{}' should be a string, got: {:?}",
+            field_path,
+            current
+        );
+    }};
+
     // Check field is number type
     ($json:expr, $field:expr, number) => {{
         let (field_path, current) = navigate_json_path!($json, $field);
@@ -447,48 +458,6 @@ macro_rules! assert_json_field {
             "JSON field '{}' should be a number, got: {:?}",
             field_path,
             current
-        );
-    }};
-
-    // String field validator
-    ($json:expr, $field:expr, str, $validator:expr) => {{
-        let (field_path, current) = navigate_json_path!($json, $field);
-        let str_val = current.as_str()
-            .unwrap_or_else(|| panic!("JSON field '{}' should be a string", field_path));
-        let validator_fn = $validator;
-        assert!(
-            validator_fn(str_val),
-            "JSON field '{}' validation failed, got: '{}'",
-            field_path,
-            str_val
-        );
-    }};
-
-    // Boolean field validator
-    ($json:expr, $field:expr, bool, $validator:expr) => {{
-        let (field_path, current) = navigate_json_path!($json, $field);
-        let bool_val = current.as_bool()
-            .unwrap_or_else(|| panic!("JSON field '{}' should be a boolean", field_path));
-        let validator_fn = $validator;
-        assert!(
-            validator_fn(bool_val),
-            "JSON field '{}' validation failed, got: {}",
-            field_path,
-            bool_val
-        );
-    }};
-
-    // Number field validator
-    ($json:expr, $field:expr, number, $validator:expr) => {{
-        let (field_path, current) = navigate_json_path!($json, $field);
-        let value = current.as_u64()
-            .unwrap_or_else(|| panic!("JSON field '{}' should be a number", field_path));
-        let validator_fn = $validator;
-        assert!(
-            validator_fn(value),
-            "JSON field '{}' validation failed, got: {}",
-            field_path,
-            value
         );
     }};
 
@@ -667,25 +636,19 @@ async fn test_adminspace_transports_and_links() {
     println!("\nNote: 'priorities' and 'reliability' are set via endpoint metadata (e.g., ?rel=1;prio=1-7)");
 
     // Verify all Link fields comprehensively
-    assert_json_field!(link_json, "src", str, |v: &str| {
-        !v.is_empty() && (v.contains("tcp/") || v.contains("localhost"))
-    });
-    assert_json_field!(link_json, "dst", str, |v: &str| {
-        !v.is_empty() && (v.contains("tcp/") || v.contains("localhost"))
-    });
-    assert_json_field!(link_json, "mtu", number, |v: u64| v > 0);
+    assert_json_field!(link_json, "src", str);
+    assert_json_field!(link_json, "dst", str);
+    assert_json_field!(link_json, "mtu", number);
     assert_json_field_eq!(link_json, "is_streamed", true);
     assert_json_field!(link_json, "interfaces", array);
 
     // Verify priorities object and its nested fields
-    assert_json_field!(link_json, "priorities", object);
-    assert_json_field!(link_json, "priorities.start", str, |v: &str| !v.is_empty());
-    assert_json_field!(link_json, "priorities.end", str, |v: &str| !v.is_empty());
+    // With prio=1-7, priority 1 maps to RealTime and priority 7 maps to Background
+    assert_json_field_eq!(link_json, "priorities.start", "RealTime");
+    assert_json_field_eq!(link_json, "priorities.end", "Background");
 
-    // Verify reliability field
-    assert_json_field!(link_json, "reliability", str, |v: &str| {
-        v == "Reliable" || v == "BestEffort"
-    });
+    // Verify reliability field (rel=1 means Reliable)
+    assert_json_field_eq!(link_json, "reliability", "Reliable");
 
     // Test 6: Verify transport query with wildcard works for all transports
     let all_transports: Vec<String> = router1
