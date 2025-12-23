@@ -133,7 +133,7 @@ impl InterceptorFactoryTrait for DownsamplingInterceptorFactory {
         #[cfg(feature = "stats")]
         let Ok(stats) = transport
             .get_stats()
-            .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::LowPass))
+            .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::Downsampling))
         else {
             // `get_stats` returning an error means the transport is closed
             return (None, None);
@@ -286,7 +286,7 @@ impl InterceptorTrait for DownsamplingInterceptor {
             );
             #[cfg(feature = "stats")]
             self.stats
-                .observe_network_message_dropped(stats_direction(self.flow), msg);
+                .observe_network_message_dropped_payload(stats_direction(self.flow), msg);
             false
         }
     }

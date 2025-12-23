@@ -301,7 +301,12 @@ impl<
                 }
             }
         }
-        if COLLECT_PER_LINK.get() {
+        if COLLECT_PER_LINK.get()
+            && collected
+                .values()
+                .flat_map(|(_, transports)| transports)
+                .any(|t| !t.links.is_empty())
+        {
             let per_link = format!("{name}_per_link", name = self.name);
             let mut metric_encoder = encoder.encode_descriptor(
                 &per_link,

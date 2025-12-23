@@ -241,7 +241,7 @@ fn declare_simple_subscription(
                             }),
                         },
                         res.expr().to_string(),
-                    ))
+                    ));
             }
         }
     }
