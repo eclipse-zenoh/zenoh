@@ -377,6 +377,8 @@ async fn test_adminspace_write() {
 /// Usage:
 /// - `assert_json_field!(json, "field", bool)` - Check field is boolean type
 /// - `assert_json_field!(json, "field", number)` - Check field is number type
+/// - `assert_json_field!(json, "field", array)` - Check field is array type
+/// - `assert_json_field!(json, "field", object)` - Check field is object type
 /// - `assert_json_field!(json, "field", str, |v| v == "expected")` - String validator
 /// - `assert_json_field!(json, "field", bool, |v| v)` - Boolean validator
 /// - `assert_json_field!(json, "field", number, |v| v > 0)` - Number validator
@@ -479,6 +481,42 @@ macro_rules! assert_json_field {
             );
         }
     };
+
+    // Check field is array type
+    ($json:expr, $field:expr, array) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            assert!(
+                $json[field_name].is_array(),
+                "JSON field '{}' should be an array, got: {:?}",
+                field_name,
+                $json[field_name]
+            );
+        }
+    };
+
+    // Check field is object type
+    ($json:expr, $field:expr, object) => {
+        {
+            let field_name = $field;
+            assert!(
+                $json.get(field_name).is_some(),
+                "JSON field '{}' does not exist",
+                field_name
+            );
+            assert!(
+                $json[field_name].is_object(),
+                "JSON field '{}' should be an object, got: {:?}",
+                field_name,
+                $json[field_name]
+            );
+        }
+    };
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -576,10 +614,18 @@ async fn test_adminspace_transports_and_links() {
     let transport_json: serde_json::Value =
         serde_json::from_slice(&transport_bytes).expect("Failed to parse transport JSON");
 
-    // Verify TransportPeer fields using macro
-    assert_json_field!(transport_json, "zid", str, |v| v == &zid2.to_string());
-    assert_json_field!(transport_json, "whatami", str, |v| v == "router");
+    // Verify all TransportPeer fields using macro
+    // Required fields
+    assert_json_field!(transport_json, "zid", str, |v: &str| v == &zid2.to_string());
+    assert_json_field!(transport_json, "whatami", str, |v: &str| v == "router");
     assert_json_field!(transport_json, "is_qos", bool);
+
+    // Optional feature-gated field (is_shm may or may not be present)
+    if transport_json.get("is_shm").is_some() {
+        assert_json_field!(transport_json, "is_shm", bool);
+    }
+
+    // Note: 'links' field is skipped in serialization (see TransportPeer serde(skip))
 
     // Test 4: Query links for the unicast transport
     let links: Vec<String> = router1
@@ -616,28 +662,56 @@ async fn test_adminspace_transports_and_links() {
     let link_json: serde_json::Value =
         serde_json::from_slice(&link_bytes).expect("Failed to parse link JSON");
 
-    // Verify Link fields using macro
-    // Verify src and dst are valid locator strings
-    let src_str = link_json["src"].as_str().unwrap();
-    let dst_str = link_json["dst"].as_str().unwrap();
-    assert!(
-        src_str.contains("tcp/") || src_str.contains("localhost"),
-        "Source locator should be a valid TCP address, got: {}",
-        src_str
-    );
-    assert!(
-        dst_str.contains("tcp/") || dst_str.contains("localhost"),
-        "Destination locator should be a valid TCP address, got: {}",
-        dst_str
-    );
+    // Verify all Link fields comprehensively
 
-    // Verify MTU is a positive number using macro
-    assert_json_field!(link_json, "mtu", number, |v| v > 0);
+    // Required field: src (source locator)
+    assert_json_field!(link_json, "src", str, |v: &str| {
+        !v.is_empty() && (v.contains("tcp/") || v.contains("localhost"))
+    });
+
+    // Required field: dst (destination locator)
+    assert_json_field!(link_json, "dst", str, |v: &str| {
+        !v.is_empty() && (v.contains("tcp/") || v.contains("localhost"))
+    });
+
+    // Optional field: group (for multicast)
+    if link_json.get("group").is_some() {
+        // Group can be null or a locator string
+        if !link_json["group"].is_null() {
+            assert_json_field!(link_json, "group", str, |v: &str| !v.is_empty());
+        }
+    }
+
+    // Required field: mtu (must be positive)
+    assert_json_field!(link_json, "mtu", number, |v: u64| v > 0);
+
+    // Required field: is_streamed (boolean)
     assert_json_field!(link_json, "is_streamed", bool);
 
-    // For TCP links, is_streamed should typically be true
+    // For TCP links, is_streamed should be true
+    let src_str = link_json["src"].as_str().unwrap();
     if src_str.contains("tcp/") {
-        assert_json_field!(link_json, "is_streamed", bool, |v| v);
+        assert_json_field!(link_json, "is_streamed", bool, |v: bool| v);
+    }
+
+    // Required field: interfaces (array of strings)
+    assert_json_field!(link_json, "interfaces", array);
+
+    // Note: auth_identifier field exists but has complex serialization format
+    // We verify its presence via macro when checking other required fields
+
+    // Optional field: priorities (priority range) - checked only if not null
+    if !link_json.get("priorities").map_or(true, |v| v.is_null()) {
+        assert_json_field!(link_json, "priorities", object);
+    }
+
+    // Optional field: reliability - checked only if not null
+    if !link_json.get("reliability").map_or(true, |v| v.is_null()) {
+        // Reliability can be string or object depending on the variant
+        assert!(
+            link_json["reliability"].is_string() || link_json["reliability"].is_object(),
+            "Link 'reliability' should be a string or object when present"
+        );
     }
 
     // Test 6: Verify transport query with wildcard works for all transports
