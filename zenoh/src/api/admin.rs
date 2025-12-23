@@ -23,7 +23,7 @@ use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{
-    core::WireExpr,
+    core::{CongestionControl, WireExpr},
     network::NetworkMessageMut,
     zenoh::{Del, PushBody, Put},
 };
@@ -33,7 +33,10 @@ use zenoh_transport::{
 
 use crate::{
     self as zenoh,
-    api::info::{Link, Transport},
+    api::{
+        info::{Link, Transport, TransportEvent},
+        publisher::Priority,
+    },
 };
 use crate::{
     api::{
@@ -78,6 +81,14 @@ static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
 
+fn ke_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
+    KE_AT / own_zid / KE_SESSION
+}
+
+fn ke_adv_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
+    KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT / own_zid / KE_SESSION
+}
+
 fn ke_transport(transport: &Transport) -> OwnedKeyExpr {
     if transport.is_multicast {
         KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
@@ -98,7 +109,7 @@ fn ke_link(link: &Link) -> OwnedKeyExpr {
 pub(crate) fn init(session: WeakSession) {
     // Normal adminspace queryable
     let own_zid = session.zid().into_keyexpr();
-    let prefix = KE_AT / &own_zid / KE_SESSION;
+    let prefix = ke_prefix(&own_zid);
     let _admin_qabl = session.declare_queryable_inner(
         &KeyExpr::from(&prefix / KE_STARSTAR),
         true,
@@ -110,17 +121,8 @@ pub(crate) fn init(session: WeakSession) {
     );
 
     // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
-    let prefix = KE_AT / &own_zid / KE_SESSION;
-    let adv_prefix = KE_ADV_PREFIX
-        / KE_PUB
-        / &own_zid
-        / KE_EMPTY
-        / KE_EMPTY
-        / KE_AT
-        / KE_AT
-        / &own_zid
-        / KE_SESSION;
-
+    let prefix = ke_prefix(&own_zid);
+    let adv_prefix = ke_adv_prefix(&own_zid);
     let _admin_adv_qabl = session.declare_queryable_inner(
         &KeyExpr::from(&adv_prefix / KE_STARSTAR),
         true,
@@ -131,7 +133,46 @@ pub(crate) fn init(session: WeakSession) {
         }),
     );
 
-    // Subscribe to transport events
+    // Subscribe to transport events and publish them to the adminspace
+    // key "@/<own_zid>/session/transport/<unicast|multicast>/<peer_zid>"
+    let callback = Callback::from({
+        let session = session.clone();
+        let own_zid = session.zid().into_keyexpr();
+        move |event: TransportEvent| {
+            let key_expr = ke_prefix(&own_zid) / &ke_transport(event.transport());
+            let key_expr = KeyExpr::from(key_expr);
+            let payload = match &event.kind() {
+                SampleKind::Put => serde_json::to_vec(event.transport()).unwrap(),
+                SampleKind::Delete => Vec::new(),
+            };
+            tracing::info!(
+                "Publishing transport event: {:?} : {:?} on {}",
+                event.kind(), event.transport(),
+                key_expr
+            );
+            if let Err(e) = session.resolve_put(
+                &key_expr,
+                payload.into(),
+                event.kind(),
+                Encoding::APPLICATION_JSON,
+                CongestionControl::default(),
+                Priority::default(),
+                false,
+                Locality::SessionLocal,
+                #[cfg(feature = "unstable")]
+                Reliability::default(),
+                None,
+                #[cfg(feature = "unstable")]
+                None,
+                None,
+            ) {
+                tracing::error!("Unable to publish transport event: {}", e);
+            }
+        }
+    });
+    if let Err(e) = session.declare_transport_events_listener_inner(callback, false) {
+        tracing::error!("Unable to subscribe to transport events: {}", e);
+    }
 }
 
 fn reply<T: serde::Serialize>(
