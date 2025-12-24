@@ -184,3 +184,29 @@ async fn test_cancellation_querier_get() {
     let replies = ztimeout!(querier.get().cancellation_token(cancellation_token.clone())).unwrap();
     assert!(replies.is_disconnected());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_cancellation_does_not_prevent_session_from_close() {
+    zenoh::init_log_from_env_or("error");
+    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50004"));
+    let cancellation_token = zenoh::cancellation::CancellationToken::default();
+
+    let ke = "test/query_cancellation_does_not_prevent_session_from_close";
+    let _queryable = ztimeout!(session1.declare_queryable(ke)).unwrap();
+
+    let querier = ztimeout!(session2.declare_querier(ke)).unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(session2
+        .get(ke)
+        .cancellation_token(cancellation_token.clone()))
+    .unwrap();
+
+    let replies2 = ztimeout!(querier.get().cancellation_token(cancellation_token.clone())).unwrap();
+
+    std::mem::drop(session2);
+    assert!(replies.is_disconnected());
+    assert!(replies2.is_disconnected());
+
+    ztimeout!(cancellation_token.cancel()).unwrap();
+}

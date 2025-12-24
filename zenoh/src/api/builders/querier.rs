@@ -514,9 +514,9 @@ where
             .map(|qid| {
                 #[cfg(feature = "unstable")]
                 if let Some(cancellation_token) = cancellation_token {
-                    let session_clone = self.querier.session.clone();
+                    let weak_session = self.querier.session.clone();
                     let on_cancel = move || {
-                        let _ = session_clone.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        let _ = weak_session.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
                         Ok(())
                     };
                     cancellation_token.add_on_cancel_handler(Box::new(on_cancel));
