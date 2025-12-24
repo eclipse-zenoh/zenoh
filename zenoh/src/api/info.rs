@@ -217,10 +217,10 @@ impl SessionInfo {
     }
 }
 
-/// Transport is a connection established to zenoh peer node. 
+/// Transport is a connection established to zenoh peer node.
 /// Multiple transports to the same peer can exist. At this moment it's possible
 /// to have both a unicast and a multicast transport to the same peer.
-/// 
+///
 /// Each transport can have multiple corresponding [`Link`](crate::session::Link)s which represent
 /// actual established data links with various protocols.
 #[derive(Debug, Clone, PartialEq, Eq)]

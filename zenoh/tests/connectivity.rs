@@ -272,11 +272,7 @@ mod tests {
         // Wait for connections
         tokio::time::sleep(SLEEP).await;
 
-        let transports: Vec<_> = session1
-            .info()
-            .transports()
-            .await
-            .collect();
+        let transports: Vec<_> = session1.info().transports().await.collect();
         assert_eq!(
             transports.len(),
             2,

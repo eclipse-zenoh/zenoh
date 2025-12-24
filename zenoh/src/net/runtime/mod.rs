@@ -454,7 +454,10 @@ impl RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn get_links_transport_unicast(&self, zid: &ZenohId) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+    fn get_links_transport_unicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
         let links = self
             .get_transports_unicast_peers()
             .into_iter()
@@ -472,7 +475,10 @@ impl RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn get_links_transport_multicast(&self, zid: &ZenohId) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+    fn get_links_transport_multicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
         let links = self
             .get_transports_multicast_peers()
             .into_iter()

@@ -34,14 +34,10 @@ use zenoh_transport::{
 use crate::{
     self as zenoh,
     api::{
-        info::{Link, Transport, TransportEvent},
-        publisher::Priority,
-    },
-};
-use crate::{
-    api::{
         encoding::Encoding,
+        info::{Link, Transport, TransportEvent},
         key_expr::KeyExpr,
+        publisher::Priority,
         queryable::Query,
         sample::{Locality, SampleKind},
         session::WeakSession,
@@ -147,7 +143,8 @@ pub(crate) fn init(session: WeakSession) {
             };
             tracing::info!(
                 "Publishing transport event: {:?} : {:?} on {}",
-                event.kind(), event.transport(),
+                event.kind(),
+                event.transport(),
                 key_expr
             );
             if let Err(e) = session.resolve_put(

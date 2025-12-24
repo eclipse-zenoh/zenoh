@@ -25,8 +25,7 @@ use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-use crate::api::session::WeakSession;
-use crate::sample::SampleKind;
+use crate::{api::session::WeakSession, sample::SampleKind};
 pub(crate) struct ConnectivityHandler {
     session: WeakSession,
 }
@@ -88,8 +87,12 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
 
     fn del_link(&self, link: zenoh_link::Link) {
         // Broadcast link removed event
-        self.session
-            .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link, self.is_multicast);
+        self.session.broadcast_link_event(
+            SampleKind::Delete,
+            self.peer_zid,
+            &link,
+            self.is_multicast,
+        );
     }
 
     fn closed(&self) {
