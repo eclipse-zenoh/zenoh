@@ -18,20 +18,26 @@ use std::{
 };
 
 use zenoh_core::{Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr;
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 use zenoh_protocol::{
-    core::WireExpr,
+    core::{CongestionControl, WireExpr},
     network::NetworkMessageMut,
     zenoh::{Del, PushBody, Put},
 };
 use zenoh_transport::{
-    TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+    TransportEventHandler, TransportMulticastEventHandler, TransportPeerEventHandler,
 };
 
-use crate as zenoh;
+use crate::{
+    self as zenoh,
+    api::{
+        info::{Link, Transport, TransportEvent},
+        publisher::Priority,
+    },
+};
 use crate::{
     api::{
         encoding::Encoding,
@@ -75,92 +81,140 @@ static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
 
-pub(crate) fn init(session: WeakSession) {
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        let _admin_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(KE_AT / own_zid / KE_SESSION / KE_STARSTAR),
-            true,
-            Locality::SessionLocal,
-            Callback::from({
-                let session = session.clone();
-                move |q| on_admin_query(&session, KE_AT, q)
-            }),
-        );
+fn ke_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
+    KE_AT / own_zid / KE_SESSION
+}
 
-        let adv_prefix = KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
+fn ke_adv_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
+    KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT / own_zid / KE_SESSION
+}
 
-        let _admin_adv_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),
-            true,
-            Locality::SessionLocal,
-            Callback::from({
-                let session = session.clone();
-                move |q| on_admin_query(&session, &adv_prefix, q)
-            }),
-        );
+fn ke_transport(transport: &Transport) -> OwnedKeyExpr {
+    if transport.is_multicast {
+        KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
+    } else {
+        KE_TRANSPORT_UNICAST / &transport.zid.into_keyexpr()
     }
 }
 
-pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Query) {
-    fn reply_peer(
-        prefix: &keyexpr,
-        own_zid: &keyexpr,
-        query: &Query,
-        peer: TransportPeer,
-        multicast: bool,
-    ) {
-        let zid = peer.zid.to_string();
-        let transport = if multicast {
-            KE_TRANSPORT_MULTICAST
-        } else {
-            KE_TRANSPORT_UNICAST
-        };
-        if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = prefix / own_zid / KE_SESSION / transport / zid;
-            if query.key_expr().intersects(&key_expr) {
-                match serde_json::to_vec(&peer) {
-                    Ok(bytes) => {
-                        let reply_expr = KE_AT / own_zid / KE_SESSION / transport / zid;
-                        let _ = query
-                            .reply(reply_expr, bytes)
-                            .encoding(Encoding::APPLICATION_JSON)
-                            .wait();
-                    }
-                    Err(e) => tracing::debug!("Admin query error: {}", e),
-                }
-            }
+fn ke_link(link: &Link) -> OwnedKeyExpr {
+    let mut s = DefaultHasher::new();
+    link.hash(&mut s);
+    let link_hash = s.finish().to_string();
+    // link_hash is number, no disallowed characters, it is safe to use unchecked
+    let link_key = unsafe { keyexpr::from_str_unchecked(&link_hash) };
+    KE_LINK / link_key
+}
 
-            for link in peer.links {
-                let mut s = DefaultHasher::new();
-                link.hash(&mut s);
-                if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr = prefix / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
-                    if query.key_expr().intersects(&key_expr) {
-                        match serde_json::to_vec(&link) {
-                            Ok(bytes) => {
-                                let reply_expr =
-                                    KE_AT / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
-                                let _ = query
-                                    .reply(reply_expr, bytes)
-                                    .encoding(Encoding::APPLICATION_JSON)
-                                    .wait();
-                            }
-                            Err(e) => tracing::debug!("Admin query error: {}", e),
-                        }
-                    }
-                }
+pub(crate) fn init(session: WeakSession) {
+    // Normal adminspace queryable
+    let own_zid = session.zid().into_keyexpr();
+    let prefix = ke_prefix(&own_zid);
+    let _admin_qabl = session.declare_queryable_inner(
+        &KeyExpr::from(&prefix / KE_STARSTAR),
+        true,
+        Locality::SessionLocal,
+        Callback::from({
+            let session = session.clone();
+            move |q| on_admin_query(&session, &prefix, &prefix, q)
+        }),
+    );
+
+    // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
+    let prefix = ke_prefix(&own_zid);
+    let adv_prefix = ke_adv_prefix(&own_zid);
+    let _admin_adv_qabl = session.declare_queryable_inner(
+        &KeyExpr::from(&adv_prefix / KE_STARSTAR),
+        true,
+        Locality::SessionLocal,
+        Callback::from({
+            let session = session.clone();
+            move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
+        }),
+    );
+
+    // Subscribe to transport events and publish them to the adminspace
+    // key "@/<own_zid>/session/transport/<unicast|multicast>/<peer_zid>"
+    let callback = Callback::from({
+        let session = session.clone();
+        let own_zid = session.zid().into_keyexpr();
+        move |event: TransportEvent| {
+            let key_expr = ke_prefix(&own_zid) / &ke_transport(event.transport());
+            let key_expr = KeyExpr::from(key_expr);
+            let payload = match &event.kind() {
+                SampleKind::Put => serde_json::to_vec(event.transport()).unwrap(),
+                SampleKind::Delete => Vec::new(),
+            };
+            tracing::info!(
+                "Publishing transport event: {:?} : {:?} on {}",
+                event.kind(), event.transport(),
+                key_expr
+            );
+            if let Err(e) = session.resolve_put(
+                &key_expr,
+                payload.into(),
+                event.kind(),
+                Encoding::APPLICATION_JSON,
+                CongestionControl::default(),
+                Priority::default(),
+                false,
+                Locality::SessionLocal,
+                #[cfg(feature = "unstable")]
+                Reliability::default(),
+                None,
+                #[cfg(feature = "unstable")]
+                None,
+                None,
+            ) {
+                tracing::error!("Unable to publish transport event: {}", e);
             }
+        }
+    });
+    if let Err(e) = session.declare_transport_events_listener_inner(callback, false) {
+        tracing::error!("Unable to subscribe to transport events: {}", e);
+    }
+}
+
+fn reply<T: serde::Serialize>(
+    match_prefix: &keyexpr,
+    reply_prefix: &keyexpr,
+    key: &keyexpr,
+    query: &Query,
+    payload: &T,
+) {
+    let match_keyexpr = match_prefix / key;
+    if query.key_expr().intersects(&match_keyexpr) {
+        let reply_keyexpr = reply_prefix / key;
+        match serde_json::to_vec(payload) {
+            Ok(bytes) => {
+                let _ = query
+                    .reply(reply_keyexpr, bytes)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait();
+            }
+            Err(e) => tracing::debug!("Admin query error: {}", e),
         }
     }
+}
 
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for peer in session.runtime.get_transports_unicast_peers() {
-            reply_peer(prefix, own_zid, &query, peer, false);
-        }
-        for transport_peers in session.runtime.get_transports_multicast_peers() {
-            for peer in transport_peers {
-                reply_peer(prefix, own_zid, &query, peer, true);
-            }
+pub(crate) fn on_admin_query(
+    session: &WeakSession,
+    match_prefix: &keyexpr,
+    reply_prefix: &keyexpr,
+    query: Query,
+) {
+    for transport in session.runtime.get_transports() {
+        let ke_transport = ke_transport(&transport);
+        reply(
+            match_prefix,
+            reply_prefix,
+            &ke_transport,
+            &query,
+            &transport,
+        );
+        for link in session.runtime.get_links(Some(&transport)) {
+            let ke_link = &ke_transport / &ke_link(&link);
+            reply(match_prefix, reply_prefix, &ke_link, &query, &link);
         }
     }
 }

@@ -19,7 +19,6 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -27,22 +26,17 @@ use zenoh_transport::{
 };
 
 use crate::api::session::WeakSession;
-#[cfg(feature = "unstable")]
 use crate::sample::SampleKind;
-/// Handler for connectivity events - independent from adminspace
-#[cfg(feature = "unstable")]
 pub(crate) struct ConnectivityHandler {
     session: WeakSession,
 }
 
-#[cfg(feature = "unstable")]
 impl ConnectivityHandler {
     pub(crate) fn new(session: WeakSession) -> Self {
         Self { session }
     }
 }
 
-#[cfg(feature = "unstable")]
 impl TransportEventHandler for ConnectivityHandler {
     fn new_unicast(
         &self,
@@ -51,13 +45,14 @@ impl TransportEventHandler for ConnectivityHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Broadcast transport opened event
         self.session
-            .broadcast_transport_event(SampleKind::Put, &peer);
+            .broadcast_transport_event(SampleKind::Put, &peer, false);
 
         // Return ConnectivityPeerHandler
         Ok(Arc::new(ConnectivityPeerHandler {
             session: self.session.clone(),
             peer_zid: peer.zid,
             peer,
+            is_multicast: false,
         }))
     }
 
@@ -72,14 +67,13 @@ impl TransportEventHandler for ConnectivityHandler {
 }
 
 /// Peer handler for connectivity events
-#[cfg(feature = "unstable")]
 pub(crate) struct ConnectivityPeerHandler {
     session: WeakSession,
     peer_zid: ZenohIdProto,
     peer: TransportPeer,
+    is_multicast: bool,
 }
 
-#[cfg(feature = "unstable")]
 impl TransportPeerEventHandler for ConnectivityPeerHandler {
     fn handle_message(&self, _msg: zenoh_protocol::network::NetworkMessageMut) -> ZResult<()> {
         // Connectivity doesn't need to handle messages
@@ -89,19 +83,19 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     fn new_link(&self, link: zenoh_link::Link) {
         // Broadcast link added event
         self.session
-            .broadcast_link_event(SampleKind::Put, self.peer_zid, &link);
+            .broadcast_link_event(SampleKind::Put, self.peer_zid, &link, self.is_multicast);
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
         // Broadcast link removed event
         self.session
-            .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link);
+            .broadcast_link_event(SampleKind::Delete, self.peer_zid, &link, self.is_multicast);
     }
 
     fn closed(&self) {
         // Broadcast transport closed event
         self.session
-            .broadcast_transport_event(SampleKind::Delete, &self.peer);
+            .broadcast_transport_event(SampleKind::Delete, &self.peer, self.is_multicast);
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -110,24 +104,23 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
 }
 
 /// Multicast handler for connectivity events
-#[cfg(feature = "unstable")]
 pub(crate) struct ConnectivityMulticastHandler {
     session: WeakSession,
 }
 
-#[cfg(feature = "unstable")]
 impl TransportMulticastEventHandler for ConnectivityMulticastHandler {
     fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Broadcast transport opened event
 
         self.session
-            .broadcast_transport_event(SampleKind::Put, &peer);
+            .broadcast_transport_event(SampleKind::Put, &peer, true);
 
         // Return ConnectivityPeerHandler
         Ok(Arc::new(ConnectivityPeerHandler {
             session: self.session.clone(),
             peer_zid: peer.zid,
             peer,
+            is_multicast: true,
         }))
     }
 

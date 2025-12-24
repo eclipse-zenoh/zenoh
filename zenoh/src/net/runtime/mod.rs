@@ -145,16 +145,11 @@ pub trait IRuntime: Send + Sync {
     #[zenoh_macros::unstable]
     fn get_shm_provider(&self) -> ShmProviderState;
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
-
-    #[cfg(feature = "unstable")]
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
 
-    #[cfg(feature = "unstable")]
     fn get_links(
         &self,
-        transport_zid: Option<ZenohId>,
+        transport: Option<&Transport>,
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     fn new_primitives(
@@ -240,63 +235,33 @@ impl IRuntime for RuntimeState {
         zwrite!(self.transport_handlers).push(handler);
     }
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
-        zenoh_runtime::ZRuntime::Net
+    #[cfg(feature = "unstable")]
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
+        let unicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_unicast())
             .into_iter()
             .filter_map(|t| t.get_peer().ok())
-            .collect::<Vec<_>>()
-    }
+            .map(|ref peer| Transport::new(peer, false));
 
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
-        zenoh_runtime::ZRuntime::Net
+        let multicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_multicast())
             .into_iter()
-            .filter_map(|t| t.get_peers().ok())
-            .collect::<Vec<_>>()
-    }
+            .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+            .map(|ref peer| Transport::new(&peer, true));
 
-    #[cfg(feature = "unstable")]
-    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
-        Box::new(
-            zenoh_runtime::ZRuntime::Net
-                .block_in_place(self.manager.get_transports_unicast())
-                .into_iter()
-                .filter_map(|t| t.get_peer().ok())
-                .map(|ref peer| Transport::new(peer)),
-        )
+        Box::new(unicast_transports.chain(multicast_transports))
     }
 
     #[cfg(feature = "unstable")]
     fn get_links(
         &self,
-        transport_zid: Option<ZenohId>,
+        transport: Option<&Transport>,
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
-        let transports =
-            zenoh_runtime::ZRuntime::Net.block_in_place(self.manager.get_transports_unicast());
-
-        let transports = if let Some(filter_zid) = transport_zid {
-            transports
-                .into_iter()
-                .find(|t| t.get_zid().ok() == Some(filter_zid.into()))
-                .into_iter()
-                .collect()
-        } else {
-            transports
-        };
-
-        // Convert transport to links (returns empty vec if get_zid fails)
-        Box::new(transports.into_iter().flat_map(|t| {
-            let Ok(zid) = t.get_zid().map(Into::into) else {
-                return Vec::new();
-            };
-
-            t.get_links()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|ref link| Link::new(zid, link))
-                .collect::<Vec<_>>()
-        }))
+        match transport {
+            None => self.get_links_all(),
+            Some(t) if t.is_multicast() => self.get_links_transport_multicast(t.zid()),
+            Some(t) => self.get_links_transport_unicast(t.zid()),
+        }
     }
 
     fn matching_status_remote(
@@ -446,6 +411,83 @@ impl RuntimeState {
 
     async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.pending_connections.lock().await.remove(zid)
+    }
+
+    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_unicast())
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_multicast())
+            .into_iter()
+            .filter_map(|t| t.get_peers().ok())
+            .collect::<Vec<_>>()
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_links_all(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let peer_to_links = |peer: TransportPeer| -> Vec<Link> {
+            let zid: ZenohId = peer.zid.into();
+            peer.links
+                .into_iter()
+                .map(|ref link| Link::new(zid, link))
+                .collect()
+        };
+
+        let unicast_links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .flat_map(peer_to_links);
+
+        let multicast_links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .flat_map(peer_to_links);
+
+        Box::new(unicast_links.chain(multicast_links))
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_links_transport_unicast(&self, zid: &ZenohId) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_links_transport_multicast(&self, zid: &ZenohId) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
     }
 }
 

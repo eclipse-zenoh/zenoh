@@ -18,14 +18,14 @@ use std::future::{IntoFuture, Ready};
 #[zenoh_macros::unstable]
 use tracing::error;
 #[zenoh_macros::unstable]
-use zenoh_config::ZenohId;
-#[zenoh_macros::unstable]
 use zenoh_core::{Resolvable, Wait};
 #[zenoh_macros::unstable]
 use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
 use crate::api::handlers::locked;
+#[zenoh_macros::unstable]
+use crate::api::info::Transport;
 #[zenoh_macros::unstable]
 use crate::api::info::{Link, LinkEvent};
 #[zenoh_macros::unstable]
@@ -55,7 +55,7 @@ use crate::{
 #[zenoh_macros::unstable]
 pub struct LinksBuilder<'a> {
     session: &'a WeakSession,
-    transport_zid: Option<ZenohId>,
+    transport: Option<Transport>,
 }
 
 #[zenoh_macros::unstable]
@@ -63,28 +63,28 @@ impl<'a> LinksBuilder<'a> {
     pub(crate) fn new(session: &'a WeakSession) -> Self {
         Self {
             session,
-            transport_zid: None,
+            transport: None,
         }
     }
 
-    /// Filter links by transport ZenohId.
+    /// Filter links by transport.
     ///
     /// # Examples
     /// ```no_run
-    /// # use std::str::FromStr;
-    /// # use zenoh::session::ZenohId;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let transport_zid = ZenohId::from_str("1234567890abcdef").unwrap();
-    /// let links = session.info().links().transport(transport_zid).await;
-    /// for link in links {
-    ///     println!("Link: {} -> {}", link.src(), link.dst());
+    /// let transports = session.info().transports().await;
+    /// if let Some(transport) = transports.into_iter().next() {
+    ///     let links = session.info().links().transport(transport).await;
+    ///     for link in links {
+    ///         println!("Link: {} -> {}", link.src(), link.dst());
+    ///     }
     /// }
     /// # }
     /// ```
-    pub fn transport(mut self, zid: ZenohId) -> Self {
-        self.transport_zid = Some(zid);
+    pub fn transport(mut self, transport: Transport) -> Self {
+        self.transport = Some(transport);
         self
     }
 }
@@ -97,7 +97,7 @@ impl Resolvable for LinksBuilder<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LinksBuilder<'_> {
     fn wait(self) -> Self::To {
-        self.session.runtime.get_links(self.transport_zid)
+        self.session.runtime.get_links(self.transport.as_ref())
     }
 }
 
@@ -310,7 +310,7 @@ pub struct LinkEventsListenerBuilder<'a, Handler, const BACKGROUND: bool = false
     session: &'a WeakSession,
     handler: Handler,
     history: bool,
-    transport_zid: Option<ZenohId>,
+    transport: Option<Transport>,
 }
 
 #[zenoh_macros::unstable]
@@ -320,7 +320,7 @@ impl<'a> LinkEventsListenerBuilder<'a, DefaultHandler> {
             session,
             handler: DefaultHandler::default(),
             history: false,
-            transport_zid: None,
+            transport: None,
         }
     }
 }
@@ -344,29 +344,29 @@ impl<'a, Handler> LinkEventsListenerBuilder<'a, Handler> {
             session: self.session,
             handler,
             history: self.history,
-            transport_zid: self.transport_zid,
+            transport: self.transport,
         }
     }
 
-    /// Filter link events by transport ZenohId.
+    /// Filter link events by transport.
     ///
     /// # Examples
     /// ```no_run
-    /// # use std::str::FromStr;
-    /// # use zenoh::session::ZenohId;
     /// # #[tokio::main]
     /// # async fn main() {
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let transport_zid = ZenohId::from_str("1234567890abcdef").unwrap();
-    /// let listener = session.info()
-    ///     .link_events_listener()
-    ///     .transport(transport_zid)
-    ///     .with(flume::bounded(32))
-    ///     .await;
+    /// let transports = session.info().transports().await;
+    /// if let Some(transport) = transports.into_iter().next() {
+    ///     let listener = session.info()
+    ///         .link_events_listener()
+    ///         .transport(transport)
+    ///         .with(flume::bounded(32))
+    ///         .await;
+    /// }
     /// # }
     /// ```
-    pub fn transport(mut self, zid: ZenohId) -> Self {
-        self.transport_zid = Some(zid);
+    pub fn transport(mut self, transport: Transport) -> Self {
+        self.transport = Some(transport);
         self
     }
 
@@ -419,7 +419,7 @@ impl<'a> LinkEventsListenerBuilder<'a, Callback<LinkEvent>> {
             session: self.session,
             handler: self.handler,
             history: self.history,
-            transport_zid: self.transport_zid,
+            transport: self.transport,
         }
     }
 }
@@ -443,7 +443,7 @@ where
         let (callback, handler) = self.handler.into_handler();
         let state = self
             .session
-            .declare_transport_links_listener_inner(callback, self.history, self.transport_zid)
+            .declare_transport_links_listener_inner(callback, self.history, self.transport)
             .expect("Failed to declare link events listener");
 
         LinkEventsListener {
@@ -482,7 +482,7 @@ impl Wait for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
         let state = self.session.declare_transport_links_listener_inner(
             self.handler,
             self.history,
-            self.transport_zid,
+            self.transport,
         )?;
         // Set the listener to not undeclare on drop (background mode)
         // Note: We can't access the listener to set background flag, so we just don't keep a reference
