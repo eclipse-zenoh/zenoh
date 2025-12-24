@@ -704,7 +704,7 @@ async fn test_adminspace_transports_and_links() {
     assert!(!links.is_empty());
     // Extract link_id from the first link key expression
     let link_key = &links[0];
-    let link_id = link_key.split('/').last().unwrap();
+    let link_id = link_key.split('/').next_back().unwrap();
 
     // Test 5: Query specific link and parse JSON
     let link_reply = router1
