@@ -31,6 +31,7 @@ members = [
   "commons/zenoh-sync",
   "commons/zenoh-task",
   "commons/zenoh-util",
+  "commons/zenoh-uring",
   "examples",
   "io/zenoh-link",
   "io/zenoh-link-commons",
@@ -88,6 +89,7 @@ async-global-executor = "3.1.0"
 async-io = "2.6.0"
 async-std = { version = "1.13.2", features = ["tokio1"] }
 async-trait = "0.1.89"
+atomic-queue = "2.2.0"
 base64 = "0.22.1"
 bincode = "1.3.3"
 buddy_system_allocator = "=0.10.0" # Fixed at 0.10.0 to be compatible with Rust 1.75
@@ -116,6 +118,7 @@ home = "0.5.9"
 http-types = "2.12.0"
 humantime = "2.3.0"
 itertools = "0.14.0"
+io-uring = "0.7.11"
 json5 = "0.4.1"
 jsonschema = { version = "0.20", default-features = false } # Don't bump jsonschem version because of invalid license while running `cargo deny check licenses`
 keyed-set = "1.1.0"
@@ -245,6 +248,7 @@ zenoh-task = { version = "=1.7.1", path = "commons/zenoh-task" }
 zenoh-transport = { version = "=1.7.1", path = "io/zenoh-transport", default-features = false }
 zenoh-util = { version = "=1.7.1", path = "commons/zenoh-util" }
 zenoh_backend_traits = { version = "=1.7.1", path = "plugins/zenoh-backend-traits", default-features = false }
+zenoh-uring = { version = "=1.7.1", path = "commons/zenoh-uring" }
 
 [profile.dev]
 debug = true
