@@ -41,6 +41,8 @@ use zenoh_config::{
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -71,7 +73,14 @@ use zenoh_task::TaskController;
 
 use super::builders::close::{CloseBuilder, Closeable, Closee};
 #[cfg(feature = "unstable")]
-use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
+use super::connectivity;
+#[cfg(feature = "unstable")]
+use crate::api::{
+    info::{Link, LinkEvent, Transport, TransportEvent},
+    query::ReplyKeyExpr,
+    sample::SourceInfo,
+    selector::ZenohParameters,
+};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -124,6 +133,38 @@ zconfigurable! {
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
 }
 
+#[cfg(feature = "unstable")]
+pub(crate) struct TransportEventsListenerState {
+    pub(crate) id: Id,
+    pub(crate) callback: Callback<TransportEvent>,
+}
+
+#[cfg(feature = "unstable")]
+impl fmt::Debug for TransportEventsListenerState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("TransportEventsListenerState")
+            .field("id", &self.id)
+            .finish()
+    }
+}
+
+#[cfg(feature = "unstable")]
+pub(crate) struct LinkEventsListenerState {
+    pub(crate) id: Id,
+    pub(crate) callback: Callback<LinkEvent>,
+    pub(crate) transport: Option<Transport>,
+}
+
+#[cfg(feature = "unstable")]
+impl fmt::Debug for LinkEventsListenerState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("LinkEventsListenerState")
+            .field("id", &self.id)
+            .field("transport", &self.transport)
+            .finish()
+    }
+}
+
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
@@ -140,6 +181,10 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) remote_queryables: HashMap<Id, (KeyExpr<'static>, bool)>,
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) transport_events_listeners: HashMap<Id, Arc<TransportEventsListenerState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) link_events_listeners: HashMap<Id, Arc<LinkEventsListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
@@ -169,6 +214,10 @@ impl SessionState {
             queryables: HashMap::new(),
             remote_queryables: HashMap::new(),
             matching_listeners: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            transport_events_listeners: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            link_events_listeners: HashMap::new(),
             queries: HashMap::new(),
             liveliness_queries: HashMap::new(),
             aggregated_subscribers,
@@ -697,7 +746,15 @@ impl Session {
                 face_id: OnceCell::new(),
             }));
 
+            // Register admin handler
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
+
+            // Register connectivity handler (independent from admin)
+            #[cfg(feature = "unstable")]
+            runtime.new_handler(Arc::new(connectivity::ConnectivityHandler::new(
+                session.downgrade(),
+            )));
+
             let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
             zwrite!(session.0.state).primitives = Some(primitives);
@@ -872,7 +929,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            runtime: self.0.runtime.deref().clone(),
+            session: self.downgrade(),
         }
     }
 
@@ -2056,6 +2113,153 @@ impl SessionInner {
             Ok(())
         } else {
             Err(zerror!("Unable to find MatchingListener").into())
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn declare_transport_events_listener_inner(
+        &self,
+        callback: Callback<TransportEvent>,
+        history: bool,
+    ) -> ZResult<Arc<TransportEventsListenerState>> {
+        let id = self.runtime.next_id();
+        trace!("declare_transport_events_listener_inner() => {id}");
+
+        let listener_state = Arc::new(TransportEventsListenerState { id, callback });
+
+        zwrite!(self.state)
+            .transport_events_listeners
+            .insert(id, listener_state.clone());
+
+        // Send history if requested
+        if history {
+            for transport in self.runtime.get_transports() {
+                let event = TransportEvent {
+                    kind: SampleKind::Put,
+                    transport,
+                };
+                listener_state.callback.call(event);
+            }
+        }
+
+        Ok(listener_state)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn undeclare_transport_events_listener_inner(&self, sid: Id) -> ZResult<()> {
+        let state = {
+            let mut state = zwrite!(self.state);
+            if state.primitives.is_none() {
+                return Ok(());
+            }
+
+            state.transport_events_listeners.remove(&sid)
+        };
+
+        if let Some(state) = state {
+            trace!("undeclare_transport_events_listener_inner({:?})", state);
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find TransportEventsListener").into())
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn broadcast_transport_event(
+        &self,
+        kind: SampleKind,
+        peer: &zenoh_transport::TransportPeer,
+        is_multicast: bool,
+    ) {
+        let transport = Transport::new(peer, is_multicast);
+        let event = TransportEvent { kind, transport };
+
+        // Call all registered callbacks
+        let state = zread!(self.state);
+        for listener in state.transport_events_listeners.values() {
+            listener.callback.call(event.clone());
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn declare_transport_links_listener_inner(
+        &self,
+        callback: Callback<LinkEvent>,
+        history: bool,
+        transport: Option<Transport>,
+    ) -> ZResult<Arc<LinkEventsListenerState>> {
+        let id = self.runtime.next_id();
+        trace!("declare_transport_links_listener_inner() => {id}");
+
+        let listener_state = Arc::new(LinkEventsListenerState {
+            id,
+            callback,
+            transport: transport.clone(),
+        });
+
+        zwrite!(self.state)
+            .link_events_listeners
+            .insert(id, listener_state.clone());
+
+        // Send history if requested
+        if history {
+            for link in self.runtime.get_links(transport.as_ref()) {
+                let event = LinkEvent {
+                    kind: SampleKind::Put,
+                    link,
+                };
+                listener_state.callback.call(event);
+            }
+        }
+
+        Ok(listener_state)
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn undeclare_transport_links_listener_inner(&self, sid: Id) -> ZResult<()> {
+        let state = {
+            let mut state = zwrite!(self.state);
+            if state.primitives.is_none() {
+                return Ok(());
+            }
+
+            state.link_events_listeners.remove(&sid)
+        };
+
+        if let Some(state) = state {
+            trace!("undeclare_transport_links_listener_inner({:?})", state);
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find LinkEventsListener").into())
+        }
+    }
+
+    #[cfg(feature = "unstable")]
+    pub(crate) fn broadcast_link_event(
+        &self,
+        kind: SampleKind,
+        transport_zid: ZenohIdProto,
+        link: &zenoh_link::Link,
+        is_multicast: bool,
+    ) {
+        let event = LinkEvent {
+            kind,
+            link: Link::new(transport_zid.into(), link),
+        };
+
+        // Call all registered callbacks, filtering by transport if specified
+        let state = zread!(self.state);
+        for listener in state.link_events_listeners.values() {
+            if let Some(filter_transport) = &listener.transport {
+                // Filter by both zid and is_multicast
+                if filter_transport.zid() == event.link.zid()
+                    && filter_transport.is_multicast() == is_multicast
+                {
+                    listener.callback.call(event.clone());
+                }
+            } else {
+                listener.callback.call(event.clone());
+            }
         }
     }
 
