@@ -21,9 +21,9 @@ use zenoh_core::Wait;
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_link::Locator;
 use zenoh_macros::ke;
+use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
-use zenoh_protocol::core::CongestionControl;
 
 use crate::{
     self as zenoh,
@@ -247,7 +247,9 @@ pub(crate) fn init(session: WeakSession) {
                     ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(event.link());
                 let key_expr = KeyExpr::from(key_expr);
                 let payload = match event.kind() {
-                    SampleKind::Put => serde_json::to_vec(&LinkJson::from(event.link().clone())).unwrap(),
+                    SampleKind::Put => {
+                        serde_json::to_vec(&LinkJson::from(event.link().clone())).unwrap()
+                    }
                     SampleKind::Delete => Vec::new(),
                 };
                 tracing::info!(
@@ -275,10 +277,7 @@ pub(crate) fn init(session: WeakSession) {
                     tracing::error!("Unable to publish link event: {}", e);
                 }
             } else {
-                tracing::warn!(
-                    "Unable to find transport for link event: {}",
-                    transport_zid
-                );
+                tracing::warn!("Unable to find transport for link event: {}", transport_zid);
             }
         }
     });
@@ -332,4 +331,3 @@ pub(crate) fn on_admin_query(
         }
     }
 }
-
