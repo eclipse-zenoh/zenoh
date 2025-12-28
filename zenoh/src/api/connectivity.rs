@@ -88,8 +88,13 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
         }
 
         // Broadcast link added event
-        self.session
-            .broadcast_link_event(SampleKind::Put, self.peer_zid, &link, self.is_multicast);
+        self.session.broadcast_link_event(
+            SampleKind::Put,
+            self.peer_zid,
+            &link,
+            self.is_multicast,
+            self.peer.is_qos,
+        );
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
@@ -104,6 +109,7 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
             self.peer_zid,
             &link,
             self.is_multicast,
+            self.peer.is_qos,
         );
     }
 

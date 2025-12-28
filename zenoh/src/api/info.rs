@@ -288,12 +288,12 @@ pub struct Link {
     pub(crate) is_streamed: bool,
     pub(crate) interfaces: Vec<String>,
     pub(crate) auth_identifier: Option<String>,
-    pub(crate) priorities: (u8, u8),
-    pub(crate) reliability: Reliability,
+    pub(crate) priorities: Option<(u8, u8)>,
+    pub(crate) reliability: Option<Reliability>,
 }
 
 impl Link {
-    pub(crate) fn new(zid: ZenohId, link: &zenoh_link_commons::Link) -> Self {
+    pub(crate) fn new(zid: ZenohId, link: &zenoh_link_commons::Link, is_qos: bool) -> Self {
         let auth_identifier = match &link.auth_identifier {
             LinkAuthId::Tls(Some(s)) | LinkAuthId::Quic(Some(s)) => Some(s.clone()),
             LinkAuthId::Tls(None)
@@ -306,28 +306,35 @@ impl Link {
             | LinkAuthId::Vsock
             | LinkAuthId::Ws => None, // avoid using _ wildcard to ensure that new protocols are correctly handled
         };
-        let priorities = link
-            .priorities
-            .as_deref()
-            .map(|p| (*p.start() as u8, *p.end() as u8))
-            .unwrap_or((
-                // max priority is the lowest numerical value
-                zenoh_protocol::core::Priority::MAX as u8,
-                zenoh_protocol::core::Priority::MIN as u8,
-            ));
+        let priorities = if is_qos {
+            link.priorities
+                .as_deref()
+                .map(|p| (*p.start() as u8, *p.end() as u8))
+                .or(Some((
+                    // max priority is the lowest numerical value
+                    zenoh_protocol::core::Priority::MAX as u8,
+                    zenoh_protocol::core::Priority::MIN as u8,
+                )))
+        } else {
+            None
+        };
         // Link reliability is always known - it's either specified explicitly in
         // the config or inferred from the protocol
-        let reliability = link.reliability.unwrap_or_else(|| {
-            let inspector = zenoh_link::LocatorInspector::default();
-            // TODO: do we need to check both?
-            if inspector.is_reliable(&link.src).unwrap_or(false)
-                && inspector.is_reliable(&link.dst).unwrap_or(false)
-            {
-                Reliability::Reliable
-            } else {
-                Reliability::BestEffort
-            }
-        });
+        let reliability = if is_qos {
+            Some(link.reliability.unwrap_or_else(|| {
+                let inspector = zenoh_link::LocatorInspector::default();
+                // TODO: do we need to check both src and dst?
+                if inspector.is_reliable(&link.src).unwrap_or(false)
+                    && inspector.is_reliable(&link.dst).unwrap_or(false)
+                {
+                    Reliability::Reliable
+                } else {
+                    Reliability::BestEffort
+                }
+            }))
+        } else {
+            None
+        };
         Link {
             zid,
             src: link.src.clone(),
@@ -396,14 +403,16 @@ impl Link {
     /// Gets the optional priority range (min, max) associated with the link.
     /// The numeric priority values corresponds [`Priority`](crate::qos::Priority)
     /// but can also contain value 0 (Control) not exposed in the public enum.
+    /// Returns None if the transport does not support QoS.
     #[inline]
-    pub fn priorities(&self) -> (u8, u8) {
+    pub fn priorities(&self) -> Option<(u8, u8)> {
         self.priorities
     }
 
     /// Gets the reliability level of the link.
+    /// Returns None if the transport does not support QoS.
     #[inline]
-    pub fn reliability(&self) -> Reliability {
+    pub fn reliability(&self) -> Option<Reliability> {
         self.reliability
     }
 }

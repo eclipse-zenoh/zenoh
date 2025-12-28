@@ -429,9 +429,10 @@ impl RuntimeState {
     fn get_links_all(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
         let peer_to_links = |peer: TransportPeer| -> Vec<Link> {
             let zid: ZenohId = peer.zid.into();
+            let is_qos = peer.is_qos;
             peer.links
                 .into_iter()
-                .map(|ref link| Link::new(zid, link))
+                .map(|ref link| Link::new(zid, link, is_qos))
                 .collect()
         };
 
@@ -459,9 +460,10 @@ impl RuntimeState {
             .find(|peer| &ZenohId::from(peer.zid) == zid)
             .map(|peer| {
                 let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
                 peer.links
                     .into_iter()
-                    .map(move |ref link| Link::new(zid, link))
+                    .map(move |ref link| Link::new(zid, link, is_qos))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
@@ -480,9 +482,10 @@ impl RuntimeState {
             .find(|peer| &ZenohId::from(peer.zid) == zid)
             .map(|peer| {
                 let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
                 peer.links
                     .into_iter()
-                    .map(move |ref link| Link::new(zid, link))
+                    .map(move |ref link| Link::new(zid, link, is_qos))
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();

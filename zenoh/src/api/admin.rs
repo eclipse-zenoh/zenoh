@@ -113,8 +113,10 @@ struct LinkJson {
     is_streamed: bool,
     interfaces: Vec<String>,
     auth_identifier: Option<String>,
-    priorities: PrioritiesJson,
-    reliability: Reliability,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    priorities: Option<PrioritiesJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reliability: Option<Reliability>,
 }
 
 impl From<Link> for LinkJson {
@@ -127,7 +129,7 @@ impl From<Link> for LinkJson {
             is_streamed: link.is_streamed,
             interfaces: link.interfaces,
             auth_identifier: link.auth_identifier,
-            priorities: PrioritiesJson::from(link.priorities),
+            priorities: link.priorities.map(PrioritiesJson::from),
             reliability: link.reliability,
         }
     }

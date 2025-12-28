@@ -2216,10 +2216,11 @@ impl SessionInner {
         transport_zid: ZenohIdProto,
         link: &zenoh_link::Link,
         is_multicast: bool,
+        is_qos: bool,
     ) {
         let event = LinkEvent {
             kind,
-            link: Link::new(transport_zid.into(), link),
+            link: Link::new(transport_zid.into(), link, is_qos),
         };
 
         // Call all registered callbacks, filtering by transport if specified
