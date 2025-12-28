@@ -21,8 +21,7 @@ use zenoh_core::Wait;
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_link::Locator;
 use zenoh_macros::ke;
-use zenoh_protocol::core::CongestionControl;
-use zenoh_protocol::core::Reliability;
+use zenoh_protocol::core::{CongestionControl, Reliability};
 
 use crate::{
     self as zenoh,

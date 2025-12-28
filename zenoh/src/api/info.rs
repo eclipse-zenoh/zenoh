@@ -25,16 +25,14 @@ use zenoh_transport::TransportPeer;
 use crate::api::builders::info_links::{LinkEventsListenerBuilder, LinksBuilder};
 #[cfg(feature = "unstable")]
 use crate::api::builders::info_transport::{TransportEventsListenerBuilder, TransportsBuilder};
-use crate::api::{
-    builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
-    session::WeakSession,
-};
-use crate::api::{
-    handlers::{CallbackParameter},
-    sample::SampleKind,
-};
 #[cfg(feature = "unstable")]
 use crate::api::handlers::DefaultHandler;
+use crate::api::{
+    builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
+    handlers::CallbackParameter,
+    sample::SampleKind,
+    session::WeakSession,
+};
 
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).

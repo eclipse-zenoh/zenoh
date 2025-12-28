@@ -25,8 +25,7 @@ use std::{
 
 use async_trait::async_trait;
 use once_cell::sync::OnceCell;
-use ref_cast::ref_cast_custom;
-use ref_cast::RefCastCustom;
+use ref_cast::{ref_cast_custom, RefCastCustom};
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -40,12 +39,11 @@ use zenoh_config::{
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
-use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
         AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
-        EMPTY_EXPR_ID,
+        ZenohIdProto, EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -69,18 +67,12 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
-use super::builders::close::{CloseBuilder, Closeable, Closee};
-use super::connectivity;
-#[cfg(feature = "unstable")]
-use crate::api::{
-    query::ReplyKeyExpr,
-    sample::SourceInfo,
-    selector::ZenohParameters,
+use super::{
+    builders::close::{CloseBuilder, Closeable, Closee},
+    connectivity,
 };
-use crate::api::info::Link;
-use crate::api::info::LinkEvent;
-use crate::api::info::Transport;
-use crate::api::info::TransportEvent;
+#[cfg(feature = "unstable")]
+use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -102,7 +94,7 @@ use crate::{
         bytes::ZBytes,
         encoding::Encoding,
         handlers::{Callback, DefaultHandler},
-        info::SessionInfo,
+        info::{Link, LinkEvent, SessionInfo, Transport, TransportEvent},
         key_expr::{KeyExpr, KeyExprInner},
         liveliness::Liveliness,
         matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},

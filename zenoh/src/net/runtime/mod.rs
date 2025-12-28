@@ -72,7 +72,6 @@ use super::{
         router::Router,
     },
 };
-use crate::api::info::{Link, Transport};
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
@@ -83,6 +82,7 @@ use crate::{
     api::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
+        info::{Link, Transport},
     },
     GIT_VERSION,
 };
