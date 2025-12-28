@@ -72,7 +72,6 @@ use super::{
         router::Router,
     },
 };
-#[cfg(feature = "unstable")]
 use crate::api::info::{Link, Transport};
 #[cfg(feature = "plugins")]
 use crate::api::loader::{load_plugins, start_plugins};
@@ -235,7 +234,6 @@ impl IRuntime for RuntimeState {
         zwrite!(self.transport_handlers).push(handler);
     }
 
-    #[cfg(feature = "unstable")]
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
         let unicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_unicast())
@@ -247,20 +245,19 @@ impl IRuntime for RuntimeState {
             .block_in_place(self.manager.get_transports_multicast())
             .into_iter()
             .flat_map(|t| t.get_peers().ok().unwrap_or_default())
-            .map(|ref peer| Transport::new(&peer, true));
+            .map(|ref peer| Transport::new(peer, true));
 
         Box::new(unicast_transports.chain(multicast_transports))
     }
 
-    #[cfg(feature = "unstable")]
     fn get_links(
         &self,
         transport: Option<&Transport>,
     ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
         match transport {
             None => self.get_links_all(),
-            Some(t) if t.is_multicast() => self.get_links_transport_multicast(t.zid()),
-            Some(t) => self.get_links_transport_unicast(t.zid()),
+            Some(t) if t.is_multicast => self.get_links_transport_multicast(&t.zid),
+            Some(t) => self.get_links_transport_unicast(&t.zid),
         }
     }
 
@@ -429,7 +426,6 @@ impl RuntimeState {
             .collect::<Vec<_>>()
     }
 
-    #[cfg(feature = "unstable")]
     fn get_links_all(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
         let peer_to_links = |peer: TransportPeer| -> Vec<Link> {
             let zid: ZenohId = peer.zid.into();
@@ -453,7 +449,6 @@ impl RuntimeState {
         Box::new(unicast_links.chain(multicast_links))
     }
 
-    #[cfg(feature = "unstable")]
     fn get_links_transport_unicast(
         &self,
         zid: &ZenohId,
@@ -474,7 +469,6 @@ impl RuntimeState {
         Box::new(links.into_iter())
     }
 
-    #[cfg(feature = "unstable")]
     fn get_links_transport_multicast(
         &self,
         zid: &ZenohId,

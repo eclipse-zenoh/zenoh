@@ -25,7 +25,6 @@ use std::{
 
 use async_trait::async_trait;
 use once_cell::sync::OnceCell;
-#[zenoh_macros::internal]
 use ref_cast::ref_cast_custom;
 use ref_cast::RefCastCustom;
 use tracing::{error, info, trace, warn};
@@ -41,7 +40,6 @@ use zenoh_config::{
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
-#[cfg(feature = "unstable")]
 use zenoh_protocol::core::ZenohIdProto;
 use zenoh_protocol::{
     core::{
@@ -72,15 +70,17 @@ use zenoh_shm::api::client_storage::ShmClientStorage;
 use zenoh_task::TaskController;
 
 use super::builders::close::{CloseBuilder, Closeable, Closee};
-#[cfg(feature = "unstable")]
 use super::connectivity;
 #[cfg(feature = "unstable")]
 use crate::api::{
-    info::{Link, LinkEvent, Transport, TransportEvent},
     query::ReplyKeyExpr,
     sample::SourceInfo,
     selector::ZenohParameters,
 };
+use crate::api::info::Link;
+use crate::api::info::LinkEvent;
+use crate::api::info::Transport;
+use crate::api::info::TransportEvent;
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -133,13 +133,11 @@ zconfigurable! {
     pub(crate) static ref API_REPLY_RECEPTION_CHANNEL_SIZE: usize = 256;
 }
 
-#[cfg(feature = "unstable")]
 pub(crate) struct TransportEventsListenerState {
     pub(crate) id: Id,
     pub(crate) callback: Callback<TransportEvent>,
 }
 
-#[cfg(feature = "unstable")]
 impl fmt::Debug for TransportEventsListenerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("TransportEventsListenerState")
@@ -148,14 +146,12 @@ impl fmt::Debug for TransportEventsListenerState {
     }
 }
 
-#[cfg(feature = "unstable")]
 pub(crate) struct LinkEventsListenerState {
     pub(crate) id: Id,
     pub(crate) callback: Callback<LinkEvent>,
     pub(crate) transport: Option<Transport>,
 }
 
-#[cfg(feature = "unstable")]
 impl fmt::Debug for LinkEventsListenerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("LinkEventsListenerState")
@@ -181,9 +177,7 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) remote_queryables: HashMap<Id, (KeyExpr<'static>, bool)>,
     pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
-    #[cfg(feature = "unstable")]
     pub(crate) transport_events_listeners: HashMap<Id, Arc<TransportEventsListenerState>>,
-    #[cfg(feature = "unstable")]
     pub(crate) link_events_listeners: HashMap<Id, Arc<LinkEventsListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) liveliness_queries: HashMap<InterestId, LivelinessQueryState>,
@@ -214,9 +208,7 @@ impl SessionState {
             queryables: HashMap::new(),
             remote_queryables: HashMap::new(),
             matching_listeners: HashMap::new(),
-            #[cfg(feature = "unstable")]
             transport_events_listeners: HashMap::new(),
-            #[cfg(feature = "unstable")]
             link_events_listeners: HashMap::new(),
             queries: HashMap::new(),
             liveliness_queries: HashMap::new(),
@@ -641,7 +633,7 @@ impl Session {
         WeakSession::new(&self.0)
     }
 
-    #[cfg(feature = "internal")]
+    #[doc(hidden)]
     #[ref_cast_custom]
     pub(crate) const fn ref_cast(from: &Arc<SessionInner>) -> &Self;
 }
@@ -686,7 +678,6 @@ impl WeakSession {
         Self(session.clone())
     }
 
-    #[zenoh_macros::internal]
     pub(crate) fn session(&self) -> &Session {
         Session::ref_cast(&self.0)
     }
@@ -2112,7 +2103,6 @@ impl SessionInner {
         }
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn declare_transport_events_listener_inner(
         &self,
         callback: Callback<TransportEvent>,
@@ -2160,7 +2150,6 @@ impl SessionInner {
         }
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn broadcast_transport_event(
         &self,
         kind: SampleKind,
@@ -2177,7 +2166,6 @@ impl SessionInner {
         }
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn declare_transport_links_listener_inner(
         &self,
         callback: Callback<LinkEvent>,
@@ -2230,7 +2218,6 @@ impl SessionInner {
         }
     }
 
-    #[cfg(feature = "unstable")]
     pub(crate) fn broadcast_link_event(
         &self,
         kind: SampleKind,
@@ -2248,8 +2235,8 @@ impl SessionInner {
         for listener in state.link_events_listeners.values() {
             if let Some(filter_transport) = &listener.transport {
                 // Filter by both zid and is_multicast
-                if filter_transport.zid() == event.link.zid()
-                    && filter_transport.is_multicast() == is_multicast
+                if filter_transport.zid == event.link.zid
+                    && filter_transport.is_multicast == is_multicast
                 {
                     listener.callback.call(event.clone());
                 }

@@ -14,15 +14,11 @@
 
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 
-#[cfg(feature = "unstable")]
 use zenoh_config::{wrappers::ZenohId, WhatAmI};
 #[cfg(feature = "unstable")]
 use zenoh_core::{Resolve, ResolveClosure};
-#[cfg(feature = "unstable")]
 use zenoh_link::LinkAuthId;
-#[cfg(feature = "unstable")]
 use zenoh_protocol::core::{Locator, Reliability};
-#[cfg(feature = "unstable")]
 use zenoh_transport::TransportPeer;
 
 #[cfg(feature = "unstable")]
@@ -33,11 +29,12 @@ use crate::api::{
     builders::info::{PeersZenohIdBuilder, RoutersZenohIdBuilder, ZenohIdBuilder},
     session::WeakSession,
 };
-#[cfg(feature = "unstable")]
 use crate::api::{
-    handlers::{CallbackParameter, DefaultHandler},
+    handlers::{CallbackParameter},
     sample::SampleKind,
 };
+#[cfg(feature = "unstable")]
+use crate::api::handlers::DefaultHandler;
 
 /// Struct returned by [`Session::info()`](crate::Session::info) that allows
 /// access to information about the current zenoh [`Session`](crate::Session).
@@ -224,7 +221,6 @@ impl SessionInfo {
 /// Each transport can have multiple corresponding [`Link`](crate::session::Link)s which represent
 /// actual established data links with various protocols.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Transport {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
@@ -245,7 +241,10 @@ impl Transport {
             is_shm: peer.is_shm,
         }
     }
+}
 
+#[cfg(feature = "unstable")]
+impl Transport {
     /// Gets the ZenohId of the remote zenoh node.
     #[inline]
     pub fn zid(&self) -> &ZenohId {
@@ -282,7 +281,6 @@ impl Transport {
 /// Zenoh can establish multiple links to the same remote zenoh node using different protocols
 /// (e.g., TCP, UDP, QUIC, etc.)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "unstable", derive(serde::Serialize))]
 pub struct Link {
     pub(crate) zid: ZenohId,
     pub(crate) src: Locator,
@@ -345,7 +343,10 @@ impl Link {
             reliability,
         }
     }
+}
 
+#[cfg(feature = "unstable")]
+impl Link {
     /// Gets the ZenohId of the transport this link belongs to.
     #[inline]
     pub fn zid(&self) -> &ZenohId {
@@ -410,14 +411,13 @@ impl Link {
 }
 
 /// Event emitted when a transport is opened or closed
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportEvent {
     pub(crate) kind: SampleKind, // Put = opened, Delete = closed
     pub(crate) transport: Transport,
 }
 
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 impl TransportEvent {
     /// Returns the kind of event (Put for opened, Delete for closed)
     pub fn kind(&self) -> SampleKind {
@@ -430,7 +430,6 @@ impl TransportEvent {
     }
 }
 
-#[zenoh_macros::unstable]
 impl CallbackParameter for TransportEvent {
     type Message<'a> = Self;
     fn from_message(msg: Self::Message<'_>) -> Self {
@@ -439,14 +438,13 @@ impl CallbackParameter for TransportEvent {
 }
 
 /// Event emitted when a link is added or removed
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkEvent {
     pub(crate) kind: SampleKind, // Put = added, Delete = removed
     pub(crate) link: Link,
 }
 
-#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
 impl LinkEvent {
     /// Returns the kind of event (Put for added, Delete for removed)
     pub fn kind(&self) -> SampleKind {
@@ -464,7 +462,6 @@ impl LinkEvent {
     }
 }
 
-#[zenoh_macros::unstable]
 impl CallbackParameter for LinkEvent {
     type Message<'a> = Self;
     fn from_message(msg: Self::Message<'_>) -> Self {

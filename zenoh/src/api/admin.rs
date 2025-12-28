@@ -22,7 +22,6 @@ use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_link::Locator;
 use zenoh_macros::ke;
 use zenoh_protocol::core::CongestionControl;
-#[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
 
 use crate::{
@@ -193,22 +192,25 @@ pub(crate) fn init(session: WeakSession) {
         let session = session.clone();
         let own_zid = session.zid().into_keyexpr();
         move |event: TransportEvent| {
-            let key_expr = ke_prefix(&own_zid) / &ke_transport(event.transport());
+            let key_expr = ke_prefix(&own_zid) / &ke_transport(&event.transport);
             let key_expr = KeyExpr::from(key_expr);
-            let payload = match &event.kind() {
-                SampleKind::Put => serde_json::to_vec(event.transport()).unwrap(),
-                SampleKind::Delete => Vec::new(),
-            };
             tracing::info!(
                 "Publishing transport event: {:?} : {:?} on {}",
-                event.kind(),
-                event.transport(),
+                &event.kind,
+                &event.transport,
                 key_expr
             );
+            let payload = match &event.kind {
+                SampleKind::Put => {
+                    let json = TransportJson::from(event.transport);
+                    serde_json::to_vec(&json).unwrap_or_default()
+                }
+                SampleKind::Delete => Vec::new(),
+            };
             if let Err(e) = session.resolve_put(
                 &key_expr,
                 payload.into(),
-                event.kind(),
+                event.kind,
                 Encoding::APPLICATION_JSON,
                 CongestionControl::default(),
                 Priority::default(),
@@ -236,32 +238,32 @@ pub(crate) fn init(session: WeakSession) {
         let own_zid = session.zid().into_keyexpr();
         move |event: LinkEvent| {
             // Find the transport to determine if it's multicast
-            let transport_zid = event.transport_zid();
+            let transport_zid = &event.link.zid;
             let transport = session
                 .runtime
                 .get_transports()
-                .find(|t| t.zid() == transport_zid);
+                .find(|t| t.zid == *transport_zid);
 
             if let Some(transport) = transport {
                 let key_expr =
-                    ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(event.link());
+                    ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
                 let key_expr = KeyExpr::from(key_expr);
-                let payload = match event.kind() {
+                tracing::info!(
+                    "Publishing link event: {:?} : {:?} on {}",
+                    &event.kind,
+                    &event.link,
+                    key_expr
+                );
+                let payload = match &event.kind {
                     SampleKind::Put => {
-                        serde_json::to_vec(&LinkJson::from(event.link().clone())).unwrap()
+                        serde_json::to_vec(&LinkJson::from(event.link)).unwrap_or_default()
                     }
                     SampleKind::Delete => Vec::new(),
                 };
-                tracing::info!(
-                    "Publishing link event: {:?} : {:?} on {}",
-                    event.kind(),
-                    event.link(),
-                    key_expr
-                );
                 if let Err(e) = session.resolve_put(
                     &key_expr,
                     payload.into(),
-                    event.kind(),
+                    event.kind,
                     Encoding::APPLICATION_JSON,
                     CongestionControl::default(),
                     Priority::default(),
