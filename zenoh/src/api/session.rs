@@ -746,14 +746,11 @@ impl Session {
                 face_id: OnceCell::new(),
             }));
 
-            // Register admin handler
+            // Register connectivity handler
             runtime.new_handler(Arc::new(admin::Handler::new(session.downgrade())));
-
-            // Register connectivity handler (independent from admin)
-            #[cfg(feature = "unstable")]
-            runtime.new_handler(Arc::new(connectivity::ConnectivityHandler::new(
-                session.downgrade(),
-            )));
+            // runtime.new_handler(Arc::new(connectivity::ConnectivityHandler::new(
+            //     session.downgrade(),
+            // )));
 
             let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 

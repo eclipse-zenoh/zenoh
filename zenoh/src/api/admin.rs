@@ -17,8 +17,10 @@ use std::{
     sync::Arc,
 };
 
+use zenoh_config::{WhatAmI, ZenohId};
 use zenoh_core::{Result as ZResult, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+use zenoh_link::Locator;
 use zenoh_macros::ke;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
@@ -76,6 +78,72 @@ static KE_SESSION: &keyexpr = ke!("session");
 static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
+
+// JSON structures for making adminspace independent of internal structures
+#[derive(serde::Serialize)]
+struct TransportJson {
+    zid: ZenohId,
+    whatami: WhatAmI,
+    is_qos: bool,
+    #[cfg(feature = "shared-memory")]
+    is_shm: bool,
+}
+
+impl From<Transport> for TransportJson {
+    fn from(transport: Transport) -> Self {
+        Self {
+            zid: transport.zid,
+            whatami: transport.whatami,
+            is_qos: transport.is_qos,
+            #[cfg(feature = "shared-memory")]
+            is_shm: transport.is_shm,
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct PrioritiesJson {
+    start: zenoh_protocol::core::Priority,
+    end: zenoh_protocol::core::Priority,
+}
+
+impl From<(u8, u8)> for PrioritiesJson {
+    fn from(priorities: (u8, u8)) -> Self {
+        Self {
+            start: priorities.0.try_into().unwrap_or_default(),
+            end: priorities.1.try_into().unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct LinkJson {
+    src: Locator,
+    dst: Locator,
+    group: Option<Locator>,
+    mtu: u16,
+    is_streamed: bool,
+    interfaces: Vec<String>,
+    auth_identifier: Option<String>,
+    priorities: PrioritiesJson,
+    reliability: Reliability,
+}
+
+impl From<Link> for LinkJson {
+    fn from(link: Link) -> Self {
+        Self {
+            src: link.src,
+            dst: link.dst,
+            group: link.group,
+            mtu: link.mtu,
+            is_streamed: link.is_streamed,
+            interfaces: link.interfaces,
+            auth_identifier: link.auth_identifier,
+            priorities: PrioritiesJson::from(link.priorities),
+            reliability: link.reliability,
+        }
+    }
+}
 
 fn ke_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
     KE_AT / own_zid / KE_SESSION
@@ -202,16 +270,18 @@ pub(crate) fn on_admin_query(
 ) {
     for transport in session.runtime.get_transports() {
         let ke_transport = ke_transport(&transport);
+        let transport_json = TransportJson::from(transport.clone());
         reply(
             match_prefix,
             reply_prefix,
             &ke_transport,
             &query,
-            &transport,
+            &transport_json,
         );
         for link in session.runtime.get_links(Some(&transport)) {
             let ke_link = &ke_transport / &ke_link(&link);
-            reply(match_prefix, reply_prefix, &ke_link, &query, &link);
+            let link_json = LinkJson::from(link);
+            reply(match_prefix, reply_prefix, &ke_link, &query, &link_json);
         }
     }
 }
