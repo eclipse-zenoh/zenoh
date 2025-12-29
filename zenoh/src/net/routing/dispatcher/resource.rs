@@ -738,16 +738,6 @@ impl Resource {
                 visit(node, &mut nodes);
             }
         }
-        fn push_all(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
-            visit_nodes(from, |from, nodes| {
-                if from.context.is_some() {
-                    matches.push(Arc::downgrade(from));
-                }
-                for child in from.children.iter() {
-                    nodes.push_back(child);
-                }
-            });
-        }
         fn get_matches_from(
             key_expr: &keyexpr,
             from: &Arc<Resource>,
@@ -776,45 +766,48 @@ impl Resource {
                     },
                     None => (key_expr, None),
                 };
-                if ke_chunk.intersects(suffix) {
-                    match ke_rest {
-                        None => {
-                            if ke_chunk.as_bytes() == b"**" {
-                                push_all(from, matches)
-                            } else {
-                                if from.context.is_some() {
-                                    matches.push(Arc::downgrade(from));
-                                }
-                                if suffix.as_bytes() == b"**" {
-                                    for child in from.children.iter() {
-                                        nodes.push_back((key_expr, child));
-                                    }
-                                }
-                                if let Some(child) =
-                                    from.children.get("/**").or_else(|| from.children.get("**"))
-                                {
-                                    if child.context.is_some() {
-                                        matches.push(Arc::downgrade(child))
-                                    }
+                let ke_chunk_intersects_suffix = ke_chunk.intersects(suffix);
+                let ke_chunk_is_wild = ke_chunk.as_bytes() == b"**";
+                let suffix_is_wild = suffix.as_bytes() == b"**";
+                match ke_rest {
+                    None => {
+                        if ke_chunk_intersects_suffix {
+                            if from.context.is_some() {
+                                matches.push(Arc::downgrade(from));
+                            }
+                            if let Some(child) =
+                                from.children.get("/**").or_else(|| from.children.get("**"))
+                            {
+                                if child.context.is_some() {
+                                    matches.push(Arc::downgrade(child))
                                 }
                             }
                         }
-                        Some(rest) if rest.as_bytes() == b"**" => push_all(from, matches),
-                        Some(rest) => {
-                            let recheck_keyexpr_one_level_lower =
-                                ke_chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
+                        if (ke_chunk_is_wild && ke_chunk_intersects_suffix) || suffix_is_wild {
                             for child in from.children.iter() {
-                                nodes.push_back((rest, child));
-                                if recheck_keyexpr_one_level_lower {
-                                    nodes.push_back((key_expr, child));
-                                }
-                            }
-                            if recheck_keyexpr_one_level_lower {
-                                nodes.push_back((rest, from));
+                                nodes.push_back((key_expr, child));
                             }
                         }
-                    };
-                }
+                    }
+                    Some(rest) => {
+                        if ke_chunk_intersects_suffix
+                            && rest.as_bytes() == b"**"
+                            && from.context.is_some()
+                        {
+                            matches.push(Arc::downgrade(from));
+                        }
+                        for child in from.children.iter() {
+                            if (ke_chunk_is_wild && ke_chunk_intersects_suffix) || suffix_is_wild {
+                                nodes.push_back((key_expr, child));
+                            } else if ke_chunk_intersects_suffix {
+                                nodes.push_back((rest, child));
+                            }
+                        }
+                        if (suffix_is_wild && ke_chunk_intersects_suffix) || ke_chunk_is_wild {
+                            nodes.push_back((rest, from));
+                        }
+                    }
+                };
             })
         }
         let mut matches = Vec::new();
