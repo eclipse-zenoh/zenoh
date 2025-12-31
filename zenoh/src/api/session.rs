@@ -519,6 +519,7 @@ pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
 
 impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
+#[allow(dead_code)] // to allow using `id` with `unstable` feature
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
     weak_counter: Mutex<usize>,
