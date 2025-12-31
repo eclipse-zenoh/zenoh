@@ -15,7 +15,7 @@ use std::{
     convert::{TryFrom, TryInto},
     future::{IntoFuture, Ready},
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc},
+    sync::Arc,
 };
 
 use zenoh_core::{Resolvable, Wait};
@@ -34,7 +34,7 @@ pub(crate) struct KeyExprWireDeclaration {
     prefix_len: u32,
     mapping: Mapping,
     session: WeakSession,
-    undeclared: AtomicBool,
+    undeclared: bool,
 }
 
 impl KeyExprWireDeclaration {
@@ -49,35 +49,16 @@ impl KeyExprWireDeclaration {
                 prefix_len,
                 mapping: Mapping::Sender,
                 session: session.downgrade(),
-                undeclared: AtomicBool::new(false),
+                undeclared: false,
             }))
     }
 
-    pub(crate) fn undeclare_with_session_check(&self, session: Option<&Session>) -> ZResult<()> {
-        if session
-            .map(|s| self.is_declared_on_session(s))
-            .unwrap_or(true)
-        {
-            if self
-                .undeclared
-                .compare_exchange(
-                    false,
-                    true,
-                    std::sync::atomic::Ordering::Relaxed,
-                    std::sync::atomic::Ordering::Relaxed,
-                )
-                .is_ok()
-            {
-                self.session.undeclare_prefix(self.expr_id)
-            } else {
-                Ok(())
-            }
+    pub(crate) fn undeclare(&mut self) -> ZResult<()> {
+        if self.undeclared {
+            Ok(())
         } else {
-            Err(zerror!(
-                "Failed to undeclare expr with id {}, as it was declared by another Session",
-                self.expr_id
-            )
-            .into())
+            self.undeclared = true;
+            self.session.undeclare_prefix(self.expr_id)
         }
     }
 
@@ -86,13 +67,14 @@ impl KeyExprWireDeclaration {
     }
 
     pub(crate) fn is_declared_on_session_inner(&self, session: &SessionInner) -> bool {
-        self.session.id == session.id
+        let inner = self.session.as_ref();
+        std::ptr::eq(inner, session)
     }
 }
 
 impl Drop for KeyExprWireDeclaration {
     fn drop(&mut self) {
-        let _ = self.undeclare_with_session_check(None);
+        let _ = self.undeclare();
     }
 }
 
@@ -569,10 +551,21 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    fn undeclare_with_session_check(&self, parent_session: Option<&Session>) -> ZResult<()> {
-        match self.declaration() {
-            Some(d) if self.key_expr().len() == d.prefix_len as usize => d.undeclare_with_session_check(parent_session),
-            _ =>  Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", self).into()),
+    fn undeclare_with_session_check(&mut self, parent_session: Option<&Session>) -> ZResult<()> {
+        match self.declaration_mut().take() {
+            Some(mut d) if self.key_expr().len() == d.prefix_len as usize => {
+                if parent_session.map(|s| d.is_declared_on_session(s)).unwrap_or(true) {
+                    Arc::get_mut(&mut d).map(|d| d.undeclare()).unwrap_or(Ok(()))
+                } else {
+                    let expr_id = self.declaration_mut().insert(d).expr_id;
+                        Err(zerror!(
+                            "Failed to undeclare expr with id {}, as it was declared by another Session",
+                            expr_id
+                        )
+                        .into())
+                }
+            },
+            _ => Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`, and that key_expression was not undeclared previously", self).into()),
         }
     }
 }
@@ -612,7 +605,7 @@ impl Resolvable for KeyExprUndeclaration<'_> {
 
 impl Wait for KeyExprUndeclaration<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        let KeyExprUndeclaration { session, expr } = self;
+        let KeyExprUndeclaration { session, mut expr } = self;
         expr.undeclare_with_session_check(Some(session))
     }
 }
