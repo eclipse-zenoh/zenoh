@@ -38,19 +38,19 @@ pub(crate) struct KeyExprWireDeclaration {
 }
 
 impl KeyExprWireDeclaration {
-    pub(crate) fn new(
-        expr_id: ExprId,
-        prefix_len: u32,
-        mapping: Mapping,
-        session: WeakSession,
-    ) -> Self {
-        Self {
-            expr_id,
-            prefix_len,
-            mapping,
-            session,
-            undeclared: AtomicBool::new(false),
-        }
+    pub(crate) fn new(prefix: &str, session: &Session, force: bool) -> ZResult<Option<Self>> {
+        let prefix_len = prefix.len() as u32;
+        Ok(session
+            .0
+            .declare_prefix(prefix, force)
+            .wait()?
+            .map(|expr_id| Self {
+                expr_id,
+                prefix_len,
+                mapping: Mapping::Sender,
+                session: session.downgrade(),
+                undeclared: AtomicBool::new(false),
+            }))
     }
 
     pub(crate) fn undeclare_with_session_check(&self, session: Option<&Session>) -> ZResult<()> {
@@ -490,10 +490,29 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    /// # Safety
-    /// New wire declaration must be compatible with key expression (at least prefix length should <= key_expr.len())
-    pub(crate) unsafe fn reset_declaration(&mut self, new_declaration: KeyExprWireDeclaration) {
-        *self.declaration_mut() = Some(Arc::new(new_declaration));
+    pub(crate) fn declare(mut self, session: &Session, force: bool) -> ZResult<Self> {
+        if !self.is_fully_optimized(session) {
+            *self.declaration_mut() =
+                KeyExprWireDeclaration::new(self.as_str(), session, force)?.map(Arc::new);
+        }
+        Ok(self)
+    }
+
+    pub(crate) fn declare_nonwild_prefix(
+        mut self,
+        session: &Session,
+        force: bool,
+    ) -> ZResult<Self> {
+        if !self.is_non_wild_prefix_optimized(session) {
+            let ke = self.as_keyexpr();
+            *self.declaration_mut() = match ke.get_nonwild_prefix() {
+                Some(prefix) => {
+                    KeyExprWireDeclaration::new(prefix.as_str(), session, force)?.map(Arc::new)
+                }
+                None => None,
+            }
+        }
+        Ok(self)
     }
 
     fn extract_declaration(self) -> Option<Arc<KeyExprWireDeclaration>> {

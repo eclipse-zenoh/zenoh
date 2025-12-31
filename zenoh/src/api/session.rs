@@ -91,7 +91,7 @@ use crate::{
         encoding::Encoding,
         handlers::{Callback, DefaultHandler},
         info::SessionInfo,
-        key_expr::{KeyExpr, KeyExprWireDeclaration},
+        key_expr::KeyExpr,
         liveliness::Liveliness,
         matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
         publisher::{Priority, PublisherState},
@@ -1135,51 +1135,11 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        ResolveClosure::new(move || {
-            let mut key_expr: KeyExpr = key_expr?;
-            if !key_expr.is_fully_optimized(self) {
-                let prefix_len = key_expr.len() as u32;
-                let expr_id = self
-                    .0
-                    .declare_prefix(key_expr.as_str(), true)
-                    .wait()?
-                    .unwrap();
-                // Safety: new declaration is guaranteed to be compatible with key_expr
-                unsafe {
-                    key_expr.reset_declaration(KeyExprWireDeclaration::new(
-                        expr_id,
-                        prefix_len,
-                        Mapping::Sender,
-                        self.downgrade(),
-                    ));
-                }
-            }
-            Ok(key_expr)
-        })
+        ResolveClosure::new(move || key_expr?.declare(self, true))
     }
 
-    pub(crate) fn declare_nonwild_prefix<'a>(
-        &self,
-        mut key_expr: KeyExpr<'a>,
-    ) -> ZResult<KeyExpr<'a>> {
-        if key_expr.is_non_wild_prefix_optimized(self) {
-            return Ok(key_expr);
-        }
-        let ke = key_expr.as_keyexpr();
-        if let Some(prefix) = ke.get_nonwild_prefix() {
-            if let Some(expr_id) = self.0.declare_prefix(prefix.as_str(), false).wait()? {
-                // Safety: declaration is guaranteed to be compatible with key expression
-                unsafe {
-                    key_expr.reset_declaration(KeyExprWireDeclaration::new(
-                        expr_id,
-                        prefix.len() as u32,
-                        Mapping::Sender,
-                        self.downgrade(),
-                    ));
-                }
-            }
-        }
-        Ok(key_expr)
+    pub(crate) fn declare_nonwild_prefix<'a>(&self, key_expr: KeyExpr<'a>) -> ZResult<KeyExpr<'a>> {
+        key_expr.declare_nonwild_prefix(self, false)
     }
 
     /// Publish [`SampleKind::Put`] sample directly from the session. This is a shortcut for declaring
