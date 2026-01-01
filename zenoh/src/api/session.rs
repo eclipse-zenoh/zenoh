@@ -2152,8 +2152,12 @@ impl SessionInner {
         let event = TransportEvent { kind, transport };
 
         // Call all registered callbacks
-        let state = zread!(self.state);
-        for listener in state.transport_events_listeners.values() {
+        let listeners = zread!(self.state)
+            .transport_events_listeners
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for listener in listeners {
             listener.callback.call(event.clone());
         }
     }
@@ -2224,8 +2228,12 @@ impl SessionInner {
         };
 
         // Call all registered callbacks, filtering by transport if specified
-        let state = zread!(self.state);
-        for listener in state.link_events_listeners.values() {
+        let listeners = zread!(self.state)
+            .link_events_listeners
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        for listener in listeners {
             if let Some(filter_transport) = &listener.transport {
                 // Filter by both zid and is_multicast
                 if filter_transport.zid == event.link.zid
