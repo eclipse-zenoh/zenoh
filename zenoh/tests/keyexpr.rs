@@ -277,11 +277,18 @@ fn keyexpr_test_undeclare() {
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config.clone()).wait().unwrap();
+    let session2 = zenoh::open(config).wait().unwrap();
     let wire_expr = session.declare_keyexpr("expr").wait().unwrap();
     let owned_wire_expr = session.declare_keyexpr("expr").wait().unwrap().into_owned();
 
+    let wire_expr2 = wire_expr.clone();
+    let wire_expr3 = wire_expr.clone();
+    assert!(session2.undeclare(wire_expr2).wait().is_err());
+
     assert!(session.undeclare(wire_expr).wait().is_ok());
+    assert!(session.undeclare(wire_expr3).wait().is_ok());
+
     assert!(session.undeclare(owned_wire_expr).wait().is_ok());
     assert!(session.undeclare(expr).wait().is_err());
 

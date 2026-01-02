@@ -483,9 +483,7 @@ impl Wait for PublisherBuilder<'_, '_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self = self.apply_qos_overwrites();
         let mut key_expr = self.key_expr?;
-        if !key_expr.is_fully_optimized(&self.session.0) {
-            key_expr = self.session.declare_keyexpr(key_expr).wait()?;
-        }
+        key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
             .0
