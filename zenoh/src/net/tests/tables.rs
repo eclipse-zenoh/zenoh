@@ -148,6 +148,9 @@ fn match_test() {
         "x/c$*",
         "x/$*d",
         "x/$*e",
+        "@a",
+        "**/@a",
+        "@a/b",
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
