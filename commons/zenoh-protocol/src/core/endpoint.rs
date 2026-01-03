@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{borrow::ToOwned, format, string::String};
+use alloc::{borrow::ToOwned, format, string::String, vec, vec::Vec};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -696,8 +696,119 @@ impl EndPoint {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub enum EndPoints {
+    Single(EndPoint),
+    Vec(Vec<EndPoint>),
+}
+impl EndPoints {
+    pub fn flatten(self) -> Vec<EndPoint> {
+        match self {
+            EndPoints::Single(ep) => vec![ep],
+            EndPoints::Vec(eps) => eps,
+        }
+    }
+
+    pub fn as_vec(&self) -> Vec<EndPoint> {
+        match self {
+            EndPoints::Single(ep) => vec![ep.clone()],
+            EndPoints::Vec(eps) => eps.clone(),
+        }
+    }
+}
+
+impl From<EndPoint> for EndPoints {
+    fn from(ep: EndPoint) -> EndPoints {
+        EndPoints::Single(ep)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for EndPoints {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct EndPointsVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for EndPointsVisitor {
+            type Value = EndPoints;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a single endpoint string or a list of endpoint strings")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                EndPoint::from_str(v)
+                    .map(EndPoints::Single)
+                    .map_err(serde::de::Error::custom)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut vec = Vec::new();
+                while let Some(elem) = seq.next_element::<EndPoint>()? {
+                    vec.push(elem);
+                }
+                Ok(EndPoints::Vec(vec))
+            }
+        }
+
+        deserializer.deserialize_any(EndPointsVisitor)
+    }
+}
+
+impl TryFrom<String> for EndPoints {
+    type Error = ZError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        const ERR: &str =
+            "Endpoints must be of the form <endpoint> or [<endpoint>, <endpoint>, ...]";
+        if s.starts_with('[') && s.ends_with(']') {
+            let eps: ZResult<Vec<EndPoint>> = s[1..s.len() - 1]
+                .split(',')
+                .map(|x| EndPoint::from_str(x.trim()))
+                .collect();
+            eps.map(EndPoints::Vec)
+        } else {
+            EndPoint::from_str(s.as_str())
+                .map(EndPoints::Single)
+                .map_err(|e| zerror!("{}: {}", ERR, e).into())
+        }
+    }
+}
+
+impl FromStr for EndPoints {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s.to_owned())
+    }
+}
+
 #[test]
 fn endpoints() {
+    // Single
+    assert_eq!(
+        EndPoints::from_str("udp/127.0.0.1:7447").unwrap(),
+        EndPoints::Single(EndPoint::from_str("udp/127.0.0.1:7447").unwrap())
+    );
+    // Vec
+    assert_eq!(
+        EndPoints::from_str("[udp/127.0.0.1:7447?rel=0,udp/127.0.0.1:7447?rel=1]").unwrap(),
+        EndPoints::Vec(vec![
+            EndPoint::from_str("udp/127.0.0.1:7447?rel=0").unwrap(),
+            EndPoint::from_str("udp/127.0.0.1:7447?rel=1").unwrap()
+        ])
+    );
+}
+
+#[test]
+fn endpoint() {
     assert!(EndPoint::from_str("/").is_err());
     assert!(EndPoint::from_str("?").is_err());
     assert!(EndPoint::from_str("#").is_err());

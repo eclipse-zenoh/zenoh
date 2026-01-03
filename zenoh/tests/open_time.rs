@@ -19,7 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use zenoh_config::Config;
+use zenoh_config::{Config, EndPoints};
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
 
@@ -74,7 +74,7 @@ async fn time_open(
     app_config
         .connect
         .endpoints
-        .set(vec![connect_endpoint.clone()])
+        .set(vec![connect_endpoint.clone().into()])
         .unwrap();
     app_config
         .transport

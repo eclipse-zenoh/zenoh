@@ -55,8 +55,14 @@ impl From<&CommonArgs> for Config {
         }
 
         if !args.connect.is_empty() {
+            // Able to parse multiple endpoints, e.g. "tcp/127.0.0.1:7447?rel=0,tcp/127.0.0.1:7447?rel=1"
+            let endpoints: Vec<Vec<String>> = args
+                .connect
+                .iter()
+                .map(|s| s.split(',').map(String::from).collect())
+                .collect();
             config
-                .insert_json5("connect/endpoints", &json!(args.connect).to_string())
+                .insert_json5("connect/endpoints", &json!(endpoints).to_string())
                 .unwrap();
         }
         if !args.listen.is_empty() {
