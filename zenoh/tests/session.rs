@@ -14,6 +14,8 @@
 
 #![cfg(feature = "internal_config")]
 
+mod common;
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -35,78 +37,13 @@ use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;
 
+use crate::common::{close_session, open_session_multicast, open_session_unicast};
+
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
-
-async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
-    // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
-    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
-
-    let mut config = zenoh::Config::default();
-    config
-        .connect
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
-    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
-
-    (peer01, peer02)
-}
-
-async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
-    // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec![endpoint01.parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {endpoint01}");
-    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
-
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec![endpoint02.parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {endpoint02}");
-    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
-
-    (peer01, peer02)
-}
-
-async fn close_session(peer01: Session, peer02: Session) {
-    println!("[  ][01d] Closing peer01 session");
-    ztimeout!(peer01.close()).unwrap();
-    println!("[  ][02d] Closing peer02 session");
-    ztimeout!(peer02.close()).unwrap();
-}
 
 async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";

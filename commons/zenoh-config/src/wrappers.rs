@@ -31,7 +31,7 @@ pub struct ZenohId(ZenohIdProto);
 
 impl ZenohId {
     /// Used by plugins for crating adminspace path
-    #[zenoh_macros::internal]
+    #[doc(hidden)]
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }
