@@ -42,8 +42,13 @@ use crate::{
     ConfigurationInspector, LinkAuthId, BIND_INTERFACE,
 };
 
-// Default ALPN protocol
-pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
+// ALPN protocols
+/// Protocol used by zenoh <= 1.6.2
+pub const PROTOCOL_LEGACY: &[u8] = b"hq-29";
+/// Zenoh single stream
+pub const PROTOCOL_SINGLE_STREAM: &[u8] = b"zenoh";
+/// Zenoh multi stream
+pub const PROTOCOL_MULTI_STREAM: &[u8] = b"zenoh-ms";
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
