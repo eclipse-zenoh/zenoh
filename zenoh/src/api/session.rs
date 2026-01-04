@@ -3298,6 +3298,8 @@ impl Closee for Arc<SessionInner> {
         let _remote_resources = std::mem::take(&mut state.remote_resources);
         let _queries = std::mem::take(&mut state.queries);
         let _matching_listeners = std::mem::take(&mut state.matching_listeners);
+        let _transport_event_listeners = std::mem::take(&mut state.transport_events_listeners);
+        let _link_event_listeners = std::mem::take(&mut state.link_events_listeners);
         drop(state);
     }
 }
