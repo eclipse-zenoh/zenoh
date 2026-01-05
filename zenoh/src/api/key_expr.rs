@@ -449,7 +449,7 @@ impl std::ops::Div<&keyexpr> for KeyExpr<'_> {
     fn div(self, rhs: &keyexpr) -> Self::Output {
         KeyExpr(KeyExprInner::Owned {
             key_expr: self.key_expr() / rhs,
-            declaration: self.extract_declaration(),
+            declaration: self.into_declaration(),
         })
     }
 }
@@ -504,7 +504,7 @@ impl<'a> KeyExpr<'a> {
         Ok(self)
     }
 
-    fn extract_declaration(self) -> Option<Arc<KeyExprWireDeclaration>> {
+    fn into_declaration(self) -> Option<Arc<KeyExprWireDeclaration>> {
         match self.0 {
             KeyExprInner::Borrowed { declaration, .. } => declaration,
             KeyExprInner::Owned { declaration, .. } => declaration,
