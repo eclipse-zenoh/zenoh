@@ -295,6 +295,12 @@ async fn test_adminspace_read() {
         .next();
     assert!(route.is_some());
 
+    let count = router.get("@/**").await.unwrap().iter().count();
+    assert!(count > 0);
+
+    let count = router.get("@/*/**").await.unwrap().iter().count();
+    assert!(count > 0);
+
     peer.close().await.unwrap();
     router2.close().await.unwrap();
     router.close().await.unwrap();
