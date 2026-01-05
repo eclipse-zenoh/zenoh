@@ -131,6 +131,7 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
+test-case = { workspace = true }
 tokio = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 
