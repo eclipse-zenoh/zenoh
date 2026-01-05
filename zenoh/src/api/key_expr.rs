@@ -98,6 +98,13 @@ pub(crate) enum KeyExprInner<'a> {
 #[serde(from = "OwnedKeyExpr")]
 #[serde(into = "OwnedKeyExpr")]
 pub struct KeyExpr<'a>(pub(crate) KeyExprInner<'a>);
+
+// Implement RefUnwindSafe for compatibility purposes.
+// Given that all key expression public methods are immutable, they
+// do not break any key expression invariants.
+impl<'a> std::panic::RefUnwindSafe for KeyExpr<'a> {}
+impl<'a> std::panic::UnwindSafe for KeyExpr<'a> {}
+
 impl std::ops::Deref for KeyExpr<'_> {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
