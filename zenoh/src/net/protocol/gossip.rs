@@ -61,7 +61,7 @@ impl Gossip {
                 name,
                 zid,
                 runtime,
-                true,
+                false,
                 router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,

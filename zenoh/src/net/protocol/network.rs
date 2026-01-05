@@ -206,14 +206,16 @@ impl Network {
         );
 
         if dests_to_update.is_empty()
-            || !(self.full_linkstate || self.router_peers_failover_brokering)
+            || !(self.full_linkstate
+                || self.gossip_multihop
+                || self.router_peers_failover_brokering)
         {
             return false;
         }
 
         for d in dests_to_update {
             if let Some(dest_idx) = self.get_idx(&d) {
-                if self.full_linkstate
+                if (self.full_linkstate || self.gossip_multihop)
                     && self.graph[dest_idx]
                         .links
                         .contains_key(&self.graph[self.idx].zid)
@@ -695,7 +697,7 @@ impl Network {
             );
         }
 
-        if !self.full_linkstate {
+        if !self.full_linkstate && !self.gossip_multihop {
             return self.process_linkstates_peer_to_peer(link_states);
         }
 
@@ -821,7 +823,7 @@ impl Network {
         let zid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
 
-        if self.full_linkstate || self.router_peers_failover_brokering {
+        if self.full_linkstate || self.gossip_multihop || self.router_peers_failover_brokering {
             let (idx, new) = match self.get_idx(&zid) {
                 Some(idx) => (idx, false),
                 None => {
@@ -843,7 +845,7 @@ impl Network {
             self.graph[self.idx].links.insert(zid, link_weight);
             self.graph[self.idx].sn += 1;
 
-            if self.full_linkstate
+            if (self.full_linkstate || self.gossip_multihop)
                 && self.graph[idx]
                     .links
                     .contains_key(&self.graph[self.idx].zid)
@@ -863,6 +865,7 @@ impl Network {
                 .filter(|link| {
                     link.zid != zid
                         && (self.full_linkstate
+                            || self.gossip_multihop
                             || link.transport.get_whatami().unwrap_or(WhatAmI::Peer)
                                 == WhatAmI::Router)
                 })
@@ -922,6 +925,7 @@ impl Network {
                         Details {
                             zid: true,
                             links: self.full_linkstate
+                                || self.gossip_multihop
                                 || (self.router_peers_failover_brokering
                                     && idx == self.idx
                                     && whatami == WhatAmI::Router),
@@ -939,7 +943,7 @@ impl Network {
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|dest, _| dest != zid);
 
-        if self.full_linkstate {
+        if self.full_linkstate || self.gossip_multihop {
             if let Some((edge, _)) = self
                 .get_idx(zid)
                 .and_then(|idx| self.graph.find_edge_undirected(self.idx, idx))
