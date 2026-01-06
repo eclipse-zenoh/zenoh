@@ -606,7 +606,7 @@ async fn gossip_regression_1() -> Result<()> {
         c.adminspace.set_enabled(true).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         let s = ztimeout!(zenoh::open(c)).unwrap();
-        tracing::info!("Peer (2) ZID: {}", s.zid());
+        tracing::info!("Peer (3) ZID: {}", s.zid());
         s
     };
 
@@ -697,6 +697,118 @@ async fn gossip_regression_2() -> Result<()> {
     let pl = sample.payload().try_to_string().unwrap();
     assert!(!pl.contains(&peer1_zid));
 
+    peer2.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gossip_regression_3() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:17483";
+    const PEER_ENDPOINT: &str = "tcp/localhost:17484";
+
+    let router = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+    let peer1_zid = peer1.zid().to_string();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer2 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.listen
+            .endpoints
+            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer3 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (3) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/peers")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(pl.contains(&peer1_zid));
+
+    peer1.close().await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/peers")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(!pl.contains(&peer1_zid));
+
+    peer3.close().await.unwrap();
     peer2.close().await.unwrap();
     router.close().await.unwrap();
 
