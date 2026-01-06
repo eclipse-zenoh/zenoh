@@ -18,24 +18,20 @@ use super::{
 use crate::api::{common::with_id::WithProtocolID, provider::memory_layout::MemoryLayout};
 
 /// The provider backend trait
-///
 /// Implement this interface to create a Zenoh-compatible shared memory provider
 #[zenoh_macros::unstable_doc]
 pub trait ShmProviderBackend: WithProtocolID {
     /// Allocate the chunk of desired size.
-    ///
     /// If successful, the result's chunk size will be >= len
     #[zenoh_macros::unstable_doc]
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult;
 
     /// Deallocate the chunk.
-    ///
     /// It is guaranteed that chunk's descriptor will correspond to the one returned from alloc(...)
     #[zenoh_macros::unstable_doc]
     fn free(&self, chunk: &ChunkDescriptor);
 
     /// Defragment the memory.
-    ///
     /// Should return the size of largest defragmented chunk
     #[zenoh_macros::unstable_doc]
     fn defragment(&self) -> usize;
@@ -45,7 +41,6 @@ pub trait ShmProviderBackend: WithProtocolID {
     fn available(&self) -> usize;
 
     /// Check and calculate suitable layout for layout.
-    ///
     /// Depending on the implementation, backend may relayout allocations for bigger layouts.
     /// This method is used to:
     /// - validate, if the provided layout can be used with this backend

@@ -203,8 +203,8 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// A key expression added to the liveliness token key expression and to the cache queryable key expression.
-    ///
+    /// A key expression added to the liveliness token key expression
+    /// and to the cache queryable key expression.
     /// It can be used to convey meta data.
     #[zenoh_macros::unstable]
     pub fn publisher_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self

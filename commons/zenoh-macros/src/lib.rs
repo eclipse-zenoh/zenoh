@@ -137,48 +137,6 @@ impl AnnotableItem {
     }
 }
 
-/// Adds unstable warning to documentation. Returns Result for proper error handling.
-fn add_unstable_warning(item: &mut AnnotableItem) -> Result<(), Error> {
-    let attrs = item.attributes_mut()?;
-
-    let mut old_attrs = std::mem::take(attrs).into_iter();
-
-    // First loop: copy attrs until first doc attr, add warning after it
-    for attr in old_attrs.by_ref() {
-        attrs.push(attr);
-        if get_doc_str(attrs.last().unwrap()).is_some() {
-            // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
-            let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
-            let note: Attribute = parse_quote!(#[doc = #message]);
-            attrs.push(note);
-            break;
-        }
-    }
-
-    // Second loop: wait for second doc attr, validate it's blank
-    for attr in old_attrs.by_ref() {
-        if let Some(lit_str) = get_doc_str(&attr) {
-            if !lit_str.value().trim().is_empty() {
-                return Err(Error::new_spanned(
-                    attr,
-                    "documentation for `#[unstable]` items must have a blank doc line after the brief description. \
-                     This blank line is critical for proper formatting: it will separate the unstable warning from the content below and ensures that \
-                     markdown links (like [`Type`](path::to::Type)) are correctly processed by rustdoc. \
-                     Add an empty `///` line after your brief description and before detailed explanations.",
-                ));
-            }
-            attrs.push(attr);
-            break;
-        }
-        attrs.push(attr);
-    }
-
-    // Third loop: copy remaining attrs
-    attrs.extend(old_attrs);
-
-    Ok(())
-}
-
 #[proc_macro_attribute]
 /// Adds only piece of documentation about the item being unstable but no unstable attribute itself.
 /// This is useful when the whole crate is supposed to be used in unstable mode only, it makes sense
@@ -189,8 +147,26 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
         Err(err) => return err.into_compile_error().into(),
     };
 
-    if let Err(err) = add_unstable_warning(&mut item) {
-        return err.into_compile_error().into();
+    let attrs = match item.attributes_mut() {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    if attrs.iter().any(is_doc_attribute) {
+        let mut pushed = false;
+        let oldattrs = std::mem::take(attrs);
+        for attr in oldattrs {
+            if is_doc_attribute(&attr) && !pushed {
+                attrs.push(attr);
+                // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
+                let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
+                let note: Attribute = parse_quote!(#[doc = #message]);
+                attrs.push(note);
+                pushed = true;
+            } else {
+                attrs.push(attr);
+            }
+        }
     }
 
     TokenStream::from(item.to_token_stream())
@@ -198,15 +174,12 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 /// Adds a `#[cfg(feature = "unstable")]` attribute to the item and appends piece of documentation about the item being unstable.
-pub fn unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let tokens = unstable_doc(attr, tokens);
     let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
         Err(err) => return err.into_compile_error().into(),
     };
-
-    if let Err(err) = add_unstable_warning(&mut item) {
-        return err.into_compile_error().into();
-    }
 
     let attrs = match item.attributes_mut() {
         Ok(attrs) => attrs,
@@ -215,6 +188,28 @@ pub fn unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
     let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable")]);
     attrs.push(feature_gate);
+
+    TokenStream::from(item.to_token_stream())
+}
+
+// FIXME(fuzzypixelz): refactor `unstable` macro to accept arguments
+#[proc_macro_attribute]
+pub fn internal_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
+    let tokens = unstable_doc(args, tokens);
+    let mut item = match parse_annotable_item!(tokens) {
+        Ok(item) => item,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let attrs = match item.attributes_mut() {
+        Ok(attrs) => attrs,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal_config")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
+    attrs.push(feature_gate);
+    attrs.push(hide_doc);
 
     TokenStream::from(item.to_token_stream())
 }
@@ -240,24 +235,11 @@ pub fn internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     TokenStream::from(item.to_token_stream())
 }
 
-/// Extracts the string literal from a `#[doc = "..."]` attribute.
-fn get_doc_str(attr: &Attribute) -> Option<&LitStr> {
-    if attr
-        .path()
+/// Returns `true` if the attribute is a `#[doc = "..."]` attribute.
+fn is_doc_attribute(attr: &Attribute) -> bool {
+    attr.path()
         .get_ident()
         .is_some_and(|ident| &ident.to_string() == "doc")
-    {
-        if let syn::Meta::NameValue(nv) = &attr.meta {
-            if let syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Str(lit_str),
-                ..
-            }) = &nv.value
-            {
-                return Some(lit_str);
-            }
-        }
-    }
-    None
 }
 
 fn keformat_support(source: &str) -> proc_macro2::TokenStream {

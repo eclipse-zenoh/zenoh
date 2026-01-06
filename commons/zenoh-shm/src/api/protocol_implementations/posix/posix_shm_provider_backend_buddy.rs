@@ -56,7 +56,6 @@ where
 }
 
 /// A buddy_system_allocator backend based on POSIX shared memory.
-///
 /// buddy_system_allocator is the fastest allocator ever. The weak side is it's low memry efficiency and
 /// higher fragmentation as opposed to talc (which is treated as the universal default for zenoh SHM)
 #[zenoh_macros::unstable_doc]

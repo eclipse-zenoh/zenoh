@@ -57,7 +57,6 @@ where
 }
 
 /// A talc backend based on POSIX shared memory.
-///
 /// This is the default general-purpose backend shipped with Zenoh.
 /// Talc allocator provides great performnce (2nd after `buddy_system_allocator`) while maintaining
 /// excellent fragmentation resistance and memory utilization efficiency.

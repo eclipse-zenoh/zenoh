@@ -357,7 +357,6 @@ impl Query {
     }
 
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
-    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does so.
     ///

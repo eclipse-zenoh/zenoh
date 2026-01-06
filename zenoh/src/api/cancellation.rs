@@ -152,9 +152,7 @@ impl Wait for CancelResult {
 }
 
 impl CancellationToken {
-    /// Interrupt all associated get queries.
-    ///
-    /// If the query callback is being executed, the call blocks until execution
+    /// Interrupt all associated get queries. If the query callback is being executed, the call blocks until execution
     /// of callback is finished.
     ///
     /// Returns a future-like object that resolves to `ZResult<()>` in case of when awaited or when calling `.wait()`.
