@@ -382,9 +382,9 @@ impl HatBaseTrait for HatCode {
                 .unwrap()
                 .remove_link(&face.zid)
             {
-                pubsub_remove_node(&mut wtables, &removed_node.zid, send_declare);
-                queries_remove_node(&mut wtables, &removed_node.zid, send_declare);
-                token_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                pubsub_remove_node(&mut wtables, &removed_node, send_declare);
+                queries_remove_node(&mut wtables, &removed_node, send_declare);
+                token_remove_node(&mut wtables, &removed_node, send_declare);
             }
 
             hat_mut!(wtables).schedule_compute_trees(tables_ref.clone());
@@ -417,9 +417,9 @@ impl HatBaseTrait for HatCode {
                             let changes = net.link_states(list.link_states, zid);
 
                             for (_, removed_node) in changes.removed_nodes {
-                                pubsub_remove_node(tables, &removed_node.zid, send_declare);
-                                queries_remove_node(tables, &removed_node.zid, send_declare);
-                                token_remove_node(tables, &removed_node.zid, send_declare);
+                                pubsub_remove_node(tables, &removed_node, send_declare);
+                                queries_remove_node(tables, &removed_node, send_declare);
+                                token_remove_node(tables, &removed_node, send_declare);
                             }
 
                             hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
