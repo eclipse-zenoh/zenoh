@@ -242,7 +242,11 @@ pub fn internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
 /// Extracts the string literal from a `#[doc = "..."]` attribute.
 fn get_doc_str(attr: &Attribute) -> Option<&LitStr> {
-    if attr.path().get_ident().is_some_and(|ident| &ident.to_string() == "doc") {
+    if attr
+        .path()
+        .get_ident()
+        .is_some_and(|ident| &ident.to_string() == "doc")
+    {
         if let syn::Meta::NameValue(nv) = &attr.meta {
             if let syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Str(lit_str),
