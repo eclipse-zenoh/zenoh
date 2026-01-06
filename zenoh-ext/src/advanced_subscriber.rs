@@ -243,8 +243,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
 impl<'a, 'c, Handler, const BACKGROUND: bool>
     AdvancedSubscriberBuilder<'a, '_, 'c, Handler, BACKGROUND>
 {
-    /// Restrict the matching publications that will be received by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// Restrict the matching publications that will be received by this [`Subscriber`] to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -298,6 +297,7 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     }
 
     /// A key expression added to the liveliness token key expression.
+    ///
     /// It can be used to convey metadata.
     #[zenoh_macros::unstable]
     pub fn subscriber_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
@@ -1268,6 +1268,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns a reference to this subscriber's handler.
+    ///
     /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
     /// The default handler is [`zenoh::handlers::DefaultHandler`].
     #[zenoh_macros::unstable]
@@ -1276,6 +1277,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns a mutable reference to this subscriber's handler.
+    ///
     /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
     /// The default handler is [`zenoh::handlers::DefaultHandler`].
     #[zenoh_macros::unstable]

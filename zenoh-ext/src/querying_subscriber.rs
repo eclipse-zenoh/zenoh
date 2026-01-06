@@ -639,8 +639,8 @@ impl<
 where
     TryIntoSample: ExtractSample,
 {
-    /// Restrict the matching publications that will be received by this [`FetchingSubscriber`]
-    /// to the ones that have the given [`Locality`](Locality).
+    /// Restrict the matching publications that will be received by this [`FetchingSubscriber`] to the ones that have the given [`Locality`](Locality).
+    ///
     #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
