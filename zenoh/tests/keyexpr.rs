@@ -11,8 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::key_expr::KeyExpr;
-use zenoh::Wait;
+use zenoh::{key_expr::KeyExpr, Wait};
 use zenoh_config::WhatAmI;
 
 #[test]
