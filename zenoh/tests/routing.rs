@@ -534,7 +534,7 @@ async fn gossip_regression_1() -> Result<()> {
     const PEER_ENDPOINT: &str = "tcp/localhost:17481";
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -549,7 +549,7 @@ async fn gossip_regression_1() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer1 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -568,7 +568,7 @@ async fn gossip_regression_1() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer2 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -591,7 +591,7 @@ async fn gossip_regression_1() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer3 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -631,7 +631,7 @@ async fn gossip_regression_2() -> Result<()> {
     const ROUTER_ENDPOINT: &str = "tcp/localhost:17482";
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -646,7 +646,7 @@ async fn gossip_regression_2() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer1 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -666,7 +666,7 @@ async fn gossip_regression_2() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer2 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -709,7 +709,7 @@ async fn gossip_regression_3() -> Result<()> {
     const PEER_ENDPOINT: &str = "tcp/localhost:17484";
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -725,7 +725,7 @@ async fn gossip_regression_3() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer1 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -746,7 +746,7 @@ async fn gossip_regression_3() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer2 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -770,7 +770,7 @@ async fn gossip_regression_3() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer3 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
