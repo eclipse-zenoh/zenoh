@@ -141,25 +141,40 @@ impl AnnotableItem {
 fn add_unstable_warning(item: &mut AnnotableItem) -> Result<(), Error> {
     let attrs = item.attributes_mut()?;
 
-    // Validate doc structure before adding the warning
-    validate_unstable_doc(attrs)?;
+    let mut old_attrs = std::mem::take(attrs).into_iter();
 
-    if attrs.iter().any(is_doc_attribute) {
-        let mut pushed = false;
-        let oldattrs = std::mem::take(attrs);
-        for attr in oldattrs {
-            if is_doc_attribute(&attr) && !pushed {
-                attrs.push(attr);
-                // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
-                let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
-                let note: Attribute = parse_quote!(#[doc = #message]);
-                attrs.push(note);
-                pushed = true;
-            } else {
-                attrs.push(attr);
-            }
+    // First loop: copy attrs until first doc attr, add warning after it
+    for attr in old_attrs.by_ref() {
+        attrs.push(attr);
+        if get_doc_str(attrs.last().unwrap()).is_some() {
+            // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
+            let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
+            let note: Attribute = parse_quote!(#[doc = #message]);
+            attrs.push(note);
+            break;
         }
     }
+
+    // Second loop: wait for second doc attr, validate it's blank
+    for attr in old_attrs.by_ref() {
+        if let Some(lit_str) = get_doc_str(&attr) {
+            if !lit_str.value().trim().is_empty() {
+                return Err(Error::new_spanned(
+                    attr,
+                    "documentation for `#[unstable]` items must have a blank doc line after the brief description. \
+                     This blank line is critical for proper formatting: it will separate the unstable warning from the content below and ensures that \
+                     markdown links (like [`Type`](path::to::Type)) are correctly processed by rustdoc. \
+                     Add an empty `///` line after your brief description and before detailed explanations.",
+                ));
+            }
+            attrs.push(attr);
+            break;
+        }
+        attrs.push(attr);
+    }
+
+    // Third loop: copy remaining attrs
+    attrs.extend(old_attrs);
 
     Ok(())
 }
@@ -225,57 +240,20 @@ pub fn internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     TokenStream::from(item.to_token_stream())
 }
 
-/// Returns `true` if the attribute is a `#[doc = "..."]` attribute.
-fn is_doc_attribute(attr: &Attribute) -> bool {
-    attr.path()
-        .get_ident()
-        .is_some_and(|ident| &ident.to_string() == "doc")
-}
-
-/// Validates that documentation for unstable items will have proper structure after the warning is added.
-/// The warning block is inserted after the first doc attribute, so this validates that
-/// the second doc attribute (if present) is a blank line.
-/// Returns a compile error if validation fails.
-fn validate_unstable_doc(attrs: &[Attribute]) -> Result<(), Error> {
-    let doc_attrs: Vec<&Attribute> = attrs.iter().filter(|attr| is_doc_attribute(attr)).collect();
-
-    // No doc attributes, nothing to validate
-    if doc_attrs.is_empty() {
-        return Ok(());
-    }
-
-    // The warning will be inserted after the first doc attribute.
-    // If there's a second doc attribute, it must be a blank line.
-    if doc_attrs.len() > 1 {
-        let second_attr = doc_attrs[1];
-
-        // Check if the second doc attribute is a blank line
-        let is_blank = if let syn::Meta::NameValue(nv) = &second_attr.meta {
+/// Extracts the string literal from a `#[doc = "..."]` attribute.
+fn get_doc_str(attr: &Attribute) -> Option<&LitStr> {
+    if attr.path().get_ident().is_some_and(|ident| &ident.to_string() == "doc") {
+        if let syn::Meta::NameValue(nv) = &attr.meta {
             if let syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Str(lit_str),
                 ..
             }) = &nv.value
             {
-                lit_str.value().trim().is_empty()
-            } else {
-                false
+                return Some(lit_str);
             }
-        } else {
-            false
-        };
-
-        if !is_blank {
-            return Err(Error::new_spanned(
-                second_attr,
-                "documentation for `#[unstable]` items must have a blank doc line after the brief description. \
-                 This blank line is critical for proper formatting: it will separate the unstable warning from the content below and ensures that \
-                 markdown links (like [`Type`](path::to::Type)) are correctly processed by rustdoc. \
-                 Add an empty `///` line after your brief description and before detailed explanations.",
-            ));
         }
     }
-
-    Ok(())
+    None
 }
 
 fn keformat_support(source: &str) -> proc_macro2::TokenStream {
