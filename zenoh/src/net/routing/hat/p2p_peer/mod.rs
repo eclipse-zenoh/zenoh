@@ -74,6 +74,12 @@ mod pubsub;
 mod queries;
 mod token;
 
+macro_rules! hat {
+    ($t:expr) => {
+        $t.hat.downcast_ref::<HatTables>().unwrap()
+    };
+}
+
 macro_rules! hat_mut {
     ($t:expr) => {
         $t.hat.downcast_mut::<HatTables>().unwrap()
@@ -379,8 +385,12 @@ impl HatBaseTrait for HatCode {
                 || (src_face.whatami == WhatAmI::Client && src_face.mcast_group.is_none()))
     }
 
-    fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
-        "graph {}".to_string()
+    fn info(&self, tables: &Tables, _kind: WhatAmI) -> String {
+        hat!(tables)
+            .gossip
+            .as_ref()
+            .map(|net| net.dot())
+            .unwrap_or_else(|| "graph {}".to_string())
     }
 }
 

@@ -82,6 +82,12 @@ impl Gossip {
             ))
         }
     }
+    pub(crate) fn dot(&self) -> String {
+        match self {
+            Self::Gossip(n) => n.dot(),
+            Self::Network(n) => n.dot(),
+        }
+    }
     pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         match self {
             Self::Gossip(n) => n.add_link(transport),
@@ -212,6 +218,10 @@ impl GossipNet {
             graph,
             runtime: Runtime::downgrade(&runtime),
         }
+    }
+
+    fn dot(&self) -> String {
+        std::format!("{:?}", petgraph::dot::Dot::new(&self.graph))
     }
 
     #[inline]
