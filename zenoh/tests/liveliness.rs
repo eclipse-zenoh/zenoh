@@ -4762,7 +4762,7 @@ async fn test_liveliness_sub_history_conflict() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.listen
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4775,7 +4775,7 @@ async fn test_liveliness_sub_history_conflict() {
     };
 
     let client_tok = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
@@ -4791,7 +4791,7 @@ async fn test_liveliness_sub_history_conflict() {
     tokio::time::sleep(SLEEP).await;
 
     let client_subs = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
             .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])

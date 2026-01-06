@@ -2095,7 +2095,7 @@ client2name:client2passwd";
         let key_expr = "acl_auth_test/pubsub/by_zid";
         let test_zid = "abcdef";
 
-        let mut config_listener = zenoh::Config::default();
+        let mut config_listener = zenoh_config::Config::default();
         config_listener
             .listen
             .set_endpoints(ModeDependentValue::Unique(vec![format!(
@@ -2153,7 +2153,7 @@ client2name:client2passwd";
         let listener_session = zenoh::open(config_listener).await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let mut config_connect = zenoh::Config::default();
+        let mut config_connect = zenoh_config::Config::default();
         config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
         config_connect
             .scouting

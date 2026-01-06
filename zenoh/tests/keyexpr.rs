@@ -55,7 +55,7 @@ fn keyexpr_test_into_owned_borrowing_clone() {
     let clone = expr.borrowing_clone();
     assert_eq!(expr, clone);
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -88,7 +88,7 @@ fn keyexpr_test_join() {
     let join = prefix.join(&suffix).unwrap();
     assert_eq!(join.as_str(), "some/prefix/some/suffix");
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -124,7 +124,7 @@ fn keyexpr_test_concat() {
     let concat = prefix.concat(&suffix).unwrap();
     assert_eq!(concat.as_str(), "some/prefixsome/suffix");
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -228,7 +228,7 @@ fn keyexpr_test_div() {
         KeyExpr::try_from("prefix/suffix").unwrap()
     );
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -265,7 +265,7 @@ fn keyexpr_test_div() {
 fn keyexpr_test_undeclare() {
     let expr = KeyExpr::try_from("expr").unwrap();
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
