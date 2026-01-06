@@ -15,7 +15,6 @@
 use crate::posix_shm::cleanup::cleanup_orphaned_segments;
 
 /// Linux: Trigger cleanup for orphaned SHM segments
-///
 /// If process that created named SHM segment crashes or exits by a signal, the segment persists in the system
 /// disregarding if it is used by other Zenoh processes or not. This is the detail of POSIX specification for
 /// shared memory that is hard to bypass. To deal with this we developed a cleanup routine that enumerates all
