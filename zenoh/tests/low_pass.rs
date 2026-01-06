@@ -23,7 +23,9 @@ use nonempty_collections::{nev, NEVec};
 #[cfg(feature = "unstable")]
 use zenoh::query::{ConsolidationMode, Reply};
 use zenoh::{bytes::ZBytes, Wait};
-use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
+use zenoh_config::{
+    Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
+};
 
 static SMALL_MSG_STR: &str = "S";
 static BIG_MSG_STR: &str = "B";
@@ -408,18 +410,15 @@ fn lowpass_del_filter_test(
     assertions(&test_res);
 }
 
-fn build_config(
-    lpf_config: Vec<LowPassFilterConf>,
-    flow: InterceptorFlow,
-) -> (zenoh_config::Config, zenoh_config::Config) {
-    let mut sender_config = zenoh_config::Config::default();
+fn build_config(lpf_config: Vec<LowPassFilterConf>, flow: InterceptorFlow) -> (Config, Config) {
+    let mut sender_config = Config::default();
     sender_config
         .scouting
         .multicast
         .set_enabled(Some(false))
         .unwrap();
 
-    let mut receiver_config = zenoh_config::Config::default();
+    let mut receiver_config = Config::default();
     receiver_config
         .scouting
         .multicast
@@ -434,11 +433,7 @@ fn build_config(
     (sender_config, receiver_config)
 }
 
-fn set_locators(
-    locator: &str,
-    listen_config: &mut zenoh_config::Config,
-    connect_config: &mut zenoh_config::Config,
-) {
+fn set_locators(locator: &str, listen_config: &mut Config, connect_config: &mut Config) {
     listen_config
         .listen
         .endpoints
@@ -453,8 +448,8 @@ fn set_locators(
 
 fn lowpass_pub_sub_query_reply_test(
     locator: &str,
-    mut writer_config: zenoh_config::Config,
-    mut reader_config: zenoh_config::Config,
+    mut writer_config: Config,
+    mut reader_config: Config,
     ke_prefix: &str,
 ) -> Arc<LowPassTestResult> {
     let test_results = Arc::new(LowPassTestResult::default());
