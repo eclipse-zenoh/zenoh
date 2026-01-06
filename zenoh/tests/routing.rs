@@ -626,6 +626,83 @@ async fn gossip_regression_1() -> Result<()> {
     Result::Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gossip_regression_2() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:17482";
+
+    let router = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+    let peer1_zid = peer1.zid().to_string();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer2 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    peer1.close().await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer2.get("@/*/peer/linkstate/peers")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(!pl.contains(&peer1_zid));
+
+    peer2.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
+}
+
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
