@@ -146,7 +146,7 @@ ref-cast = "1.0.24"
 regex = "1.11.2"
 ringbuffer-spsc = "0.1.15"
 ron = "0.12.0"
-rsa = "0.9.9"
+rsa = "0.9.10"
 rustc_version = "0.4.1"
 rustls = { version = "0.23.31", default-features = false, features = [
   "logging",
