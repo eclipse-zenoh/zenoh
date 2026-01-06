@@ -12,9 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh::key_expr::KeyExpr;
-#[cfg(feature = "internal_config")]
 use zenoh::Wait;
-#[cfg(feature = "internal_config")]
 use zenoh_config::WhatAmI;
 
 #[test]
@@ -45,7 +43,6 @@ fn keyexpr_test_new() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_into_owned_borrowing_clone() {
     let expr = KeyExpr::try_from("expr").unwrap();
     let clone = expr.borrowing_clone();
@@ -86,7 +83,6 @@ fn keyexpr_test_autocannonize() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_join() {
     let prefix = KeyExpr::try_from("some/prefix").unwrap();
     let suffix = KeyExpr::try_from("some/suffix").unwrap();
@@ -123,7 +119,6 @@ fn keyexpr_test_join() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_concat() {
     let prefix = KeyExpr::try_from("some/prefix").unwrap();
     let suffix = KeyExpr::try_from("some/suffix").unwrap();
@@ -211,7 +206,6 @@ fn keyexpr_test_debug() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_div() {
     let suffix = KeyExpr::try_from("suffix").unwrap();
 
@@ -269,7 +263,6 @@ fn keyexpr_test_div() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_undeclare() {
     let expr = KeyExpr::try_from("expr").unwrap();
 

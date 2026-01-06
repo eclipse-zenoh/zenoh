@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
-
 use std::time::Duration;
 
 use zenoh_config::WhatAmI;
