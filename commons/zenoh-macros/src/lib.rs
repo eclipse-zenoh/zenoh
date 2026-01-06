@@ -237,10 +237,7 @@ fn is_doc_attribute(attr: &Attribute) -> bool {
 /// the second doc attribute (if present) is a blank line.
 /// Returns a compile error if validation fails.
 fn validate_unstable_doc(attrs: &[Attribute]) -> Result<(), Error> {
-    let doc_attrs: Vec<&Attribute> = attrs
-        .iter()
-        .filter(|attr| is_doc_attribute(attr))
-        .collect();
+    let doc_attrs: Vec<&Attribute> = attrs.iter().filter(|attr| is_doc_attribute(attr)).collect();
 
     // No doc attributes, nothing to validate
     if doc_attrs.is_empty() {
