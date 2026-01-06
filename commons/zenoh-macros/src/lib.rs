@@ -137,20 +137,12 @@ impl AnnotableItem {
     }
 }
 
-#[proc_macro_attribute]
-/// Adds only piece of documentation about the item being unstable but no unstable attribute itself.
-/// This is useful when the whole crate is supposed to be used in unstable mode only, it makes sense
-/// to mention it in documentation for the crate items, but not to add `#[cfg(feature = "unstable")]` to every item.
-pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let mut item = match parse_annotable_item!(tokens) {
-        Ok(item) => item,
-        Err(err) => return err.into_compile_error().into(),
-    };
+/// Adds unstable warning to documentation. Returns Result for proper error handling.
+fn add_unstable_warning(item: &mut AnnotableItem) -> Result<(), Error> {
+    let attrs = item.attributes_mut()?;
 
-    let attrs = match item.attributes_mut() {
-        Ok(attrs) => attrs,
-        Err(err) => return err.into_compile_error().into(),
-    };
+    // Validate doc structure before adding the warning
+    validate_unstable_doc(attrs)?;
 
     if attrs.iter().any(is_doc_attribute) {
         let mut pushed = false;
@@ -169,27 +161,42 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
         }
     }
 
-    TokenStream::from(item.to_token_stream())
+    Ok(())
 }
 
 #[proc_macro_attribute]
-/// Adds a `#[cfg(feature = "unstable")]` attribute to the item and appends piece of documentation about the item being unstable.
-pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let tokens = unstable_doc(attr, tokens);
+/// Adds only piece of documentation about the item being unstable but no unstable attribute itself.
+/// This is useful when the whole crate is supposed to be used in unstable mode only, it makes sense
+/// to mention it in documentation for the crate items, but not to add `#[cfg(feature = "unstable")]` to every item.
+pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
         Err(err) => return err.into_compile_error().into(),
     };
 
+    if let Err(err) = add_unstable_warning(&mut item) {
+        return err.into_compile_error().into();
+    }
+
+    TokenStream::from(item.to_token_stream())
+}
+
+#[proc_macro_attribute]
+/// Adds a `#[cfg(feature = "unstable")]` attribute to the item and appends piece of documentation about the item being unstable.
+pub fn unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut item = match parse_annotable_item!(tokens) {
+        Ok(item) => item,
+        Err(err) => return err.into_compile_error().into(),
+    };
+
+    if let Err(err) = add_unstable_warning(&mut item) {
+        return err.into_compile_error().into();
+    }
+
     let attrs = match item.attributes_mut() {
         Ok(attrs) => attrs,
         Err(err) => return err.into_compile_error().into(),
     };
-
-    // Validate that documentation has proper blank line after warning
-    if let Err(err) = validate_unstable_doc_structure(attrs) {
-        return err.into_compile_error().into();
-    }
 
     let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable")]);
     attrs.push(feature_gate);
@@ -225,58 +232,49 @@ fn is_doc_attribute(attr: &Attribute) -> bool {
         .is_some_and(|ident| &ident.to_string() == "doc")
 }
 
-/// Extracts the doc string from a `#[doc = "..."]` attribute.
-fn extract_doc_string(attr: &Attribute) -> Option<String> {
-    if let syn::Meta::NameValue(nv) = &attr.meta {
-        if let syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Str(lit_str),
-            ..
-        }) = &nv.value
-        {
-            return Some(lit_str.value());
-        }
-    }
-    None
-}
-
-/// Validates that documentation for unstable items has a blank line after the warning.
+/// Validates that documentation for unstable items will have proper structure after the warning is added.
+/// The warning block is inserted after the first doc attribute, so this validates that
+/// the second doc attribute (if present) is a blank line.
 /// Returns a compile error if validation fails.
-fn validate_unstable_doc_structure(attrs: &[Attribute]) -> Result<(), Error> {
-    let doc_attrs: Vec<(usize, &Attribute)> = attrs
+fn validate_unstable_doc(attrs: &[Attribute]) -> Result<(), Error> {
+    let doc_attrs: Vec<&Attribute> = attrs
         .iter()
-        .enumerate()
-        .filter(|(_, attr)| is_doc_attribute(attr))
+        .filter(|attr| is_doc_attribute(attr))
         .collect();
 
+    // No doc attributes, nothing to validate
     if doc_attrs.is_empty() {
         return Ok(());
     }
 
-    // Find if there's a warning block
-    let warning_idx = doc_attrs.iter().position(|(_, attr)| {
-        extract_doc_string(attr)
-            .map(|s| s.contains("<div class=\"warning\">"))
-            .unwrap_or(false)
-    });
+    // The warning will be inserted after the first doc attribute.
+    // If there's a second doc attribute, it must be a blank line.
+    if doc_attrs.len() > 1 {
+        let second_attr = doc_attrs[1];
 
-    if let Some(pos) = warning_idx {
-        // Check if there's a next doc attribute
-        if pos + 1 < doc_attrs.len() {
-            let (_next_idx, next_attr) = doc_attrs[pos + 1];
-            // Check if the next doc attribute is a blank line
-            let is_blank = extract_doc_string(next_attr)
-                .map(|s| s.trim().is_empty())
-                .unwrap_or(false);
-
-            if !is_blank {
-                return Err(Error::new_spanned(
-                    next_attr,
-                    "documentation for `#[unstable]` items must have a blank doc line immediately after the warning block. \
-                     This blank line is critical for proper formatting: it separates the warning from the content below and ensures that \
-                     markdown links (like [`Type`](path::to::Type)) are correctly processed by rustdoc. \
-                     Add an empty `///` line after your brief description and before detailed explanations.",
-                ));
+        // Check if the second doc attribute is a blank line
+        let is_blank = if let syn::Meta::NameValue(nv) = &second_attr.meta {
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit_str),
+                ..
+            }) = &nv.value
+            {
+                lit_str.value().trim().is_empty()
+            } else {
+                false
             }
+        } else {
+            false
+        };
+
+        if !is_blank {
+            return Err(Error::new_spanned(
+                second_attr,
+                "documentation for `#[unstable]` items must have a blank doc line after the brief description. \
+                 This blank line is critical for proper formatting: it will separate the unstable warning from the content below and ensures that \
+                 markdown links (like [`Type`](path::to::Type)) are correctly processed by rustdoc. \
+                 Add an empty `///` line after your brief description and before detailed explanations.",
+            ));
         }
     }
 
