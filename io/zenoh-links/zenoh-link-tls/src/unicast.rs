@@ -98,6 +98,10 @@ impl LinkUnicastTls {
         }
 
         // Set the TLS linger option
+        #[allow(
+            deprecated,
+            reason = "set_linger is deprecated but we want to have more control over the socket options. See https://github.com/tokio-rs/tokio/issues/7751"
+        )]
         if let Err(err) = tcp_stream.set_linger(Some(Duration::from_secs(
             (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
         ))) {

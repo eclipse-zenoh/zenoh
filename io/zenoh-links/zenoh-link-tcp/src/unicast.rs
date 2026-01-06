@@ -62,6 +62,10 @@ impl LinkUnicastTcp {
         }
 
         // Set the TCP linger option
+        #[allow(
+            deprecated,
+            reason = "set_linger is deprecated but we want to have more control over the socket options. See https://github.com/tokio-rs/tokio/issues/7751"
+        )]
         if let Err(err) = socket.set_linger(Some(Duration::from_secs(
             (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
         ))) {
