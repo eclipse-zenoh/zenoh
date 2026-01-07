@@ -37,6 +37,9 @@ async fn test_adminspace_wonly() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
+        c.plugins_loading.set_enabled(true).unwrap();
+        c.insert_json5("plugins/rest/http_port", "8080").unwrap();
+        c.insert_json5("plugins/rest/__required__", "true").unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -76,6 +79,10 @@ async fn test_adminspace_read() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
+        c.plugins_loading.set_enabled(true).unwrap();
+        c.insert_json5("plugins/rest/http_port", "\"8080\"")
+            .unwrap();
+        c.insert_json5("plugins/rest/__required__", "true").unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -294,6 +301,22 @@ async fn test_adminspace_read() {
         .into_iter()
         .next();
     assert!(route.is_some());
+
+    let plugins = router
+        .get(format!("@/{zid}/router/plugins/**"))
+        .await
+        .unwrap()
+        .into_iter()
+        .next();
+    assert!(plugins.is_some());
+
+    let plugins_status = router
+        .get(format!("@/{zid}/router/status/plugins/**"))
+        .await
+        .unwrap()
+        .into_iter()
+        .next();
+    assert!(plugins_status.is_some());
 
     let count = router.get("@/**").await.unwrap().iter().count();
     assert!(count > 0);
