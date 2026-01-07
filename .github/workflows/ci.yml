@@ -237,7 +237,7 @@ jobs:
       - name: Run tests with unstable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
-          cargo build -p zenoh-plugin-rest --lib
+          sudo cargo build -p zenoh-plugin-rest --lib
           sudo cargo nextest run -F test -F internal_config,plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with unstable
