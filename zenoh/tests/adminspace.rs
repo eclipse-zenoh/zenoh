@@ -82,9 +82,9 @@ async fn test_adminspace_read() {
             .unwrap()
             .join("target/debug");
         c.plugins_loading
-            .set_search_dirs(zenoh_util::LibSearchDirs::from_paths(&[
-                plugin_search_dir.to_str().unwrap(),
-            ]))
+            .set_search_dirs(zenoh_util::LibSearchDirs::from_paths(&[plugin_search_dir
+                .to_str()
+                .unwrap()]))
             .unwrap();
         c.insert_json5("plugins/rest/http_port", "\"8080\"")
             .unwrap();
