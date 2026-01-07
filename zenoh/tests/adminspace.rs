@@ -18,6 +18,7 @@ use std::time::Duration;
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
+use zenoh_protocol::core::EndPoints;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_wonly() {
@@ -37,8 +38,7 @@ async fn test_adminspace_wonly() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
     let root = router
@@ -76,8 +76,7 @@ async fn test_adminspace_read() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
     let router2 = {
@@ -86,10 +85,9 @@ async fn test_adminspace_read() {
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid2 = router2.zid();
     let peer = {
@@ -100,8 +98,7 @@ async fn test_adminspace_read() {
             .set(vec![MULTICAST_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
 
     let root = router
@@ -324,8 +321,7 @@ async fn test_adminspace_ronly() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
 
@@ -357,8 +353,7 @@ async fn test_adminspace_write() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
-        let s = ztimeout!(zenoh::open(c)).unwrap();
-        s
+        ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid = router.zid();
 
