@@ -36,9 +36,14 @@ use crate::{
     handlers::{Callback, DefaultHandler, IntoHandler},
 };
 
-/// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links) that allows
-/// access to information about links across all transport sessions. Multiple links can be established
-/// between two zenoh nodes (e.g., using different interfaces).
+/// A builder returned by [`SessionInfo::links()`](crate::session::SessionInfo::links).
+///
+/// The builder creates an iterator over the established [`Link`](crate::session::Link)s
+/// within the session. 
+/// Multiple [`Link`](crate::session::Link) can be established between two zenoh nodes within 
+/// the same [`Transport`](crate::session::Transport).
+/// By default all links are returned, but you can filter them by transport using
+/// the [`transport()`](LinksBuilder::transport) method.
 ///
 /// # Examples
 /// ```no_run
@@ -279,8 +284,10 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
     }
 }
 
-/// A builder returned by [`SessionInfo::link_events_listener()`](crate::session::SessionInfo::link_events_listener) that allows
-/// subscribing to link lifecycle events.
+/// A builder returned by [`SessionInfo::link_events_listener()`](crate::session::SessionInfo::link_events_listener).
+/// 
+/// The builder creates a [`LinkEventsListener`](crate::session::LinkEventsListener) which sends notifications
+/// when new [`Link`](crate::session::Link) are created or removed.
 ///
 /// # Examples
 /// ```no_run

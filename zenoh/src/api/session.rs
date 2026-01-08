@@ -95,7 +95,7 @@ use crate::{
         encoding::Encoding,
         handlers::{Callback, DefaultHandler},
         info::{Link, LinkEvent, SessionInfo, Transport, TransportEvent},
-        key_expr::{KeyExpr, KeyExprInner},
+        key_expr::KeyExpr,
         liveliness::Liveliness,
         matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
         publisher::{Priority, PublisherState},

@@ -34,8 +34,9 @@ use crate::{
     net::runtime::DynamicRuntime,
 };
 
-/// A builder returned by [`SessionInfo::transports()`](crate::session::SessionInfo::transports) that allows
-/// access to information about transports this session is connected to.
+/// A builder returned by [`SessionInfo::transports()`](crate::session::SessionInfo::transports).
+/// 
+/// The builder creates an iterator over all currently active [`Transport`](crate::session::Transport) instances.
 ///
 /// # Examples
 /// ```no_run
