@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
 #![cfg(feature = "internal")]
 
 use std::str::FromStr;
@@ -110,10 +109,10 @@ impl InterceptorTrait for TestInterceptor {
 
 use std::{any::Any, time::Duration};
 
-use zenoh_config::{InterceptorFlow, ZenohId};
+use zenoh_config::{Config, InterceptorFlow, ZenohId};
 use zenoh_core::ztimeout;
 
-use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
+use crate::{config::WhatAmI, init_log_from_env_or, open};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

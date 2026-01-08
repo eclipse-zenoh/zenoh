@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "internal_config")]
 #![cfg(unix)]
 
 use std::sync::{
@@ -23,8 +22,10 @@ use std::sync::{
 use nonempty_collections::{nev, NEVec};
 #[cfg(feature = "unstable")]
 use zenoh::query::{ConsolidationMode, Reply};
-use zenoh::{bytes::ZBytes, Config, Wait};
-use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
+use zenoh::{bytes::ZBytes, Wait};
+use zenoh_config::{
+    Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
+};
 
 static SMALL_MSG_STR: &str = "S";
 static BIG_MSG_STR: &str = "B";

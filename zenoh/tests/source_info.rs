@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(all(feature = "unstable", feature = "internal_config"))]
+#![cfg(feature = "unstable")]
 use core::time::Duration;
 
 use zenoh::{sample::SourceInfo, Session};
