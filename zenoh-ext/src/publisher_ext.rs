@@ -19,7 +19,6 @@ use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder, MissDetection
 #[zenoh_macros::unstable]
 pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
     /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to recover history and/or missed samples.
-    ///
     #[zenoh_macros::unstable]
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 

@@ -155,7 +155,7 @@ fn add_unstable_warning(item: &mut AnnotableItem) -> Result<(), Error> {
         }
     }
 
-    // Second loop: wait for second doc attr, validate it's blank
+    // Second loop: copy attrs until second doc attr, validate that it's blank
     for attr in old_attrs.by_ref() {
         if let Some(lit_str) = get_doc_str(&attr) {
             if !lit_str.value().trim().is_empty() {

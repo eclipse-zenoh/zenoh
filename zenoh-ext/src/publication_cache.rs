@@ -73,7 +73,6 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Restrict the matching queries that will be received by this [`PublicationCache`]'s queryable to the ones that have the given [`Locality`](zenoh::sample::Locality).
-    ///
     #[zenoh_macros::unstable]
     #[inline]
     #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
