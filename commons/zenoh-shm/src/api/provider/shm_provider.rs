@@ -93,7 +93,7 @@ impl<T> AllocLayout for TypedLayout<T> {
 }
 
 /// A layout for allocations.
-/// 
+///
 /// This is a pre-calculated layout suitable for making series of similar allocations
 /// adopted for particular ShmProvider
 #[zenoh_macros::unstable_doc]
@@ -396,7 +396,7 @@ impl<Limit: ConstPolicy, InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> Const
 }
 
 /// Blocking allocation policy.
-/// 
+///
 /// This policy will block until the allocation succeeds.
 /// Both sync and async modes available.
 #[zenoh_macros::unstable_doc]
@@ -790,7 +790,7 @@ where
     }
 
     /// Map externally-allocated chunk into ZShmMut.
-    /// 
+    ///
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
@@ -838,7 +838,7 @@ where
     }
 
     /// Try to collect free chunks.
-    /// 
+    ///
     /// Returns the size of largest collected chunk
     #[zenoh_macros::unstable_doc]
     pub fn garbage_collect(&self) -> usize {
@@ -846,7 +846,7 @@ where
     }
 
     /// Try to collect free chunks.
-    /// 
+    ///
     /// Returns the size of largest collected chunk
     ///
     /// # Safety

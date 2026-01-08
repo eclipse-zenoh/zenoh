@@ -79,7 +79,7 @@ enum GroupNetEvent {
 }
 
 /// Events exposed to the user to be informed for relevant
-/// 
+///
 /// changes in the group.
 #[zenoh_macros::unstable]
 #[derive(Serialize, Deserialize, Debug)]
