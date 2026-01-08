@@ -522,7 +522,7 @@ async fn test_adminspace_transports_and_links() {
 
     // Create router1 with adminspace enabled
     let router1 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
@@ -578,7 +578,7 @@ async fn test_adminspace_transports_and_links() {
 
     // Create router2 that connects to router1 (creates unicast transport)
     let router2 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
