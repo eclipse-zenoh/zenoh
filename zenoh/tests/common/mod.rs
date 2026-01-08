@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,9 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-#![cfg(feature = "internal_config")]
-
 use std::time::Duration;
 
 use zenoh::Session;
@@ -22,7 +19,7 @@ use zenoh_core::ztimeout;
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 pub async fn open_session_listen(endpoints: &[&str]) -> Session {
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config
         .listen
         .endpoints
@@ -38,7 +35,7 @@ pub async fn open_session_listen(endpoints: &[&str]) -> Session {
 }
 
 pub async fn open_session_connect(endpoints: &[&str]) -> Session {
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config
         .connect
         .endpoints
