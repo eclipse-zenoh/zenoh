@@ -225,7 +225,8 @@ where
     fn wait(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
-        let ke = self.key_expr?;
+        let mut ke = self.key_expr?;
+        ke = self.session.declare_nonwild_prefix(ke)?;
         session
             .0
             .declare_queryable_inner(&ke, self.complete, self.origin, callback)
@@ -260,12 +261,11 @@ impl Resolvable for QueryableBuilder<'_, '_, Callback<Query>, true> {
 
 impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.session.0.declare_queryable_inner(
-            &self.key_expr?,
-            self.complete,
-            self.origin,
-            self.handler,
-        )?;
+        let mut ke = self.key_expr?;
+        ke = self.session.declare_nonwild_prefix(ke)?;
+        self.session
+            .0
+            .declare_queryable_inner(&ke, self.complete, self.origin, self.handler)?;
         Ok(())
     }
 }

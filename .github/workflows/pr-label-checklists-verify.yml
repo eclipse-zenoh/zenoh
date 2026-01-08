@@ -1,0 +1,15 @@
+name: PR Label Checklists
+
+on:
+  pull_request_target:
+    types: [edited]
+
+jobs:
+  verify:
+    name: Verify
+    permissions:
+      statuses: write
+      contents: read
+    uses: eclipse-zenoh/ci/.github/workflows/pr-label-checklists-verify.yml@main
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

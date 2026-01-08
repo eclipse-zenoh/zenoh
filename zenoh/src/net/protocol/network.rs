@@ -110,7 +110,7 @@ impl Link {
 #[derive(Default)]
 pub(crate) struct Changes {
     pub(crate) updated_nodes: Vec<(NodeIndex, Node)>,
-    pub(crate) removed_nodes: Vec<(NodeIndex, Node)>,
+    pub(crate) removed_nodes: Vec<(NodeIndex, ZenohIdProto)>,
 }
 
 #[derive(Clone)]
@@ -206,14 +206,16 @@ impl Network {
         );
 
         if dests_to_update.is_empty()
-            || !(self.full_linkstate || self.router_peers_failover_brokering)
+            || !(self.full_linkstate
+                || self.gossip_multihop
+                || self.router_peers_failover_brokering)
         {
             return false;
         }
 
         for d in dests_to_update {
             if let Some(dest_idx) = self.get_idx(&d) {
-                if self.full_linkstate
+                if (self.full_linkstate || self.gossip_multihop)
                     && self.graph[dest_idx]
                         .links
                         .contains_key(&self.graph[self.idx].zid)
@@ -412,8 +414,7 @@ impl Network {
                 || self.links.values().any(|link| {
                     self.graph
                         .node_weight(idx)
-                        .map(|node| link.zid == node.zid)
-                        .unwrap_or(true)
+                        .is_some_and(|node| link.zid == node.zid)
                 }))
     }
 
@@ -696,7 +697,7 @@ impl Network {
             );
         }
 
-        if !self.full_linkstate {
+        if !self.full_linkstate && !self.gossip_multihop {
             return self.process_linkstates_peer_to_peer(link_states);
         }
 
@@ -822,7 +823,7 @@ impl Network {
         let zid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
 
-        if self.full_linkstate || self.router_peers_failover_brokering {
+        if self.full_linkstate || self.gossip_multihop || self.router_peers_failover_brokering {
             let (idx, new) = match self.get_idx(&zid) {
                 Some(idx) => (idx, false),
                 None => {
@@ -844,7 +845,7 @@ impl Network {
             self.graph[self.idx].links.insert(zid, link_weight);
             self.graph[self.idx].sn += 1;
 
-            if self.full_linkstate
+            if (self.full_linkstate || self.gossip_multihop)
                 && self.graph[idx]
                     .links
                     .contains_key(&self.graph[self.idx].zid)
@@ -864,6 +865,7 @@ impl Network {
                 .filter(|link| {
                     link.zid != zid
                         && (self.full_linkstate
+                            || self.gossip_multihop
                             || link.transport.get_whatami().unwrap_or(WhatAmI::Peer)
                                 == WhatAmI::Router)
                 })
@@ -904,41 +906,44 @@ impl Network {
         }
 
         // Send all nodes linkstate on new link
-        let idxs = self
-            .graph
-            .node_indices()
-            .filter(|&idx| {
-                self.full_linkstate
-                    || self.gossip_multihop
-                    || self.links.values().any(|link| link.zid == zid)
-                    || (self.router_peers_failover_brokering
-                        && idx == self.idx
-                        && whatami == WhatAmI::Router)
-            })
-            .map(|idx| {
-                (
-                    idx,
-                    Details {
-                        zid: true,
-                        links: self.full_linkstate
-                            || (self.router_peers_failover_brokering
-                                && idx == self.idx
-                                && whatami == WhatAmI::Router),
-                        ..Default::default()
-                    },
-                )
-            })
-            .collect();
+        let idxs =
+            self.graph
+                .node_indices()
+                .filter(|&idx| {
+                    self.full_linkstate
+                        || self.gossip_multihop
+                        || self.graph.node_weight(idx).is_some_and(|node| {
+                            self.links.values().any(|link| link.zid == node.zid)
+                        })
+                        || (self.router_peers_failover_brokering
+                            && idx == self.idx
+                            && whatami == WhatAmI::Router)
+                })
+                .map(|idx| {
+                    (
+                        idx,
+                        Details {
+                            zid: true,
+                            links: self.full_linkstate
+                                || self.gossip_multihop
+                                || (self.router_peers_failover_brokering
+                                    && idx == self.idx
+                                    && whatami == WhatAmI::Router),
+                            ..Default::default()
+                        },
+                    )
+                })
+                .collect();
         self.send_on_link(idxs, &transport);
         free_index
     }
 
-    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, Node)> {
+    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|dest, _| dest != zid);
 
-        if self.full_linkstate {
+        if self.full_linkstate || self.gossip_multihop {
             if let Some((edge, _)) = self
                 .get_idx(zid)
                 .and_then(|idx| self.graph.find_edge_undirected(self.idx, idx))
@@ -987,7 +992,7 @@ impl Network {
         }
     }
 
-    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, Node)> {
+    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
         let mut dfs_stack = vec![self.idx];
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
@@ -1006,7 +1011,7 @@ impl Network {
         for idx in self.graph.node_indices().collect::<Vec<NodeIndex>>() {
             if !visit_map.is_visited(&idx) {
                 tracing::debug!("Remove node {}", &self.graph[idx].zid);
-                removed.push((idx, self.graph.remove_node(idx).unwrap()));
+                removed.push((idx, self.graph.remove_node(idx).unwrap().zid));
             }
         }
         removed
