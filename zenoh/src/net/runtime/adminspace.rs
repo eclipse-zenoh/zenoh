@@ -22,7 +22,7 @@ use itertools::Itertools;
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{unwrap_or_default, wrappers::ZenohId, ConfigValidator, WhatAmI};
+use zenoh_config::{wrappers::ZenohId, ConfigValidator, WhatAmI};
 use zenoh_core::Wait;
 use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
@@ -197,9 +197,7 @@ impl AdminSpace {
         if runtime.state.whatami == WhatAmI::Router {
             add_handler!("linkstate/routers", routers_linkstate_data);
         }
-        if runtime.state.whatami != WhatAmI::Client
-            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate"
-        {
+        if runtime.state.whatami != WhatAmI::Client {
             add_handler!("linkstate/peers", peers_linkstate_data);
         }
         add_handler!("subscriber", "**", subscribers_data);
@@ -867,7 +865,7 @@ fn plugins_status(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let mut root_key = prefix.as_str().to_string();
     for plugin in guard.started_plugins_iter() {
-        with_extended_string(&mut root_key, &[plugin.id()], |plugin_key| {
+        with_extended_string(&mut root_key, &["/", plugin.id()], |plugin_key| {
             // @TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {

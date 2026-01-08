@@ -111,7 +111,17 @@ fn is_locality_compatible(locality: Locality, same_session: bool) -> bool {
     }
 }
 
-async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_type: TestType) {
+#[test_case::test_matrix(
+    [Locality::SessionLocal, Locality::Remote, Locality::Any],
+    [
+        TestType::SameSession,
+        TestType::ClientPeer, TestType::PeerClient, TestType::PeerPeer,
+        TestType::ClientRouterClient, TestType::RouterClient, TestType::RouterRouter
+    ]
+)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_querier_matching_status(querier_locality: Locality, test_type: TestType) {
+    zenoh_util::init_log_from_env_or("error");
     println!("Querier origin :{querier_locality:?}, test type: {test_type:?}");
     let same_session = test_type == TestType::SameSession;
     let key_expr = match querier_locality {
@@ -296,26 +306,6 @@ async fn zenoh_publisher_matching_status_inner(publisher_locality: Locality, sam
         get_matching_listener_status(&matching_listener),
         locality_compatible.then_some(false)
     );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn zenoh_querier_matching_status() -> ZResult<()> {
-    zenoh_util::init_log_from_env_or("error");
-    let test_types = [
-        TestType::SameSession,
-        TestType::ClientPeer,
-        TestType::PeerClient,
-        TestType::PeerPeer,
-        TestType::ClientRouterClient,
-        TestType::RouterRouter,
-        TestType::RouterClient,
-    ];
-    for tt in test_types {
-        zenoh_querier_matching_status_inner(Locality::Any, tt).await;
-        zenoh_querier_matching_status_inner(Locality::Remote, tt).await;
-        zenoh_querier_matching_status_inner(Locality::SessionLocal, tt).await;
-    }
-    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
