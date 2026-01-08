@@ -35,7 +35,7 @@ use crate::{
 };
 
 /// A builder returned by [`SessionInfo::transports()`](crate::session::SessionInfo::transports).
-/// 
+///
 /// The builder creates an iterator over all currently active [`Transport`](crate::session::Transport) instances.
 ///
 /// # Examples
