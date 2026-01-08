@@ -74,6 +74,19 @@ async fn test_adminspace_read() {
             .peer
             .set_mode(Some("linkstate".to_string()))
             .unwrap();
+        c.plugins_loading.set_enabled(true).unwrap();
+        let plugin_search_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("target/debug");
+        c.plugins_loading
+            .set_search_dirs(zenoh_util::LibSearchDirs::from_paths(&[plugin_search_dir
+                .to_str()
+                .unwrap()]))
+            .unwrap();
+        c.insert_json5("plugins/rest/http_port", "\"8080\"")
+            .unwrap();
+        c.insert_json5("plugins/rest/__required__", "true").unwrap();
         let s = ztimeout!(zenoh::open(c)).unwrap();
         s
     };
@@ -292,6 +305,28 @@ async fn test_adminspace_read() {
         .into_iter()
         .next();
     assert!(route.is_some());
+
+    let plugins = router
+        .get(format!("@/{zid}/router/plugins/**"))
+        .await
+        .unwrap()
+        .into_iter()
+        .next();
+    #[cfg(feature = "plugins")]
+    assert!(plugins.is_some());
+    #[cfg(not(feature = "plugins"))]
+    assert!(plugins.is_none());
+
+    let plugins_status = router
+        .get(format!("@/{zid}/router/status/plugins/**"))
+        .await
+        .unwrap()
+        .into_iter()
+        .next();
+    #[cfg(feature = "plugins")]
+    assert!(plugins_status.is_some());
+    #[cfg(not(feature = "plugins"))]
+    assert!(plugins_status.is_none());
 
     let count = router.get("@/**").await.unwrap().iter().count();
     assert!(count > 0);

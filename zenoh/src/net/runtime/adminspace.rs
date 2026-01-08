@@ -865,7 +865,7 @@ fn plugins_status(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     let mut root_key = prefix.as_str().to_string();
     for plugin in guard.started_plugins_iter() {
-        with_extended_string(&mut root_key, &[plugin.id()], |plugin_key| {
+        with_extended_string(&mut root_key, &["/", plugin.id()], |plugin_key| {
             // @TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
