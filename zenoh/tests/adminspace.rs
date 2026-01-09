@@ -532,10 +532,6 @@ async fn test_adminspace_transports_and_links() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         // Enable QoS for priorities and reliability support
         c.transport.unicast.qos.set_enabled(true).unwrap();
         ztimeout!(zenoh::open(c)).unwrap()
