@@ -76,7 +76,6 @@ transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 transport_ws = ["zenoh-transport/transport_ws"]
 unstable = [
-  "internal_config",
   "zenoh-config/unstable",
   "zenoh-keyexpr/unstable",
   "zenoh-protocol/unstable",

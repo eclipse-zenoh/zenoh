@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
-
 use std::time::Duration;
 
 use zenoh_config::WhatAmI;
@@ -26,7 +24,7 @@ async fn test_adminspace_wonly() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -59,7 +57,7 @@ async fn test_adminspace_read() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
@@ -94,7 +92,7 @@ async fn test_adminspace_read() {
     };
     let zid = router.zid();
     let router2 = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
@@ -106,7 +104,7 @@ async fn test_adminspace_read() {
     };
     let zid2 = router2.zid();
     let peer = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Peer)).unwrap();
         c.listen
             .endpoints
@@ -348,7 +346,7 @@ async fn test_adminspace_ronly() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -381,7 +379,7 @@ async fn test_adminspace_write() {
     zenoh_util::init_log_from_env_or("error");
 
     let router = {
-        let mut c = zenoh::Config::default();
+        let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
