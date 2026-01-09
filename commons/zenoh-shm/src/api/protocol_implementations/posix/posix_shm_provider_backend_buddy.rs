@@ -110,16 +110,9 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult {
         tracing::trace!("PosixShmProviderBackendBuddy::alloc({:?})", layout);
 
-        let alloc_layout = unsafe {
-            Layout::from_size_align_unchecked(
-                layout.size().get(),
-                layout.alignment().get_alignment_value().get(),
-            )
-        };
-
         let alloc = {
             let mut lock = zlock!(self.heap);
-            lock.alloc(alloc_layout)
+            lock.alloc(layout.into())
         };
 
         match alloc {
