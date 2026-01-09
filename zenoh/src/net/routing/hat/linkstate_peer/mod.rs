@@ -356,9 +356,11 @@ impl HatBaseTrait for HatCode {
             }
         }
 
+        let mut tokens = vec![];
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            tokens.push(res);
         }
 
         for mut res in subs_matches {
@@ -371,6 +373,9 @@ impl HatBaseTrait for HatCode {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .disable_query_routes();
+            Resource::clean(&mut res);
+        }
+        for mut res in tokens {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
