@@ -15,6 +15,7 @@
 use std::{any::Any, sync::Arc};
 
 /// Unique protocol identifier.
+///
 /// Here is a contract: it is up to user to make sure that incompatible ShmClient
 /// and ShmProviderBackend implementations will never use the same ProtocolID
 #[zenoh_macros::unstable_doc]

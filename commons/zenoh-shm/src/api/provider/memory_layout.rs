@@ -99,6 +99,7 @@ impl MemoryLayout {
     }
 
     /// Realign the layout for new alignment. The alignment must be >= of the existing one.
+    ///
     /// # Examples
     ///
     /// ```
