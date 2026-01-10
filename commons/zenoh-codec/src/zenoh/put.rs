@@ -16,7 +16,6 @@ use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    ZBuf,
 };
 use zenoh_protocol::{
     common::{iext, imsg},
@@ -27,11 +26,13 @@ use zenoh_protocol::{
     },
 };
 
-#[cfg(not(feature = "shared-memory"))]
-use crate::Zenoh080Bounded;
 #[cfg(feature = "shared-memory")]
-use crate::Zenoh080Sliced;
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::zenoh::shm::{ZBufShmReader, ZBufShmWriter};
+use crate::{
+    common::extension,
+    zenoh::shm::{ZBufRCodec, ZBufRawReader, ZBufRawWriter, ZBufWCodec},
+    RCodec, WCodec, Zenoh080, Zenoh080Header,
+};
 
 impl<W> WCodec<&Put, &mut W> for Zenoh080
 where
@@ -91,7 +92,14 @@ where
         }
         if let Some(att) = ext_attachment.as_ref() {
             n_exts -= 1;
-            self.write(&mut *writer, (att, n_exts != 0))?;
+            #[cfg(feature = "shared-memory")]
+            if ext_shm.is_some() {
+                self.write(&mut *writer, (att, n_exts != 0, ZBufShmWriter {}))?;
+            } else {
+                self.write(&mut *writer, (att, n_exts != 0, ZBufRawWriter {}))?;
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            self.write(&mut *writer, (att, n_exts != 0, ZBufRawWriter {}))?;
         }
         for u in ext_unknown.iter() {
             n_exts -= 1;
@@ -100,18 +108,13 @@ where
 
         // Payload
         #[cfg(feature = "shared-memory")]
-        {
-            let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-            codec.write(&mut *writer, payload)?;
+        if ext_shm.is_some() {
+            ZBufShmWriter::write_zbuf(writer, payload)
+        } else {
+            ZBufRawWriter::write_zbuf(writer, payload)
         }
-
         #[cfg(not(feature = "shared-memory"))]
-        {
-            let bodec = Zenoh080Bounded::<u32>::new();
-            bodec.write(&mut *writer, payload)?;
-        }
-
-        Ok(())
+        ZBufRawWriter::write_zbuf(writer, payload)
     }
 }
 
@@ -174,7 +177,26 @@ where
                     has_ext = ext;
                 }
                 ext::Attachment::ID => {
-                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    let (a, ext): (ext::AttachmentType, bool) = {
+                        fn read<ZBufR: ZBufRCodec, R: Reader>(
+                            reader: &mut R,
+                            codec: &Zenoh080Header,
+                        ) -> Result<(ext::AttachmentType, bool), DidntRead>
+                        {
+                            let (a, ext, _): (ext::AttachmentType, bool, ZBufR) =
+                                codec.read(reader)?;
+                            Ok((a, ext))
+                        }
+
+                        #[cfg(feature = "shared-memory")]
+                        if ext_shm.is_some() {
+                            read::<ZBufShmReader, R>(reader, &eodec)
+                        } else {
+                            read::<ZBufRawReader, R>(reader, &eodec)
+                        }
+                        #[cfg(not(feature = "shared-memory"))]
+                        read::<ZBufRawReader, R>(reader, &eodec)
+                    }?;
                     ext_attachment = Some(a);
                     has_ext = ext;
                 }
@@ -186,20 +208,16 @@ where
             }
         }
 
-        // Payload
-        let payload: ZBuf = {
+        let payload = {
             #[cfg(feature = "shared-memory")]
-            {
-                let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-                codec.read(&mut *reader)?
+            if ext_shm.is_some() {
+                ZBufShmReader::read_zbuf(reader)
+            } else {
+                ZBufRawReader::read_zbuf(reader)
             }
-
             #[cfg(not(feature = "shared-memory"))]
-            {
-                let bodec = Zenoh080Bounded::<u32>::new();
-                bodec.read(&mut *reader)?
-            }
-        };
+            ZBufRawReader::read_zbuf(reader)
+        }?;
 
         Ok(Put {
             timestamp,

@@ -16,25 +16,24 @@ pub mod err;
 pub mod put;
 pub mod query;
 pub mod reply;
+pub mod shm;
 
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    ZBuf,
 };
 #[cfg(feature = "shared-memory")]
-use zenoh_protocol::common::{iext, ZExtUnit};
+use zenoh_protocol::common::ZExtUnit;
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
     core::{Encoding, EntityGlobalIdProto, EntityId, ZenohIdProto},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
 
-#[cfg(not(feature = "shared-memory"))]
-use crate::Zenoh080Bounded;
-#[cfg(feature = "shared-memory")]
-use crate::Zenoh080Sliced;
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
+use crate::{
+    zenoh::shm::{ZBufRCodec, ZBufWCodec},
+    LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length,
+};
 
 // Push
 impl<W> WCodec<&PushBody, &mut W> for Zenoh080
@@ -233,41 +232,21 @@ where
 }
 
 // Extension ValueType
-impl<W, const VID: u8, const SID: u8> WCodec<(&ext::ValueType<{ VID }, { SID }>, bool), &mut W>
+impl<W, const VID: u8, ZBufW: ZBufWCodec> WCodec<(&ext::ValueType<{ VID }>, bool, ZBufW), &mut W>
     for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::ValueType<{ VID }, { SID }>, bool)) -> Self::Output {
-        let (x, more) = x;
-        let ext::ValueType {
-            encoding,
-            payload,
-            #[cfg(feature = "shared-memory")]
-            ext_shm,
-        } = x;
-
-        #[cfg(feature = "shared-memory")] // Write Shm extension if present
-        if let Some(eshm) = ext_shm.as_ref() {
-            self.write(&mut *writer, (eshm, true))?;
-        }
+    fn write(self, writer: &mut W, x: (&ext::ValueType<{ VID }>, bool, ZBufW)) -> Self::Output {
+        let (x, more, _) = x;
+        let ext::ValueType { encoding, payload } = x;
 
         // Compute extension length
         let mut len = self.w_len(encoding);
 
-        #[cfg(feature = "shared-memory")]
-        {
-            let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-            len += codec.w_len(payload);
-        }
-
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            let codec = Zenoh080Bounded::<u32>::new();
-            len += codec.w_len(payload);
-        }
+        ZBufW::calc_wlen(payload, &mut len);
 
         // Write ZExtBuf header
         let header: ZExtZBufHeader<{ VID }> = ZExtZBufHeader::new(len);
@@ -277,37 +256,11 @@ where
         self.write(&mut *writer, encoding)?;
 
         // Write payload
-        fn write<W>(writer: &mut W, payload: &ZBuf) -> Result<(), DidntWrite>
-        where
-            W: Writer,
-        {
-            // Don't write the length since it is already included in the header
-            for s in payload.zslices() {
-                writer.write_zslice(s)?;
-            }
-            Ok(())
-        }
-
-        #[cfg(feature = "shared-memory")]
-        {
-            if ext_shm.is_some() {
-                let codec = Zenoh080Sliced::<u32>::new(true);
-                codec.write(&mut *writer, payload)?;
-            } else {
-                write(&mut *writer, payload)?;
-            }
-        }
-
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            write(&mut *writer, payload)?;
-        }
-
-        Ok(())
+        ZBufW::write_zbuf_nolen(writer, payload)
     }
 }
 
-impl<R, const VID: u8, const SID: u8> RCodec<(ext::ValueType<{ VID }, { SID }>, bool), &mut R>
+impl<R, const VID: u8, ZBufR: ZBufRCodec> RCodec<(ext::ValueType<{ VID }>, bool, ZBufR), &mut R>
     for Zenoh080Header
 where
     R: Reader,
@@ -317,14 +270,7 @@ where
     fn read(
         #[allow(unused_mut)] mut self,
         reader: &mut R,
-    ) -> Result<(ext::ValueType<{ VID }, { SID }>, bool), Self::Error> {
-        #[cfg(feature = "shared-memory")]
-        let ext_shm = if iext::eid(self.header) == SID {
-            self.header = self.codec.read(&mut *reader)?;
-            Some(ext::ShmType)
-        } else {
-            None
-        };
+    ) -> Result<(ext::ValueType<{ VID }>, bool, ZBufR), Self::Error> {
         let (header, more): (ZExtZBufHeader<{ VID }>, bool) = self.read(&mut *reader)?;
 
         // Read encoding
@@ -332,81 +278,49 @@ where
         let encoding: Encoding = self.codec.read(&mut *reader)?;
         let end = reader.remaining();
 
-        // Read payload
-        fn read<R>(reader: &mut R, len: usize) -> Result<ZBuf, DidntRead>
-        where
-            R: Reader,
-        {
-            let mut payload = ZBuf::empty();
-            reader.read_zslices(len, |s| payload.push_zslice(s))?;
-            Ok(payload)
-        }
-
         // Calculate how many bytes are left in the payload
         let len = header.len - (start - end);
 
-        let payload: ZBuf = {
-            #[cfg(feature = "shared-memory")]
-            {
-                if ext_shm.is_some() {
-                    let codec = Zenoh080Sliced::<u32>::new(true);
-                    let payload: ZBuf = codec.read(&mut *reader)?;
-                    payload
-                } else {
-                    read(&mut *reader, len)?
-                }
-            }
+        let payload = ZBufR::read_zbuf_nolen(reader, len)?;
 
-            #[cfg(not(feature = "shared-memory"))]
-            {
-                read(&mut *reader, len)?
-            }
-        };
-
-        Ok((
-            ext::ValueType {
-                #[cfg(feature = "shared-memory")]
-                ext_shm,
-                encoding,
-                payload,
-            },
-            more,
-        ))
+        Ok((ext::ValueType { encoding, payload }, more, ZBufR::default()))
     }
 }
 
 // Extension: Attachment
-impl<W, const ID: u8> WCodec<(&ext::AttachmentType<{ ID }>, bool), &mut W> for Zenoh080
+impl<W, const ID: u8, ZBufW: ZBufWCodec> WCodec<(&ext::AttachmentType<{ ID }>, bool, ZBufW), &mut W>
+    for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::AttachmentType<{ ID }>, bool)) -> Self::Output {
-        let (x, more) = x;
+    fn write(self, writer: &mut W, x: (&ext::AttachmentType<{ ID }>, bool, ZBufW)) -> Self::Output {
+        let (x, more, _zbuf_wcodec) = x;
         let ext::AttachmentType { buffer } = x;
 
         let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(buffer));
         self.write(&mut *writer, (&header, more))?;
-        for s in buffer.zslices() {
-            writer.write_zslice(s)?;
-        }
 
-        Ok(())
+        ZBufW::write_zbuf_nolen(writer, buffer)
     }
 }
 
-impl<R, const ID: u8> RCodec<(ext::AttachmentType<{ ID }>, bool), &mut R> for Zenoh080Header
+impl<R, const ID: u8, ZBufR: ZBufRCodec> RCodec<(ext::AttachmentType<{ ID }>, bool, ZBufR), &mut R>
+    for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::AttachmentType<{ ID }>, bool), Self::Error> {
+    fn read(
+        self,
+        reader: &mut R,
+    ) -> Result<(ext::AttachmentType<{ ID }>, bool, ZBufR), Self::Error> {
         let (h, more): (ZExtZBufHeader<{ ID }>, bool) = self.read(&mut *reader)?;
-        let mut buffer = ZBuf::empty();
-        reader.read_zslices(h.len, |s| buffer.push_zslice(s))?;
 
-        Ok((ext::AttachmentType { buffer }, more))
+        let buffer = ZBufR::read_zbuf_nolen(reader, h.len)?;
+
+        Ok((ext::AttachmentType { buffer }, more, ZBufR::default()))
     }
 }

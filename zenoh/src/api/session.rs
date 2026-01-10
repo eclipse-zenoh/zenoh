@@ -2176,6 +2176,9 @@ impl SessionInner {
                 ext_sinfo: source_info.clone().map(Into::into),
                 #[cfg(not(feature = "unstable"))]
                 ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+
                 ext_attachment: attachment.clone().map(Into::into),
                 ext_unknown: vec![],
             }),
@@ -2318,9 +2321,9 @@ impl SessionInner {
                     ext_sinfo: source.clone().map(Into::into),
                     #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
                         encoding: v.1.clone().into(),
                         payload: v.0.clone().into(),
                     }),
@@ -2341,8 +2344,6 @@ impl SessionInner {
                 #[cfg(feature = "unstable")]
                 source,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
                     encoding: v.1.clone().into(),
                     payload: v.0.clone().into(),
                 }),
