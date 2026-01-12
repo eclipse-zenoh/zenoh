@@ -210,9 +210,9 @@ struct Cache {
 
 impl QosInterceptor {
     #[inline]
-    fn is_ke_affected(&self, ke: &keyexpr) -> bool {
+    fn is_ke_affected(&self, token: &keyexpr) -> bool {
         match &self.keys {
-            Some(keys) => keys.nodes_including(ke).any(|n| n.weight().is_some()),
+            Some(keys) => keys.nodes_including(token).any(|n| n.weight().is_some()),
             None => true,
         }
     }
@@ -267,7 +267,7 @@ impl QosInterceptor {
             || cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
                 ctx.full_keyexpr(msg)
                     .as_ref()
-                    .map(|ke| self.is_ke_affected(ke))
+                    .map(|token| self.is_ke_affected(token))
                     .unwrap_or(false)
             })
     }

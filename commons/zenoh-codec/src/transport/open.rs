@@ -48,6 +48,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         } = x;
 
         // Header
@@ -59,7 +60,8 @@ where
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
-            + (ext_compression.is_some() as u8);
+            + (ext_compression.is_some() as u8)
+            + (ext_south.is_some() as u8);
 
         #[cfg(feature = "shared-memory")]
         {
@@ -105,6 +107,10 @@ where
         if let Some(compression) = ext_compression.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
+        }
+        if let Some(south) = ext_south.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (south, n_exts != 0))?;
         }
 
         Ok(())
@@ -153,6 +159,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
+        let mut ext_south = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -190,6 +197,11 @@ where
                     ext_compression = Some(q);
                     has_ext = ext;
                 }
+                ext::South::ID => {
+                    let (q, ext): (ext::South, bool) = eodec.read(&mut *reader)?;
+                    ext_south = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "OpenSyn", ext)?;
                 }
@@ -207,6 +219,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         })
     }
 }
@@ -229,6 +242,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         } = x;
 
         // Header
@@ -242,7 +256,8 @@ where
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
-            + (ext_compression.is_some() as u8);
+            + (ext_compression.is_some() as u8)
+            + (ext_south.is_some() as u8);
 
         #[cfg(feature = "shared-memory")]
         {
@@ -287,6 +302,10 @@ where
         if let Some(compression) = ext_compression.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
+        }
+        if let Some(south) = ext_south.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (south, n_exts != 0))?;
         }
 
         Ok(())
@@ -334,6 +353,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
+        let mut ext_south = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -371,6 +391,11 @@ where
                     ext_compression = Some(q);
                     has_ext = ext;
                 }
+                ext::South::ID => {
+                    let (q, ext): (ext::South, bool) = eodec.read(&mut *reader)?;
+                    ext_south = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "OpenAck", ext)?;
                 }
@@ -387,6 +412,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         })
     }
 }

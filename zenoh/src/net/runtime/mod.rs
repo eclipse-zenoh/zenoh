@@ -38,7 +38,12 @@ use futures::Future;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
+use zenoh_config::{
+    gateway::BoundFilterConf, unwrap_or_default, GenericConfig, IConfig, Interface, ModeDependent,
+    ZenohId,
+};
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -47,6 +52,7 @@ use zenoh_protocol::{
     network::NetworkMessageMut,
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_runtime::ZRuntime;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::{
     client_storage::ShmClientStorage,
@@ -81,6 +87,11 @@ use crate::{
     api::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
+    },
+    net::routing::{
+        dispatcher::region::Region,
+        hat::{self, HatTrait},
+        router::RouterBuilder,
     },
     GIT_VERSION,
 };
@@ -124,6 +135,7 @@ pub(crate) struct RuntimeState {
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
+    span: tracing::Span,
 }
 
 #[allow(private_interfaces)]
@@ -261,36 +273,44 @@ impl IRuntime for RuntimeState {
         let router = self.router();
         let tables = zread!(router.tables.tables);
 
-        let matches = match matching_type {
+        let (broker_hat, other_hats) = tables.hats.partition(&Region::Local);
+        let local_broker = broker_hat
+            .as_any()
+            .downcast_ref::<hat::broker::Hat>()
+            .unwrap();
+
+        let key_expr = match &ns_key_expr {
+            Some(ns_ke) => ns_ke,
+            None => key_expr,
+        };
+
+        let Some(src_face) = tables.data.faces.get(&face_id) else {
+            tracing::error!(fid = face_id, "Unknown session face");
+            return MatchingStatus { matching: false };
+        };
+
+        let matching = match matching_type {
             crate::api::matching::MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_subscriber_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                 )
             }
             crate::api::matching::MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_queryable_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                     complete,
                 )
             }
         };
 
-        drop(tables);
-        let matching = match destination {
-            crate::sample::Locality::Any => !matches.is_empty(),
-            crate::sample::Locality::Remote => matches.values().any(|dir| dir.id != face_id),
-            crate::sample::Locality::SessionLocal => matches.values().any(|dir| dir.id == face_id),
-        };
         MatchingStatus { matching }
     }
 
@@ -349,7 +369,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -415,7 +435,7 @@ pub struct RuntimeBuilder {
 impl RuntimeBuilder {
     pub fn new(config: Config) -> Self {
         Self {
-            config: config.0,
+            config: config.0.expanded(),
             #[cfg(feature = "plugins")]
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
@@ -445,7 +465,7 @@ impl RuntimeBuilder {
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = (*config.id()).unwrap_or_default().into();
+        let zid = ZenohIdProto::from(config.id().expect("Config should be expanded"));
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
@@ -456,14 +476,15 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(
-            zid,
-            whatami,
-            hlc.clone(),
-            &config,
-            #[cfg(feature = "stats")]
-            stats.clone(),
-        )?);
+        let mut router_builder = RouterBuilder::new(&config);
+        if let Some(hlc) = hlc.as_ref().cloned() {
+            router_builder = router_builder.hlc(hlc.clone());
+        }
+
+        #[cfg(feature = "stats")]
+        let router_builder = router_builder.stats(stats.clone());
+
+        let router = Arc::new(router_builder.build()?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -473,7 +494,14 @@ impl RuntimeBuilder {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .zid(zid);
+            .bound_callback({
+                let config = config.clone();
+                move |p| {
+                    compute_transport_peer_region(&config, &p)
+                        .map(|b| b.bound())
+                        .unwrap_or_default()
+                }
+            });
 
         #[cfg(feature = "shared-memory")]
         let transport_manager_builder =
@@ -498,7 +526,7 @@ impl RuntimeBuilder {
 
         let namespace = config.namespace().clone();
         let config = Notifier::new(crate::config::Config(config));
-
+        let span = tracing::trace_span!("rt", zid = %zid.short());
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid: zid.into(),
@@ -518,10 +546,11 @@ impl RuntimeBuilder {
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
+                span,
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone())?;
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_hats(runtime.clone())?;
 
         // Admin space
         if start_admin_space {
@@ -606,7 +635,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -691,6 +720,7 @@ struct RuntimeTransportEventHandler {
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
+    #[tracing::instrument(level = "trace", skip_all)]
     fn new_unicast(
         &self,
         peer: TransportPeer,
@@ -698,6 +728,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
@@ -705,13 +736,75 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
+
+                let region = compute_transport_peer_region(&runtime.config().lock().0, &peer)?;
+
+                fn north_bound_transport_peer_count(
+                    runtime: &Runtime,
+                    new_peer: &TransportPeer,
+                ) -> usize {
+                    ZRuntime::Application.block_in_place(async {
+                        runtime
+                            .manager()
+                            .get_transports_unicast()
+                            .await
+                            .iter()
+                            .filter(|transport| {
+                                let Ok(peer) = transport.get_peer() else {
+                                    tracing::error!(
+                                        "Could not get transport peer \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                if &peer == new_peer {
+                                    return false;
+                                }
+
+                                // NOTE(regions): compute bound instead of querying the router as
+                                // the corresponding transport face might not exist yet
+                                let Ok(bound) = compute_transport_peer_region(
+                                    &runtime.config().lock().0,
+                                    &peer,
+                                ) else {
+                                    tracing::error!(
+                                        zid = %peer.zid.short(),
+                                        wai = %peer.whatami.short(),
+                                        "Could not get transport peer bound \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                bound.bound().is_north()
+                            })
+                            .count()
+                    })
+                }
+
+                if region.bound().is_north()
+                    && runtime.whatami() == WhatAmI::Client
+                    && north_bound_transport_peer_count(runtime, &peer) > 0
+                {
+                    bail!("Client runtimes only accept one north-bound transport");
+                }
+
+                tracing::trace!(
+                    peer.zid = %peer.zid.short(),
+                    peer.mode = %peer.whatami.short(),
+                    peer.region = %region
+                );
+
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoints: std::sync::RwLock::new(HashSet::new()),
                     main_handler: runtime
                         .state
                         .router
-                        .new_transport_unicast(transport)
+                        .new_transport_unicast(transport, region)
                         .unwrap(),
                     slave_handlers,
                 }))
@@ -726,15 +819,20 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
+
+                let region =
+                    compute_multicast_group_region(&runtime.config().lock().0, &transport)?;
+
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone())?;
+                    .new_transport_multicast(transport.clone(), region)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -759,6 +857,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn new_link(&self, link: Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
@@ -766,6 +865,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn del_link(&self, link: Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -774,6 +874,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn closed(&self) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.closed();
         Runtime::closed_session(self);
         for handler in &self.slave_handlers {
@@ -799,12 +900,15 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .iter()
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
+
+        let region = compute_transport_peer_region(&self.runtime.config().lock().0, &peer)?;
+
         Ok(Arc::new(RuntimeMulticastSession {
-            main_handler: self
-                .runtime
-                .state
-                .router
-                .new_peer_multicast(self.transport.clone(), peer)?,
+            main_handler: self.runtime.state.router.new_peer_multicast(
+                self.transport.clone(),
+                peer,
+                region,
+            )?,
             slave_handlers,
         }))
     }
@@ -859,7 +963,7 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
     async fn close_inner(&self) {
-        tracing::trace!("Runtime::close())");
+        tracing::trace!("Runtime::close()");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
@@ -872,8 +976,8 @@ impl Closee for Arc<RuntimeState> {
         // This should be resolved by identifying corresponding task, and placing
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
-        tables.root_res.close();
-        tables.faces.clear();
+        tables.data.root_res.close();
+        tables.data.faces.clear();
     }
 }
 
@@ -883,6 +987,84 @@ impl Closeable for Runtime {
     fn get_closee(&self) -> Self::TClosee {
         self.state.clone()
     }
+}
+
+#[allow(clippy::incompatible_msrv)]
+#[tracing::instrument(level = "debug", skip_all, fields(zid = %peer.zid.short(), mode = %peer.whatami), ret)]
+fn compute_transport_peer_region(
+    config: &zenoh_config::Config,
+    peer: &TransportPeer,
+) -> ZResult<Region> {
+    let mode = config.mode().expect("Config should be expanded");
+
+    let gateway_config = config
+        .gateway
+        .get(mode)
+        .ok_or_else(|| zerror!("`mode` is set to `{mode}` but `gateway.{mode}` is not set"))?;
+
+    let is_match = |filter: &BoundFilterConf| {
+        filter
+            .zids
+            .as_ref()
+            .is_none_or(|zid| zid.contains(&peer.zid.into()))
+            && filter.interfaces.as_ref().is_none_or(|ifaces| {
+                peer.links
+                    .iter()
+                    .flat_map(|link| {
+                        link.interfaces
+                            .iter()
+                            .map(|iface| Interface(iface.to_owned()))
+                    })
+                    .all(|iface| ifaces.contains(&iface))
+            })
+            && filter
+                .modes
+                .as_ref()
+                .is_none_or(|mode| mode.matches(peer.whatami))
+    };
+
+    let north = gateway_config
+        .north
+        .filters
+        .as_ref()
+        .is_none_or(|filters| filters.iter().any(is_match));
+
+    let south = gateway_config.south.iter().position(|south| {
+        south
+            .filters
+            .as_ref()
+            .is_none_or(|filters| filters.iter().any(is_match))
+    });
+
+    let region = match (north, south) {
+        (true, None) => Region::North,
+        (false, Some(index)) => Region::Subregion {
+            id: index,
+            mode: peer.whatami,
+        },
+        (false, None) | (true, Some(_)) => Region::Undefined { mode: peer.whatami },
+    };
+
+    if peer.whatami.is_router() && region.bound().is_south() && !mode.is_router() {
+        bail!("Router regions cannot be subregions of non-router regions")
+    }
+
+    Ok(region)
+}
+
+#[allow(clippy::incompatible_msrv)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
+fn compute_multicast_group_region(
+    config: &zenoh_config::Config,
+    _group: &TransportMulticast, // TODO(regions*): remove this
+) -> ZResult<Region> {
+    let mode = config.mode().expect("Config should be expanded");
+
+    if mode.is_client() {
+        bail!("Multicast groups are only supported in north peer/router regions");
+    }
+
+    Ok(Region::North)
 }
 
 #[derive(Clone)]

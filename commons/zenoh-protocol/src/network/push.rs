@@ -65,6 +65,9 @@ pub mod ext {
 
     pub type NodeId = zextz64!(0x3, true);
     pub type NodeIdType = crate::network::ext::NodeIdType<{ NodeId::ID }>;
+
+    pub type DstNodeId = zextz64!(0x4, false);
+    pub type DstNodeIdType = crate::network::ext::NodeIdType<{ DstNodeId::ID }>;
 }
 
 impl Push {

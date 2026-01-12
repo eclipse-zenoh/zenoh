@@ -27,7 +27,7 @@ use zenoh_result::ZResult;
 use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
 use crate::{
     unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
-    TransportPeerEventHandler,
+    Bound, TransportPeerEventHandler,
 };
 
 pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
@@ -67,6 +67,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
+    fn get_bound(&self) -> Bound;
     fn get_config(&self) -> &TransportConfigUnicast;
     #[cfg(feature = "stats")]
     fn stats(&self) -> zenoh_stats::TransportStats;

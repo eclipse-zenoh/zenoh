@@ -17,15 +17,20 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    sync::Arc,
+};
 
-use zenoh_config::{unwrap_or_default, Config, WhatAmI};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-        interest::{InterestId, InterestMode, InterestOptions},
-        Declare, Oam,
+        interest::InterestId,
+        Declare, Interest, Oam,
     },
 };
 use zenoh_result::ZResult;
@@ -33,30 +38,33 @@ use zenoh_transport::unicast::TransportUnicast;
 
 use super::{
     dispatcher::{
-        face::{Face, FaceState},
+        face::FaceState,
         pubsub::SubscriberInfo,
-        tables::{NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables, TablesLock},
+        tables::{
+            NodeId, QueryTargetQablSet, Resource, Route, RoutingExpr, TablesData, TablesLock,
+        },
     },
     RoutingContext,
 };
-use crate::{
-    key_expr::KeyExpr,
-    net::{
-        protocol::{linkstate::LinkInfo, network::SuccessorEntry},
-        runtime::Runtime,
+use crate::net::{
+    protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+    routing::dispatcher::{
+        interests::{CurrentInterest, RemoteInterest},
+        region::{Region, RegionMap},
     },
+    runtime::Runtime,
 };
 
-mod client;
-mod linkstate_peer;
-mod p2p_peer;
-mod router;
+pub(crate) mod broker;
+pub(crate) mod client;
+pub(crate) mod peer;
+pub(crate) mod router;
 
 zconfigurable! {
     pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
-#[derive(Default, serde::Serialize)]
+#[derive(Debug, Default, serde::Serialize)]
 pub(crate) struct Sources {
     routers: Vec<ZenohIdProto>,
     peers: Vec<ZenohIdProto>,
@@ -71,6 +79,12 @@ impl Sources {
             clients: vec![],
         }
     }
+
+    pub(crate) fn extend(&mut self, other: &Sources) {
+        self.routers.extend(other.routers.iter().copied());
+        self.peers.extend(other.peers.iter().copied());
+        self.clients.extend(other.clients.iter().copied());
+    }
 }
 
 pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>, RoutingContext<Declare>)
@@ -80,248 +94,493 @@ pub(crate) trait HatTrait:
 {
 }
 
-pub(crate) trait HatBaseTrait {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()>;
+pub(crate) struct BaseContext<'ctx> {
+    pub(crate) tables_lock: &'ctx Arc<TablesLock>,
+    pub(crate) tables: &'ctx mut TablesData,
+    pub(crate) src_face: &'ctx mut Arc<FaceState>,
+    pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
+}
 
-    fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;
+impl BaseContext<'_> {
+    /// Reborrows [`BaseContext`] to avoid moving it.
+    pub(crate) fn reborrow(&mut self) -> BaseContext<'_> {
+        BaseContext {
+            tables_lock: self.tables_lock,
+            tables: &mut *self.tables,
+            src_face: &mut *self.src_face,
+            send_declare: &mut *self.send_declare,
+        }
+    }
+}
+
+/// A party with which a hat exchanges messages.
+///
+/// This type exists to generalize [`crate:::net::routing::dispatcher::face::Face`] ̦
+/// to nodes that don't have a face but still need to be identified in hat interfaces.
+///
+/// Named after Git remotes.
+#[derive(Debug)]
+pub(crate) struct Remote(Box<dyn RemoteTrait>);
+
+impl Remote {
+    fn as_any(&self) -> &dyn Any {
+        self.0.as_any()
+    }
+
+    // FIXME(regions): remove this
+    pub(crate) fn downcast_ref_to_face(&self) -> &Arc<FaceState> {
+        self.as_any().downcast_ref().unwrap()
+    }
+}
+
+pub(crate) trait RemoteTrait: Any + Send + Sync + Debug {
+    fn clone_box(&self) -> Box<dyn RemoteTrait>;
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<T> RemoteTrait for T
+where
+    T: Any + Send + Sync + Debug + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn RemoteTrait> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Clone for Remote {
+    fn clone(&self) -> Self {
+        Remote(self.0.clone_box())
+    }
+}
+
+pub(crate) trait HatBaseTrait: Any {
+    fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()>;
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync>;
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
-    fn new_local_face(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
-        send_declare: &mut SendDeclare,
-    ) -> ZResult<()>;
+    // REVIEW(regions): it would be better if this returned a Result instead
+    // Currently errors are logged in router::Hat::get_router.
+
+    fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
+
+    fn new_local_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>) -> ZResult<()>;
 
     fn new_transport_unicast_face(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
+        &mut self,
+        ctx: BaseContext,
         transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
+        other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()>;
 
     fn handle_oam(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
+        &mut self,
+        ctx: BaseContext,
         oam: &mut Oam,
-        transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
+        other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()>;
 
     fn map_routing_context(
         &self,
-        tables: &Tables,
+        tables: &TablesData, // TODO(fuzzpixelz): can this be removed?
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId;
 
-    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &RoutingExpr) -> bool;
+    fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
 
+    // TODO(regions): review multicast-related logic
     fn egress_filter(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
         expr: &RoutingExpr,
     ) -> bool;
 
-    fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
+    fn info(&self, kind: WhatAmI) -> String; // FIXME(regions*): remove `kind`.
 
-    fn close_face(
-        &self,
-        tables: &TablesLock,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    );
+    fn close_face(&mut self, ctx: BaseContext);
 
     fn update_from_config(
-        &self,
-        _tables: &mut Tables,
+        &mut self,
         _tables_ref: &Arc<TablesLock>,
         _runtime: &Runtime,
     ) -> ZResult<()> {
         Ok(())
     }
 
-    fn links_info(&self, _tables: &Tables) -> HashMap<ZenohIdProto, LinkInfo> {
+    fn links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         HashMap::new()
     }
 
-    fn route_successor(
-        &self,
-        _tables: &Tables,
-        _src: ZenohIdProto,
-        _dst: ZenohIdProto,
-    ) -> Option<ZenohIdProto> {
+    fn route_successor(&self, _src: ZenohIdProto, _dst: ZenohIdProto) -> Option<ZenohIdProto> {
         None
     }
 
-    fn route_successors(&self, _tables: &Tables) -> Vec<SuccessorEntry> {
+    fn route_successors(&self) -> Vec<SuccessorEntry> {
         Vec::new()
+    }
+
+    #[allow(dead_code)] // FIXME(regions)
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    fn whatami(&self) -> WhatAmI;
+
+    fn region(&self) -> Region;
+
+    /// Returns `true` if `face` belongs to this [`Hat`].
+    fn owns(&self, face: &FaceState) -> bool {
+        if self.region() == face.region && face.remote_bound.is_north() {
+            debug_assert_eq!(self.whatami(), face.whatami);
+            debug_assert_eq!(face.is_local, self.region() == Region::Local);
+            debug_assert_implies!(face.is_local, face.whatami.is_client());
+        }
+
+        self.region() == face.region
     }
 }
 
+// REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
+
+/// Hat interest protocol interface.
+///
+/// Below is the typical code-path for each message type.
+///
+/// # Interest (current and/or future)
+///   1. [`HatInterestTrait::route_interest`] on the north hat.
+///   2. [`HatInterestTrait::register_interest`] on the owner south hat, iff it owns the src face.
+///   3. [`HatInterestTrait::propagate_current_subscriptions`] on the owner south hat, iff it owns the src face.
+///   4. [`HatInterestTrait::propagate_current_queryables`] on the owner south hat, iff it owns the src face.
+///   4. [`HatInterestTrait::propagate_current_tokens`] on the owner south hat, iff it owns the src face.
+///   5. [`HatInterestTrait::send_final_declaration`] on the owner south hat,
+///      iff it owns the src face and there is no gateway in the north region.
+///
+/// # Interest (final)
+///   1. [`HatInterestTrait::route_interest_final`] on the north hat.
+///   2. [`HatInterestTrait::unregister_interest`] on the owner south hat, iff it owns the src face.
+///
+/// # Declare (final)
+///   1. [`HatInterestTrait::route_final_declaration`] on the north hat.
+///   2. [`HatInterestTrait::send_final_declaration`] on the owner south hat, iff the msg is intended for it.
 pub(crate) trait HatInterestTrait {
-    #[allow(clippy::too_many_arguments)]
-    fn declare_interest(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        options: InterestOptions,
-        send_declare: &mut SendDeclare,
+    /// Handles interest messages.
+    ///
+    /// This method is only called on the north-bound hat.
+    ///
+    /// Returns `Some` iff the pending current interest is resolved.
+    ///
+    /// Will use the dowstream hat reference to call
+    /// [`HatInterestTrait::propagate_declarations`].
+    fn route_interest(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        src: &Remote,
+    ) -> Option<CurrentInterest>; // TODO(regions): it's odd that this needs to be `Some` for "resolved interest" (i.e. doing nothing).
+
+    /// Handles interest finalization messages.
+    ///
+    /// This method is only called on the north-bound hat.
+    fn route_interest_final(
+        &mut self,
+        ctx: BaseContext,
+        msg: &Interest,
+        remote_interest: &RemoteInterest,
     );
-    fn undeclare_interest(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
-    fn declare_final(&self, tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId);
+
+    /// Handles declaration finalization messages.
+    ///
+    /// Returns `Some` iff the pending current interest is resolved.
+    ///
+    /// This method is only called on the north hat.
+    fn route_declare_final(
+        &mut self,
+        ctx: BaseContext,
+        interest_id: InterestId,
+    ) -> Option<CurrentInterest>;
+
+    fn route_current_token(
+        &mut self,
+        ctx: BaseContext,
+        interest_id: InterestId,
+        res: Arc<Resource>,
+    ) -> Option<CurrentInterest>;
+
+    // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
+    // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
+    // should be reworked.
+
+    /// Propagates current subscriptions to the interested subregion.
+    ///
+    /// This method is only called on the owner south hat.
+    fn send_current_subscriptions(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
+    );
+
+    /// Propagates current queryables to the interested subregion.
+    ///
+    /// This method is only called on the owner south hat.
+    fn send_current_queryables(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
+    );
+
+    fn send_current_tokens(
+        &self,
+        ctx: BaseContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashSet<Arc<Resource>>,
+    );
+
+    fn propagate_current_token(
+        &self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        interest: CurrentInterest,
+    );
+
+    /// Informs the interest source that all declarations have been transmitted.
+    ///
+    /// This method is only called on south hats.
+    fn send_declare_final(
+        &mut self,
+        ctx: BaseContext,
+        interest_id: InterestId, // TODO(regions): change to &Interest (?)
+        dst: &Remote,
+    );
+
+    /// Register remote interests.
+    ///
+    /// This method is only called on the owner south hat.
+    fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>);
+
+    /// Unregister remote interests.
+    ///
+    /// This method is only called on the owner south hat.
+    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest>;
+
+    fn remote_interests(&self, tables: &TablesData) -> HashSet<RemoteInterest>;
+}
+
+/// Return value of entity unregistration methods.
+#[derive(Debug)]
+pub(crate) enum UnregisterResult {
+    /// Indicates that the unregisration was a no-op (e.g. the entity has duplicates).
+    Noop,
+    /// Indicates that the entity info changed (e.g. an update to queryable completeness).
+    InfoUpdate { res: Arc<Resource> },
+    /// Indicates that the last entity on the given [`Resource`] was unregistered.
+    LastUnregistered { res: Arc<Resource> },
 }
 
 pub(crate) trait HatPubSubTrait {
-    #[allow(clippy::too_many_arguments)]
-    fn declare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+    /// Register a subscriber entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn register_subscription(
+        &mut self,
+        ctx: BaseContext,
         id: SubscriberId,
-        res: &mut Arc<Resource>,
-        sub_info: &SubscriberInfo,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        res: Arc<Resource>,
+        nid: NodeId,
+        info: &SubscriberInfo,
     );
-    fn undeclare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+
+    /// Unregister a subscriber entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
         id: SubscriberId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        nid: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
 
-    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    /// Propagate a subscriber entity.
+    ///
+    /// The callee hat will only push the subscription if is the north hat.
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        other_info: Option<SubscriberInfo>,
+    );
+
+    /// Unpropagate a subscriber entity.
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    /// Unpropagate the last remaining subscriber entity which the callee hat doesn't own.
+    ///
+    /// This implies that the callee hat owns the last remaining subscriber and that the penultimate
+    /// subscriber was unregistered.
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        self.unpropagate_subscription(ctx, res);
+    }
+
+    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo>;
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.remote_subscriptions_matching(tables, None)
+    }
+
+    fn remote_subscriptions_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, SubscriberInfo>;
+
+    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+
+    fn sourced_publishers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_data_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
-        source: NodeId,
-        source_type: WhatAmI,
+        node_id: NodeId,
     ) -> Arc<Route>;
-
-    fn get_matching_subscriptions(
-        &self,
-        tables: &Tables,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>>;
 }
 
 pub(crate) trait HatQueriesTrait {
-    #[allow(clippy::too_many_arguments)]
-    fn declare_queryable(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+    /// Register a queryable entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn register_queryable(
+        &mut self,
+        ctx: BaseContext,
         id: QueryableId,
-        res: &mut Arc<Resource>,
-        qabl_info: &QueryableInfoType,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        res: Arc<Resource>,
+        nid: NodeId,
+        info: &QueryableInfoType,
     );
-    fn undeclare_queryable(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+
+    /// Unregister a queryable entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn unregister_queryable(
+        &mut self,
+        ctx: BaseContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
-    ) -> Option<Arc<Resource>>;
+        nid: NodeId,
+    ) -> UnregisterResult;
 
-    fn get_queryables(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
 
-    fn get_queriers(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
+    /// Propagate a queryable entity.
+    ///
+    /// The callee hat will only push the subscription if is the north hat.
+    fn propagate_queryable(
+        &mut self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        other_info: Option<QueryableInfoType>,
+    );
+
+    /// Unpropagate a queryable entity.
+    fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn unpropagate_last_non_owned_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        self.unpropagate_queryable(ctx, res);
+    }
+
+    fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType>;
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn remote_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, QueryableInfoType> {
+        self.remote_queryables_matching(tables, None)
+    }
+
+    fn remote_queryables_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, QueryableInfoType>;
+
+    // TODO(region): replace return type with map
+    fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+
+    fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
     fn compute_query_route(
         &self,
-        tables: &Tables,
+        tables: &TablesData,
+        face: &FaceState,
         expr: &RoutingExpr,
         source: NodeId,
-        source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
-
-    fn get_matching_queryables(
-        &self,
-        tables: &Tables,
-        key_expr: &KeyExpr<'_>,
-        complete: bool,
-    ) -> HashMap<usize, Arc<FaceState>>;
-}
-
-pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
-    match whatami {
-        WhatAmI::Client => Box::new(client::HatCode {}),
-        WhatAmI::Peer => {
-            if unwrap_or_default!(config.routing().peer().mode()) == *"linkstate" {
-                Box::new(linkstate_peer::HatCode {})
-            } else {
-                Box::new(p2p_peer::HatCode {})
-            }
-        }
-        WhatAmI::Router => Box::new(router::HatCode {}),
-    }
 }
 
 pub(crate) trait HatTokenTrait {
-    #[allow(clippy::too_many_arguments)]
-    fn declare_token(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: TokenId,
-        res: &mut Arc<Resource>,
-        node_id: NodeId,
-        interest_id: Option<InterestId>,
-        send_declare: &mut SendDeclare,
-    );
+    /// Register a token entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn register_token(&mut self, ctx: BaseContext, id: TokenId, res: Arc<Resource>, nid: NodeId);
 
-    fn undeclare_token(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
+    /// Unregister a token entity.
+    ///
+    /// The callee hat assumes that it owns the source face.
+    fn unregister_token(
+        &mut self,
+        ctx: BaseContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
-        node_id: NodeId,
-        send_declare: &mut SendDeclare,
+        nid: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
-}
+    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
 
-trait CurrentFutureTrait {
-    fn future(&self) -> bool;
-    fn current(&self) -> bool;
-}
+    /// Propagate a token entity.
+    ///
+    /// The callee hat will only push the subscription if is the north hat.
+    fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool);
 
-impl CurrentFutureTrait for InterestMode {
-    #[inline]
-    fn future(&self) -> bool {
-        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    /// Unpropagate a queryable entity.
+    fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>);
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn unpropagate_last_non_owned_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        self.unpropagate_token(ctx, res);
     }
 
-    #[inline]
-    fn current(&self) -> bool {
-        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
+    fn remote_tokens_of(&self, res: &Resource) -> bool;
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn remote_tokens(&self, tables: &TablesData) -> HashSet<Arc<Resource>> {
+        self.remote_tokens_matching(tables, None)
     }
+
+    fn remote_tokens_matching(
+        &self,
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashSet<Arc<Resource>>;
+
+    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 }

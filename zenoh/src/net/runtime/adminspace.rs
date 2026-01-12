@@ -42,10 +42,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
-use super::{
-    routing::{dispatcher::face::Face, hat::HatTrait},
-    Runtime,
-};
+use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
@@ -194,20 +191,13 @@ impl AdminSpace {
 
         add_handler!(local_data);
         add_handler!("metrics", metrics);
-        if runtime.state.whatami == WhatAmI::Router {
-            add_handler!("linkstate/routers", routers_linkstate_data);
-        }
-        if runtime.state.whatami != WhatAmI::Client {
-            add_handler!("linkstate/peers", peers_linkstate_data);
-        }
+        add_handler!("linkstate", "*", linkstate_data);
         add_handler!("subscriber", "**", subscribers_data);
         add_handler!("publisher", "**", publishers_data);
         add_handler!("queryable", "**", queryables_data);
         add_handler!("querier", "**", queriers_data);
         add_handler!("token", "**", tokens_data);
-        if runtime.state.whatami == WhatAmI::Router {
-            add_handler!("route/successor", "**", route_successor);
-        }
+        add_handler!("route/successor", "**", route_successor);
 
         #[cfg(feature = "plugins")]
         add_handler!("plugins", "**", plugins_data);
@@ -308,12 +298,15 @@ impl AdminSpace {
             });
         }
 
+        let _span =
+            tracing::debug_span!("adminspace", zid = %ZenohIdProto::from(admin.zid).short())
+                .entered();
+
         let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(&mut Declare {
             interest_id: None,
-
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::DEFAULT,
@@ -432,6 +425,9 @@ impl Primitives for AdminSpace {
         trace!("recv Request {:?}", msg);
         match &mut msg.payload {
             RequestBody::Query(query) => {
+                let _span =
+                    tracing::debug_span!("adminspace", zid = %ZenohIdProto::from(self.zid).short())
+                        .entered();
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
                     let conf = &self.context.runtime.state.config.lock().0;
@@ -546,6 +542,7 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let transport_mgr = context.runtime.manager().clone();
 
@@ -670,6 +667,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
     #[cfg(not(feature = "stats"))]
     let mut metrics = format!(
@@ -717,39 +715,13 @@ fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
     }
 }
 
-fn routers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-
-    if let Err(e) = query
-        .reply(prefix, tables.hat_code.info(&rtables, WhatAmI::Router))
-        .encoding(Encoding::TEXT_PLAIN)
-        .wait()
-    {
-        tracing::error!("Error sending AdminSpace reply: {:?}", e);
-    }
-}
-
-fn peers_linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-
-    if let Err(e) = query
-        .reply(prefix, tables.hat_code.info(&rtables, WhatAmI::Peer))
-        .encoding(Encoding::TEXT_PLAIN)
-        .wait()
-    {
-        tracing::error!("Error sending AdminSpace reply: {:?}", e);
-    }
-}
-
 fn resources_data<F>(prefix: &keyexpr, context: &AdminContext, query: Query, f: F)
 where
-    F: Fn(&dyn HatTrait, &Tables) -> Vec<(Arc<Resource>, Sources)>,
+    F: Fn(&Tables) -> HashMap<Arc<Resource>, Sources>,
 {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
-    for res in f(&*tables.hat_code, &rtables) {
+    for res in f(&rtables) {
         let key = prefix / keyexpr::new(res.0.expr()).unwrap();
         if query.key_expr().intersects(&key) {
             let payload =
@@ -765,40 +737,62 @@ where
     }
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    resources_data(prefix, context, query, |hat_code, rtables| {
-        hat_code.get_subscriptions(rtables)
+    resources_data(prefix, context, query, |tables| {
+        tables.sourced_subscribers()
     });
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn publishers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    resources_data(prefix, context, query, |hat_code, rtables| {
-        hat_code.get_publications(rtables)
-    });
+    resources_data(prefix, context, query, |tables| tables.sourced_publishers());
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn queryables_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    resources_data(prefix, context, query, |hat_code, rtables| {
-        hat_code.get_queryables(rtables)
-    });
+    resources_data(prefix, context, query, |tables| tables.sourced_queryables());
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn queriers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    resources_data(prefix, context, query, |hat_code, rtables| {
-        hat_code.get_queriers(rtables)
-    });
+    resources_data(prefix, context, query, |tables| tables.sourced_queriers());
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
 fn tokens_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    resources_data(prefix, context, query, |hat_code, rtables| {
-        hat_code.get_tokens(rtables)
-    });
+    resources_data(prefix, context, query, |tables| tables.sourced_tokens());
 }
 
+#[tracing::instrument(level = "trace", skip_all)]
+fn linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
+    let tables = &context.runtime.state.router.tables;
+    let rtables = zread!(tables.tables);
+
+    for (region, hat) in rtables
+        .hats
+        .iter()
+        .filter(|(_, hat)| hat.whatami().is_peer() || hat.whatami().is_router())
+    {
+        let reply_key = prefix / &KeyExpr::try_from(format!("{region}")).unwrap();
+
+        if query.key_expr().intersects(&reply_key) {
+            if let Err(e) = query
+                .reply(reply_key, hat.info(WhatAmI::Router))
+                .encoding(Encoding::TEXT_PLAIN)
+                .wait()
+            {
+                tracing::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all)]
 fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
-    let reply = |keyexpr: &keyexpr, successor: ZenohIdProto| {
+    let reply = |ke: &keyexpr, successor: ZenohIdProto| {
         if let Err(e) = query
-            .reply(keyexpr, serde_json::to_vec(&json!(successor)).unwrap())
+            .reply(ke, serde_json::to_vec(&json!(successor)).unwrap())
             .encoding(Encoding::APPLICATION_JSON)
             .wait()
         {
@@ -807,34 +801,47 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
     };
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
+
     // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
 
     let suffix = query.key_expr().as_str().strip_prefix(prefix.as_str());
     if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
         if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
-            if let Some(successor) = tables.hat_code.route_successor(&rtables, src_zid, dst_zid) {
-                reply(query.key_expr(), successor);
-                return;
+            for hat in rtables
+                .hats
+                .values()
+                .filter(|hat| hat.whatami().is_router())
+            {
+                if let Some(successor) = hat.route_successor(src_zid, dst_zid) {
+                    reply(query.key_expr(), successor);
+                }
             }
         }
     }
+
     // Reply with every successor suffix matching the keyexpr.
-    let successors = tables.hat_code.route_successors(&rtables);
+    let successors = rtables
+        .hats
+        .values()
+        .filter(|hat| hat.whatami().is_router())
+        .flat_map(|hat| hat.route_successors())
+        .collect_vec();
     drop(rtables);
-    for entry in successors.iter() {
-        let keyexpr = KeyExpr::new(format!(
+    for entry in successors {
+        let ke = KeyExpr::new(format!(
             "{prefix}/src/{src}/dst/{dst}",
             src = entry.source,
             dst = entry.destination
         ))
         .unwrap();
-        if query.key_expr().intersects(&keyexpr) {
-            reply(&keyexpr, entry.successor);
+        if query.key_expr().intersects(&ke) {
+            reply(&ke, entry.successor);
         }
     }
 }
 
 #[cfg(feature = "plugins")]
+#[tracing::instrument(level = "trace", skip_all)]
 fn plugins_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     tracing::debug!("requested plugins status {:?}", query.key_expr());

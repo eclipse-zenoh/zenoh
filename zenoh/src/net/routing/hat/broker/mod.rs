@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -48,10 +48,11 @@ use crate::net::{
     routing::{
         dispatcher::{
             interests::RemoteInterest,
+            queries::LocalQueryables,
             region::{Region, RegionMap},
         },
         hat::{BaseContext, Remote},
-        router::FaceContext,
+        router::{FaceContext, LocalSubscribers},
     },
     runtime::Runtime,
 };
@@ -74,12 +75,11 @@ impl Debug for Hat {
 impl Hat {
     #[tracing::instrument(level = "trace")]
     pub(crate) fn new(region: Region) -> Self {
-        debug_assert!(region.bound().is_north());
-
+        debug_assert!(region.bound().is_south());
         Self { region }
     }
 
-    pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
+    pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
         face_state.hats[self.region].downcast_ref().unwrap()
     }
 
@@ -87,6 +87,10 @@ impl Hat {
         get_mut_unchecked(face_state).hats[self.region]
             .downcast_mut()
             .unwrap()
+    }
+
+    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
+        remote.as_any().downcast_ref().unwrap()
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -137,33 +141,39 @@ impl HatBaseTrait for Hat {
         Some(Remote(Box::new(face.clone())))
     }
 
-    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        bail!("Local sessions should not be bound to client hats");
+    fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+
+        // NOTE(regions):
+        // - The broker hat is never the north hat, thus there are no interests to re-propagate
+        // - The broker hat doesn't re-propagate entities to between clients
+
+        ctx.tables.disable_all_routes();
+
+        Ok(())
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
-        mut ctx: BaseContext,
+        ctx: BaseContext,
         _transport: &TransportUnicast,
-        other_hats: RegionMap<&dyn HatTrait>,
+        _other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
-        debug_assert!(ctx.src_face.remote_bound.is_south());
-        debug_assert!(ctx.src_face.region.bound().is_north());
-        debug_assert_eq!(self.owned_faces(ctx.tables).count(), 1);
+        debug_assert!(ctx.src_face.region.bound().is_south());
 
-        self.interests_new_face(ctx.reborrow(), &other_hats);
-        self.pubsub_new_face(ctx.reborrow(), &other_hats);
-        self.queries_new_face(ctx.reborrow(), &other_hats);
-        self.tokens_new_face(ctx.reborrow(), &other_hats);
+        // NOTE(regions):
+        // - The broker hat is never the north hat, thus there are no interests to re-propagate
+        // - The broker hat doesn't re-propagate entities between clients
+
         ctx.tables.disable_all_routes();
+
         Ok(())
     }
 
     fn close_face(&mut self, ctx: BaseContext) {
-        debug_assert!(self.owns(ctx.src_face));
-
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -214,10 +224,8 @@ impl HatBaseTrait for Hat {
         out_face: &Arc<FaceState>,
         _expr: &RoutingExpr,
     ) -> bool {
-        // REVIEW(regions): Does this make sense given that only peers do multicast?
         src_face.id != out_face.id
-            && out_face.mcast_group.is_none()
-            && src_face.mcast_group.is_none()
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
     fn info(&self, _kind: WhatAmI) -> String {
@@ -252,9 +260,9 @@ impl HatContext {
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
+    local_qabls: LocalQueryables,
     remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
@@ -265,9 +273,9 @@ impl HatFace {
         Self {
             next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
-            local_qabls: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),
@@ -277,5 +285,4 @@ impl HatFace {
 
 impl HatTrait for Hat {}
 
-#[allow(dead_code)] // FIXME(regions)
 type HatRemote = Arc<FaceState>;

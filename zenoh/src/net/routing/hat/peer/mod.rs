@@ -21,16 +21,23 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt::Debug,
+    mem,
     sync::{atomic::AtomicU32, Arc},
 };
 
-use zenoh_config::WhatAmI;
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
+    common::ZExtBody,
     core::ZenohIdProto,
     network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-        interest::InterestId,
-        Oam,
+        declare::{
+            ext::{NodeIdType, QoSType},
+            queryable::ext::QueryableInfoType,
+            QueryableId, SubscriberId, TokenId,
+        },
+        interest::{InterestId, InterestOptions},
+        oam::id::OAM_LINKSTATE,
+        Declare, DeclareBody, DeclareFinal, Oam,
     },
 };
 use zenoh_result::ZResult;
@@ -45,13 +52,18 @@ use super::{
     HatBaseTrait, HatTrait,
 };
 use crate::net::{
+    codec::Zenoh080Routing,
+    protocol::{gossip::Gossip, linkstate::LinkStateList},
     routing::{
         dispatcher::{
+            face::InterestState,
             interests::RemoteInterest,
+            queries::LocalQueryables,
             region::{Region, RegionMap},
         },
         hat::{BaseContext, Remote},
-        router::FaceContext,
+        router::{FaceContext, LocalSubscribers},
+        RoutingContext,
     },
     runtime::Runtime,
 };
@@ -61,8 +73,11 @@ mod pubsub;
 mod queries;
 mod token;
 
+use crate::net::common::AutoConnect;
+
 pub(crate) struct Hat {
     region: Region,
+    gossip: Option<Gossip>,
 }
 
 impl Debug for Hat {
@@ -74,9 +89,10 @@ impl Debug for Hat {
 impl Hat {
     #[tracing::instrument(level = "trace")]
     pub(crate) fn new(region: Region) -> Self {
-        debug_assert!(region.bound().is_north());
-
-        Self { region }
+        Self {
+            region,
+            gossip: None,
+        }
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
@@ -87,6 +103,10 @@ impl Hat {
         get_mut_unchecked(face_state).hats[self.region]
             .downcast_mut()
             .unwrap()
+    }
+
+    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
+        remote.as_any().downcast_ref().unwrap()
     }
 
     /// Returns an iterator over the [`FaceContext`]s this hat [`Self::owns`].
@@ -118,10 +138,50 @@ impl Hat {
     {
         tables.faces.values_mut().filter(|face| self.owns(face))
     }
+
+    pub(crate) fn multicast_groups<'t>(
+        &self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> {
+        tables.hats[self.region].mcast_groups.iter()
+    }
 }
 
 impl HatBaseTrait for Hat {
-    fn init(&mut self, _tables: &mut TablesData, _runtime: Runtime) -> ZResult<()> {
+    fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
+        let config_guard = runtime.config().lock();
+        let config = &config_guard.0;
+        let whatami = tables.hats[self.region].whatami;
+        let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
+        let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
+        let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
+        if gossip_target.matches(WhatAmI::Client) {
+            bail!("\"client\" is not allowed as gossip target")
+        }
+        let autoconnect = if gossip {
+            AutoConnect::gossip(config, whatami, runtime.zid().into())
+        } else {
+            AutoConnect::disabled()
+        };
+        let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
+        let router_peers_failover_brokering =
+            unwrap_or_default!(config.routing().router().peers_failover_brokering());
+        drop(config_guard);
+
+        if gossip {
+            self.gossip = Some(Gossip::new(
+                "[Gossip]".to_string(),
+                tables.zid,
+                runtime,
+                router_peers_failover_brokering,
+                gossip,
+                gossip_multihop,
+                gossip_target,
+                autoconnect,
+                wait_declares,
+                &self.region,
+            ));
+        }
         Ok(())
     }
 
@@ -138,26 +198,57 @@ impl HatBaseTrait for Hat {
     }
 
     fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
-        bail!("Local sessions should not be bound to client hats");
+        bail!("Local sessions should not be bound to peer hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
         mut ctx: BaseContext,
-        _transport: &TransportUnicast,
+        transport: &TransportUnicast,
         other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
-        debug_assert!(ctx.src_face.remote_bound.is_south());
-        debug_assert!(ctx.src_face.region.bound().is_north());
-        debug_assert_eq!(self.owned_faces(ctx.tables).count(), 1);
+
+        if let Some(net) = self.gossip.as_mut() {
+            net.add_link(transport.clone());
+        }
+
+        // NOTE(regions): we only send/recv initial interests between peers that are mutually north-bound,
+        // otherwise we are in PULL mode. In particular, the `open.return_conditions.declares` configuration
+        // option doesn't apply to region gateways.
+        let do_initial_interest =
+            ctx.src_face.region.bound().is_north() && ctx.src_face.remote_bound.is_north();
+
+        tracing::trace!(do_initial_interest);
+
+        if do_initial_interest {
+            let face_id = ctx.src_face.id;
+            get_mut_unchecked(ctx.src_face).local_interests.insert(
+                INITIAL_INTEREST_ID,
+                InterestState::new(face_id, InterestOptions::ALL, None, false),
+            );
+        }
 
         self.interests_new_face(ctx.reborrow(), &other_hats);
         self.pubsub_new_face(ctx.reborrow(), &other_hats);
         self.queries_new_face(ctx.reborrow(), &other_hats);
         self.tokens_new_face(ctx.reborrow(), &other_hats);
         ctx.tables.disable_all_routes();
+
+        if do_initial_interest {
+            (ctx.send_declare)(
+                &ctx.src_face.primitives,
+                RoutingContext::new(Declare {
+                    interest_id: Some(INITIAL_INTEREST_ID),
+                    ext_qos: QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: NodeIdType::default(),
+                    body: DeclareBody::DeclareFinal(DeclareFinal),
+                }),
+            );
+        }
+
         Ok(())
     }
 
@@ -178,16 +269,44 @@ impl HatBaseTrait for Hat {
         hat_face.local_subs.clear();
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
+
+        if let Some(net) = self.gossip.as_mut() {
+            net.remove_link(&face.zid);
+        }
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
-        _ctx: BaseContext,
-        _oam: &mut Oam,
-        _zid: &ZenohIdProto,
-        _whatami: WhatAmI,
+        ctx: BaseContext,
+        oam: &mut Oam,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
         _other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
+        if oam.id == OAM_LINKSTATE {
+            debug_assert_implies!(
+                !ctx.src_face.whatami.is_peer(),
+                ctx.src_face.remote_bound.is_south()
+            );
+
+            if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
+                if let Some(net) = self.gossip.as_mut() {
+                    use zenoh_buffers::reader::HasReader;
+                    use zenoh_codec::RCodec;
+                    let codec = Zenoh080Routing::new();
+                    let mut reader = buf.reader();
+                    let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
+                        bail!("failed to decode link state");
+                    };
+
+                    tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
+
+                    net.link_states(list.link_states, *zid, whatami);
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -214,14 +333,15 @@ impl HatBaseTrait for Hat {
         out_face: &Arc<FaceState>,
         _expr: &RoutingExpr,
     ) -> bool {
-        // REVIEW(regions): Does this make sense given that only peers do multicast?
         src_face.id != out_face.id
-            && out_face.mcast_group.is_none()
-            && src_face.mcast_group.is_none()
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
     fn info(&self, _kind: WhatAmI) -> String {
-        "graph {}".to_string()
+        self.gossip
+            .as_ref()
+            .map(|net| net.dot())
+            .unwrap_or_else(|| "graph {}".to_string())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -233,7 +353,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn whatami(&self) -> WhatAmI {
-        WhatAmI::Client
+        WhatAmI::Peer
     }
 
     fn region(&self) -> Region {
@@ -252,30 +372,42 @@ impl HatContext {
 struct HatFace {
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
-    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
     local_tokens: HashMap<Arc<Resource>, TokenId>,
     remote_tokens: HashMap<TokenId, Arc<Resource>>,
+    local_qabls: LocalQueryables,
+    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing
+            next_id: AtomicU32::new(1), // In p2p, id 0 is erserved for initial interest
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
-            local_qabls: HashMap::new(),
-            remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
+            remote_qabls: HashMap::new(),
         }
     }
 }
 
 impl HatTrait for Hat {}
 
-#[allow(dead_code)] // FIXME(regions)
+// In p2p, at connection, while no interest is sent on the network,
+// peers act as if they received an interest CurrentFuture with id 0
+// and send back a DeclareFinal with interest_id 0.
+// This 'ghost' interest is registered locally to allow tracking if
+// the DeclareFinal has been received or not (finalized).
+
+pub(crate) const INITIAL_INTEREST_ID: u32 = 0;
+
+#[inline]
+fn initial_interest(face: &FaceState) -> Option<&InterestState> {
+    face.local_interests.get(&INITIAL_INTEREST_ID)
+}
+
 type HatRemote = Arc<FaceState>;
