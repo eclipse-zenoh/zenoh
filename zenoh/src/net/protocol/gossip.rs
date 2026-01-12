@@ -35,6 +35,7 @@ use crate::net::{
         linkstate::{LinkState, LinkStateList},
         network::Network,
     },
+    routing::dispatcher::region::Region,
     runtime::{Runtime, WeakRuntime},
 };
 
@@ -55,6 +56,7 @@ impl Gossip {
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         wait_declares: bool,
+        region: &Region,
     ) -> Self {
         if gossip_multihop {
             Self::Network(Network::new(
@@ -62,12 +64,12 @@ impl Gossip {
                 zid,
                 runtime,
                 false,
-                router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
                 HashMap::new(),
+                region,
             ))
         } else {
             Self::Gossip(GossipNet::new(
@@ -282,6 +284,7 @@ impl GossipNet {
             },
             links,
             link_weights: None,
+            is_gateway: false, // TODO(regions): should this be aligned with the South ext?
         }
     }
 
