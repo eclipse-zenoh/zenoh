@@ -6333,6 +6333,8 @@ dependencies = [
  "pest_generator",
  "pest_meta",
  "potential_utf",
+ "prost 0.14.1",
+ "prost-derive 0.14.1",
  "serde_spanned",
  "serde_with",
  "serde_with_macros",

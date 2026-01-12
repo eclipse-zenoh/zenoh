@@ -43,6 +43,8 @@ pest_derive = "=2.8.0"
 pest_generator = "=2.8.0"
 pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
+prost = "=0.14.1"
+prost-derive = "=0.14.1"
 serde_spanned = "=1.0.1"
 serde_with = "=3.14.1"
 serde_with_macros = "3.14.1"
@@ -77,6 +79,8 @@ ignored = [
   "pest_generator",
   "pest_meta",
   "potential_utf",
+  "prost",
+  "prost-derive",
   "serde_spanned",
   "serde_with",
   "serde_with_macros",
