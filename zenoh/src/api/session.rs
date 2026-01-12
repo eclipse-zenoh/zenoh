@@ -632,7 +632,7 @@ impl Drop for Session {
 // When all `Session` instances are dropped, [`Session::close`] is called and cleans
 // the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 //
-// (Although it was planed to be used initially, `Weak` was in fact causing errors in the session
+// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 // closing, because the primitive implementation seemed to be used in the closing operation.)
 #[derive(Debug, Clone)]
 pub struct WeakSession(Arc<SessionInner>);
