@@ -637,6 +637,18 @@ impl Drop for Session {
 #[derive(Debug, Clone)]
 pub struct WeakSession(Arc<SessionInner>);
 
+impl PartialEq for WeakSession {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialEq<Session> for WeakSession {
+    fn eq(&self, other: &Session) -> bool {
+        *self == other.0
+    }
+}
+
 #[zenoh_macros::internal]
 impl Deref for WeakSession {
     type Target = Session;
@@ -1279,10 +1291,6 @@ impl WeakSession {
         self.0.runtime.zid()
     }
 
-    pub(crate) fn eid(&self) -> EntityId {
-        self.0.id
-    }
-
     pub(crate) fn queries_default_timeout(&self) -> Duration {
         Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms())
     }
@@ -1356,7 +1364,7 @@ impl WeakSession {
 
     pub(crate) fn undeclare_prefix(&self, expr_id: ExprId) -> ZResult<()> {
         trace!("undedeclare_prefix({expr_id})");
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         let primitives = state.primitives()?;
         if let Some(entry) = state.local_resources.get_mut(&expr_id) {
             entry.count -= 1;
@@ -2481,23 +2489,6 @@ impl WeakSession {
                 cb.call(query.clone());
             }
         }
-    }
-
-    pub(crate) fn undeclare_keyexpr(&self, expr_id: ExprId) -> ZResult<()> {
-        tracing::trace!("undeclare_keyexpr({:?})", expr_id);
-        let mut state = zwrite!(self.0.state);
-        state.local_resources.remove(&expr_id);
-
-        let primitives = state.primitives()?;
-        drop(state);
-        primitives.send_declare(&mut zenoh_protocol::network::Declare {
-            interest_id: None,
-            ext_qos: declare::ext::QoSType::DECLARE,
-            ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
-        });
-        Ok(())
     }
 
     pub(crate) fn get_publisher_qos_overwrite(&self, key_expr: &keyexpr) -> PublisherQoSConfig {
