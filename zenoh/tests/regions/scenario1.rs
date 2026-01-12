@@ -151,7 +151,7 @@ async fn test_regions_scenario1_order1_putsub() {
         "aa9110", "aa9120", "aa9130", "aa9210", "aa9220", "aa9230", "aa9310", "aa9320", "aa9330",
     ] {
         assert_eq!(
-            count!(s, ["zid" = i], "Declare subscriber", "test/**", ":N"),
+            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
             2
         );
     }
@@ -277,7 +277,7 @@ async fn test_regions_scenario1_order1_pubsub() {
         "ab9110", "ab9120", "ab9130", "ab9210", "ab9220", "ab9230", "ab9310", "ab9320", "ab9330",
     ] {
         assert_eq!(
-            count!(s, ["zid" = i], "Declare subscriber", "test/**", ":N"),
+            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
             3
         );
     }
@@ -393,7 +393,7 @@ async fn test_regions_scenario1_order2_putsub() {
         "ac9110", "ac9120", "ac9130", "ac9210", "ac9220", "ac9230", "ac9310", "ac9320", "ac9330",
     ] {
         assert_eq!(
-            count!(s, ["zid" = i], "Declare subscriber", "test/**", ":N"),
+            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
             2
         );
     }
@@ -519,7 +519,7 @@ async fn test_regions_scenario1_order2_pubsub() {
         "ad9110", "ad9120", "ad9130", "ad9210", "ad9220", "ad9230", "ad9310", "ad9320", "ad9330",
     ] {
         assert_eq!(
-            count!(s, ["zid" = i], "Declare subscriber", "test/**", ":N"),
+            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
             3
         );
     }

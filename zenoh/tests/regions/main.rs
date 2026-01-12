@@ -65,15 +65,40 @@ impl Node {
 
 #[macro_export]
 macro_rules! count {
-    ($storage:expr  $(, [$k:literal = $v:expr])* $(, $p:literal)* $(,)?) => {
+    ($storage:expr, $($span:ident{$($k:ident=$v:expr )*}:)* $($p:literal $(,)?)* ) => {
         $storage.all_events().filter(|e| {
-            true
-                $(&& e.parent().is_some_and(|p| p.value($k).is_some_and(|v|v.as_debug_str().is_some_and(|v| v == $v))))*
-                && e.message().is_some_and(|m| {
-                    true
-                        $(&&  m.contains($p))*
-                })
+            $(
+                let span_name = stringify!($span);
+                let mut found = false;
+                let mut parent = e.parent();
+                while let Some(span) = parent {
+                    if span.metadata().name() == span_name {
+                        $(
+                            let key = stringify!($k);
+                            if !span.value(key).is_some_and(|v|
+                                    v.as_str().is_some_and(|v| v == $v || ($v.ends_with("...") && v.starts_with(&$v[0..$v.len()-3])))
+                                    || v.as_debug_str().is_some_and(|v| v == $v || ($v.ends_with("...") && v.starts_with(&$v[0..$v.len()-3])))
+                            ) {
+                                parent = span.parent();
+                                continue
+                            }
+                        )*
+                        found = true;
+                        break;
+                    }
+                    parent = span.parent();
+                }
+
+                if !found {
+                    return false
+                }
+            )*
+
+            e.message().is_some_and(|m| {
+                true
+                    $(&&  m.contains($p))*
             })
-            .count()
+        })
+        .count()
     }
 }

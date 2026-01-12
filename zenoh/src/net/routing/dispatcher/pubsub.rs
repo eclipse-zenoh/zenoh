@@ -63,6 +63,7 @@ impl Face {
                     expr = [prefix.expr(), expr.suffix.as_ref()].concat()
                 )
                 .entered();
+                tracing::debug!("()");
 
                 let res = Resource::get_resource(&prefix, &expr.suffix);
                 let (mut res, mut wtables) =
