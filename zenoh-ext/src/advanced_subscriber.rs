@@ -834,7 +834,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let drop_callback = {
             let statesref = statesref.clone();
             move || {
-                statesref.lock().unwrap().callback.take();
+                let mut states = statesref.lock().unwrap();
+                states.callback.take();
+                states.miss_handlers.clear();
             }
         };
 
