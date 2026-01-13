@@ -361,7 +361,7 @@ async fn rx_task(
 
     let lease_tracker = TimeoutTracker::new(lease);
     if link.link.supports_priorities() {
-        let (res, _, _) = select_all((Priority::MAX as u8..Priority::MIN as u8).map(|prio| {
+        let (res, _, _) = select_all((Priority::MAX as u8..=Priority::MIN as u8).map(|prio| {
             let mut link = link.clone();
             let transport = transport.clone();
             let token = token.clone();
