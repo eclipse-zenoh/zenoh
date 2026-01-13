@@ -462,11 +462,6 @@ impl LinkEvent {
     pub fn link(&self) -> &Link {
         &self.link
     }
-
-    /// Returns the ZenohId of the transport this link belongs to
-    pub fn transport_zid(&self) -> &ZenohId {
-        self.link.zid()
-    }
 }
 
 impl CallbackParameter for LinkEvent {

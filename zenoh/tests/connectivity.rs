@@ -180,7 +180,7 @@ mod tests {
             "Link added: {} -> {} (transport: {})",
             event.link().src(),
             event.link().dst(),
-            event.transport_zid()
+            event.link().zid()
         );
 
         // Close session2 to trigger link removal event
