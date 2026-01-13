@@ -239,6 +239,19 @@ impl Transport {
             is_shm: peer.is_shm,
         }
     }
+
+    /// Constructs an uninitialized empty Transport.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        Transport {
+            zid: ZenohId::default(),
+            whatami: WhatAmI::default(),
+            is_qos: false,
+            is_multicast: false,
+            #[cfg(feature = "shared-memory")]
+            is_shm: false,
+        }
+    }
 }
 
 #[cfg(feature = "unstable")]
@@ -348,6 +361,23 @@ impl Link {
             reliability,
         }
     }
+
+    /// Constructs an uninitialized empty Link.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        Link {
+            zid: ZenohId::default(),
+            src: Locator::empty(),
+            dst: Locator::empty(),
+            group: None,
+            mtu: 0,
+            is_streamed: false,
+            interfaces: Vec::new(),
+            auth_identifier: None,
+            priorities: None,
+            reliability: None,
+        }
+    }
 }
 
 #[cfg(feature = "unstable")]
@@ -424,6 +454,17 @@ pub struct TransportEvent {
     pub(crate) transport: Transport,
 }
 
+impl TransportEvent {
+    /// Constructs an uninitialized empty TransportEvent.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        TransportEvent {
+            kind: SampleKind::Put,
+            transport: Transport::empty(),
+        }
+    }
+}
+
 #[cfg(feature = "unstable")]
 impl TransportEvent {
     /// Returns the kind of event (Put for opened, Delete for closed)
@@ -449,6 +490,17 @@ impl CallbackParameter for TransportEvent {
 pub struct LinkEvent {
     pub(crate) kind: SampleKind, // Put = added, Delete = removed
     pub(crate) link: Link,
+}
+
+impl LinkEvent {
+    /// Constructs an uninitialized empty LinkEvent.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        LinkEvent {
+            kind: SampleKind::Put,
+            link: Link::empty(),
+        }
+    }
 }
 
 #[cfg(feature = "unstable")]
