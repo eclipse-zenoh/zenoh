@@ -20,7 +20,7 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
 use zenoh_protocol::network::{
-    declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId},
+    declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
     interest::InterestId,
     Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
     Interest,
@@ -410,7 +410,7 @@ impl HatInterestTrait for Hat {
                 .insert(res.clone(), id);
             id
         } else {
-            SubscriberId::default()
+            TokenId::default()
         };
 
         let wire_expr = Resource::decl_key(&res, &mut dst);

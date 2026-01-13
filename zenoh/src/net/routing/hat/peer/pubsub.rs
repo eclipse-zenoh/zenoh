@@ -248,34 +248,36 @@ impl HatPubSubTrait for Hat {
         }
 
         if src_face.region.bound().is_south() {
-            for face in self.owned_faces(tables) {
-                if face.remote_bound.is_south() {
-                    route.try_insert(face.id, || {
-                        let has_interest_finalized = expr
-                            .resource()
-                            .and_then(|res| res.face_ctxs.get(&face.id))
-                            .is_some_and(|ctx| ctx.subscriber_interest_finalized);
-                        (!has_interest_finalized).then(|| {
-                            tracing::trace!(dst = %face, res = ?expr.resource(), reason = "unfinalized subscriber interest");
-                            let wire_expr = expr.get_best_key(face.id);
-                            Direction {
-                                dst_face: face.clone(),
-                                wire_expr: wire_expr.to_owned(),
-                                node_id: DEFAULT_NODE_ID,
-                            }
-                        })
-                    });
-                } else if initial_interest(face).is_some_and(|i| !i.finalized) {
-                    tracing::trace!(dst = %face, reason = "unfinalized initial interest");
-                    route.insert(face.id, || {
+            if let Some(face) = self.owned_faces(tables).find(|f| f.remote_bound.is_south()) {
+                route.try_insert(face.id, || {
+                    let has_interest_finalized = expr
+                        .resource()
+                        .and_then(|res| res.face_ctxs.get(&face.id))
+                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    (!has_interest_finalized).then(|| {
+                        tracing::trace!(dst = %face, res = ?expr.resource(), reason = "unfinalized subscriber interest");
                         let wire_expr = expr.get_best_key(face.id);
                         Direction {
                             dst_face: face.clone(),
                             wire_expr: wire_expr.to_owned(),
                             node_id: DEFAULT_NODE_ID,
                         }
-                    });
-                }
+                    })
+                });
+            }
+
+            for face in self.owned_faces(tables).filter(|f| {
+                f.remote_bound.is_north() && initial_interest(f).is_some_and(|i| !i.finalized)
+            }) {
+                tracing::trace!(dst = %face, reason = "unfinalized initial interest");
+                route.insert(face.id, || {
+                    let wire_expr = expr.get_best_key(face.id);
+                    Direction {
+                        dst_face: face.clone(),
+                        wire_expr: wire_expr.to_owned(),
+                        node_id: DEFAULT_NODE_ID,
+                    }
+                });
             }
         }
 

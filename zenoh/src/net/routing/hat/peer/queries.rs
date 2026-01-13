@@ -272,27 +272,13 @@ impl HatQueriesTrait for Hat {
 
         if src_face.region.bound().is_south() {
             // TODO: BestMatching: What if there is a local compete ?
-            for face in self.owned_faces(tables) {
-                if face.remote_bound.is_south() {
-                    let has_interest_finalized = expr
-                        .resource()
-                        .and_then(|res| res.face_ctxs.get(&face.id))
-                        .is_some_and(|ctx| ctx.queryable_interest_finalized);
-                    if !has_interest_finalized {
-                        tracing::trace!(dst = %face, reason = "unfinalized queryable interest");
-                        let wire_expr = expr.get_best_key(face.id);
-                        route.push(QueryTargetQabl {
-                            dir: Direction {
-                                dst_face: face.clone(),
-                                wire_expr: wire_expr.to_owned(),
-                                node_id: DEFAULT_NODE_ID,
-                            },
-                            info: None,
-                            region: self.region,
-                        });
-                    }
-                } else if initial_interest(face).is_some_and(|i| !i.finalized) {
-                    tracing::trace!(dst = %face, reason = "unfinalized initial interest");
+            if let Some(face) = self.owned_faces(tables).find(|f| f.remote_bound.is_south()) {
+                let has_interest_finalized = expr
+                    .resource()
+                    .and_then(|res| res.face_ctxs.get(&face.id))
+                    .is_some_and(|ctx| ctx.queryable_interest_finalized);
+                if !has_interest_finalized {
+                    tracing::trace!(dst = %face, reason = "unfinalized queryable interest");
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         dir: Direction {
@@ -304,6 +290,22 @@ impl HatQueriesTrait for Hat {
                         region: self.region,
                     });
                 }
+            }
+
+            for face in self.owned_faces(tables).filter(|f| {
+                f.remote_bound.is_north() && initial_interest(f).is_some_and(|i| !i.finalized)
+            }) {
+                tracing::trace!(dst = %face, reason = "unfinalized initial interest");
+                let wire_expr = expr.get_best_key(face.id);
+                route.push(QueryTargetQabl {
+                    dir: Direction {
+                        dst_face: face.clone(),
+                        wire_expr: wire_expr.to_owned(),
+                        node_id: DEFAULT_NODE_ID,
+                    },
+                    info: None,
+                    region: self.region,
+                });
             }
         }
 

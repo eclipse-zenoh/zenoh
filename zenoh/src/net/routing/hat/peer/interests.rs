@@ -100,8 +100,9 @@ impl HatInterestTrait for Hat {
         res: Option<Arc<Resource>>,
         src: &Remote,
     ) -> Option<CurrentInterest> {
+        debug_assert_ne!(msg.mode, InterestMode::Final);
         debug_assert!(self.region().bound().is_north());
-        debug_assert_eq!(
+        debug_assert_implies!(
             ctx.src_face.region.bound().is_north(),
             ctx.src_face.whatami.is_peer()
         );
@@ -113,21 +114,37 @@ impl HatInterestTrait for Hat {
             mode: msg.mode,
         });
 
-        let interests_timeout = ctx.tables.interests_timeout;
+        let initial_interest_peers = self.owned_faces(ctx.tables).filter(|f| {
+            f.remote_bound.is_north()
+                && f.whatami.is_peer()
+                && msg.options.tokens()
+                && msg.mode == InterestMode::Current
+                && !initial_interest(f).is_none_or(|i| i.finalized)
+        });
 
-        for mut dst in self
-            .owned_faces(ctx.tables)
-            .filter(|f| {
-                f.remote_bound.is_south()
-                    || (f.whatami.is_peer()
-                        && msg.options.tokens()
-                        && msg.mode == InterestMode::Current
-                        // REVIEW(regions): is this necessary? (we don't do initial interest with gateways)
-                        && !initial_interest(f).is_none_or(|i| i.finalized))
-            })
-            .cloned()
-            .collect_vec()
-        {
+        // NOTE(regions): Current interests are stateless, i.e. gateways don't register
+        // inbound/outbound token propagation. For this reason, we pick at most one destination
+        // for Current interests; otherwise we would wind up with duplicate tokens.
+        let dsts = if msg.mode == InterestMode::Current {
+            initial_interest_peers
+                .chain(
+                    self.owned_faces(ctx.tables)
+                        .find(|f| f.remote_bound.is_south())
+                        .into_iter(),
+                )
+                .cloned()
+                .collect_vec()
+        } else {
+            initial_interest_peers
+                .chain(
+                    self.owned_faces(ctx.tables)
+                        .filter(|f| f.remote_bound.is_south()),
+                )
+                .cloned()
+                .collect_vec()
+        };
+
+        for mut dst in dsts {
             let id = self.face_hat(&dst).next_id.fetch_add(1, Ordering::SeqCst);
             let dst_id = dst.id;
             get_mut_unchecked(&mut dst).local_interests.insert(
@@ -155,7 +172,7 @@ impl HatInterestTrait for Hat {
                     &dst,
                     ctx.tables_lock,
                     id,
-                    interests_timeout,
+                    ctx.tables.interests_timeout,
                 );
             }
             let wire_expr = res.as_ref().map(|res| Resource::decl_key(res, &mut dst));
@@ -312,8 +329,6 @@ impl HatInterestTrait for Hat {
             );
             return None;
         };
-
-        tracing::trace!(interest = ?pending_interest.interest);
 
         Some(pending_interest.interest.as_ref().clone())
     }
@@ -581,32 +596,39 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.region().bound().is_south());
 
-        let dst = self.hat_remote(&interest.src);
+        let mut dst = self.hat_remote(&interest.src).clone();
 
         debug_assert!(dst.region.bound().is_south());
 
         // TODO(regions*): is this necessary?
-        if self.face_hat(dst).local_tokens.contains_key(&res) {
+        if self.face_hat(&dst).local_tokens.contains_key(&res) {
             return;
         }
 
-        // FIXME(regions*)
-        // let wire_expr = Resource::decl_key(&res, &mut dst.clone());
-        let wire_expr = zenoh_protocol::core::WireExpr::empty()
-            .with_suffix(res.expr())
-            .to_owned();
+        let id = if interest.mode.is_future() {
+            let id = self
+                .face_hat(ctx.src_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(&mut dst)
+                .local_tokens
+                .insert(res.clone(), id);
+            id
+        } else {
+            TokenId::default()
+        };
+
+        let wire_expr = Resource::decl_key(&res, &mut dst.clone());
+        tracing::trace!(?dst);
         (ctx.send_declare)(
-            &ctx.src_face.primitives,
+            &dst.primitives,
             RoutingContext::with_expr(
                 Declare {
                     interest_id: Some(interest.src_interest_id),
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareToken(DeclareToken {
-                        id: TokenId::default(),
-                        wire_expr,
-                    }),
+                    body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                 },
                 res.expr().to_string(),
             ),
