@@ -42,14 +42,13 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{Address, Config, EndPoint, Locator, Priority},
+    core::{Address, EndPoint, Locator, Metadata, Priority},
+    network::declare::token::flag::M,
     transport::BatchSize,
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror, ZError, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
-
-const MULTISTREAM_CONFIG_KEY: &str = "multistream";
 
 /// Quic endpoint `multistream` config
 enum MultiStreamConfig {
@@ -63,13 +62,19 @@ enum MultiStreamConfig {
 
 impl MultiStreamConfig {
     /// Parse multistream configuration.
-    fn new(config: Config) -> ZResult<Self> {
-        Ok(match config.get(MULTISTREAM_CONFIG_KEY) {
-            Some("false") => Self::Disabled,
-            Some("true") => Self::Enabled,
-            None | Some("auto") => Self::Auto,
-            Some(s) => bail!("Invalid multistream config: {s}"),
-        })
+    fn new(metadata: Metadata) -> ZResult<Self> {
+        let multistream = metadata.get(Metadata::MULTISTREAM).unwrap_or("auto");
+        if multistream == "auto" {
+            return Ok(Self::Auto);
+        }
+        if multistream
+            .parse()
+            .map_err(|_| zerror!("Invalid multistream config:  {multistream}"))?
+        {
+            Ok(Self::Enabled)
+        } else {
+            Ok(Self::Disabled)
+        }
     }
 
     /// Returns the list of protocols supported for Quic ALPN.
@@ -478,7 +483,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             )
         }
 
-        let multistream = MultiStreamConfig::new(epconf)?;
+        let multistream = MultiStreamConfig::new(endpoint.metadata())?;
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
@@ -588,7 +593,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             bail!("No QUIC configuration provided");
         };
 
-        let multistream = MultiStreamConfig::new(epconf)?;
+        let multistream = MultiStreamConfig::new(endpoint.metadata())?;
 
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
