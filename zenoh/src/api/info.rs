@@ -476,6 +476,11 @@ impl TransportEvent {
     pub fn transport(&self) -> &Transport {
         &self.transport
     }
+
+    /// Returns a mutable reference to the transport
+    pub fn transport_mut(&mut self) -> &mut Transport {
+        &mut self.transport
+    }
 }
 
 impl CallbackParameter for TransportEvent {
@@ -513,6 +518,11 @@ impl LinkEvent {
     /// Returns a reference to the link
     pub fn link(&self) -> &Link {
         &self.link
+    }
+
+    /// Returns a mutable reference to the link
+    pub fn link_mut(&mut self) -> &mut Link {
+        &mut self.link
     }
 }
 
