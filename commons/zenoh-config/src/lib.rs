@@ -1323,6 +1323,15 @@ impl Config {
                         Ok(c) => zerror!("Invalid configuration: {}", c).into(),
                         Err(e) => zerror!("YAML error: {:?}", e).into(),
                     }),
+                    Some("toml") => {
+                        match toml::Deserializer::parse(&content) {
+                            Ok(de) => Config::from_deserializer(de).map_err(|e| match e {
+                                Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                                Err(e) => zerror!("TOML deserization error: {:?}", e).into(),
+                            }),
+                            Err(e) => bail!("TOML parsing error: {:?}", e),
+                        }
+                    },
                     Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
                     None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")
                 }

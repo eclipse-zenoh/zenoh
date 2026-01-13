@@ -37,6 +37,7 @@ serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 serde_yaml = { workspace = true }
+toml = { workspace = true }
 tracing = { workspace = true }
 uhlc = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
