@@ -41,3 +41,7 @@ test-group = 'serial'
 [[profile.default.overrides]]
 filter = 'test(scenario2::)'
 test-group = 'serial'
+
+[[profile.default.overrides]]
+filter = 'test(scenario3::)'
+test-group = 'serial'
