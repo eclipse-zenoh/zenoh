@@ -19,11 +19,10 @@ mod common;
 #[cfg(feature = "unstable")]
 mod tests {
     use std::{
+        fmt::Debug,
         sync::{atomic::AtomicUsize, Arc},
         time::Duration,
     };
-
-    use std::fmt::Debug;
 
     use zenoh::sample::SampleKind;
 
@@ -31,10 +30,7 @@ mod tests {
         close_session, open_session_connect, open_session_listen, open_session_unicast,
     };
 
-    async fn collect_events<T: Debug>(
-        events: &flume::Receiver<T>,
-        timeout: Duration,
-    ) -> Vec<T> {
+    async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
         let mut collected = Vec::new();
         while let Ok(event) = tokio::time::timeout(timeout, events.recv_async()).await {
             let event = event.expect("Channel closed");
@@ -127,8 +123,11 @@ mod tests {
 
         // Collect transport opened events - should be exactly 1 Put
         let put_events = collect_events(&events, Duration::from_millis(200)).await;
-        assert!(put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
-            "Expected exactly 1 Put event, got {:?}", put_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
+        assert!(
+            put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
+            "Expected exactly 1 Put event, got {:?}",
+            put_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+        );
 
         // Close session2 to trigger transport close event
         session2.close().await.unwrap();
@@ -136,8 +135,11 @@ mod tests {
 
         // Collect transport closed events - should be exactly 1 Delete
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
-        assert!(delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
-            "Expected exactly 1 Delete event, got {:?}", delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
+        assert!(
+            delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Expected exactly 1 Delete event, got {:?}",
+            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+        );
 
         session1.close().await.unwrap();
     }
@@ -162,8 +164,11 @@ mod tests {
 
         // Collect link added events - should be exactly 1 Put
         let put_events = collect_events(&events, Duration::from_millis(200)).await;
-        assert!(put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
-            "Expected exactly 1 Put event, got {:?}", put_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
+        assert!(
+            put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
+            "Expected exactly 1 Put event, got {:?}",
+            put_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+        );
 
         // Close session2 to trigger link removal
         session2.close().await.unwrap();
@@ -171,8 +176,11 @@ mod tests {
 
         // Collect link removed events - should be exactly 1 Delete
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
-        assert!(delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
-            "Expected exactly 1 Delete event, got {:?}", delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
+        assert!(
+            delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Expected exactly 1 Delete event, got {:?}",
+            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+        );
 
         session1.close().await.unwrap();
     }
