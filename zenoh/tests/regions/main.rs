@@ -13,6 +13,7 @@
 //
 
 mod scenario1;
+mod scenario2;
 
 use std::time::Duration;
 
