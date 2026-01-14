@@ -18,7 +18,6 @@
 
 use std::time::Duration;
 
-use serial_test::serial;
 use zenoh_config::WhatAmI::Peer;
 use zenoh_core::{lazy_static, ztimeout};
 
@@ -41,7 +40,6 @@ fn init_tracing_subscriber() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-#[serial]
 async fn test_regions_scenario2_order1_putsub() {
     init_tracing_subscriber();
 
@@ -145,7 +143,6 @@ async fn test_regions_scenario2_order1_putsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-#[serial]
 async fn test_regions_scenario2_order1_pubsub() {
     init_tracing_subscriber();
 
@@ -259,7 +256,6 @@ async fn test_regions_scenario2_order1_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-#[serial]
 async fn test_regions_scenario2_order2_putsub() {
     init_tracing_subscriber();
 
@@ -363,7 +359,6 @@ async fn test_regions_scenario2_order2_putsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-#[serial]
 async fn test_regions_scenario2_order2_pubsub() {
     init_tracing_subscriber();
 
