@@ -146,9 +146,6 @@ jobs:
       - name: Clippy zenoh
         run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
 
-      - name: Clippy zenoh internal_config
-        run: cargo +stable clippy -p zenoh --all-targets --features internal_config -- --deny warnings
-
       - name: Clippy zenoh unstable
         run: cargo +stable clippy -p zenoh --all-targets --features unstable -- --deny warnings
 
@@ -228,19 +225,23 @@ jobs:
 
       - name: Run tests stable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -p zenoh -F internal_config
+        run: sudo cargo nextest run -p zenoh
 
       - name: Run tests stable
         if: ${{ matrix.os != 'macos-latest' }}
-        run: cargo nextest run -p zenoh -F internal_config
+        run: cargo nextest run -p zenoh
 
       - name: Run tests with unstable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: |
+          sudo cargo build -p zenoh-plugin-rest --lib
+          sudo cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with unstable
         if: ${{ matrix.os != 'macos-latest' }}
-        run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: |
+          cargo build -p zenoh-plugin-rest --lib
+          cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -252,13 +253,13 @@ jobs:
 
       - name: Run tests with SHM (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: sudo cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
           RUST_BACKTRACE: 1
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -271,8 +272,8 @@ jobs:
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          sudo prlimit --memlock=unlimited --pid=$$ 
-          cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Rename junit test report
         if: ${{ matrix.os == 'ubuntu-latest' }}

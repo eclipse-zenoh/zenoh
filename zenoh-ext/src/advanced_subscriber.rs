@@ -22,7 +22,7 @@ use zenoh::{
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
-    sample::{Locality, Sample, SampleKind, SourceSn},
+    sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId},
     Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
     KE_SUB,
@@ -48,6 +48,7 @@ use {
 
 use crate::{
     advanced_cache::{ke_liveliness, KE_UHLC},
+    utils::WrappingSn,
     z_deserialize,
 };
 
@@ -242,8 +243,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
 impl<'a, 'c, Handler, const BACKGROUND: bool>
     AdvancedSubscriberBuilder<'a, '_, 'c, Handler, BACKGROUND>
 {
-    /// Restrict the matching publications that will be received by this [`Subscriber`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// Restrict the matching publications that will be received by this [`Subscriber`] to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -297,6 +297,7 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     }
 
     /// A key expression added to the liveliness token key expression.
+    ///
     /// It can be used to convey metadata.
     #[zenoh_macros::unstable]
     pub fn subscriber_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
@@ -397,7 +398,7 @@ struct Period {
 struct State {
     next_id: usize,
     global_pending_queries: u64,
-    sequenced_states: HashMap<EntityGlobalId, SourceState<u32>>,
+    sequenced_states: HashMap<EntityGlobalId, SourceState<WrappingSn>>,
     timestamped_states: HashMap<ID, SourceState<Timestamp>>,
     session: Session,
     key_expr: KeyExpr<'static>,
@@ -547,10 +548,11 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         #[inline]
         fn deliver_and_flush(
             sample: Sample,
-            mut source_sn: SourceSn,
+            source_sn: impl Into<WrappingSn>,
             callback: &Callback<Sample>,
-            state: &mut SourceState<u32>,
+            state: &mut SourceState<WrappingSn>,
         ) {
+            let mut source_sn = source_sn.into();
             callback.call(sample);
             state.last_delivered = Some(source_sn);
             while let Some(sample) = state.pending_samples.remove(&(source_sn + 1)) {
@@ -562,7 +564,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
 
         let entry = states.sequenced_states.entry(*source_info.source_id());
         let new = matches!(&entry, Entry::Vacant(_));
-        let state = entry.or_insert(SourceState::<u32> {
+        let state = entry.or_insert(SourceState::<WrappingSn> {
             last_delivered: None,
             pending_queries: 0,
             pending_samples: BTreeMap::new(),
@@ -570,12 +572,12 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         if state.last_delivered.is_none() && states.global_pending_queries != 0 {
             // Avoid going through the Map if history_depth == 1
             if states.history_depth == 1 {
-                state.last_delivered = Some(source_info.source_sn());
+                state.last_delivered = Some(source_info.source_sn().into());
                 states.callback.call(sample);
             } else {
                 state
                     .pending_samples
-                    .insert(source_info.source_sn(), sample);
+                    .insert(source_info.source_sn().into(), sample);
                 if state.pending_samples.len() >= states.history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
                         deliver_and_flush(sample, sn, &states.callback, state);
@@ -589,7 +591,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 if states.retransmission {
                     state
                         .pending_samples
-                        .insert(source_info.source_sn(), sample);
+                        .insert(source_info.source_sn().into(), sample);
                 } else {
                     tracing::info!(
                         "Sample missed: missed {} samples from {:?}.",
@@ -603,7 +605,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                         });
                     }
                     states.callback.call(sample);
-                    state.last_delivered = Some(source_info.source_sn());
+                    state.last_delivered = Some(source_info.source_sn().into());
                 }
             }
         } else {
@@ -638,7 +640,7 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
 }
 
 #[zenoh_macros::unstable]
-fn seq_num_range(start: Option<u32>, end: Option<u32>) -> String {
+fn seq_num_range(start: Option<WrappingSn>, end: Option<WrappingSn>) -> String {
     match (start, end) {
         (Some(start), Some(end)) => format!("_sn={start}..{end}"),
         (Some(start), None) => format!("_sn={start}.."),
@@ -968,7 +970,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         );
                                         let entry = states.sequenced_states.entry(source_id);
                                         let new = matches!(&entry, Entry::Vacant(_));
-                                        let state = entry.or_insert(SourceState::<u32> {
+                                        let state = entry.or_insert(SourceState::<WrappingSn> {
                                             last_delivered: None,
                                             pending_queries: 0,
                                             pending_samples: BTreeMap::new(),
@@ -1143,7 +1145,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         EntityGlobalId::new(zid, eid)
                     };
 
-                    let Ok(heartbeat_sn) = z_deserialize::<u32>(sample_hb.payload()) else {
+                    let Ok(heartbeat_sn) = z_deserialize::<WrappingSn>(sample_hb.payload()) else {
                         tracing::debug!(
                             "AdvancedSubscriber{{}}: Skipping invalid heartbeat payload on '{}'",
                             heartbeat_keyexpr
@@ -1163,7 +1165,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
                         }
                     }
 
-                    let state = entry.or_insert(SourceState::<u32> {
+                    let state = entry.or_insert(SourceState::<WrappingSn> {
                         last_delivered: None,
                         pending_queries: 0,
                         pending_samples: BTreeMap::new(),
@@ -1266,6 +1268,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns a reference to this subscriber's handler.
+    ///
     /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
     /// The default handler is [`zenoh::handlers::DefaultHandler`].
     #[zenoh_macros::unstable]
@@ -1274,6 +1277,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 
     /// Returns a mutable reference to this subscriber's handler.
+    ///
     /// An handler is anything that implements [`zenoh::handlers::IntoHandler`].
     /// The default handler is [`zenoh::handlers::DefaultHandler`].
     #[zenoh_macros::unstable]
@@ -1335,7 +1339,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
 #[zenoh_macros::unstable]
 #[inline]
 fn flush_sequenced_source(
-    state: &mut SourceState<u32>,
+    state: &mut SourceState<WrappingSn>,
     callback: &Callback<Sample>,
     source_id: &EntityGlobalId,
     miss_handlers: &HashMap<usize, Callback<Miss>>,

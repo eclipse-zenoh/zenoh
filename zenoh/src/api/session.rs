@@ -16,7 +16,10 @@ use std::{
     convert::TryInto,
     fmt, mem,
     ops::Deref,
-    sync::{atomic::Ordering, Arc, Mutex, RwLock, RwLockReadGuard},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock, RwLockReadGuard,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -54,7 +57,7 @@ use zenoh_protocol::{
         ext,
         interest::{InterestId, InterestMode, InterestOptions},
         push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
-        Response, ResponseFinal,
+        Response, ResponseFinal, UndeclareKeyExpr,
     },
     zenoh::{
         query::{self, ext::QueryBodyType},
@@ -91,7 +94,7 @@ use crate::{
         encoding::Encoding,
         handlers::{Callback, DefaultHandler},
         info::SessionInfo,
-        key_expr::{KeyExpr, KeyExprInner},
+        key_expr::KeyExpr,
         liveliness::Liveliness,
         matching::{MatchingListenerState, MatchingStatus, MatchingStatusType},
         publisher::{Priority, PublisherState},
@@ -485,6 +488,7 @@ impl Resource {
 pub(crate) struct LocalResource {
     resource: Resource,
     declared: bool,
+    count: usize,
 }
 
 impl LocalResource {
@@ -518,9 +522,10 @@ pub trait Undeclarable<S = ()>: UndeclarableSealed<S> {}
 
 impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 
+#[allow(dead_code)] // to allow using `id` with `unstable` feature
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
-    weak_counter: Mutex<usize>,
+    strong_counter: AtomicUsize,
     pub(crate) runtime: GenericRuntime,
     pub(crate) state: RwLock<SessionState>,
     pub(crate) id: EntityId,
@@ -602,16 +607,14 @@ impl fmt::Debug for Session {
 
 impl Clone for Session {
     fn clone(&self) -> Self {
-        let _weak = self.0.weak_counter.lock().unwrap();
+        self.0.strong_counter.fetch_add(1, Ordering::Relaxed);
         Self(self.0.clone())
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        let weak = self.0.weak_counter.lock().unwrap();
-        if Arc::strong_count(&self.0) == *weak + /* the `Arc` currently dropped */ 1 {
-            drop(weak);
+        if self.0.strong_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
             if let Err(error) = self.close().wait() {
                 tracing::error!(error)
             }
@@ -626,34 +629,19 @@ impl Drop for Session {
 /// When all `Session` instances are dropped, [`Session::close`] is called and cleans
 /// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
 ///
-/// The pseudo-weak algorithm relies on a counter wrapped in a mutex. It was indeed the simplest
-/// to implement, because atomic manipulations to achieve these semantics would not have been
-/// trivial at all — what could happen if a pseudo-weak is cloned while the last session instance
-/// is dropped? With a mutex, it's simple, and it works perfectly fine, as we don't care about the
-/// performance penalty when it comes to session entities cloning/dropping.
-///
 /// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 /// closing, because the primitive implementation seemed to be used in the closing operation.)
+#[derive(Clone)]
 pub(crate) struct WeakSession(Arc<SessionInner>);
 
 impl WeakSession {
     fn new(session: &Arc<SessionInner>) -> Self {
-        let mut weak = session.weak_counter.lock().unwrap();
-        *weak += 1;
         Self(session.clone())
     }
 
     #[zenoh_macros::internal]
     pub(crate) fn session(&self) -> &Session {
         Session::ref_cast(&self.0)
-    }
-}
-
-impl Clone for WeakSession {
-    fn clone(&self) -> Self {
-        let mut weak = self.0.weak_counter.lock().unwrap();
-        *weak += 1;
-        Self(self.0.clone())
     }
 }
 
@@ -668,13 +656,6 @@ impl Deref for WeakSession {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl Drop for WeakSession {
-    fn drop(&mut self) {
-        let mut weak = self.0.weak_counter.lock().unwrap();
-        *weak -= 1;
     }
 }
 
@@ -710,7 +691,7 @@ impl Session {
                 publisher_qos.into(),
             ));
             let session = Session(Arc::new(SessionInner {
-                weak_counter: Mutex::new(0),
+                strong_counter: AtomicUsize::new(1),
                 runtime: runtime.clone(),
                 state,
                 id: runtime.next_id(),
@@ -899,7 +880,7 @@ impl Session {
 
     /// Returns the [`ShmProviderState`](ShmProviderState) associated with the current [`Session`](Session)’s [`Runtime`](Runtime).
     ///
-    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.  
+    /// Each [`Runtime`](Runtime) may create its own provider to manage internal optimizations.
     /// This method exposes that provider so it can also be accessed at the application level.
     ///
     /// Note that the provider may not be immediately available or may be disabled via configuration.
@@ -1134,37 +1115,11 @@ impl Session {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
-        let session_id = self.0.id;
-        ResolveClosure::new(move || {
-            let key_expr: KeyExpr = key_expr?;
-            let prefix_len = key_expr.len() as u32;
-            let expr_id = self
-                .0
-                .declare_prefix(key_expr.as_str(), true)
-                .wait()?
-                .unwrap();
-            let key_expr = match key_expr.0 {
-                KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                    KeyExpr(KeyExprInner::BorrowedWire {
-                        key_expr,
-                        expr_id,
-                        mapping: Mapping::Sender,
-                        prefix_len,
-                        session_id,
-                    })
-                }
-                KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
-                    KeyExpr(KeyExprInner::Wire {
-                        key_expr,
-                        expr_id,
-                        mapping: Mapping::Sender,
-                        prefix_len,
-                        session_id,
-                    })
-                }
-            };
-            Ok(key_expr)
-        })
+        ResolveClosure::new(move || key_expr?.declare(self, true))
+    }
+
+    pub(crate) fn declare_nonwild_prefix<'a>(&self, key_expr: KeyExpr<'a>) -> ZResult<KeyExpr<'a>> {
+        key_expr.declare_nonwild_prefix(self, false)
     }
 
     /// Publish [`SampleKind::Put`] sample directly from the session. This is a shortcut for declaring
@@ -1348,10 +1303,13 @@ impl SessionInner {
             let primitives = state.primitives()?;
             match state
                 .local_resources
-                .iter()
+                .iter_mut()
                 .find(|(_expr_id, res)| res.resource.name() == prefix)
             {
-                Some((expr_id, res)) if force || res.declared => Ok(Some(*expr_id)),
+                Some((expr_id, res)) if force || res.declared => {
+                    res.count += 1;
+                    Ok(Some(*expr_id))
+                }
                 Some(_) => Ok(None),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -1373,6 +1331,7 @@ impl SessionInner {
                         LocalResource {
                             resource: res,
                             declared: false,
+                            count: 1,
                         },
                     );
                     drop(state);
@@ -1398,6 +1357,29 @@ impl SessionInner {
                 }
             }
         })
+    }
+
+    pub(crate) fn undeclare_prefix(&self, expr_id: ExprId) -> ZResult<()> {
+        trace!("undedeclare_prefix({expr_id})");
+        let mut state = zwrite!(self.state);
+        let primitives = state.primitives()?;
+        if let Some(entry) = state.local_resources.get_mut(&expr_id) {
+            entry.count -= 1;
+            if entry.count == 0 {
+                state.local_resources.remove(&expr_id);
+                drop(state);
+                primitives.send_declare(&mut Declare {
+                    interest_id: None,
+                    ext_qos: declare::ext::QoSType::DECLARE,
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
+                });
+            }
+            Ok(())
+        } else {
+            bail!("Unknown prefix id: {expr_id} for session: {}", self.zid())
+        }
     }
 
     pub(crate) fn declare_publisher_inner(
@@ -1556,20 +1538,6 @@ impl SessionInner {
         }
     }
 
-    pub(crate) fn optimize_nonwild_prefix(&self, key_expr: &KeyExpr) -> ZResult<WireExpr<'static>> {
-        let ke = key_expr.as_keyexpr();
-        if let Some(prefix) = ke.get_nonwild_prefix() {
-            if let Some(expr_id) = self.declare_prefix(prefix.as_str(), false).wait()? {
-                return Ok(WireExpr {
-                    scope: expr_id,
-                    suffix: key_expr.as_str()[prefix.len()..].to_string().into(),
-                    mapping: Mapping::Sender,
-                });
-            }
-        }
-        Ok(key_expr.to_wire(self).to_owned())
-    }
-
     pub(crate) fn declare_subscriber_inner(
         self: &Arc<Self>,
         key_expr: &KeyExpr,
@@ -1583,7 +1551,7 @@ impl SessionInner {
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
             drop(state);
-            let wire_expr = self.optimize_nonwild_prefix(&key_expr)?;
+            let wire_expr = key_expr.to_wire(self).to_owned();
 
             primitives.send_declare(&mut Declare {
                 interest_id: None,
@@ -1656,7 +1624,8 @@ impl SessionInner {
                                 &sub_state.key_expr,
                                 MatchingStatusType::Subscribers,
                                 false,
-                            )
+                            );
+                            drop(state);
                         } else {
                             drop(state);
                         }
@@ -1668,29 +1637,31 @@ impl SessionInner {
                             &sub_state.key_expr,
                             MatchingStatusType::Subscribers,
                             false,
-                        )
+                        );
+                        drop(state);
                     }
                 }
                 SubscriberKind::LivelinessSubscriber => {
-                    if kind == SubscriberKind::LivelinessSubscriber {
-                        let primitives = state.primitives()?;
-                        drop(state);
+                    let primitives = state.primitives()?;
+                    drop(state);
 
-                        primitives.send_interest(&mut Interest {
-                            id: sub_state.id,
-                            mode: InterestMode::Final,
-                            // Note: InterestMode::Final options are undefined in the current protocol specification,
-                            //       they are initialized here for internal use by local egress interceptors.
-                            options: InterestOptions::TOKENS,
-                            wire_expr: None,
-                            ext_qos: declare::ext::QoSType::DEFAULT,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        });
-                    }
+                    primitives.send_interest(&mut Interest {
+                        id: sub_state.id,
+                        mode: InterestMode::Final,
+                        // Note: InterestMode::Final options are undefined in the current protocol specification,
+                        //       they are initialized here for internal use by local egress interceptors.
+                        options: InterestOptions::TOKENS,
+                        wire_expr: None,
+                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                    });
                 }
             }
 
+            // We need to ensure that the `state` lock is no longer held at this point to allow
+            // eventual undeclaration of subscriber key expression which will happen automatically
+            // on `sub_state` drop, for background subscribers.
             Ok(())
         } else {
             Err(zerror!("Unable to find subscriber").into())
@@ -1723,7 +1694,7 @@ impl SessionInner {
                 complete,
                 distance: 0,
             };
-            let wire_expr = self.optimize_nonwild_prefix(key_expr)?;
+            let wire_expr = key_expr.to_wire(self).to_owned();
             primitives.send_declare(&mut Declare {
                 interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
@@ -1781,6 +1752,11 @@ impl SessionInner {
                 MatchingStatusType::Queryables(qable_state.complete),
                 false,
             );
+            drop(state);
+
+            // We need to ensure that the `state` lock is no longer held at this point to allow
+            // eventual undeclaration of queryable key expression which will happen automatically
+            // on `qable_state` drop for background queryables.
             Ok(())
         } else {
             Err(zerror!("Unable to find queryable").into())
@@ -1934,7 +1910,7 @@ impl SessionInner {
         tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
-            current: std::sync::Mutex::new(false),
+            current: Mutex::new(false),
             destination,
             key_expr: key_expr.clone().into_owned(),
             match_type,

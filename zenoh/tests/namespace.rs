@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
-
 use std::time::Duration;
 
 use zenoh::{sample::Locality, Result as ZResult, Session};
@@ -29,7 +27,7 @@ async fn create_peer_client_pair(
     namespaces: &[Option<OwnedNonWildKeyExpr>; 2],
 ) -> (Session, Session) {
     let config1 = {
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh_config::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .listen
@@ -39,7 +37,7 @@ async fn create_peer_client_pair(
         config.namespace = namespaces[0].clone();
         config
     };
-    let mut config2 = zenoh::Config::default();
+    let mut config2 = zenoh_config::Config::default();
     config2.set_mode(Some(WhatAmI::Client)).unwrap();
     config2
         .connect
@@ -57,7 +55,7 @@ async fn create_routed_clients_pair(
     namespaces: &[Option<OwnedNonWildKeyExpr>; 2],
 ) -> (Session, Session, Session) {
     let config_router = {
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh_config::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
@@ -69,7 +67,7 @@ async fn create_routed_clients_pair(
         config
     };
 
-    let mut config1 = zenoh::Config::default();
+    let mut config1 = zenoh_config::Config::default();
     config1.set_mode(Some(WhatAmI::Client)).unwrap();
     config1
         .connect
@@ -77,7 +75,7 @@ async fn create_routed_clients_pair(
         .unwrap();
     config1.namespace = namespaces[0].clone();
 
-    let mut config2 = zenoh::Config::default();
+    let mut config2 = zenoh_config::Config::default();
     config2.set_mode(Some(WhatAmI::Client)).unwrap();
     config2
         .connect
@@ -93,7 +91,7 @@ async fn create_routed_clients_pair(
 
 async fn create_local_session(namespace: Option<OwnedNonWildKeyExpr>) -> (Session, Session) {
     let config1 = {
-        let mut config = zenoh::Config::default();
+        let mut config = zenoh_config::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config.namespace = namespace;
         config

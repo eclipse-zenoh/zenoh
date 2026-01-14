@@ -211,7 +211,8 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        let key_expr = self.key_expr?;
+        let mut key_expr = self.key_expr?;
+        key_expr = self.session.declare_nonwild_prefix(key_expr)?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         session
@@ -249,9 +250,11 @@ impl Resolvable for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
 
 impl Wait for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
+        let mut key_expr = self.key_expr?;
+        key_expr = self.session.declare_nonwild_prefix(key_expr)?;
         self.session
             .0
-            .declare_subscriber_inner(&self.key_expr?, self.origin, self.handler)?;
+            .declare_subscriber_inner(&key_expr, self.origin, self.handler)?;
         Ok(())
     }
 }
