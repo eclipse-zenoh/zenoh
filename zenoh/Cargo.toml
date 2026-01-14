@@ -131,7 +131,6 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
-serial_test = { workspace = true, features = ["async"] }
 test-case = { workspace = true }
 tokio = { workspace = true }
 tracing-capture = { workspace = true }
