@@ -165,40 +165,63 @@ mod tests {
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive link added event with SampleKind::Put
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for link event")
-            .expect("Channel closed");
-
+        // Collect all Put events - should be exactly 1
+        let mut put_events = Vec::new();
+        while let Ok(event) =
+            tokio::time::timeout(Duration::from_millis(200), events.recv_async()).await
+        {
+            let event = event.expect("Channel closed");
+            println!(
+                "Event: {:?} {} -> {} (transport: {})",
+                event.kind(),
+                event.link().src(),
+                event.link().dst(),
+                event.link().zid()
+            );
+            put_events.push(event);
+        }
         assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Put,
-            "Event kind should be Put for added link"
+            put_events.len(),
+            1,
+            "Should receive exactly 1 Put event, got {} (duplicates detected)",
+            put_events.len()
         );
-        println!(
-            "Link added: {} -> {} (transport: {})",
-            event.link().src(),
-            event.link().dst(),
-            event.link().zid()
+        assert_eq!(
+            put_events[0].kind(),
+            SampleKind::Put,
+            "Event kind should be Put for added link"
         );
 
         // Close session2 to trigger link removal event
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive link removed event with SampleKind::Delete
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for link removal event")
-            .expect("Channel closed");
-
+        // Collect all Delete events - should be exactly 1
+        let mut delete_events = Vec::new();
+        while let Ok(event) =
+            tokio::time::timeout(Duration::from_millis(200), events.recv_async()).await
+        {
+            let event = event.expect("Channel closed");
+            println!(
+                "Event: {:?} {} -> {} (transport: {})",
+                event.kind(),
+                event.link().src(),
+                event.link().dst(),
+                event.link().zid()
+            );
+            delete_events.push(event);
+        }
         assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Delete,
+            delete_events.len(),
+            1,
+            "Should receive exactly 1 Delete event, got {} (duplicates detected)",
+            delete_events.len()
+        );
+        assert_eq!(
+            delete_events[0].kind(),
+            SampleKind::Delete,
             "Event kind should be Delete for removed link"
         );
-        println!("Link removed");
 
         session1.close().await.unwrap();
     }
