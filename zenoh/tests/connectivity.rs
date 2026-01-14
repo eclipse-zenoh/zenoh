@@ -23,11 +23,26 @@ mod tests {
         time::Duration,
     };
 
+    use std::fmt::Debug;
+
     use zenoh::sample::SampleKind;
 
     use crate::common::{
         close_session, open_session_connect, open_session_listen, open_session_unicast,
     };
+
+    async fn collect_events<T: Debug>(
+        events: &flume::Receiver<T>,
+        timeout: Duration,
+    ) -> Vec<T> {
+        let mut collected = Vec::new();
+        while let Ok(event) = tokio::time::timeout(timeout, events.recv_async()).await {
+            let event = event.expect("Channel closed");
+            println!("{:?}", event);
+            collected.push(event);
+        }
+        collected
+    }
 
     const SLEEP: Duration = Duration::from_millis(100);
 
@@ -108,39 +123,21 @@ mod tests {
             .await;
 
         let session2 = open_session_connect(&["tcp/127.0.0.1:17450"]).await;
-
-        // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive transport opened event with SampleKind::Put
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for transport event")
-            .expect("Channel closed");
-
-        assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Put,
-            "Event kind should be Put for opened transport"
-        );
-        println!("Transport opened: {}", event.transport().zid());
+        // Collect transport opened events - should be exactly 1 Put
+        let put_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
+            "Expected exactly 1 Put event, got {:?}", put_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
 
         // Close session2 to trigger transport close event
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive transport closed event with SampleKind::Delete
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for transport close event")
-            .expect("Channel closed");
-
-        assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Delete,
-            "Event kind should be Delete for closed transport"
-        );
-        println!("Transport closed");
+        // Collect transport closed events - should be exactly 1 Delete
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Expected exactly 1 Delete event, got {:?}", delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
 
         session1.close().await.unwrap();
     }
@@ -161,67 +158,21 @@ mod tests {
             .await;
 
         let session2 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
-
-        // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
 
-        // Collect all Put events - should be exactly 1
-        let mut put_events = Vec::new();
-        while let Ok(event) =
-            tokio::time::timeout(Duration::from_millis(200), events.recv_async()).await
-        {
-            let event = event.expect("Channel closed");
-            println!(
-                "Event: {:?} {} -> {} (transport: {})",
-                event.kind(),
-                event.link().src(),
-                event.link().dst(),
-                event.link().zid()
-            );
-            put_events.push(event);
-        }
-        assert_eq!(
-            put_events.len(),
-            1,
-            "Should receive exactly 1 Put event, got {} (duplicates detected)",
-            put_events.len()
-        );
-        assert_eq!(
-            put_events[0].kind(),
-            SampleKind::Put,
-            "Event kind should be Put for added link"
-        );
+        // Collect link added events - should be exactly 1 Put
+        let put_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
+            "Expected exactly 1 Put event, got {:?}", put_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
 
-        // Close session2 to trigger link removal event
+        // Close session2 to trigger link removal
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        // Collect all Delete events - should be exactly 1
-        let mut delete_events = Vec::new();
-        while let Ok(event) =
-            tokio::time::timeout(Duration::from_millis(200), events.recv_async()).await
-        {
-            let event = event.expect("Channel closed");
-            println!(
-                "Event: {:?} {} -> {} (transport: {})",
-                event.kind(),
-                event.link().src(),
-                event.link().dst(),
-                event.link().zid()
-            );
-            delete_events.push(event);
-        }
-        assert_eq!(
-            delete_events.len(),
-            1,
-            "Should receive exactly 1 Delete event, got {} (duplicates detected)",
-            delete_events.len()
-        );
-        assert_eq!(
-            delete_events[0].kind(),
-            SampleKind::Delete,
-            "Event kind should be Delete for removed link"
-        );
+        // Collect link removed events - should be exactly 1 Delete
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Expected exactly 1 Delete event, got {:?}", delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>());
 
         session1.close().await.unwrap();
     }
