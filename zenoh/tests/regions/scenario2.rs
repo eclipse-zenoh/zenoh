@@ -1,10 +1,10 @@
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
-// This program and the accompanying materials are made available under the
-// terms of the Eclipse Public License 2.0 which is available at
+// This program and the accompanying materials are made availbble under the
+// terms of the Eclipse Public License 2.0 which is availbble at
 // http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+// which is availbble at https://www.apache.org/licenses/LICENSE-2.0.
 //
 // SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
 //
@@ -12,15 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-// Scenario 1
-//          R
-//   C      C      C
+// Scenario 2
+//   P      P      P
 // P P P  P P P  P P P
 
 use std::time::Duration;
 
 use serial_test::serial;
-use zenoh_config::WhatAmI::{Client, Peer, Router};
+use zenoh_config::WhatAmI::Peer;
 use zenoh_core::{lazy_static, ztimeout};
 
 use crate::{count, Node};
@@ -43,72 +42,59 @@ fn init_tracing_subscriber() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial]
-async fn test_regions_scenario1_order1_putsub() {
+async fn test_regions_scenario2_order1_putsub() {
     init_tracing_subscriber();
 
-    let _z9000 = ztimeout!(Node::new(Router, "11aa9000")
-        .endpoints("tcp/[::]:9000", &[])
+    let _z9100 = ztimeout!(Node::new(Peer, "21aa9100")
+        .endpoints("tcp/[::]:9100", &[])
+        .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Peer, "21aa9200")
+        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Peer, "21aa9300")
+        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
         .open());
 
-    let _z9100 = ztimeout!(Node::new(Client, "11aa9100")
-        .endpoints("tcp/[::]:9100", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"11aa9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-    let _z9200 = ztimeout!(Node::new(Client, "11aa9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"11aa9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-    let _z9300 = ztimeout!(Node::new(Client, "11aa9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"11aa9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-
-    let _z9110 = ztimeout!(Node::new(Peer, "11aa9110")
+    let _z9110 = ztimeout!(Node::new(Peer, "21aa9110")
         .listen("tcp/[::]:9110")
         .connect(&["tcp/[::]:9100"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "11aa9120")
+    let _z9120 = ztimeout!(Node::new(Peer, "21aa9120")
         .listen("tcp/[::]:9120")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "11aa9130")
+    let _z9130 = ztimeout!(Node::new(Peer, "21aa9130")
         .listen("tcp/[::]:9130")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "11aa9210")
+    let _z9210 = ztimeout!(Node::new(Peer, "21aa9210")
         .listen("tcp/[::]:9210")
         .connect(&["tcp/[::]:9200"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "11aa9220")
+    let _z9220 = ztimeout!(Node::new(Peer, "21aa9220")
         .listen("tcp/[::]:9220")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "11aa9230")
+    let _z9230 = ztimeout!(Node::new(Peer, "21aa9230")
         .listen("tcp/[::]:9230")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "11aa9310")
+    let _z9310 = ztimeout!(Node::new(Peer, "21aa9310")
         .listen("tcp/[::]:9310")
         .connect(&["tcp/[::]:9300"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "11aa9320")
+    let _z9320 = ztimeout!(Node::new(Peer, "21aa9320")
         .listen("tcp/[::]:9320")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "11aa9330")
+    let _z9330 = ztimeout!(Node::new(Peer, "21aa9330")
         .listen("tcp/[::]:9330")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -148,8 +134,8 @@ async fn test_regions_scenario1_order1_putsub() {
     let s = STORAGE.lock();
 
     for i in [
-        "11aa9110", "11aa9120", "11aa9130", "11aa9210", "11aa9220", "11aa9230", "11aa9310",
-        "11aa9320", "11aa9330",
+        "21aa9110", "21aa9120", "21aa9130", "21aa9210", "21aa9220", "21aa9230", "21aa9310",
+        "21aa9320", "21aa9330",
     ] {
         assert_eq!(
             count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
@@ -160,72 +146,59 @@ async fn test_regions_scenario1_order1_putsub() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial]
-async fn test_regions_scenario1_order1_pubsub() {
+async fn test_regions_scenario2_order1_pubsub() {
     init_tracing_subscriber();
 
-    let _z9000 = ztimeout!(Node::new(Router, "11ab9000")
-        .endpoints("tcp/[::]:9000", &[])
+    let _z9100 = ztimeout!(Node::new(Peer, "21ab9100")
+        .endpoints("tcp/[::]:9100", &[])
+        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[{filters:[]}]}")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Peer, "21ab9200")
+        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[{filters:[]}]}")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Peer, "21ab9300")
+        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[{filters:[]}]}")
         .open());
 
-    let _z9100 = ztimeout!(Node::new(Client, "11ab9100")
-        .endpoints("tcp/[::]:9100", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"11ab9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-    let _z9200 = ztimeout!(Node::new(Client, "11ab9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"11ab9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-    let _z9300 = ztimeout!(Node::new(Client, "11ab9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"11ab9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-
-    let _z9110 = ztimeout!(Node::new(Peer, "11ab9110")
+    let _z9110 = ztimeout!(Node::new(Peer, "21ab9110")
         .listen("tcp/[::]:9110")
         .connect(&["tcp/[::]:9100"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "11ab9120")
+    let _z9120 = ztimeout!(Node::new(Peer, "21ab9120")
         .listen("tcp/[::]:9120")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "11ab9130")
+    let _z9130 = ztimeout!(Node::new(Peer, "21ab9130")
         .listen("tcp/[::]:9130")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "11ab9210")
+    let _z9210 = ztimeout!(Node::new(Peer, "21ab9210")
         .listen("tcp/[::]:9210")
         .connect(&["tcp/[::]:9200"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "11ab9220")
+    let _z9220 = ztimeout!(Node::new(Peer, "21ab9220")
         .listen("tcp/[::]:9220")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "11ab9230")
+    let _z9230 = ztimeout!(Node::new(Peer, "21ab9230")
         .listen("tcp/[::]:9230")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "11ab9310")
+    let _z9310 = ztimeout!(Node::new(Peer, "21ab9310")
         .listen("tcp/[::]:9310")
         .connect(&["tcp/[::]:9300"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "11ab9320")
+    let _z9320 = ztimeout!(Node::new(Peer, "21ab9320")
         .listen("tcp/[::]:9320")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "11ab9330")
+    let _z9330 = ztimeout!(Node::new(Peer, "21ab9330")
         .listen("tcp/[::]:9330")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -275,8 +248,8 @@ async fn test_regions_scenario1_order1_pubsub() {
     let s = STORAGE.lock();
 
     for i in [
-        "11ab9110", "11ab9120", "11ab9130", "11ab9210", "11ab9220", "11ab9230", "11ab9310",
-        "11ab9320", "11ab9330",
+        "21ab9110", "21ab9120", "21ab9130", "21ab9210", "21ab9220", "21ab9230", "21ab9310",
+        "21ab9320", "21ab9330",
     ] {
         assert_eq!(
             count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
@@ -287,55 +260,46 @@ async fn test_regions_scenario1_order1_pubsub() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial]
-async fn test_regions_scenario1_order2_putsub() {
+async fn test_regions_scenario2_order2_putsub() {
     init_tracing_subscriber();
 
-    let _z9110 = ztimeout!(Node::new(Peer, "12aa9110")
+    let _z9110 = ztimeout!(Node::new(Peer, "22aa9110")
         .listen("tcp/[::]:9110")
         .connect(&["tcp/[::]:9100"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "12aa9120")
+    let _z9120 = ztimeout!(Node::new(Peer, "22aa9120")
         .listen("tcp/[::]:9120")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "12aa9130")
+    let _z9130 = ztimeout!(Node::new(Peer, "22aa9130")
         .listen("tcp/[::]:9130")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "12aa9210")
+    let _z9210 = ztimeout!(Node::new(Peer, "22aa9210")
         .listen("tcp/[::]:9210")
         .connect(&["tcp/[::]:9200"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "12aa9220")
+    let _z9220 = ztimeout!(Node::new(Peer, "22aa9220")
         .listen("tcp/[::]:9220")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "12aa9230")
+    let _z9230 = ztimeout!(Node::new(Peer, "22aa9230")
         .listen("tcp/[::]:9230")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "12aa9310")
+    let _z9310 = ztimeout!(Node::new(Peer, "22aa9310")
         .listen("tcp/[::]:9310")
         .connect(&["tcp/[::]:9300"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "12aa9320")
+    let _z9320 = ztimeout!(Node::new(Peer, "22aa9320")
         .listen("tcp/[::]:9320")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "12aa9330")
+    let _z9330 = ztimeout!(Node::new(Peer, "22aa9330")
         .listen("tcp/[::]:9330")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -348,21 +312,17 @@ async fn test_regions_scenario1_order2_putsub() {
     let s9320 = _z9320.declare_subscriber("test/**").await.unwrap();
     let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
 
-    let _z9000 = ztimeout!(Node::new(Router, "12aa9000")
-        .endpoints("tcp/[::]:9000", &[])
+    let _z9100 = ztimeout!(Node::new(Peer, "22aa9100")
+        .endpoints("tcp/[::]:9100", &[])
+        .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
         .open());
-
-    let _z9100 = ztimeout!(Node::new(Client, "12aa9100")
-        .endpoints("tcp/[::]:9100", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"12aa9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
+    let _z9200 = ztimeout!(Node::new(Peer, "22aa9200")
+        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Client, "12aa9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"12aa9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-    let _z9300 = ztimeout!(Node::new(Client, "12aa9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"12aa9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
+    let _z9300 = ztimeout!(Node::new(Peer, "22aa9300")
+        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
         .open());
 
     tokio::time::sleep(Duration::from_secs(8)).await;
@@ -392,8 +352,8 @@ async fn test_regions_scenario1_order2_putsub() {
     let s = STORAGE.lock();
 
     for i in [
-        "12aa9110", "12aa9120", "12aa9130", "12aa9210", "12aa9220", "12aa9230", "12aa9310",
-        "12aa9320", "12aa9330",
+        "22aa9110", "22aa9120", "22aa9130", "22aa9210", "22aa9220", "22aa9230", "22aa9310",
+        "22aa9320", "22aa9330",
     ] {
         assert_eq!(
             count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
@@ -404,55 +364,46 @@ async fn test_regions_scenario1_order2_putsub() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial]
-async fn test_regions_scenario1_order2_pubsub() {
+async fn test_regions_scenario2_order2_pubsub() {
     init_tracing_subscriber();
 
-    let _z9110 = ztimeout!(Node::new(Peer, "12ab9110")
+    let _z9110 = ztimeout!(Node::new(Peer, "22ab9110")
         .listen("tcp/[::]:9110")
         .connect(&["tcp/[::]:9100"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "12ab9120")
+    let _z9120 = ztimeout!(Node::new(Peer, "22ab9120")
         .listen("tcp/[::]:9120")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "12ab9130")
+    let _z9130 = ztimeout!(Node::new(Peer, "22ab9130")
         .listen("tcp/[::]:9130")
         .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "12ab9210")
+    let _z9210 = ztimeout!(Node::new(Peer, "22ab9210")
         .listen("tcp/[::]:9210")
         .connect(&["tcp/[::]:9200"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "12ab9220")
+    let _z9220 = ztimeout!(Node::new(Peer, "22ab9220")
         .listen("tcp/[::]:9220")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "12ab9230")
+    let _z9230 = ztimeout!(Node::new(Peer, "22ab9230")
         .listen("tcp/[::]:9230")
         .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "12ab9310")
+    let _z9310 = ztimeout!(Node::new(Peer, "22ab9310")
         .listen("tcp/[::]:9310")
         .connect(&["tcp/[::]:9300"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "12ab9320")
+    let _z9320 = ztimeout!(Node::new(Peer, "22ab9320")
         .listen("tcp/[::]:9320")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "12ab9330")
+    let _z9330 = ztimeout!(Node::new(Peer, "22ab9330")
         .listen("tcp/[::]:9330")
         .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
-        .gateway("{north:{filters:[{}]},south:[]}")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -475,21 +426,17 @@ async fn test_regions_scenario1_order2_pubsub() {
     let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
-    let _z9000 = ztimeout!(Node::new(Router, "12ab9000")
-        .endpoints("tcp/[::]:9000", &[])
+    let _z9100 = ztimeout!(Node::new(Peer, "22ab9100")
+        .endpoints("tcp/[::]:9100", &[])
+        .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
         .open());
-
-    let _z9100 = ztimeout!(Node::new(Client, "12ab9100")
-        .endpoints("tcp/[::]:9100", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"12ab9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
+    let _z9200 = ztimeout!(Node::new(Peer, "22ab9200")
+        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Client, "12ab9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"12ab9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
-        .open());
-    let _z9300 = ztimeout!(Node::new(Client, "12ab9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9000"])
-        .gateway("{north:{filters:[{zids:[\"12ab9000\"]}]},south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
+    let _z9300 = ztimeout!(Node::new(Peer, "22ab9300")
+        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
         .open());
 
     tokio::time::sleep(Duration::from_secs(8)).await;
@@ -519,8 +466,8 @@ async fn test_regions_scenario1_order2_pubsub() {
     let s = STORAGE.lock();
 
     for i in [
-        "12ab9110", "12ab9120", "12ab9130", "12ab9210", "12ab9220", "12ab9230", "12ab9310",
-        "12ab9320", "12ab9330",
+        "22ab9110", "22ab9120", "22ab9130", "22ab9210", "22ab9220", "22ab9230", "22ab9310",
+        "22ab9320", "22ab9330",
     ] {
         assert_eq!(
             count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
