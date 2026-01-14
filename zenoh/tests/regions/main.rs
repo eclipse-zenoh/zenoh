@@ -14,6 +14,7 @@
 
 mod scenario1;
 mod scenario2;
+mod scenario3;
 
 use std::time::Duration;
 
