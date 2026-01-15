@@ -24,7 +24,7 @@ use std::{
 
 use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, ExprId, WireExpr},
+    core::{key_expr::keyexpr, ExprId, Region, WireExpr},
     network::{
         self,
         declare::{self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
@@ -43,7 +43,7 @@ use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
         queries::disable_matches_query_routes,
-        region::{Region, RegionMap},
+        region::RegionMap,
         tables::{RoutingExpr, Tables},
     },
     interceptor::{InterceptorTrait, InterceptorsChain},

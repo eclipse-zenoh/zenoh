@@ -23,7 +23,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    core::{Region, WhatAmI, WhatAmIMatcher, ZenohIdProto},
     network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
 };
 use zenoh_transport::unicast::TransportUnicast;
@@ -35,7 +35,6 @@ use crate::net::{
         linkstate::{LinkState, LinkStateList},
         network::Network,
     },
-    routing::dispatcher::region::Region,
     runtime::{Runtime, WeakRuntime},
 };
 

@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
-use zenoh_config::{Config, ZenohId};
+use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, EMPTY_EXPR_ID},
+    core::{key_expr::keyexpr, ExprId, Region, Reliability, WhatAmI, WireExpr, EMPTY_EXPR_ID},
     network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
     zenoh::Put,
 };
@@ -29,7 +29,6 @@ use crate::{
             dispatcher::{
                 face::{Face, FaceState},
                 pubsub::SubscriberInfo,
-                region::Region,
                 tables::TablesData,
             },
             router::*,
@@ -39,10 +38,7 @@ use crate::{
 };
 
 fn new_router() -> Router {
-    let mut config = Config::default();
-    config
-        .set_id(Some(ZenohId::from_str("1").unwrap()))
-        .unwrap();
+    let mut config = Config::default().expanded();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     RouterBuilder::new(&config)
         .hat(Region::Local, WhatAmI::Client)

@@ -428,20 +428,20 @@ impl<const ID: u8> From<ZExtZBuf<{ ID }>> for ZExtUnknown {
 #[macro_export]
 macro_rules! zextunit {
     ($id:expr, $m:expr) => {
-        ZExtUnit<{ ZExtUnit::<$id>::id($m) }>
+        $crate::common::extension::ZExtUnit<{ $crate::common::extension::ZExtUnit::<$id>::id($m) }>
     }
 }
 
 #[macro_export]
 macro_rules! zextz64 {
     ($id:expr, $m:expr) => {
-        ZExtZ64<{ ZExtZ64::<$id>::id($m) }>
+        $crate::common::extension::ZExtZ64<{ $crate::common::extension::ZExtZ64::<$id>::id($m) }>
     }
 }
 
 #[macro_export]
 macro_rules! zextzbuf {
     ($id:expr, $m:expr) => {
-        ZExtZBuf<{ ZExtZBuf::<$id>::id($m) }>
+        $crate::common::extension::ZExtZBuf<{ $crate::common::extension::ZExtZBuf::<$id>::id($m) }>
     }
 }

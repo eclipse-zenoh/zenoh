@@ -1,106 +1,72 @@
-use std::{fmt, marker::PhantomData};
-
+//
+// Copyright (c) 2026 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use nonempty_collections::NEVec;
-use serde::{
-    de::{self, MapAccess, Visitor},
-    Deserialize, Serialize,
-};
-use zenoh_protocol::core::WhatAmIMatcher;
+use serde::{Deserialize, Serialize};
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
+use zenoh_protocol::core::{RegionName, WhatAmIMatcher};
 
-use crate::{Interface, ModeDependentValue, ModeValues, ZenohId};
+use crate::{Interface, ZenohId};
 
-impl<'de> Deserialize<'de> for ModeDependentValue<GatewayConf> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
-
-        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<GatewayConf>> {
-            type Value = ModeDependentValue<GatewayConf>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("gateway config or mode dependent gateway config")
-            }
-
-            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let value =
-                    serde_json::Value::deserialize(de::value::MapAccessDeserializer::new(map))?;
-
-                if let Ok(values) = ModeValues::deserialize(&value) {
-                    return Ok(ModeDependentValue::Dependent(values));
-                }
-
-                Ok(ModeDependentValue::Unique(
-                    GatewayConf::deserialize(&value).map_err(de::Error::custom)?,
-                ))
-            }
-        }
-
-        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
-    }
-}
-
-impl Default for ModeDependentValue<GatewayConf> {
-    fn default() -> Self {
-        ModeDependentValue::Dependent(ModeValues {
-            router: Some(GatewayConf {
-                north: BoundConf {
-                    filters: Some(vec![BoundFilterConf {
-                        modes: Some(WhatAmIMatcher::empty().router()),
-                        interfaces: None,
-                        zids: None,
-                    }]),
-                },
-                south: vec![BoundConf {
-                    filters: Some(vec![BoundFilterConf {
-                        modes: Some(WhatAmIMatcher::empty().peer().client()),
-                        interfaces: None,
-                        zids: None,
-                    }]),
-                }],
-            }),
-            peer: Some(GatewayConf {
-                north: BoundConf {
-                    filters: Some(vec![BoundFilterConf {
-                        modes: Some(WhatAmIMatcher::empty().peer().router()),
-                        interfaces: None,
-                        zids: None,
-                    }]),
-                },
-                south: vec![BoundConf {
-                    filters: Some(vec![BoundFilterConf {
-                        modes: Some(WhatAmIMatcher::empty().client()),
-                        interfaces: None,
-                        zids: None,
-                    }]),
-                }],
-            }),
-            client: Some(GatewayConf {
-                north: BoundConf { filters: None },
-                south: vec![],
-            }),
-        })
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayConf {
-    pub north: BoundConf,
-    pub south: Vec<BoundConf>,
+    pub south: Option<GatewaySouthConf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BoundConf {
-    pub filters: Option<Vec<BoundFilterConf>>,
+#[serde(untagged)]
+pub enum GatewaySouthConf {
+    Preset(GatewayPresetConf),
+    Custom(Vec<GatewayExplicitSouthConf>),
 }
 
+impl Default for GatewaySouthConf {
+    fn default() -> Self {
+        GatewaySouthConf::Preset(GatewayPresetConf::default())
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GatewayPresetConf {
+    #[default]
+    Auto,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayExplicitSouthConf {
+    /// Bound filters.
+    ///
+    /// If [`Some`], a subject matches this filter list iff it matches _any_ of the individual
+    /// filters. Thus if the list is empty no subject ever matches.
+    ///
+    /// If [`None`], a subject _always_ matches.
+    pub filters: Option<Vec<GatewayFiltersConf>>,
+}
+
+/// Bound filter.
+///
+/// A subject matches this filter iff it matches _all_ of its individual filter fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BoundFilterConf {
+#[serde(deny_unknown_fields)]
+pub struct GatewayFiltersConf {
     pub modes: Option<WhatAmIMatcher>,
     pub interfaces: Option<NEVec<Interface>>,
     pub zids: Option<NEVec<ZenohId>>,
+    pub region_names: Option<NEVec<RegionName>>,
+    #[serde(default)]
+    pub negated: bool,
 }

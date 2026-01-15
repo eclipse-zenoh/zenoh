@@ -26,7 +26,7 @@ use std::{
 
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
-    core::ZenohIdProto,
+    core::{Region, ZenohIdProto},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
         interest::InterestId,
@@ -50,7 +50,7 @@ use crate::net::{
     protocol::{linkstate::LinkInfo, network::SuccessorEntry},
     routing::dispatcher::{
         interests::{CurrentInterest, RemoteInterest},
-        region::{Region, RegionMap},
+        region::RegionMap,
     },
     runtime::Runtime,
 };

@@ -31,7 +31,7 @@ use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
 mod ext {
     use zenoh_protocol::{zextunit, zextz64, zextzbuf};
 
-    use super::{id::USRPWD, ZExtUnit, ZExtZ64, ZExtZBuf};
+    use super::id::USRPWD;
 
     pub(super) type InitSyn = zextunit!(USRPWD, false);
     pub(super) type InitAck = zextz64!(USRPWD, false);

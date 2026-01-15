@@ -24,7 +24,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{Bound, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{
         close, Close, TransportBodyLowLatencyRef, TransportMessageLowLatencyRef, TransportSn,
@@ -41,7 +41,7 @@ use crate::{
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,
     },
-    Bound, TransportManager, TransportPeerEventHandler,
+    TransportManager, TransportPeerEventHandler,
 };
 
 /*************************************/
@@ -221,7 +221,11 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.config.is_qos
     }
 
-    fn get_bound(&self) -> Bound {
+    fn region_name(&self) -> Option<RegionName> {
+        self.config.region_name.clone()
+    }
+
+    fn get_bound(&self) -> Option<Bound> {
         self.config.bound
     }
 

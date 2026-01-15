@@ -247,6 +247,30 @@
     },
   },
 
+  /// North region name.
+  ///
+  /// A non-empty UTF-8 strings of at most 32 bytes. It is used during establishment to assign
+  /// remotes to a region through the `gateway.south[].filters[].region_names` filter.
+  region_name: null,
+
+  /// Gateway configuration.
+  ///
+  /// `gateway.south` is either a _preset_ denoted by a string (e.g. `"auto"`), or a _custom_ value.
+  ///
+  /// A custom `gateway.south` is a array of arrays of objects. Each element of `gateway.south`
+  /// defines a (south-bound) subregion. Remotes are assigned subregion id `<i>` if
+  /// `gateway.south[<i>].filters` matches said remote—the first matching filter is selected. Each
+  /// filter in `gateway.south[].filters` array may contain the following optional keys:
+  ///   - `modes`: a WhatAmI matcher.
+  ///   - `interfaces`: a non-empty array of network interface names.
+  ///   - `zids`: a non-empty array of Zenoh IDs.
+  ///   - `region_names`: a non-empty array of region names.
+  gateway: {
+    /// The `auto` preset mode puts peers and clients south of routers and client south of peers.
+    /// This is the only available preset.
+    south: "auto"
+  },
+
   // /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config for overwritten values)
   // qos: {
   //   /// Overwrite QoS options for PUT and DELETE messages

@@ -197,8 +197,8 @@ where
                     ext_compression = Some(q);
                     has_ext = ext;
                 }
-                ext::South::ID => {
-                    let (q, ext): (ext::South, bool) = eodec.read(&mut *reader)?;
+                ext::RemoteBound::ID => {
+                    let (q, ext): (ext::RemoteBound, bool) = eodec.read(&mut *reader)?;
                     ext_south = Some(q);
                     has_ext = ext;
                 }
@@ -391,8 +391,8 @@ where
                     ext_compression = Some(q);
                     has_ext = ext;
                 }
-                ext::South::ID => {
-                    let (q, ext): (ext::South, bool) = eodec.read(&mut *reader)?;
+                ext::RemoteBound::ID => {
+                    let (q, ext): (ext::RemoteBound, bool) = eodec.read(&mut *reader)?;
                     ext_south = Some(q);
                     has_ext = ext;
                 }

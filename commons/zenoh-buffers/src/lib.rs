@@ -207,12 +207,21 @@ pub mod writer {
 }
 
 pub mod reader {
-    use core::num::NonZeroUsize;
+    use core::{fmt::Display, num::NonZeroUsize};
 
     use crate::ZSlice;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
+
+    impl Display for DidntRead {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str("Didn't read")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for DidntRead {}
 
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead>;

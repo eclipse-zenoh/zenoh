@@ -59,8 +59,8 @@ pub struct Put {
 
 pub mod ext {
     #[cfg(feature = "shared-memory")]
-    use crate::{common::ZExtUnit, zextunit};
-    use crate::{common::ZExtZBuf, zextzbuf};
+    use crate::zextunit;
+    use crate::zextzbuf;
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data

@@ -132,7 +132,7 @@ impl Runtime {
 
     async fn start_client(&self) -> ZResult<()> {
         let (listeners, peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
-            let guard = &self.state.config.lock().0;
+            let guard = &self.state.config.lock();
             (
                 guard
                     .listen()
@@ -186,7 +186,7 @@ impl Runtime {
 
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = &self.state.config.lock().0;
+            let guard = &self.state.config.lock();
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
                 guard
@@ -227,7 +227,7 @@ impl Runtime {
 
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = &self.state.config.lock().0;
+            let guard = &self.state.config.lock();
             (
                 guard
                     .listen()
@@ -271,7 +271,7 @@ impl Runtime {
     ) -> ZResult<()> {
         let multicast_ttl = {
             let config_guard = self.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
         let ifaces = Runtime::get_interfaces(&ifaces);
@@ -425,22 +425,22 @@ impl Runtime {
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), true)
     }
 
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_listener_timeout(guard)
     }
 
     fn get_global_connect_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_connect_timeout(guard)
     }
 
@@ -709,7 +709,7 @@ impl Runtime {
             let this = self.clone();
             let idx = self.state.start_conditions.add_peer_connector().await;
             let config_guard = this.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
             let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
@@ -937,7 +937,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(self.whatami())
@@ -1210,7 +1209,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
@@ -1246,7 +1244,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)

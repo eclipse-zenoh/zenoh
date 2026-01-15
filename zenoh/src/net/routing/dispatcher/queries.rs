@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{Encoding, WireExpr},
+    core::{Encoding, Region, WireExpr},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         request::{self, ext::QueryTarget, Request, RequestId},
@@ -42,7 +42,6 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
-        region::Region,
         tables::Tables,
     },
     hat::{BaseContext, SendDeclare, UnregisterResult},
@@ -292,14 +291,14 @@ impl Face {
                     src_qid: msg.id,
                 });
 
-                for (bnd, hat) in rtables.hats.iter() {
+                for (region, hat) in rtables.hats.iter() {
                     if hat.ingress_filter(&rtables.data, &self.state, &expr) {
                         let qabls = get_query_route(
                             &rtables,
                             &self.state,
                             &expr,
                             msg.ext_nodeid.node_id,
-                            bnd,
+                            region,
                         );
 
                         compute_final_route(

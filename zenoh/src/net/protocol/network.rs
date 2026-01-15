@@ -31,7 +31,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    core::{Region, WhatAmI, WhatAmIMatcher, ZenohIdProto},
     network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
 };
 use zenoh_transport::unicast::TransportUnicast;
@@ -41,7 +41,7 @@ use crate::net::{
     codec::Zenoh080Routing,
     common::AutoConnect,
     protocol::linkstate::{LinkEdgeWeight, LinkState, LinkStateList, LocalLinkState},
-    routing::dispatcher::{region::Region, tables::NodeId},
+    routing::dispatcher::tables::NodeId,
     runtime::Runtime,
 };
 

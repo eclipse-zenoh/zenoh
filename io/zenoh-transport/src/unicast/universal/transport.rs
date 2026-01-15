@@ -22,7 +22,7 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Bound, Priority, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
@@ -39,7 +39,7 @@ use crate::{
         universal::link::TransportLinkUnicastUniversal,
         TransportConfigUnicast,
     },
-    Bound, TransportManager, TransportPeerEventHandler,
+    TransportManager, TransportPeerEventHandler,
 };
 
 /*************************************/
@@ -341,7 +341,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         self.config.is_qos
     }
 
-    fn get_bound(&self) -> Bound {
+    fn region_name(&self) -> Option<RegionName> {
+        self.config.region_name.clone()
+    }
+
+    fn get_bound(&self) -> Option<Bound> {
         self.config.bound
     }
 

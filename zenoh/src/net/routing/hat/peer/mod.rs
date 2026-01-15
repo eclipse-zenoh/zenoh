@@ -28,7 +28,7 @@ use std::{
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::ZenohIdProto,
+    core::{Region, ZenohIdProto},
     network::{
         declare::{
             ext::{NodeIdType, QoSType},
@@ -56,10 +56,8 @@ use crate::net::{
     protocol::{gossip::Gossip, linkstate::LinkStateList},
     routing::{
         dispatcher::{
-            face::InterestState,
-            interests::RemoteInterest,
-            queries::LocalQueryables,
-            region::{Region, RegionMap},
+            face::InterestState, interests::RemoteInterest, queries::LocalQueryables,
+            region::RegionMap,
         },
         hat::{BaseContext, Remote},
         router::{FaceContext, LocalSubscribers},
@@ -150,7 +148,7 @@ impl Hat {
 impl HatBaseTrait for Hat {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
-        let config = &config_guard.0;
+        let config = &config_guard;
         let whatami = tables.hats[self.region].whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());

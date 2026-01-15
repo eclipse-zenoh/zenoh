@@ -22,17 +22,20 @@ use std::{
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::network::{
-    declare::{self},
-    interest::{InterestId, InterestMode, InterestOptions},
-    Declare, DeclareBody, DeclareFinal, Interest,
+use zenoh_protocol::{
+    core::Region,
+    network::{
+        declare::{self},
+        interest::{InterestId, InterestMode, InterestOptions},
+        Declare, DeclareBody, DeclareFinal, Interest,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
 
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
-    dispatcher::{face::Face, region::Region, tables::Tables},
+    dispatcher::{face::Face, tables::Tables},
     hat::{BaseContext, Remote, SendDeclare},
     router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,

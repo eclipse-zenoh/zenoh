@@ -17,8 +17,9 @@ use std::{
 };
 
 use zenoh_config::WhatAmI;
-use zenoh_protocol::network::{
-    declare::queryable::ext::QueryableInfoType, interest::InterestId, Interest,
+use zenoh_protocol::{
+    core::Region,
+    network::{declare::queryable::ext::QueryableInfoType, interest::InterestId, Interest},
 };
 use zenoh_runtime::ZRuntime;
 
@@ -26,7 +27,6 @@ use super::Hat;
 use crate::net::routing::{
     dispatcher::{
         interests::{CurrentInterest, PendingCurrentInterest, RemoteInterest},
-        region::Region,
         resource::Resource,
         tables::TablesData,
     },

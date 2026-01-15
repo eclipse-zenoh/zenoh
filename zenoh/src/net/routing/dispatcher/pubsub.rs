@@ -18,7 +18,7 @@ use itertools::Itertools;
 use zenoh_core::zread;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{Reliability, WireExpr},
+    core::{Region, Reliability, WireExpr},
     network::{declare::SubscriberId, push::ext, Push},
 };
 use zenoh_sync::get_mut_unchecked;
@@ -32,7 +32,6 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
-        region::Region,
     },
     hat::{BaseContext, SendDeclare},
     router::{get_or_set_route, Direction, RouteBuilder},

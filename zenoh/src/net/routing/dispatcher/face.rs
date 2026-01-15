@@ -25,7 +25,7 @@ use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
 use zenoh_protocol::{
-    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
+    core::{Bound, ExprId, Region, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
         Mapping, Push, Request, RequestId, Response, ResponseFinal,
@@ -34,7 +34,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
-use zenoh_transport::{multicast::TransportMulticast, Bound};
+use zenoh_transport::multicast::TransportMulticast;
 
 use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
 use crate::net::{
@@ -46,7 +46,7 @@ use crate::net::{
                 disable_matches_query_routes, finalize_pending_queries, merge_qabl_infos,
                 route_send_response, route_send_response_final, Query,
             },
-            region::{Region, RegionMap},
+            region::RegionMap,
         },
         hat::BaseContext,
         interceptor::{

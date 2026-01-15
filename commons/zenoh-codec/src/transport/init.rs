@@ -53,6 +53,7 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_region_name,
         } = x;
 
         // Header
@@ -66,7 +67,8 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (*ext_patch != ext::PatchType::NONE) as u8;
+            + (*ext_patch != ext::PatchType::NONE) as u8
+            + (ext_region_name.is_some() as u8);
 
         #[cfg(feature = "shared-memory")]
         {
@@ -131,6 +133,10 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
+        if let Some(region_name) = ext_region_name.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (region_name, n_exts != 0))?;
+        }
 
         Ok(())
     }
@@ -193,6 +199,7 @@ where
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
         let mut ext_patch = ext::PatchType::NONE;
+        let mut ext_northtag = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -240,6 +247,11 @@ where
                     ext_patch = p;
                     has_ext = ext;
                 }
+                ext::RegionName::ID => {
+                    let (p, ext): (ext::RegionName, bool) = eodec.read(&mut *reader)?;
+                    ext_northtag = Some(p);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
@@ -261,6 +273,7 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_region_name: ext_northtag,
         })
     }
 }
@@ -289,6 +302,7 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_region_name,
         } = x;
 
         // Header
@@ -302,7 +316,8 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (*ext_patch != ext::PatchType::NONE) as u8;
+            + (*ext_patch != ext::PatchType::NONE) as u8
+            + (ext_region_name.is_some() as u8);
 
         #[cfg(feature = "shared-memory")]
         {
@@ -370,6 +385,10 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
         }
+        if let Some(region_name) = ext_region_name.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (region_name, n_exts != 0))?;
+        }
 
         Ok(())
     }
@@ -435,6 +454,7 @@ where
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
         let mut ext_patch = ext::PatchType::NONE;
+        let mut ext_region_name = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -482,6 +502,11 @@ where
                     ext_patch = p;
                     has_ext = ext;
                 }
+                ext::RegionName::ID => {
+                    let (q, ext): (ext::RegionName, bool) = eodec.read(&mut *reader)?;
+                    ext_region_name = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
@@ -504,6 +529,7 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_region_name,
         })
     }
 }

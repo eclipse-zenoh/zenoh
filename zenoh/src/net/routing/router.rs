@@ -18,12 +18,13 @@ use std::{
 
 use arc_swap::ArcSwap;
 use uhlc::HLC;
-use zenoh_config::{Config, ModeDependent};
-use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
-use zenoh_result::ZResult;
-use zenoh_transport::{
-    multicast::TransportMulticast, unicast::TransportUnicast, Bound, TransportPeer,
+use zenoh_config::{
+    gateway::{GatewayPresetConf, GatewaySouthConf},
+    ExpandedConfig,
 };
+use zenoh_protocol::core::{Bound, Region, WhatAmI, ZenohIdProto};
+use zenoh_result::ZResult;
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
 pub use super::dispatcher::{pubsub::*, resource::*};
 use super::{
@@ -40,15 +41,14 @@ use crate::net::{
     routing::{
         dispatcher::{
             face::{FaceState, FaceStateBuilder},
-            region::Region,
             tables::{self, Tables},
         },
         hat::{BaseContext, HatTrait},
     },
 };
 
-pub struct RouterBuilder<'conf> {
-    config: &'conf Config,
+pub struct RouterBuilder<'c> {
+    config: &'c ExpandedConfig,
     hlc: Option<Arc<HLC>>,
     hats: Vec<(Region, WhatAmI)>,
     #[cfg(feature = "stats")]
@@ -56,7 +56,7 @@ pub struct RouterBuilder<'conf> {
 }
 
 impl<'conf> RouterBuilder<'conf> {
-    pub fn new(config: &'conf Config) -> RouterBuilder<'conf> {
+    pub fn new(config: &'conf ExpandedConfig) -> RouterBuilder<'conf> {
         Self {
             config,
             hlc: None,
@@ -84,30 +84,48 @@ impl<'conf> RouterBuilder<'conf> {
     }
 
     pub fn build(mut self) -> ZResult<Router> {
-        let zid = ZenohIdProto::from(self.config.id().expect("Config should be expanded"));
-        let mode = self.config.mode().expect("Config should be expanded");
-
-        let gateway_config = self
-            .config
-            .gateway
-            .get(mode)
-            .ok_or_else(|| zerror!("Undefined gateway configuration"))?;
+        let zid = ZenohIdProto::from(self.config.id());
+        let mode = self.config.mode();
 
         if self.hats.is_empty() {
             self.hats
                 .extend([(Region::North, mode), (Region::Local, WhatAmI::Client)]);
-
-            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-                self.hats.push((Region::Undefined { mode }, mode));
-            }
         }
 
-        for (index, _) in gateway_config.south.iter().enumerate() {
-            // REVIEW(regions): we create three hats per subregion.
-            // If memory usage is an issue, we should create then lazily.
-            for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-                self.hats
-                    .push((Region::Subregion { id: index, mode }, mode));
+        let south = self.config.gateway.south.clone().unwrap_or_default();
+
+        match south {
+            GatewaySouthConf::Preset(GatewayPresetConf::Auto) => match mode {
+                WhatAmI::Router => {
+                    for mode in [WhatAmI::Client, WhatAmI::Peer] {
+                        self.hats.push((
+                            Region::South {
+                                id: usize::default(),
+                                mode,
+                            },
+                            mode,
+                        ));
+                    }
+                }
+                WhatAmI::Peer => {
+                    self.hats.push((
+                        Region::South {
+                            id: usize::default(),
+                            mode: WhatAmI::Client,
+                        },
+                        mode,
+                    ));
+                }
+                WhatAmI::Client => {}
+            },
+            GatewaySouthConf::Custom(subregions) => {
+                for (id, _) in subregions.iter().enumerate() {
+                    // NOTE(regions): we create three hats per subregion.
+                    // If memory usage is an issue, we should create then lazily.
+                    for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+                        self.hats.push((Region::South { id, mode }, mode));
+                    }
+                }
             }
         }
 
@@ -240,6 +258,7 @@ impl Router {
         &self,
         transport: TransportUnicast,
         region: Region,
+        remote_bound: Bound,
     ) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -262,7 +281,7 @@ impl Router {
                     fid,
                     zid,
                     region,
-                    transport.get_bound().unwrap_or_default(),
+                    remote_bound,
                     mux.clone(),
                     tables.hats.map_ref(|hat| hat.new_face()),
                 )
@@ -280,6 +299,7 @@ impl Router {
             .filter(|(_, f)| f.remote_bound.is_south())
             .count();
 
+        // FIXME(regions): this error message is bad!
         if gwy_count > 1 {
             tracing::error!(
                 total = gwy_count,

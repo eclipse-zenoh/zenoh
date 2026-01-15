@@ -58,6 +58,9 @@ pub use resolution::*;
 pub mod parameters;
 pub use parameters::Parameters;
 
+pub mod region;
+pub use region::*;
+
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -644,7 +647,7 @@ impl CongestionControl {
 mod tests {
     use core::str::FromStr;
 
-    use crate::core::{Priority, PriorityRange};
+    use crate::core::{Priority, PriorityRange, RegionName};
 
     #[test]
     fn test_priority_range() {
@@ -664,5 +667,16 @@ mod tests {
 
         assert!(PriorityRange::from_str("1-").is_err());
         assert!(PriorityRange::from_str("-5").is_err());
+    }
+
+    #[test]
+    fn test_region_name_ok() {
+        assert!(RegionName::from_str("1234567812345678").is_ok());
+    }
+
+    #[test]
+    fn test_region_name_err() {
+        assert!(RegionName::from_str("12345678123456789").is_err());
+        assert!(RegionName::from_str("").is_err());
     }
 }

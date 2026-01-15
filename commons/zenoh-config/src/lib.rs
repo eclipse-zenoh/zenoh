@@ -37,7 +37,7 @@ use std::{
     io::Read,
     net::SocketAddr,
     num::{NonZeroU16, NonZeroUsize},
-    ops::{self, Bound, Deref, RangeBounds},
+    ops::{self, Bound, Deref, DerefMut, RangeBounds},
     path::Path,
     sync::{Arc, Weak},
 };
@@ -57,7 +57,7 @@ pub use zenoh_protocol::core::{
 use zenoh_protocol::{
     core::{
         key_expr::{OwnedKeyExpr, OwnedNonWildKeyExpr},
-        Bits,
+        Bits, RegionName,
     },
     transport::{BatchSize, TransportSn},
 };
@@ -473,7 +473,8 @@ validated_struct::validator! {
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
-        pub gateway: ModeDependentValue<gateway::GatewayConf>,
+        region_name: Option<RegionName>,
+        pub gateway: gateway::GatewayConf,
         /// Which zenoh nodes to connect to.
         pub connect:
         ConnectConfig {
@@ -1335,7 +1336,11 @@ impl Config {
     /// Expands the config with missing but required fields.
     ///
     /// This method should be called before a user-supplied config is used in the runtime.
-    pub fn expanded(mut self) -> Self {
+    ///
+    /// ## Invariants
+    ///
+    /// 1. All getter methods on [`ExpandedConfig`] are infallible (e.g. [`ExpandedConfig::id`] vs [`Config::id`]).
+    pub fn expanded(mut self) -> ExpandedConfig {
         if self.id.is_none() {
             self.set_id(Some(ZenohId::default())).unwrap();
         }
@@ -1344,7 +1349,35 @@ impl Config {
             self.set_mode(Some(WhatAmI::default())).unwrap();
         }
 
-        self
+        ExpandedConfig(self)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct ExpandedConfig(Config);
+
+impl ExpandedConfig {
+    pub fn id(&self) -> ZenohId {
+        self.0.id.unwrap()
+    }
+
+    pub fn mode(&self) -> WhatAmI {
+        self.0.mode.unwrap()
+    }
+}
+
+impl Deref for ExpandedConfig {
+    type Target = Config;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ExpandedConfig {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

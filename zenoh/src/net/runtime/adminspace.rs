@@ -31,7 +31,9 @@ use zenoh_plugin_trait::PluginDiff;
 #[cfg(feature = "plugins")]
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, Reliability, WireExpr, ZenohIdProto, EMPTY_EXPR_ID},
+    core::{
+        key_expr::OwnedKeyExpr, ExprId, Region, Reliability, WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
+    },
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Interest, Push, Request,
@@ -57,6 +59,7 @@ use crate::{
     net::{
         primitives::Primitives,
         routing::{dispatcher::tables::Tables, hat::Sources, router::Resource},
+        runtime::region,
     },
     LONG_VERSION,
 };
@@ -167,7 +170,7 @@ impl AdminSpace {
     pub async fn start(runtime: &Runtime) {
         let zid_str = runtime.state.zid.to_string();
         let whatami_str = runtime.state.whatami.to_str();
-        let config = &mut runtime.config().lock().0;
+        let config = &mut runtime.config().lock();
         let root_key: OwnedKeyExpr = format!("@/{zid_str}/{whatami_str}").try_into().unwrap();
 
         let mut handlers: HashMap<OwnedKeyExpr, (Handler, OwnedKeyExpr)> = HashMap::new();
@@ -240,7 +243,7 @@ impl AdminSpace {
 
                         let requested_plugins = {
                             let cfg_guard = admin.context.runtime.state.config.lock();
-                            cfg_guard.0.plugins().load_requests().collect::<Vec<_>>()
+                            cfg_guard.plugins().load_requests().collect::<Vec<_>>()
                         };
                         let mut diffs = Vec::new();
                         for plugin in active_plugins.keys() {
@@ -366,7 +369,7 @@ impl Primitives for AdminSpace {
     fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
         trace!("recv Push {:?}", msg);
         {
-            let conf = &self.context.runtime.state.config.lock().0;
+            let conf = &self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
                 tracing::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
@@ -430,7 +433,7 @@ impl Primitives for AdminSpace {
                         .entered();
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
-                    let conf = &self.context.runtime.state.config.lock().0;
+                    let conf = &self.context.runtime.state.config.lock();
                     if !conf.adminspace.permissions().read {
                         tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
@@ -566,6 +569,16 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
         .collect();
 
     let links_info = context.runtime.get_links_info();
+
+    let config = context.runtime.config().lock().clone();
+    // FIXME(regions): this should not be re-computed (and the config need not be cloned).
+    let transport_unicast_to_region = move |transport: &TransportUnicast| -> Option<Region> {
+        let peer = transport.get_peer().ok()?;
+        let transient_remote_bound = transport.get_bound().ok()?;
+        let (region, _) =
+            region::compute_region_of(&peer, &config, transient_remote_bound.as_ref()).ok()?;
+        Some(region)
+    };
     // transports info
     let transport_unicast_to_json = |transport: &TransportUnicast| {
         let link_to_json = |link: &Link| {
@@ -590,6 +603,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
             "links": links,
             "weight": transport.get_zid().ok().and_then(|zid| links_info.get(&zid)),
             "shm": shm,
+            "region": transport_unicast_to_region(transport).map_or_else(|| "unknown".to_string(), |r| r.to_string())
         });
         json
     };
@@ -635,7 +649,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let mut json = json!({
         "zid": context.runtime.state.zid,
         "version": &*LONG_VERSION,
-        "metadata": context.runtime.config().lock().0.metadata(),
+        "metadata": context.runtime.config().lock().metadata(),
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,

@@ -61,6 +61,7 @@ impl WhatAmI {
         }
     }
 
+    // FIXME(regions): delete this
     pub const fn short(self) -> &'static str {
         match self {
             Self::Router => "R",

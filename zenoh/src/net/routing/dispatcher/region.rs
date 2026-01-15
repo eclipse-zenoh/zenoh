@@ -1,46 +1,22 @@
+//
+// Copyright (c) 2026 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use std::{
-    fmt::{Debug, Display},
+    fmt::Debug,
     ops::{Index, IndexMut},
 };
 
-use zenoh_config::WhatAmI;
-pub(crate) use zenoh_transport::Bound;
-
-/// Subregion identifier.
-pub(crate) type SubregionId = usize;
-
-/// Region identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub(crate) enum Region {
-    /// Main region.
-    North,
-    /// Subregion of local sessions.
-    Local,
-    /// Subregion of remotes with no user-defined subregion.
-    Undefined { mode: WhatAmI }, // REVIEW(regions): call this "unbound" even though it's effectively south-bound?
-    /// User-defined subregions.
-    Subregion { id: SubregionId, mode: WhatAmI },
-}
-
-impl Region {
-    pub(crate) fn bound(&self) -> Bound {
-        match self {
-            Region::North => Bound::North,
-            Region::Local | Region::Undefined { .. } | Region::Subregion { .. } => Bound::South,
-        }
-    }
-}
-
-impl Display for Region {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Region::North => f.write_str("north"),
-            Region::Local => f.write_str("local"),
-            Region::Undefined { mode } => write!(f, "undef:{mode}"),
-            Region::Subregion { id, mode } => write!(f, "south:{mode}:{id}"),
-        }
-    }
-}
+use zenoh_protocol::core::Region;
 
 // TODO(regions): optimization
 #[derive(Debug, Default)]

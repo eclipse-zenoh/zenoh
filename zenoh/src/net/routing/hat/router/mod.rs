@@ -29,7 +29,7 @@ use itertools::Itertools;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::ZenohIdProto,
+    core::{Region, ZenohIdProto},
     network::{
         declare::queryable::ext::QueryableInfoType, interest::InterestId, oam::id::OAM_LINKSTATE,
         Oam,
@@ -60,7 +60,7 @@ use crate::net::{
             face::InterestState,
             interests::{PendingCurrentInterest, RemoteInterest},
             queries::merge_qabl_infos,
-            region::{Region, RegionMap},
+            region::RegionMap,
         },
         hat::{BaseContext, Remote, TREES_COMPUTATION_DELAY_MS},
         router::DEFAULT_NODE_ID,
@@ -324,7 +324,7 @@ impl Hat {
 impl HatBaseTrait for Hat {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
-        let config = &config_guard.0;
+        let config = &config_guard;
         let whatami = tables.hats[self.region].whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
@@ -590,7 +590,6 @@ impl HatBaseTrait for Hat {
         let config = runtime.config().lock();
         let router_link_weights = link_weights_from_config(
             config
-                .0
                 .routing()
                 .router()
                 .linkstate()
