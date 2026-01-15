@@ -772,9 +772,9 @@ impl<'de> serde::Deserialize<'de> for EndPoints {
                     locators: Vec<EndPoint>,
                 }
 
-                let s = serde::Deserialize::deserialize(serde::de::value::MapAccessDeserializer::new(
-                    map,
-                ))?;
+                let s = serde::Deserialize::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )?;
                 let helper: LocatorsHelper = s;
                 Ok(EndPoints::Locators(Locators {
                     strategy: helper.strategy,
@@ -791,8 +791,7 @@ impl TryFrom<String> for EndPoints {
     type Error = ZError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        const ERR: &str =
-            "Endpoints must be of the form <endpoint>";
+        const ERR: &str = "Endpoints must be of the form <endpoint>";
         EndPoint::from_str(s.as_str())
             .map(EndPoints::Single)
             .map_err(|e| zerror!("{}: {}", ERR, e).into())
