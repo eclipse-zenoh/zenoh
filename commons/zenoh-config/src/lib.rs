@@ -1209,7 +1209,7 @@ fn config_deser() {
                 mode: "client",
                 connect: {
                     endpoints: [
-                        ["tcp/127.0.0.1:7447?rel=0","tcp/127.0.0.1:7448?rel=1"],
+                        { strategy: "allOf", locators: ["tcp/127.0.0.1:7447?rel=0", "tcp/127.0.0.1:7448?rel=1"] },
                     ]
                 }
             }"#,
@@ -1222,7 +1222,13 @@ fn config_deser() {
     assert_eq!(endpoints.len(), 1);
     assert_eq!(
         endpoints[0],
-        EndPoints::from_str("[tcp/127.0.0.1:7447?rel=0,tcp/127.0.0.1:7448?rel=1]").unwrap(),
+        EndPoints::Locators(zenoh_protocol::core::Locators {
+            strategy: zenoh_protocol::core::LocatorsStrategy::AllOf,
+            locators: vec![
+                EndPoint::from_str("tcp/127.0.0.1:7447?rel=0").unwrap(),
+                EndPoint::from_str("tcp/127.0.0.1:7448?rel=1").unwrap()
+            ]
+        })
     );
 
     dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
