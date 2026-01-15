@@ -27,7 +27,8 @@ mod tests {
     use zenoh::sample::SampleKind;
 
     use crate::common::{
-        close_session, open_session_connect, open_session_listen, open_session_unicast,
+        close_session, open_session_connect, open_session_listen, open_session_multilink,
+        open_session_unicast,
     };
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
@@ -159,18 +160,20 @@ mod tests {
             .with(flume::bounded(32))
             .await;
 
+        // Connect two sessions
         let session2 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
+        let session3 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
         tokio::time::sleep(SLEEP).await;
 
-        // Collect link added events - should be exactly 1 Put
+        // Collect link added events - should be exactly 2 Put
         let put_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
-            put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
-            "Expected exactly 1 Put event, got {:?}",
+            put_events.len() == 2 && put_events.iter().all(|e| e.kind() == SampleKind::Put),
+            "Expected exactly 2 Put events, got {:?}",
             put_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
         );
 
-        // Close session2 to trigger link removal
+        // Close session2 (first transport's last link)
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
@@ -178,7 +181,61 @@ mod tests {
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
-            "Expected exactly 1 Delete event, got {:?}",
+            "First close: expected exactly 1 Delete event, got {:?}",
+            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+        );
+
+        // Close session3 (second transport's last link)
+        session3.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // Collect link removed events - should be exactly 1 Delete
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Second close: expected exactly 1 Delete event, got {:?}",
+            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+        );
+
+        session1.close().await.unwrap();
+    }
+
+    /// Test link events with multilink transport (multiple links in same transport)
+    /// This tests is_last=false (first link) vs is_last=true (last link) in del_link()
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_link_events_multilink() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let endpoints = &["tcp/127.0.0.1:17470", "tcp/127.0.0.1:17471"];
+        let (session1, session2) = open_session_multilink(endpoints, endpoints).await;
+
+        tokio::time::sleep(SLEEP).await;
+
+        // Verify we have 2 links in 1 transport
+        let transports: Vec<_> = session1.info().transports().await.collect();
+        assert_eq!(transports.len(), 1, "Should have exactly 1 transport");
+
+        let links: Vec<_> = session1.info().links().await.collect();
+        assert_eq!(links.len(), 2, "Should have exactly 2 links in multilink transport");
+
+        // Subscribe to link events
+        let events = session1
+            .info()
+            .link_events_listener()
+            .history(false)
+            .with(flume::bounded(32))
+            .await;
+
+        // Close session2 - this closes both links
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // Collect delete events - should be exactly 2 (one per link)
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            delete_events.len() == 2 && delete_events.iter().all(|e| e.kind() == SampleKind::Delete),
+            "Expected exactly 2 Delete events (one per link), got {:?}",
             delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
         );
 
