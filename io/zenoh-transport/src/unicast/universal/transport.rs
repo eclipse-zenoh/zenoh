@@ -159,7 +159,7 @@ impl TransportUnicastUniversal {
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
         enum Target {
             Transport,
-            Link(TransportLinkUnicastUniversal),
+            Link(Box<TransportLinkUnicastUniversal>),
         }
 
         // Try to remove the link
@@ -187,7 +187,7 @@ impl TransportUnicastUniversal {
                     let mut links = guard.to_vec();
                     let stl = links.remove(index);
                     *guard = links.into_boxed_slice();
-                    Target::Link(stl)
+                    Target::Link(stl.into())
                 }
             } else {
                 bail!(
