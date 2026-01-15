@@ -126,8 +126,8 @@ mod tests {
         let put_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
-            "Expected exactly 1 Put event, got {:?}",
-            put_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+            "Expected exactly 1 Put event, got {} events",
+            put_events.len()
         );
 
         // Close session2 to trigger transport close event
@@ -138,8 +138,8 @@ mod tests {
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
-            "Expected exactly 1 Delete event, got {:?}",
-            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+            "Expected exactly 1 Delete event, got {} events",
+            delete_events.len()
         );
 
         session1.close().await.unwrap();
@@ -169,8 +169,8 @@ mod tests {
         let put_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             put_events.len() == 2 && put_events.iter().all(|e| e.kind() == SampleKind::Put),
-            "Expected exactly 2 Put events, got {:?}",
-            put_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+            "Expected exactly 2 Put events, got {} events",
+            put_events.len()
         );
 
         // Close session2 (first transport's last link)
@@ -181,8 +181,8 @@ mod tests {
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
-            "First close: expected exactly 1 Delete event, got {:?}",
-            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+            "First close: expected exactly 1 Delete event, got {:?} events",
+            delete_events.len()
         );
 
         // Close session3 (second transport's last link)
@@ -193,8 +193,8 @@ mod tests {
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
-            "Second close: expected exactly 1 Delete event, got {:?}",
-            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+            "Second close: expected exactly 1 Delete event, got {} events",
+            delete_events.len()
         );
 
         session1.close().await.unwrap();
@@ -235,8 +235,8 @@ mod tests {
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
             delete_events.len() == 2 && delete_events.iter().all(|e| e.kind() == SampleKind::Delete),
-            "Expected exactly 2 Delete events (one per link), got {:?}",
-            delete_events.iter().map(|e| e.kind()).collect::<Vec<_>>()
+            "Expected exactly 2 Delete events (one per link), got {} events",
+            delete_events.len()
         );
 
         session1.close().await.unwrap();
