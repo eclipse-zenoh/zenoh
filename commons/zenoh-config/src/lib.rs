@@ -1323,7 +1323,9 @@ impl Config {
                         Ok(c) => zerror!("Invalid configuration: {}", c).into(),
                         Err(e) => zerror!("YAML error: {:?}", e).into(),
                     }),
+                    #[cfg(feature = "unstable")]
                     Some("toml") => {
+                        tracing::warn!("The TOML configuration format is unstable and may be removed in a future release");
                         match toml::Deserializer::parse(&content) {
                             Ok(de) => Config::from_deserializer(de).map_err(|e| match e {
                                 Ok(c) => zerror!("Invalid configuration: {}", c).into(),
