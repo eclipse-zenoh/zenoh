@@ -217,7 +217,11 @@ mod tests {
         assert_eq!(transports.len(), 1, "Should have exactly 1 transport");
 
         let links: Vec<_> = session1.info().links().await.collect();
-        assert_eq!(links.len(), 2, "Should have exactly 2 links in multilink transport");
+        assert_eq!(
+            links.len(),
+            2,
+            "Should have exactly 2 links in multilink transport"
+        );
 
         // Subscribe to link events
         let events = session1
@@ -234,7 +238,8 @@ mod tests {
         // Collect delete events - should be exactly 2 (one per link)
         let delete_events = collect_events(&events, Duration::from_millis(200)).await;
         assert!(
-            delete_events.len() == 2 && delete_events.iter().all(|e| e.kind() == SampleKind::Delete),
+            delete_events.len() == 2
+                && delete_events.iter().all(|e| e.kind() == SampleKind::Delete),
             "Expected exactly 2 Delete events (one per link), got {} events",
             delete_events.len()
         );

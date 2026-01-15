@@ -159,7 +159,7 @@ impl TransportUnicastUniversal {
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
         enum Target {
             Transport,
-            Link(Box<TransportLinkUnicastUniversal>),
+            Link(TransportLinkUnicastUniversal),
         }
 
         // Try to remove the link
@@ -177,16 +177,17 @@ impl TransportUnicastUniversal {
             }) {
                 let is_last = guard.len() == 1;
                 if is_last {
+                    // even if closing the whole transport, still need to remove the link from the list
+                    // because multiple concurrent del_link calls could be staying on this guard
+                    *guard = vec![].into_boxed_slice();
                     // Close the whole transport
-                    drop(guard);
                     Target::Transport
                 } else {
                     // Remove the link
                     let mut links = guard.to_vec();
                     let stl = links.remove(index);
                     *guard = links.into_boxed_slice();
-                    drop(guard);
-                    Target::Link(stl.into())
+                    Target::Link(stl)
                 }
             } else {
                 bail!(
