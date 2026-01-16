@@ -83,7 +83,17 @@ macro_rules! loc {
     ($session:expr) => {
         ztimeout!($session.info().locators())
             .into_iter()
-            .next()
+            .fold(None, |accu, item| match accu {
+                None => Some(item),
+                Some(loc) => {
+                    // Select IPv4 locators prior to IPv6 locators for github CI
+                    if loc.as_str().contains("[") {
+                        Some(item)
+                    } else {
+                        Some(loc)
+                    }
+                }
+            })
             .unwrap()
             .as_str()
     };
