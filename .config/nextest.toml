@@ -33,15 +33,3 @@ serial = { max-threads = 1 }
 [[profile.default.overrides]]
 filter = 'test(zenoh_querier_matching_status::)'
 test-group = 'serial'
-
-[[profile.default.overrides]]
-filter = 'test(scenario1::)'
-test-group = 'serial'
-
-[[profile.default.overrides]]
-filter = 'test(scenario2::)'
-test-group = 'serial'
-
-[[profile.default.overrides]]
-filter = 'test(scenario3::)'
-test-group = 'serial'

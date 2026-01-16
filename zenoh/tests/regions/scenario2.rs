@@ -21,7 +21,7 @@ use std::time::Duration;
 use zenoh_config::WhatAmI::Peer;
 use zenoh_core::{lazy_static, ztimeout};
 
-use crate::{count, Node};
+use crate::{count, loc, Node};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -44,55 +44,48 @@ async fn test_regions_scenario2_order1_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Peer, "21aa9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.1.1:9100")
         .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "21aa9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.1.1:9200")
         .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21aa9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.1.1:9300")
         .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "21aa9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.1.1:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "21aa9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.1.1:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "21aa9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.1.1:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "21aa9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.1.1:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "21aa9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.1.1:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "21aa9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.1.1:9200")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "21aa9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.1.1:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "21aa9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.1.1:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "21aa9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.1.1:9300")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -147,55 +140,48 @@ async fn test_regions_scenario2_order1_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Peer, "21ab9100")
-        .endpoints("tcp/[::]:9100", &[])
-        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[{filters:[]}]}")
+        .multicast("224.2.1.2:9100")
+        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "21ab9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
-        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[{filters:[]}]}")
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.1.2:9200")
+        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21ab9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
-        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[{filters:[]}]}")
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.1.2:9300")
+        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "21ab9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.1.2:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "21ab9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.1.2:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "21ab9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.1.2:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "21ab9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.1.2:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "21ab9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.1.2:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "21ab9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.1.2:9200")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "21ab9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.1.2:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "21ab9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.1.2:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "21ab9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.1.2:9300")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -260,42 +246,33 @@ async fn test_regions_scenario2_order2_putsub() {
     init_tracing_subscriber();
 
     let _z9110 = ztimeout!(Node::new(Peer, "22aa9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.2.1:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "22aa9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.2.1:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "22aa9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.2.1:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "22aa9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.2.1:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "22aa9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.2.1:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "22aa9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.2.1:9200")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "22aa9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.2.1:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "22aa9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.2.1:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "22aa9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.2.1:9300")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -309,15 +286,17 @@ async fn test_regions_scenario2_order2_putsub() {
     let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
 
     let _z9100 = ztimeout!(Node::new(Peer, "22aa9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.2.1:9100")
         .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "22aa9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.2.1:9200")
         .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22aa9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.2.1:9300")
         .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
         .open());
 
@@ -363,42 +342,33 @@ async fn test_regions_scenario2_order2_pubsub() {
     init_tracing_subscriber();
 
     let _z9110 = ztimeout!(Node::new(Peer, "22ab9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.2.2:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "22ab9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.2.2:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "22ab9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.2.2:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "22ab9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.2.2:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "22ab9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.2.2:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "22ab9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.2.2:9200")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "22ab9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.2.2:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "22ab9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.2.2:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "22ab9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.2.2:9300")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -422,15 +392,17 @@ async fn test_regions_scenario2_order2_pubsub() {
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
     let _z9100 = ztimeout!(Node::new(Peer, "22ab9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.2.2:9100")
         .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "22ab9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.2.2:9200")
         .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22ab9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.2.2:9300")
         .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
         .open());
 
@@ -476,51 +448,43 @@ async fn test_regions_scenario2_order3_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Peer, "23aa9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.3.1:9100")
         .gateway("{north:{filters:[{zids:[\"23aa9100\",\"23aa9200\",\"23aa9300\"]}]},south:[]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "23aa9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.3.1:9200")
         .gateway("{north:{filters:[{zids:[\"23aa9100\",\"23aa9200\",\"23aa9300\"]}]},south:[]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "23aa9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.3.1:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "23aa9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.3.1:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "23aa9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.3.1:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "23aa9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.3.1:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "23aa9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.3.1:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "23aa9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.3.1:9200")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "23aa9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.3.1:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "23aa9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.3.1:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "23aa9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.3.1:9300")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -534,7 +498,8 @@ async fn test_regions_scenario2_order3_putsub() {
     let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Peer, "23aa9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.3.1:9300")
         .gateway("{north:{filters:[{zids:[\"23aa9100\",\"23aa9200\",\"23aa9300\"]}]},south:[]}")
         .open());
 
@@ -580,51 +545,43 @@ async fn test_regions_scenario2_order3_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Peer, "23ab9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.3.2:9100")
         .gateway("{north:{filters:[{zids:[\"23ab9100\",\"23ab9200\",\"23ab9300\"]}]},south:[{filters:[]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "23ab9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.3.2:9200")
         .gateway("{north:{filters:[{zids:[\"23ab9100\",\"23ab9200\",\"23ab9300\"]}]},south:[{filters:[]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "23ab9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.3.2:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "23ab9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.3.2:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "23ab9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.3.2:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "23ab9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.3.2:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "23ab9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.3.2:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "23ab9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.3.2:9200")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "23ab9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.3.2:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "23ab9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.3.2:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "23ab9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.3.2:9300")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -648,7 +605,8 @@ async fn test_regions_scenario2_order3_pubsub() {
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Peer, "23ab9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.3.2:9300")
         .gateway("{north:{filters:[{zids:[\"23ab9100\",\"23ab9200\",\"23ab9300\"]}]},south:[{filters:[]}]}")
         .open());
 
@@ -694,38 +652,33 @@ async fn test_regions_scenario2_order4_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Peer, "24aa9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.4.1:9100")
         .gateway("{north:{filters:[{zids:[\"24aa9100\",\"24aa9200\",\"24aa9300\"]}]},south:[]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "24aa9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.4.1:9200")
         .gateway("{north:{filters:[{zids:[\"24aa9100\",\"24aa9200\",\"24aa9300\"]}]},south:[]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "24aa9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.4.1:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "24aa9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.4.1:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "24aa9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.4.1:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "24aa9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.4.1:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "24aa9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.4.1:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "24aa9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.4.1:9200")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -736,21 +689,19 @@ async fn test_regions_scenario2_order4_putsub() {
     let s9230 = _z9230.declare_subscriber("test/**").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Peer, "24aa9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.4.1:9300")
         .gateway("{north:{filters:[{zids:[\"24aa9100\",\"24aa9200\",\"24aa9300\"]}]},south:[]}")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "24aa9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.4.1:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "24aa9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.4.1:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "24aa9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.4.1:9300")
         .open());
 
     let s9310 = _z9310.declare_subscriber("test/**").await.unwrap();
@@ -799,38 +750,33 @@ async fn test_regions_scenario2_order4_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Peer, "24ab9100")
-        .endpoints("tcp/[::]:9100", &[])
+        .multicast("224.2.4.2:9100")
         .gateway("{north:{filters:[{zids:[\"24ab9100\",\"24ab9200\",\"24ab9300\"]}]},south:[{filters:[]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "24ab9200")
-        .endpoints("tcp/[::]:9200", &["tcp/[::]:9100"])
+        .connect(&[loc!(_z9100)])
+        .multicast("224.2.4.2:9200")
         .gateway("{north:{filters:[{zids:[\"24ab9100\",\"24ab9200\",\"24ab9300\"]}]},south:[{filters:[]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "24ab9110")
-        .listen("tcp/[::]:9110")
-        .connect(&["tcp/[::]:9100"])
+        .multicast("224.2.4.2:9100")
         .open());
     let _z9120 = ztimeout!(Node::new(Peer, "24ab9120")
-        .listen("tcp/[::]:9120")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110"])
+        .multicast("224.2.4.2:9100")
         .open());
     let _z9130 = ztimeout!(Node::new(Peer, "24ab9130")
-        .listen("tcp/[::]:9130")
-        .connect(&["tcp/[::]:9100", "tcp/[::]:9110", "tcp/[::]:9120"])
+        .multicast("224.2.4.2:9100")
         .open());
 
     let _z9210 = ztimeout!(Node::new(Peer, "24ab9210")
-        .listen("tcp/[::]:9210")
-        .connect(&["tcp/[::]:9200"])
+        .multicast("224.2.4.2:9200")
         .open());
     let _z9220 = ztimeout!(Node::new(Peer, "24ab9220")
-        .listen("tcp/[::]:9220")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210"])
+        .multicast("224.2.4.2:9200")
         .open());
     let _z9230 = ztimeout!(Node::new(Peer, "24ab9230")
-        .listen("tcp/[::]:9230")
-        .connect(&["tcp/[::]:9200", "tcp/[::]:9210", "tcp/[::]:9220"])
+        .multicast("224.2.4.2:9200")
         .open());
 
     let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
@@ -848,21 +794,19 @@ async fn test_regions_scenario2_order4_pubsub() {
     let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Peer, "24ab9300")
-        .endpoints("tcp/[::]:9300", &["tcp/[::]:9100", "tcp/[::]:9200"])
+        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.2.4.2:9300")
         .gateway("{north:{filters:[{zids:[\"24ab9100\",\"24ab9200\",\"24ab9300\"]}]},south:[{filters:[]}]}")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "24ab9310")
-        .listen("tcp/[::]:9310")
-        .connect(&["tcp/[::]:9300"])
+        .multicast("224.2.4.2:9300")
         .open());
     let _z9320 = ztimeout!(Node::new(Peer, "24ab9320")
-        .listen("tcp/[::]:9320")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310"])
+        .multicast("224.2.4.2:9300")
         .open());
     let _z9330 = ztimeout!(Node::new(Peer, "24ab9330")
-        .listen("tcp/[::]:9330")
-        .connect(&["tcp/[::]:9300", "tcp/[::]:9310", "tcp/[::]:9320"])
+        .multicast("224.2.4.2:9300")
         .open());
 
     let s9310 = _z9310.declare_subscriber("test/**").await.unwrap();
