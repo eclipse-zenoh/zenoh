@@ -154,6 +154,7 @@ impl QuerierBuilder<'_, '_> {
     }
 
     /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this querier accepts such disjoint replies.
     #[zenoh_macros::unstable]
@@ -172,9 +173,7 @@ impl<'b> Resolvable for QuerierBuilder<'_, 'b> {
 impl Wait for QuerierBuilder<'_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
-        if !key_expr.is_fully_optimized(&self.session.0) {
-            key_expr = self.session.declare_keyexpr(key_expr).wait()?;
-        }
+        key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
             .0
@@ -514,9 +513,9 @@ where
             .map(|qid| {
                 #[cfg(feature = "unstable")]
                 if let Some(cancellation_token) = cancellation_token {
-                    let session_clone = self.querier.session.clone();
+                    let weak_session = self.querier.session.clone();
                     let on_cancel = move || {
-                        let _ = session_clone.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        let _ = weak_session.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
                         Ok(())
                     };
                     cancellation_token.add_on_cancel_handler(Box::new(on_cancel));

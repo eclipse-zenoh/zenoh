@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh::key_expr::KeyExpr;
-#[cfg(feature = "internal_config")]
-use zenoh::Wait;
-#[cfg(feature = "internal_config")]
+use zenoh::{key_expr::KeyExpr, Wait};
 use zenoh_config::WhatAmI;
 
 #[test]
@@ -45,7 +42,6 @@ fn keyexpr_test_new() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_into_owned_borrowing_clone() {
     let expr = KeyExpr::try_from("expr").unwrap();
     let clone = expr.borrowing_clone();
@@ -59,7 +55,7 @@ fn keyexpr_test_into_owned_borrowing_clone() {
     let clone = expr.borrowing_clone();
     assert_eq!(expr, clone);
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -86,14 +82,13 @@ fn keyexpr_test_autocannonize() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_join() {
     let prefix = KeyExpr::try_from("some/prefix").unwrap();
     let suffix = KeyExpr::try_from("some/suffix").unwrap();
     let join = prefix.join(&suffix).unwrap();
     assert_eq!(join.as_str(), "some/prefix/some/suffix");
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -123,14 +118,13 @@ fn keyexpr_test_join() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_concat() {
     let prefix = KeyExpr::try_from("some/prefix").unwrap();
     let suffix = KeyExpr::try_from("some/suffix").unwrap();
     let concat = prefix.concat(&suffix).unwrap();
     assert_eq!(concat.as_str(), "some/prefixsome/suffix");
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -211,7 +205,6 @@ fn keyexpr_test_debug() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_div() {
     let suffix = KeyExpr::try_from("suffix").unwrap();
 
@@ -235,7 +228,7 @@ fn keyexpr_test_div() {
         KeyExpr::try_from("prefix/suffix").unwrap()
     );
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -269,19 +262,25 @@ fn keyexpr_test_div() {
 }
 
 #[test]
-#[cfg(feature = "internal_config")]
 fn keyexpr_test_undeclare() {
     let expr = KeyExpr::try_from("expr").unwrap();
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
     config.listen.endpoints.set(vec![]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config.clone()).wait().unwrap();
+    let session2 = zenoh::open(config).wait().unwrap();
     let wire_expr = session.declare_keyexpr("expr").wait().unwrap();
     let owned_wire_expr = session.declare_keyexpr("expr").wait().unwrap().into_owned();
 
+    let wire_expr2 = wire_expr.clone();
+    let wire_expr3 = wire_expr.clone();
+    assert!(session2.undeclare(wire_expr2).wait().is_err());
+
     assert!(session.undeclare(wire_expr).wait().is_ok());
+    assert!(session.undeclare(wire_expr3).wait().is_ok());
+
     assert!(session.undeclare(owned_wire_expr).wait().is_ok());
     assert!(session.undeclare(expr).wait().is_err());
 

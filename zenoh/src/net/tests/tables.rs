@@ -148,6 +148,9 @@ fn match_test() {
         "x/c$*",
         "x/$*d",
         "x/$*e",
+        "@a",
+        "**/@a",
+        "@a/b",
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
@@ -446,12 +449,13 @@ async fn clean_test() {
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
+    register_expr(&tables, &mut face0.state.clone(), 5, &"todrop6".into());
     declare_subscription(
         tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         3,
-        &"todrop5".into(),
+        &WireExpr::from(4),
         &sub_info,
         NodeId::default(),
         &mut |p, m| {
@@ -465,9 +469,37 @@ async fn clean_test() {
         &tables,
         &mut face0.state.clone(),
         4,
-        &"todrop6".into(),
+        &"todrop7".into(),
         &sub_info,
         NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+    declare_token(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut face0.state.clone(),
+        5,
+        &WireExpr::from(4),
+        NodeId::default(),
+        None,
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+    declare_token(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut face0.state.clone(),
+        4,
+        &"todrop8".into(),
+        NodeId::default(),
+        None,
         &mut |p, m| {
             m.with_mut(|m| {
                 p.send_declare(m);
@@ -487,15 +519,27 @@ async fn clean_test() {
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
+    let optres4 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop7")
+        .map(|res| Arc::downgrade(&res));
+    assert!(optres4.is_some());
+    let res4 = optres4.unwrap();
+    let optres5 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop8")
+        .map(|res| Arc::downgrade(&res));
+    assert!(optres5.is_some());
+    let res5 = optres5.unwrap();
 
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
+    assert!(res4.upgrade().is_some());
+    assert!(res5.upgrade().is_some());
 
     face0.send_close();
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
+    assert!(res4.upgrade().is_none());
+    assert!(res5.upgrade().is_none());
 }
 
 pub struct ClientPrimitives {

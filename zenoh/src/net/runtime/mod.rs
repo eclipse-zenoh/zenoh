@@ -20,6 +20,7 @@
 mod adminspace;
 pub mod orchestrator;
 
+#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -40,7 +41,7 @@ use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
-use zenoh_link::{EndPoint, Link};
+use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
     core::{Locator, WhatAmI, ZenohIdProto},
@@ -81,6 +82,7 @@ use crate::{
     api::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
+        info::{Link, Transport},
     },
     GIT_VERSION,
 };
@@ -142,8 +144,12 @@ pub trait IRuntime: Send + Sync {
     #[zenoh_macros::unstable]
     fn get_shm_provider(&self) -> ShmProviderState;
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
+
+    fn get_links(
+        &self,
+        transport: Option<&Transport>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     fn new_primitives(
         &self,
@@ -228,20 +234,31 @@ impl IRuntime for RuntimeState {
         zwrite!(self.transport_handlers).push(handler);
     }
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
-        zenoh_runtime::ZRuntime::Net
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
+        let unicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_unicast())
             .into_iter()
             .filter_map(|t| t.get_peer().ok())
-            .collect::<Vec<_>>()
-    }
+            .map(|ref peer| Transport::new(peer, false));
 
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
-        zenoh_runtime::ZRuntime::Net
+        let multicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_multicast())
             .into_iter()
-            .filter_map(|t| t.get_peers().ok())
-            .collect::<Vec<_>>()
+            .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+            .map(|ref peer| Transport::new(peer, true));
+
+        Box::new(unicast_transports.chain(multicast_transports))
+    }
+
+    fn get_links(
+        &self,
+        transport: Option<&Transport>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        match transport {
+            None => self.get_links_all(),
+            Some(t) if t.is_multicast => self.get_links_transport_multicast(&t.zid),
+            Some(t) => self.get_links_transport_unicast(&t.zid),
+        }
     }
 
     fn matching_status_remote(
@@ -391,6 +408,89 @@ impl RuntimeState {
 
     async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.pending_connections.lock().await.remove(zid)
+    }
+
+    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_unicast())
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_multicast())
+            .into_iter()
+            .filter_map(|t| t.get_peers().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_links_all(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let peer_to_links = |peer: TransportPeer| -> Vec<Link> {
+            let zid: ZenohId = peer.zid.into();
+            let is_qos = peer.is_qos;
+            peer.links
+                .into_iter()
+                .map(|ref link| Link::new(zid, link, is_qos))
+                .collect()
+        };
+
+        let unicast_links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .flat_map(peer_to_links);
+
+        let multicast_links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .flat_map(peer_to_links);
+
+        Box::new(unicast_links.chain(multicast_links))
+    }
+
+    fn get_links_transport_unicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link, is_qos))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
+    }
+
+    fn get_links_transport_multicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link, is_qos))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
     }
 }
 
@@ -758,14 +858,14 @@ impl TransportPeerEventHandler for RuntimeSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -830,14 +930,14 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());

@@ -62,6 +62,7 @@ impl LinkUnicastTcp {
         }
 
         // Set the TCP linger option
+        #[allow(deprecated)]
         if let Err(err) = socket.set_linger(Some(Duration::from_secs(
             (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
         ))) {

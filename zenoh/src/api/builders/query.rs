@@ -320,8 +320,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](Locality).
+    /// Restrict the matching queryables that will receive the query to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(self, destination: Locality) -> Self {
@@ -338,6 +337,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     }
 
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this get operation accepts such disjoint replies.
     #[zenoh_macros::unstable]
@@ -411,9 +411,9 @@ where
             .map(|qid| {
                 #[cfg(feature = "unstable")]
                 if let Some(cancellation_token) = cancellation_token {
-                    let session_clone = self.session.clone();
+                    let weak_session = self.session.downgrade();
                     let on_cancel = move || {
-                        let _ = session_clone.0.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
+                        let _ = weak_session.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
                         Ok(())
                     };
                     cancellation_token.add_on_cancel_handler(Box::new(on_cancel));

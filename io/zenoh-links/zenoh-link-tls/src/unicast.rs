@@ -98,6 +98,7 @@ impl LinkUnicastTls {
         }
 
         // Set the TLS linger option
+        #[allow(deprecated)]
         if let Err(err) = tcp_stream.set_linger(Some(Duration::from_secs(
             (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
         ))) {
