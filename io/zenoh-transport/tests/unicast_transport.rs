@@ -16,9 +16,10 @@ use std::{
     convert::TryFrom,
     fmt::Write as _,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc,
     },
+    thread::sleep,
     time::Duration,
 };
 
@@ -26,7 +27,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohIdProto},
-    network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
+    network::{push::ext::QoSType, NetworkMessage, NetworkMessageExt, NetworkMessageMut, Push},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -1802,4 +1803,406 @@ async fn transport_unicast_quic_datagram_only_server() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
+}
+
+// Transport Handler for multistream server
+struct MultiStreamHandler {
+    callback: Arc<MultiStreamCallback>,
+}
+
+impl Default for MultiStreamHandler {
+    fn default() -> Self {
+        Self {
+            callback: Arc::new(MultiStreamCallback::new()),
+        }
+    }
+}
+
+impl TransportEventHandler for MultiStreamHandler {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(self.callback.clone())
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        unreachable!();
+    }
+}
+
+// Transport Callback for multistream tests
+pub struct MultiStreamCallback {
+    sleeping: AtomicBool,
+    is_multistream: AtomicBool,
+}
+
+impl MultiStreamCallback {
+    pub fn new() -> Self {
+        Self {
+            sleeping: AtomicBool::new(false),
+            is_multistream: AtomicBool::new(false),
+        }
+    }
+}
+
+impl TransportPeerEventHandler for MultiStreamCallback {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
+        match self.sleeping.swap(true, Ordering::SeqCst) {
+            false => std::thread::sleep(Duration::from_secs(10000)),
+            true => self.is_multistream.store(true, Ordering::Relaxed),
+        }
+        Ok(())
+    }
+
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+async fn open_multistream_transport_unicast(
+    client_endpoints: &[EndPoint],
+    server_endpoints: &[EndPoint],
+    lowlatency_transport: bool,
+) -> (
+    TransportManager,
+    Arc<MultiStreamHandler>,
+    TransportManager,
+    TransportUnicast,
+) {
+    // Define client and router IDs
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
+
+    // Create the router transport manager
+    let router_handler = Arc::new(MultiStreamHandler::default());
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        server_endpoints.len(),
+        lowlatency_transport,
+    );
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .unicast(unicast)
+        .build_test(router_handler.clone())
+        .unwrap();
+
+    // Create the listener on the router
+    for e in server_endpoints.iter() {
+        println!("Add endpoint: {e}");
+        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+    }
+
+    // Create the client transport manager
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        client_endpoints.len(),
+        lowlatency_transport,
+    );
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClient))
+        .unwrap();
+
+    // Create an empty transport with the client
+    // Open transport -> This should be accepted
+    for e in client_endpoints.iter() {
+        println!("Opening transport with {e}");
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
+    }
+
+    let client_transport = ztimeout!(client_manager.get_transport_unicast(&router_id)).unwrap();
+
+    // Return the handlers
+    (
+        router_manager,
+        router_handler,
+        client_manager,
+        client_transport,
+    )
+}
+
+#[cfg(feature = "transport_quic")]
+fn quic_endpoint(locator: &str) -> EndPoint {
+    use zenoh_link_commons::tls::config::*;
+
+    let mut endpoint: EndPoint = locator.parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+    endpoint
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_quic_default() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = quic_endpoint("quic/localhost:10468");
+    let is_multistream =
+        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    assert!(
+        is_multistream,
+        "default endpoint config (auto) should enable multistream"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_quic_enabled() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let mut endpoint = quic_endpoint("quic/localhost:10469?multistream=true");
+    let is_multistream =
+        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    assert!(
+        is_multistream,
+        "'?multistream=true' should enable multistream"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_quic_disabled() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let mut endpoint = quic_endpoint("quic/localhost:10470?multistream=false");
+    let is_mutlistream =
+        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    assert!(
+        !is_mutlistream,
+        "'?multistream=false' should disable multistream"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_quic_auto_explicit() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = 10471;
+    let is_mutlistream = run_multistream_test(
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?multistream=true"
+        ))],
+        &[quic_endpoint(&format!("quic/localhost:{port}"))],
+        false,
+    )
+    .await;
+    assert!(
+        is_mutlistream,
+        "'?multistream=true' with auto listener should enable multistream"
+    );
+
+    let port = 10472;
+    let is_mutlistream = run_multistream_test(
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?multistream=false"
+        ))],
+        &[quic_endpoint(&format!("quic/localhost:{port}"))],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mutlistream,
+        "'?multistream=false' with auto listener should disable multistream"
+    );
+
+    let port = 10473;
+    let is_mutlistream = run_multistream_test(
+        &[quic_endpoint(&format!("quic/localhost:{port}"))],
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?multistream=true"
+        ))],
+        false,
+    )
+    .await;
+    assert!(
+        is_mutlistream,
+        "'?multistream=true' with auto connect should enable multistream"
+    );
+
+    let port = 10474;
+    let is_mutlistream = run_multistream_test(
+        &[quic_endpoint(&format!("quic/localhost:{port}"))],
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?multistream=false"
+        ))],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mutlistream,
+        "'?multistream=false' with auto connect should disable multistream"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_quic_auto() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = quic_endpoint("quic/localhost:10475?multistream=auto");
+    let is_multistream =
+        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    assert!(
+        is_multistream,
+        "'?multistream=auto' endpoint should enable multistream"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[test]
+fn transport_unicast_multistream_quic_incompatible() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = 10476;
+    let result = std::panic::catch_unwind(|| {
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_multistream_test(
+                &[quic_endpoint(&format!(
+                    "quic/localhost:{port}?multistream=true"
+                ))],
+                &[quic_endpoint(&format!(
+                    "quic/localhost:{port}?multistream=false"
+                ))],
+                false,
+            ))
+    });
+    assert!(
+        result.is_err(),
+        "incompatible multistream config should fail to connect"
+    );
+
+    let port = 10477;
+    let result = std::panic::catch_unwind(|| {
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_multistream_test(
+                &[quic_endpoint(&format!(
+                    "quic/localhost:{port}?multistream=false"
+                ))],
+                &[quic_endpoint(&format!(
+                    "quic/localhost:{port}?multistream=true"
+                ))],
+                false,
+            ))
+    });
+    assert!(
+        result.is_err(),
+        "incompatible multistream config should fail to connect"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_quic_lowlatency() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = quic_endpoint("quic/localhost:10478?multistream=true");
+    let is_multistream = run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], true).await;
+    assert!(
+        !is_multistream,
+        "lowltency should not support priority-based multistream"
+    );
+
+    let mut endpoint = quic_endpoint("quic/localhost:10479?multistream=false");
+    let is_multistream = run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], true).await;
+    assert!(
+        !is_multistream,
+        "lowltency should not support priority-based multistream"
+    );
+}
+
+async fn run_multistream_test(
+    client_endpoints: &[EndPoint],
+    server_endpoints: &[EndPoint],
+    lowlatency_transport: bool,
+) -> bool {
+    // println!("\n>>> Running multistream test for:  {client_endpoints:?}, {server_endpoints:?}");
+
+    let (router_manager, router_handler, client_manager, client_transport) =
+        open_multistream_transport_unicast(
+            client_endpoints,
+            server_endpoints,
+            lowlatency_transport,
+        )
+        .await;
+
+    let result = test_multistream_transport(router_handler.clone(), client_transport.clone()).await;
+
+    close_transport(
+        router_manager,
+        client_manager,
+        client_transport,
+        client_endpoints,
+    )
+    .await;
+
+    result
+}
+
+async fn test_multistream_transport(
+    router_handler: Arc<MultiStreamHandler>,
+    client_transport: TransportUnicast,
+) -> bool {
+    const SLEEP_BETWEEN_MSGS: Duration = Duration::from_secs(2);
+
+    let mut message = Push {
+        wire_expr: "test".into(),
+        ext_qos: QoSType::new(Priority::RealTime, CongestionControl::Drop, false),
+        ..Push::from(vec![0u8; 8])
+    };
+
+    client_transport
+        .schedule(NetworkMessage::from(message.clone()).as_mut())
+        .unwrap();
+    tokio::time::sleep(SLEEP_BETWEEN_MSGS).await;
+    message.ext_qos = QoSType::new(Priority::Background, CongestionControl::Drop, false);
+    client_transport
+        .schedule(NetworkMessage::from(message.clone()).as_mut())
+        .unwrap();
+    tokio::time::sleep(SLEEP_BETWEEN_MSGS).await;
+
+    assert!(
+        router_handler.callback.sleeping.load(Ordering::Relaxed),
+        "router should have received first message"
+    );
+    router_handler
+        .callback
+        .is_multistream
+        .load(Ordering::Relaxed)
 }
