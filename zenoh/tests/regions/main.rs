@@ -12,8 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "unstable")]
 mod scenario1;
+#[cfg(feature = "unstable")]
 mod scenario2;
+#[cfg(feature = "unstable")]
 mod scenario3;
 
 use std::time::Duration;
@@ -56,6 +59,16 @@ impl Node {
         self.listen(listen).connect(connect)
     }
 
+    pub fn multicast(self, group: &str) -> Self {
+        self.insert("scouting/multicast/enabled", "true")
+            .insert("scouting/multicast/listen", "true")
+            .insert(
+                "scouting/multicast/autoconnect",
+                "[\"router\",\"peer\",\"client\"]",
+            )
+            .insert("scouting/multicast/address", &format!("\"{group}\""))
+    }
+
     pub fn gateway(self, conf: &str) -> Self {
         self.insert("gateway", conf)
     }
@@ -63,6 +76,17 @@ impl Node {
     pub async fn open(self) -> Session {
         ztimeout!(zenoh::open(self.c)).unwrap()
     }
+}
+
+#[macro_export]
+macro_rules! loc {
+    ($session:expr) => {
+        ztimeout!($session.info().locators())
+            .into_iter()
+            .next()
+            .unwrap()
+            .as_str()
+    };
 }
 
 #[macro_export]
