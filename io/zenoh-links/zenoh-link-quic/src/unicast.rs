@@ -43,10 +43,9 @@ use zenoh_link_commons::{
 };
 use zenoh_protocol::{
     core::{Address, EndPoint, Locator, Metadata, Priority},
-    network::declare::token::flag::M,
     transport::BatchSize,
 };
-use zenoh_result::{bail, zerror, ZError, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
