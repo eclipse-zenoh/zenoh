@@ -27,7 +27,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohIdProto},
-    network::{push::ext::QoSType, NetworkMessage, NetworkMessageExt, NetworkMessageMut, Push},
+    network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -995,8 +995,6 @@ async fn transport_unicast_tcp_udp_unix() {
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_server() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
     // Define the locator
@@ -1950,9 +1948,9 @@ fn quic_endpoint(locator: &str) -> EndPoint {
 async fn transport_unicast_multistream_quic_default() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint = quic_endpoint("quic/localhost:10468");
-    let is_multistream =
-        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    let endpoint_quic = quic_endpoint("quic/localhost:10468");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_multistream = run_multistream_test(endpoint, endpoint, false).await;
     assert!(
         is_multistream,
         "default endpoint config (auto) should enable multistream"
@@ -1962,13 +1960,11 @@ async fn transport_unicast_multistream_quic_default() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_multistream_quic_enabled() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
-    let mut endpoint = quic_endpoint("quic/localhost:10469?multistream=true");
-    let is_multistream =
-        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    let endpoint_quic = quic_endpoint("quic/localhost:10469?multistream=true");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_multistream = run_multistream_test(endpoint, endpoint, false).await;
     assert!(
         is_multistream,
         "'?multistream=true' should enable multistream"
@@ -1978,13 +1974,11 @@ async fn transport_unicast_multistream_quic_enabled() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_multistream_quic_disabled() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
-    let mut endpoint = quic_endpoint("quic/localhost:10470?multistream=false");
-    let is_mutlistream =
-        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    let endpoint_quic = quic_endpoint("quic/localhost:10470?multistream=false");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_mutlistream = run_multistream_test(endpoint, endpoint, false).await;
     assert!(
         !is_mutlistream,
         "'?multistream=false' should disable multistream"
@@ -1994,8 +1988,6 @@ async fn transport_unicast_multistream_quic_disabled() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_multistream_quic_auto_explicit() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
     let port = 10471;
@@ -2058,13 +2050,11 @@ async fn transport_unicast_multistream_quic_auto_explicit() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_multistream_quic_auto() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint = quic_endpoint("quic/localhost:10475?multistream=auto");
-    let is_multistream =
-        run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], false).await;
+    let endpoint_quic = quic_endpoint("quic/localhost:10475?multistream=auto");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_multistream = run_multistream_test(endpoint, endpoint, false).await;
     assert!(
         is_multistream,
         "'?multistream=auto' endpoint should enable multistream"
@@ -2074,8 +2064,6 @@ async fn transport_unicast_multistream_quic_auto() {
 #[cfg(feature = "transport_quic")]
 #[test]
 fn transport_unicast_multistream_quic_incompatible() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
     let port = 10476;
@@ -2120,19 +2108,19 @@ fn transport_unicast_multistream_quic_incompatible() {
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_multistream_quic_lowlatency() {
-    use zenoh_link_commons::tls::config::*;
-
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint = quic_endpoint("quic/localhost:10478?multistream=true");
-    let is_multistream = run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], true).await;
+    let endpoint_quic = quic_endpoint("quic/localhost:10478?multistream=true");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
         !is_multistream,
         "lowltency should not support priority-based multistream"
     );
 
-    let mut endpoint = quic_endpoint("quic/localhost:10479?multistream=false");
-    let is_multistream = run_multistream_test(&[endpoint.clone()], &[endpoint.clone()], true).await;
+    let endpoint_quic = quic_endpoint("quic/localhost:10479?multistream=false");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
         !is_multistream,
         "lowltency should not support priority-based multistream"
