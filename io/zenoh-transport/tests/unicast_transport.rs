@@ -13,13 +13,13 @@
 //
 use std::{
     any::Any,
+    collections::HashSet,
     convert::TryFrom,
     fmt::Write as _,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc,
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
     },
-    thread::sleep,
     time::Duration,
 };
 
@@ -1813,7 +1813,7 @@ struct MultiStreamHandler {
 impl Default for MultiStreamHandler {
     fn default() -> Self {
         Self {
-            callback: Arc::new(MultiStreamCallback::new()),
+            callback: Arc::new(MultiStreamCallback::default()),
         }
     }
 }
@@ -1836,26 +1836,18 @@ impl TransportEventHandler for MultiStreamHandler {
 }
 
 // Transport Callback for multistream tests
+#[derive(Default)]
 pub struct MultiStreamCallback {
-    sleeping: AtomicBool,
-    is_multistream: AtomicBool,
-}
-
-impl MultiStreamCallback {
-    pub fn new() -> Self {
-        Self {
-            sleeping: AtomicBool::new(false),
-            is_multistream: AtomicBool::new(false),
-        }
-    }
+    msg_count: AtomicUsize,
+    rx_task_ids: Mutex<HashSet<tokio::task::Id>>,
 }
 
 impl TransportPeerEventHandler for MultiStreamCallback {
     fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
-        match self.sleeping.swap(true, Ordering::SeqCst) {
-            false => std::thread::sleep(Duration::from_secs(10000)),
-            true => self.is_multistream.store(true, Ordering::Relaxed),
-        }
+        self.msg_count.fetch_add(1, Ordering::Relaxed);
+        let rx_id = tokio::task::id();
+        let mut ids = self.rx_task_ids.lock().unwrap();
+        ids.insert(rx_id);
         Ok(())
     }
 
@@ -2179,8 +2171,6 @@ async fn test_multistream_transport(
     router_handler: Arc<MultiStreamHandler>,
     client_transport: TransportUnicast,
 ) -> bool {
-    const SLEEP_BETWEEN_MSGS: Duration = Duration::from_secs(2);
-
     let mut message = Push {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(Priority::RealTime, CongestionControl::Drop, false),
@@ -2190,19 +2180,16 @@ async fn test_multistream_transport(
     client_transport
         .schedule(NetworkMessage::from(message.clone()).as_mut())
         .unwrap();
-    tokio::time::sleep(SLEEP_BETWEEN_MSGS).await;
     message.ext_qos = QoSType::new(Priority::Background, CongestionControl::Drop, false);
     client_transport
         .schedule(NetworkMessage::from(message.clone()).as_mut())
         .unwrap();
-    tokio::time::sleep(SLEEP_BETWEEN_MSGS).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     assert!(
-        router_handler.callback.sleeping.load(Ordering::Relaxed),
-        "router should have received first message"
+        router_handler.callback.msg_count.load(Ordering::Relaxed) == 2,
+        "router should have received both messages"
     );
-    router_handler
-        .callback
-        .is_multistream
-        .load(Ordering::Relaxed)
+
+    router_handler.callback.rx_task_ids.lock().unwrap().len() > 1
 }
