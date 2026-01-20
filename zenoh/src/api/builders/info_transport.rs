@@ -378,7 +378,7 @@ where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
 {
-    type To = TransportEventsListener<Handler::Handler>;
+    type To = ZResult<TransportEventsListener<Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
@@ -391,17 +391,16 @@ where
         let (callback, handler) = self.handler.into_handler();
         let state = self
             .session
-            .declare_transport_events_listener_inner(callback, self.history)
-            .expect("Failed to declare transport events listener");
+            .declare_transport_events_listener_inner(callback, self.history)?;
 
-        TransportEventsListener {
+        Ok(TransportEventsListener {
             inner: TransportEventsListenerInner {
                 session: self.session.clone(),
                 id: state.id,
                 undeclare_on_drop: true,
             },
             handler,
-        }
+        })
     }
 }
 

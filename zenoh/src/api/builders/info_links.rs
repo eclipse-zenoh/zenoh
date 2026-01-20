@@ -437,7 +437,7 @@ where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,
 {
-    type To = LinkEventsListener<Handler::Handler>;
+    type To = ZResult<LinkEventsListener<Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
@@ -450,17 +450,16 @@ where
         let (callback, handler) = self.handler.into_handler();
         let state = self
             .session
-            .declare_transport_links_listener_inner(callback, self.history, self.transport)
-            .expect("Failed to declare link events listener");
-
-        LinkEventsListener {
+            .declare_transport_links_listener_inner(callback, self.history, self.transport)?;
+        
+        Ok(LinkEventsListener {
             inner: LinkEventsListenerInner {
                 session: self.session.clone(),
                 id: state.id,
                 undeclare_on_drop: true,
             },
             handler,
-        }
+        })
     }
 }
 
