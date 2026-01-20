@@ -35,6 +35,7 @@ macro_rules! zbuf_impl {
         {
             type Output = Result<(), DidntWrite>;
 
+            #[inline(always)]
             fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
                 self.write(&mut *writer, x.len())?;
                 for s in x.zslices() {
@@ -50,11 +51,10 @@ macro_rules! zbuf_impl {
         {
             type Error = DidntRead;
 
+            #[inline(always)]
             fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
                 let len: usize = self.read(&mut *reader)?;
-                let mut zbuf = ZBuf::empty();
-                reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
-                Ok(zbuf)
+                reader.read_zbuf(len)
             }
         }
     };
@@ -128,6 +128,7 @@ mod shm {
             {
                 type Output = Result<(), DidntWrite>;
 
+                #[inline(always)]
                 fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
                     if self.is_sliced {
                         self.codec.write(&mut *writer, x.zslices().count())?;
@@ -164,6 +165,7 @@ mod shm {
             {
                 type Error = DidntRead;
 
+                #[inline(always)]
                 fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
                     if self.is_sliced {
                         let num: usize = self.codec.read(&mut *reader)?;
