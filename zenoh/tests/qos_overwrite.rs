@@ -147,7 +147,7 @@ async fn test_qos_overwrite_get_reply() {
             r#"[
                 {
                     messages: ["query"],
-                    key_exprs: ["a/**"],
+                    key_exprs: ["a/test"],
                     overwrite: {
                         priority: "real_time",
                         congestion_control: "block",
@@ -155,14 +155,6 @@ async fn test_qos_overwrite_get_reply() {
                     },
                     flows: ["egress"]
                 },
-                {
-                    messages: ["reply"],
-                    key_exprs: ["a/b/**"],
-                    overwrite: {
-                        priority: "interactive_high",
-                    },
-                    flows: ["egress"]
-                }
             ]"#,
         )
         .unwrap();
@@ -188,19 +180,14 @@ async fn test_qos_overwrite_get_reply() {
     //assert_eq!(query.congestion_control(), CongestionControl::Block);
     //assert!(query.express());
 
-    query
-        .reply("a/test", "reply")
-        .priority(Priority::DataHigh)
-        .congestion_control(CongestionControl::Drop)
-        .express(false)
-        .await
-        .unwrap();
+    query.reply("a/test", "reply").express(false).await.unwrap();
     std::mem::drop(query);
     let reply = replies.recv_async().await.unwrap();
-    assert_eq!(reply.result().unwrap().priority(), Priority::DataHigh);
+    // Reply inherits the QoS of the query, which is overwritten
+    assert_eq!(reply.result().unwrap().priority(), Priority::RealTime);
     assert_eq!(
         reply.result().unwrap().congestion_control(),
-        CongestionControl::Drop
+        CongestionControl::Block
     );
     assert!(!reply.result().unwrap().express());
 
@@ -218,18 +205,14 @@ async fn test_qos_overwrite_get_reply() {
 
     query
         .reply("a/b/test", "reply")
-        .priority(Priority::DataHigh)
-        .congestion_control(CongestionControl::Drop)
         .express(false)
         .await
         .unwrap();
     std::mem::drop(query);
 
     let reply = replies.recv_async().await.unwrap();
-    assert_eq!(
-        reply.result().unwrap().priority(),
-        Priority::InteractiveHigh
-    );
+    // Reply inherits the QoS of the query, which is not overwritten
+    assert_eq!(reply.result().unwrap().priority(), Priority::DataLow);
     assert_eq!(
         reply.result().unwrap().congestion_control(),
         CongestionControl::Drop
