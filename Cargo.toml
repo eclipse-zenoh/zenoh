@@ -183,6 +183,7 @@ tokio = { version = "1.47.1", default-features = false } # Default features are 
 tokio-rustls = { version = "0.26.2", default-features = false }
 tokio-tungstenite = "0.24.0"
 tokio-util = "0.7.16"
+toml = "0.9.6"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
