@@ -13,7 +13,10 @@
 //
 use std::{
     fmt::DebugStruct,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock, RwLock,
+    },
     time::Duration,
 };
 
@@ -60,7 +63,8 @@ pub(crate) struct TransportUnicastUniversal {
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
+    pub(super) callback: Arc<OnceLock<Arc<dyn TransportPeerEventHandler>>>,
+    pub(super) closed: Arc<AtomicBool>,
     // Lock used to ensure no race in add_link method
     add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
@@ -107,7 +111,8 @@ impl TransportUnicastUniversal {
             priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             add_link_lock: Arc::new(AsyncMutex::new(())),
-            callback: Arc::new(RwLock::new(None)),
+            callback: Arc::new(OnceLock::new()),
+            closed: Arc::new(AtomicBool::new(false)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
@@ -132,7 +137,8 @@ impl TransportUnicastUniversal {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
         *a_guard = false;
-        let callback = zwrite!(self.callback).take();
+        self.closed.store(true, Ordering::Relaxed);
+        let callback = self.callback.get();
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
@@ -149,7 +155,7 @@ impl TransportUnicastUniversal {
         }
 
         // Notify the callback that we have closed the transport
-        if let Some(cb) = callback.as_ref() {
+        if let Some(cb) = callback {
             cb.closed();
         }
 
@@ -198,8 +204,7 @@ impl TransportUnicastUniversal {
         };
 
         // Notify the callback
-        let cb = zread!(self.callback).clone();
-        if let Some(callback) = cb {
+        if let Some(callback) = self.callback.get() {
             callback.del_link(link);
         }
 
@@ -317,7 +322,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*            ACCESSORS              */
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
-        *zwrite!(self.callback) = Some(callback);
+        let _ = self.callback.set(callback);
     }
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
@@ -342,7 +347,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
-        zread!(self.callback).clone()
+        self.callback.get().cloned()
     }
 
     fn get_config(&self) -> &TransportConfigUnicast {
