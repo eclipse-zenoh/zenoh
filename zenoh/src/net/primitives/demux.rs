@@ -16,7 +16,7 @@ use std::{any::Any, cell::OnceCell, sync::Arc};
 use arc_swap::ArcSwap;
 use zenoh_link::Link;
 use zenoh_protocol::network::{
-    ext, response, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageExt as _,
+    ext, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageExt as _,
     NetworkMessageMut, ResponseFinal,
 };
 use zenoh_result::ZResult;
@@ -116,6 +116,7 @@ impl TransportPeerEventHandler for DeMux {
             match &msg.body {
                 NetworkBodyMut::Request(request) => {
                     let request_id = request.id;
+                    let qos = request.ext_qos;
                     if !interceptor.intercept(&mut msg, &mut ctx as &mut dyn InterceptorContext) {
                         // request was blocked by an interceptor, we need to send response final to avoid timeout error
                         self.face
@@ -123,7 +124,7 @@ impl TransportPeerEventHandler for DeMux {
                             .primitives
                             .send_response_final(&mut ResponseFinal {
                                 rid: request_id,
-                                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                                ext_qos: qos,
                                 ext_tstamp: None,
                             });
                         return Ok(());

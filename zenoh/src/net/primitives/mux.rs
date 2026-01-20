@@ -21,8 +21,8 @@ use arc_swap::ArcSwap;
 use zenoh_protocol::{
     core::Reliability,
     network::{
-        interest::Interest, response, Declare, NetworkBodyMut, NetworkMessageExt as _,
-        NetworkMessageMut, Push, Request, Response, ResponseFinal,
+        interest::Interest, Declare, NetworkBodyMut, NetworkMessageExt as _, NetworkMessageMut,
+        Push, Request, Response, ResponseFinal,
     },
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -177,6 +177,7 @@ impl EPrimitives for Mux {
     }
 
     fn send_request(&self, msg: &mut Request) -> bool {
+        let qos = msg.ext_qos;
         let request_id = msg.id;
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
@@ -197,7 +198,7 @@ impl EPrimitives for Mux {
                 // request was blocked by an interceptor, we need to send response final to avoid timeout error
                 face.send_response_final(&mut ResponseFinal {
                     rid: request_id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_qos: qos,
                     ext_tstamp: None,
                 });
                 false
@@ -395,6 +396,7 @@ impl EPrimitives for McastMux {
 
     fn send_request(&self, msg: &mut Request) -> bool {
         let request_id = msg.id;
+        let qos = msg.ext_qos;
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Request(msg),
             reliability: Reliability::Reliable,
@@ -414,7 +416,7 @@ impl EPrimitives for McastMux {
                 // request was blocked by an interceptor, we need to send response final to avoid timeout error
                 face.send_response_final(&mut ResponseFinal {
                     rid: request_id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_qos: qos,
                     ext_tstamp: None,
                 });
                 false

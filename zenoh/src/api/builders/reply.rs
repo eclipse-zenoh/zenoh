@@ -77,7 +77,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
         Self {
             query,
             key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
+            qos: query.inner.qos.into(),
             kind: ReplyBuilderPut {
                 payload: payload.into(),
                 encoding: Encoding::default(),
@@ -99,7 +99,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
         Self {
             query,
             key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
+            qos: query.inner.qos.into(),
             kind: ReplyBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
@@ -140,14 +140,14 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        let qos = self.qos.congestion_control(congestion_control);
-        Self { qos, ..self }
+    #[deprecated = "congestion control cannot be set for reply"]
+    fn congestion_control(self, _congestion_control: CongestionControl) -> Self {
+        self
     }
 
-    fn priority(self, priority: Priority) -> Self {
-        let qos = self.qos.priority(priority);
-        Self { qos, ..self }
+    #[deprecated = "priority cannot be set for reply"]
+    fn priority(self, _priority: Priority) -> Self {
+        self
     }
 
     fn express(self, is_express: bool) -> Self {
@@ -272,7 +272,7 @@ impl Wait for ReplyErrBuilder<'_> {
                 ext_unknown: vec![],
                 payload: self.payload.into(),
             }),
-            ext_qos: response::ext::QoSType::RESPONSE,
+            ext_qos: self.query.inner.qos.into(),
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
                 zid: self.query.inner.zid,

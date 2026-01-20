@@ -442,7 +442,7 @@ impl Primitives for AdminSpace {
                     );
                         primitives.send_response_final(&mut ResponseFinal {
                             rid: msg.id,
-                            ext_qos: ext::QoSType::RESPONSE_FINAL,
+                            ext_qos: msg.ext_qos,
                             ext_tstamp: None,
                         });
                         return;
@@ -455,7 +455,7 @@ impl Primitives for AdminSpace {
                         tracing::error!("Unknown KeyExpr: {}", e);
                         primitives.send_response_final(&mut ResponseFinal {
                             rid: msg.id,
-                            ext_qos: ext::QoSType::RESPONSE_FINAL,
+                            ext_qos: msg.ext_qos,
                             ext_tstamp: None,
                         });
                         return;
@@ -468,6 +468,7 @@ impl Primitives for AdminSpace {
                         parameters: mem::take(&mut query.parameters).into(),
                         qid: msg.id,
                         zid: zid.into(),
+                        qos: msg.ext_qos.into(),
                         #[cfg(feature = "unstable")]
                         source_info: query.ext_sinfo.map(Into::into),
                         primitives,

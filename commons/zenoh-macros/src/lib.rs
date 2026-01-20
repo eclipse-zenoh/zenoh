@@ -605,14 +605,14 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 ///
 #[proc_macro_attribute]
 pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemImpl);
+    let mut input = parse_macro_input!(item as ItemImpl);
     let trait_path = &input.trait_.as_ref().unwrap().1;
     let struct_path = &input.self_ty;
     let generics = &input.generics;
     // let struct_lifetime = get_type_path_lifetime(struct_path);
 
     let mut struct_methods = quote! {};
-    for item_fn in input.items.iter() {
+    for item_fn in input.items.iter_mut() {
         if let syn::ImplItem::Fn(method) = item_fn {
             let method_name = &method.sig.ident;
             let method_generic_params = &method.sig.generics.params;
@@ -642,6 +642,9 @@ pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #attr
                 });
             }
+            method
+                .attrs
+                .retain(|attr| !attr.meta.path().is_ident("deprecated"));
             // call corresponding trait method from struct method
             struct_methods.extend(quote! {
                 #attributes

@@ -45,7 +45,7 @@ use crate::{
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
-        sample::{Locality, Sample, SampleKind},
+        sample::{Locality, QoS, Sample, SampleKind},
         selector::Selector,
         session::{UndeclarableSealed, WeakSession},
         Id,
@@ -59,6 +59,7 @@ pub(crate) struct QueryInner {
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
+    pub(crate) qos: QoS,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) primitives: Arc<dyn Primitives>,
@@ -72,6 +73,7 @@ impl QueryInner {
             parameters: Parameters::empty(),
             qid: 0,
             zid: ZenohIdProto::default(),
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
             primitives: Arc::new(DummyPrimitives),
@@ -83,7 +85,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(&mut ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+            ext_qos: self.qos.into(),
             ext_tstamp: None,
         });
     }
