@@ -73,3 +73,52 @@ pub async fn close_session(peer01: Session, peer02: Session) {
     println!("[  ][02d] Closing peer02 session");
     ztimeout!(peer02.close()).unwrap();
 }
+
+/// Open sessions configured for multilink (max_links > 1)
+#[allow(dead_code)]
+pub async fn open_session_multilink(
+    listen_endpoints: &[&str],
+    connect_endpoints: &[&str],
+) -> (Session, Session) {
+    // Session1: listener with multilink enabled
+    let mut config1 = zenoh_config::Config::default();
+    config1
+        .listen
+        .endpoints
+        .set(
+            listen_endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+    config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config1
+        .transport
+        .unicast
+        .set_max_links(listen_endpoints.len())
+        .unwrap();
+    let session1 = ztimeout!(zenoh::open(config1)).unwrap();
+
+    // Session2: connector with multilink enabled
+    let mut config2 = zenoh_config::Config::default();
+    config2
+        .connect
+        .endpoints
+        .set(
+            connect_endpoints
+                .iter()
+                .map(|e| e.parse().unwrap())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+    config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config2
+        .transport
+        .unicast
+        .set_max_links(connect_endpoints.len())
+        .unwrap();
+    let session2 = ztimeout!(zenoh::open(config2)).unwrap();
+
+    (session1, session2)
+}

@@ -19,6 +19,7 @@ mod common;
 #[cfg(feature = "unstable")]
 mod tests {
     use std::{
+        fmt::Debug,
         sync::{atomic::AtomicUsize, Arc},
         time::Duration,
     };
@@ -26,8 +27,19 @@ mod tests {
     use zenoh::sample::SampleKind;
 
     use crate::common::{
-        close_session, open_session_connect, open_session_listen, open_session_unicast,
+        close_session, open_session_connect, open_session_listen, open_session_multilink,
+        open_session_unicast,
     };
+
+    async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
+        let mut collected = Vec::new();
+        while let Ok(event) = tokio::time::timeout(timeout, events.recv_async()).await {
+            let event = event.expect("Channel closed");
+            println!("{:?}", event);
+            collected.push(event);
+        }
+        collected
+    }
 
     const SLEEP: Duration = Duration::from_millis(100);
 
@@ -108,39 +120,27 @@ mod tests {
             .await;
 
         let session2 = open_session_connect(&["tcp/127.0.0.1:17450"]).await;
-
-        // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive transport opened event with SampleKind::Put
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for transport event")
-            .expect("Channel closed");
-
-        assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Put,
-            "Event kind should be Put for opened transport"
+        // Collect transport opened events - should be exactly 1 Put
+        let put_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            put_events.len() == 1 && put_events[0].kind() == SampleKind::Put,
+            "Expected exactly 1 Put event, got {} events",
+            put_events.len()
         );
-        println!("Transport opened: {}", event.transport().zid());
 
         // Close session2 to trigger transport close event
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive transport closed event with SampleKind::Delete
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for transport close event")
-            .expect("Channel closed");
-
-        assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Delete,
-            "Event kind should be Delete for closed transport"
+        // Collect transport closed events - should be exactly 1 Delete
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Expected exactly 1 Delete event, got {} events",
+            delete_events.len()
         );
-        println!("Transport closed");
 
         session1.close().await.unwrap();
     }
@@ -160,45 +160,89 @@ mod tests {
             .with(flume::bounded(32))
             .await;
 
+        // Connect two sessions
         let session2 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
-
-        // Wait for connection to establish
+        let session3 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive link added event with SampleKind::Put
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for link event")
-            .expect("Channel closed");
-
-        assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Put,
-            "Event kind should be Put for added link"
-        );
-        println!(
-            "Link added: {} -> {} (transport: {})",
-            event.link().src(),
-            event.link().dst(),
-            event.link().zid()
+        // Collect link added events - should be exactly 2 Put
+        let put_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            put_events.len() == 2 && put_events.iter().all(|e| e.kind() == SampleKind::Put),
+            "Expected exactly 2 Put events, got {} events",
+            put_events.len()
         );
 
-        // Close session2 to trigger link removal event
+        // Close session2 (first transport's last link)
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        // Should receive link removed event with SampleKind::Delete
-        let event = tokio::time::timeout(Duration::from_secs(5), events.recv_async())
-            .await
-            .expect("Timeout waiting for link removal event")
-            .expect("Channel closed");
-
-        assert_eq!(
-            event.kind(),
-            zenoh::sample::SampleKind::Delete,
-            "Event kind should be Delete for removed link"
+        // Collect link removed events - should be exactly 1 Delete
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "First close: expected exactly 1 Delete event, got {:?} events",
+            delete_events.len()
         );
-        println!("Link removed");
+
+        // Close session3 (second transport's last link)
+        session3.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // Collect link removed events - should be exactly 1 Delete
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            delete_events.len() == 1 && delete_events[0].kind() == SampleKind::Delete,
+            "Second close: expected exactly 1 Delete event, got {} events",
+            delete_events.len()
+        );
+
+        session1.close().await.unwrap();
+    }
+
+    /// Test link events with multilink transport (multiple links in same transport)
+    /// This tests is_last=false (first link) vs is_last=true (last link) in del_link()
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_link_events_multilink() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let endpoints = &["tcp/127.0.0.1:17470", "tcp/127.0.0.1:17471"];
+        let (session1, session2) = open_session_multilink(endpoints, endpoints).await;
+
+        tokio::time::sleep(SLEEP).await;
+
+        // Verify we have 2 links in 1 transport
+        let transports: Vec<_> = session1.info().transports().await.collect();
+        assert_eq!(transports.len(), 1, "Should have exactly 1 transport");
+
+        let links: Vec<_> = session1.info().links().await.collect();
+        assert_eq!(
+            links.len(),
+            2,
+            "Should have exactly 2 links in multilink transport"
+        );
+
+        // Subscribe to link events
+        let events = session1
+            .info()
+            .link_events_listener()
+            .history(false)
+            .with(flume::bounded(32))
+            .await;
+
+        // Close session2 - this closes both links
+        session2.close().await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        // Collect delete events - should be exactly 2 (one per link)
+        let delete_events = collect_events(&events, Duration::from_millis(200)).await;
+        assert!(
+            delete_events.len() == 2
+                && delete_events.iter().all(|e| e.kind() == SampleKind::Delete),
+            "Expected exactly 2 Delete events (one per link), got {} events",
+            delete_events.len()
+        );
 
         session1.close().await.unwrap();
     }
