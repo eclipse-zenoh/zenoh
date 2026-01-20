@@ -18,7 +18,7 @@ use std::{borrow::Cow, fmt::Debug, mem, str::Utf8Error};
 use zenoh_buffers::{
     buffer::{Buffer, SplitBuffer},
     reader::{HasReader, Reader},
-    BufferMutGuard, ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
+    ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
 use zenoh_protocol::zenoh::ext::AttachmentType;
 
@@ -263,7 +263,7 @@ const _: () = {
             buf.map(Into::into).filter(|_| zslices.next().is_none())
         }
 
-        pub fn as_shm_mut(&mut self) -> Option<BufferMutGuard<'_, zshm>> {
+        pub fn as_shm_mut(&mut self) -> Option<zenoh_buffers::BufferMutGuard<'_, zshm>> {
             let mut zslices = self.0.zslices_mut();
             // SAFETY: ShmBufInner cannot change the size of the slice
             let buf = unsafe { zslices.next()?.downcast_mut::<ShmBufInner>() }
