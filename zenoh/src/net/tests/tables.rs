@@ -831,7 +831,7 @@ fn client_test() {
     primitives2.clear_data();
 
     let route_dummy_data = |face: &Weak<FaceState>, wire_expr| {
-        route_data(
+        tables.hat_code.route_data(
             &tables,
             &face.upgrade().unwrap(),
             &mut Push {
