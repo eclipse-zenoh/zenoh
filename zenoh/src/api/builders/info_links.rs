@@ -448,10 +448,12 @@ where
 {
     fn wait(self) -> Self::To {
         let (callback, handler) = self.handler.into_handler();
-        let state = self
-            .session
-            .declare_transport_links_listener_inner(callback, self.history, self.transport)?;
-        
+        let state = self.session.declare_transport_links_listener_inner(
+            callback,
+            self.history,
+            self.transport,
+        )?;
+
         Ok(LinkEventsListener {
             inner: LinkEventsListenerInner {
                 session: self.session.clone(),
