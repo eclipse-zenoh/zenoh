@@ -1317,6 +1317,17 @@ impl Config {
                         Ok(c) => zerror!("Invalid configuration: {}", c).into(),
                         Err(e) => zerror!("YAML error: {:?}", e).into(),
                     }),
+                    #[cfg(feature = "unstable")]
+                    Some("toml") => {
+                        tracing::warn!("The TOML configuration format is unstable and may be removed in a future release");
+                        match toml::Deserializer::parse(&content) {
+                            Ok(de) => Config::from_deserializer(de).map_err(|e| match e {
+                                Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                                Err(e) => zerror!("TOML deserization error: {:?}", e).into(),
+                            }),
+                            Err(e) => bail!("TOML parsing error: {:?}", e),
+                        }
+                    },
                     Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
                     None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")
                 }
@@ -1858,5 +1869,60 @@ impl GenericConfig {
 impl fmt::Display for GenericConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0.to_json())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs::File, io::Write, str::FromStr, time::SystemTime};
+
+    use zenoh_protocol::core::{EndPoint, WhatAmI};
+
+    use crate::{Config, ModeDependentValue, ZenohId};
+
+    #[test]
+    fn test_toml_config_format() {
+        const FILE_CONTENTS: &str = r#"
+            id = "abc"
+            mode = "router"
+
+            [listen]
+            endpoints = ["tcp/localhost:7448"]
+
+            [adminspace]
+            enabled = true
+        "#;
+
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let path = env::temp_dir().join(format!("{timestamp}.test.config.toml"));
+
+        {
+            let mut tmp = File::create(&path).unwrap();
+            tmp.write_all(FILE_CONTENTS.as_bytes()).unwrap();
+            tmp.flush().unwrap();
+        }
+
+        let expected_config = {
+            let mut c = Config::default();
+            c.set_id(Some(ZenohId::from_str("abc").unwrap())).unwrap();
+            c.set_mode(Some(WhatAmI::Router)).unwrap();
+            c.listen
+                .set_endpoints(ModeDependentValue::Unique(vec![EndPoint::from_str(
+                    "tcp/localhost:7448",
+                )
+                .unwrap()]))
+                .unwrap();
+            c.adminspace.set_enabled(true).unwrap();
+            c
+        };
+
+        assert_eq!(
+            Config::from_file(&path).unwrap().to_string(),
+            expected_config.to_string()
+        );
     }
 }
