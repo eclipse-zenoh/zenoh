@@ -12,76 +12,93 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{net::{TcpListener, TcpStream}, os::fd::AsRawFd, sync::{Arc, atomic::AtomicUsize}, time::Duration};
+use std::{
+    io::Write,
+    net::{TcpListener, TcpStream},
+    os::fd::AsRawFd,
+    sync::{atomic::AtomicUsize, Arc},
+    time::Duration,
+};
 
-use io_uring::{IoUring, types};
-use zenoh_uring::{BUF_SIZE, reader::Reader, writer::Writer};
+use zenoh_uring::{reader::Reader, BUF_SIZE};
 
 use crate::common::monotonic_now_ns;
 
 pub mod common;
-
 
 fn writer_main() {
     //let addr = "/tmp/rw.sock";
     //let client = UnixStream::connect(addr).unwrap();
 
     let addr = ("127.0.0.1", 7777);
-    let client = TcpStream::connect(addr).unwrap();
+    let mut client = TcpStream::connect(addr).unwrap();
     client.set_nodelay(true).unwrap();
 
-    let writer = Writer::new();
+    // io_uring write
+    /*
+        let writer = Writer::new();
+        //let ctr = Arc::new(AtomicUsize::new(0));
+        //let c_ctr = ctr.clone();
+        //    let _ = std::thread::spawn(move || {
+        let mut select_latencies_accum = 0u128;
+        let mut write_latencies_accum = 0u128;
+        let mut times_accum = 0u128;
+        loop {
+    //        std::thread::sleep(Duration::from_millis(1));
 
-    //let ctr = Arc::new(AtomicUsize::new(0));
+            let time_before_select = monotonic_now_ns();
+            let mut buffer = writer.select_buffer();
 
-    //let c_ctr = ctr.clone();
+            let time_after_select = monotonic_now_ns();
 
-    //    let _ = std::thread::spawn(move || {
-    let mut select_latencies_accum = 0u128;
-    let mut write_latencies_accum = 0u128;
-    let mut times_accum = 0u128;
-    loop {
-        std::thread::sleep(Duration::from_micros(1000));
+            let slice = buffer.as_mut();
+            slice[0..16].copy_from_slice(&time_before_select.to_le_bytes());
 
-        let time_before_select = monotonic_now_ns();
-        let mut buffer = writer.select_buffer();
-
-        let time_after_select = monotonic_now_ns();
-
-        let slice = buffer.as_mut();
-        slice[0..16].copy_from_slice(&time_before_select.to_le_bytes());
-
-        writer.write(
-            types::Fd(client.as_raw_fd()),
-            buffer,
-            BUF_SIZE, //actual len
-        );
-
-        let time_after_write = monotonic_now_ns();
-
-        select_latencies_accum += time_after_select - time_before_select;
-        write_latencies_accum += time_after_write - time_after_select;
-        times_accum += 1;
-
-        if times_accum == 5000 {
-            //panic!("stop");
-            println!(
-                "Avg latencies, ns: selection: {} ns, write: {}",
-                select_latencies_accum / times_accum,
-                write_latencies_accum / times_accum
+            writer.write(
+                types::Fd(client.as_raw_fd()),
+                buffer,
+                BUF_SIZE, //actual len
             );
-            select_latencies_accum = 0;
-            write_latencies_accum = 0;
-            times_accum = 0;
+
+            let time_after_write = monotonic_now_ns();
+
+            select_latencies_accum += time_after_select - time_before_select;
+            write_latencies_accum += time_after_write - time_after_select;
+            times_accum += 1;
+
+            if times_accum == 5000 {
+                //panic!("stop");
+                println!(
+                    "Avg latencies, ns: selection: {} ns, write: {}",
+                    select_latencies_accum / times_accum,
+                    write_latencies_accum / times_accum
+                );
+                select_latencies_accum = 0;
+                write_latencies_accum = 0;
+                times_accum = 0;
+            }
+
+            //c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            //client.flush().unwrap();
+            //std::thread::yield_now();
+            //std::thread::sleep(Duration::from_micros(1000));
         }
+        //    });
+        */
 
-        //c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    // standard write
+    {
+        let mut arr = [0u8; BUF_SIZE];
+        loop {
+            let time = monotonic_now_ns();
+            arr[0..16].copy_from_slice(&time.to_le_bytes());
+            client.write_all(&arr).unwrap();
 
-        //client.flush().unwrap();
-        //std::thread::yield_now();
-        //std::thread::sleep(Duration::from_micros(1000));
+            //std::thread::yield_now();
+            //std::thread::sleep(Duration::from_millis(100));
+        }
     }
-    //    });
 
     //loop {
     //    let ctr = ctr.swap(0, std::sync::atomic::Ordering::SeqCst);
@@ -89,9 +106,6 @@ fn writer_main() {
     //    std::thread::sleep(Duration::from_secs(1));
     //}
 }
-
-
-
 
 fn reader_main() {
     //let addr = "/tmp/rw.sock";
@@ -109,41 +123,28 @@ fn reader_main() {
     let c_len = len.clone();
     let c_accum_latency = accum_latency.clone();
 
-    let (mut stream, _addr) = listener.accept().unwrap();
+    let (stream, _addr) = listener.accept().unwrap();
     stream.set_nodelay(true).unwrap();
-    
-    
-    /// io_uring read
-    let ring = Arc::new(
-        IoUring::builder()
-            .setup_submit_all()
-            //.setup_sqpoll(1)
-            //.setup_iopoll()
-            //.setup_sqpoll_cpu(0)
-            .setup_coop_taskrun()
-            //.setup_defer_taskrun()
-            //.setup_single_issuer()
-            .build((1024).try_into().unwrap()).unwrap(),
-    );
 
-    let reader = Reader::new(ring);
+    let reader = Reader::new();
 
-    reader.setup_read(stream.as_raw_fd(), move |data| {
-        //assert!(data.len() == BUF_SIZE);
+    let _read_handle = reader
+        .setup_read(stream.as_raw_fd(), move |data| {
+            //assert!(data.len() == BUF_SIZE);
 
-        let time = monotonic_now_ns();
-        let restored = u128::from_le_bytes(data[0..16].try_into().unwrap());
+            let time = monotonic_now_ns();
+            let restored = u128::from_le_bytes(data[0..16].try_into().unwrap());
 
-        let latency = (time - restored) as usize;
-        //println!("latency: {latency} ns");
+            let latency = (time - restored) as usize;
+            //println!("latency: {latency} ns");
 
-        c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        c_len.fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
-        c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
-    });
+            c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            c_len.fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
+            c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
+        })
+        .unwrap();
 
-    
-/*    
+    /*
     // standard read
     let _ = std::thread::spawn(move || {
 
@@ -176,10 +177,6 @@ fn reader_main() {
         std::thread::sleep(Duration::from_secs(1));
     }
 }
-
-
-
-
 
 #[test]
 fn rw() {

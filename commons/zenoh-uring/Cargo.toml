@@ -32,6 +32,7 @@ io-uring = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true }
 libc = { workspace = true }
+nix = { workspace = true, features = ["event"] }
 
 [dev-dependencies]
 zenoh-result = { workspace = true }

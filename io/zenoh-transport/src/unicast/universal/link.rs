@@ -317,6 +317,15 @@ async fn rx_task(
         link.config.reliability,
     );
 
+    let _reader = transport
+        .manager
+        .state
+        .uring
+        .reader
+        .setup_read(link.link.get_fd(), |data| {
+            
+        });
+
     loop {
         tokio::select! {
             batch = tokio::time::timeout(lease, read(link, &pool)) => {

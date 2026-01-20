@@ -12,15 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh_uring::writer::Writer;
+use std::sync::Arc;
 
+use zenoh_uring::{reader::Reader, writer::Writer};
+
+#[derive(Clone)]
 pub struct Uring {
-    pub writer: Writer
+    pub writer: Arc<Writer>,
+    pub reader: Reader
 }
 
 impl Default for Uring {
     fn default() -> Self {
-        let writer = Writer::new();
-        Self { writer }
+        let writer = Arc::new(Writer::new());
+        let reader = Reader::new();
+        Self { writer, reader }
     }
 }

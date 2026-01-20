@@ -6597,11 +6597,12 @@ dependencies = [
 
 [[package]]
 name = "zenoh-uring"
-version = "1.7.1"
+version = "1.7.2"
 dependencies = [
  "atomic-queue",
  "io-uring",
  "libc",
+ "nix 0.29.0",
  "zenoh-core",
  "zenoh-result",
 ]
