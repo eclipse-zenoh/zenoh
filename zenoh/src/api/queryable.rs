@@ -51,7 +51,7 @@ use crate::{
         Id,
     },
     handlers::Callback,
-    net::primitives::Primitives,
+    net::{primitives::Primitives, runtime::GenericPrimitives},
 };
 
 pub(crate) struct QueryInner {
@@ -61,7 +61,7 @@ pub(crate) struct QueryInner {
     pub(crate) zid: ZenohIdProto,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
-    pub(crate) primitives: Arc<dyn Primitives>,
+    pub(crate) primitives: GenericPrimitives,
 }
 
 impl QueryInner {
@@ -74,7 +74,7 @@ impl QueryInner {
             zid: ZenohIdProto::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
-            primitives: Arc::new(DummyPrimitives),
+            primitives: GenericPrimitives::Dyn(Arc::new(DummyPrimitives)),
         }
     }
 }

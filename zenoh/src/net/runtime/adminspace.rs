@@ -44,7 +44,7 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, 
 
 use super::{
     routing::{dispatcher::face::Face, hat::HatTrait},
-    Runtime,
+    GenericPrimitives, Runtime,
 };
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
@@ -470,7 +470,7 @@ impl Primitives for AdminSpace {
                         zid: zid.into(),
                         #[cfg(feature = "unstable")]
                         source_info: query.ext_sinfo.map(Into::into),
-                        primitives,
+                        primitives: GenericPrimitives::Face(primitives),
                     }),
                     eid: self.queryable_id,
                     value: mem::take(&mut query.ext_body)

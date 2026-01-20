@@ -24,17 +24,20 @@ use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
-use crate::api::{
-    builders::sample::{
-        EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
-        TimestampBuilderTrait,
+use crate::{
+    api::{
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
+            TimestampBuilderTrait,
+        },
+        bytes::{OptionZBytes, ZBytes},
+        encoding::Encoding,
+        key_expr::KeyExpr,
+        publisher::Priority,
+        queryable::Query,
+        sample::QoSBuilder,
     },
-    bytes::{OptionZBytes, ZBytes},
-    encoding::Encoding,
-    key_expr::KeyExpr,
-    publisher::Priority,
-    queryable::Query,
-    sample::QoSBuilder,
+    net::primitives::Primitives,
 };
 
 /// The type modifier for a [`ReplyBuilder`] to create a reply with a [`Put`](crate::sample::SampleKind::Put) sample.
