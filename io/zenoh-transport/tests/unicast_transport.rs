@@ -995,6 +995,8 @@ async fn transport_unicast_tcp_udp_unix() {
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_server() {
+    use zenoh_link_commons::tls::config::*;
+
     zenoh_util::init_log_from_env_or("error");
 
     // Define the locator
