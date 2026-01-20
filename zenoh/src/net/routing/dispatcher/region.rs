@@ -125,3 +125,37 @@ impl<D> IndexMut<Region> for RegionMap<D> {
         self.index_mut(&region)
     }
 }
+
+#[derive(Debug, Default)]
+pub(crate) struct BoundMap<D> {
+    north: Option<D>,
+    south: Option<D>,
+}
+
+impl<D> BoundMap<D> {
+    pub(crate) fn clear(&mut self) {
+        self.north.take();
+        self.south.take();
+    }
+
+    pub(crate) fn get(&self, bound: &Bound) -> Option<&D> {
+        match bound {
+            Bound::North => self.north.as_ref(),
+            Bound::South => self.south.as_ref(),
+        }
+    }
+
+    pub(crate) fn get_mut(&mut self, bound: &Bound) -> Option<&mut D> {
+        match bound {
+            Bound::North => self.north.as_mut(),
+            Bound::South => self.south.as_mut(),
+        }
+    }
+
+    pub(crate) fn insert(&mut self, bound: &Bound, value: D) -> Option<D> {
+        match bound {
+            Bound::North => self.north.replace(value),
+            Bound::South => self.south.replace(value),
+        }
+    }
+}

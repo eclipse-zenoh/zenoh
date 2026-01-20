@@ -262,14 +262,14 @@ macro_rules! treat_timestamp {
 #[inline]
 fn get_data_route(
     tables: &Tables,
-    face: &FaceState,
+    src_face: &FaceState,
     expr: &RoutingExpr,
     node_id: NodeId,
     region: &Region,
 ) -> Arc<Route> {
-    let node_id = tables.hats[region].map_routing_context(&tables.data, face, node_id);
+    let node_id = tables.hats[region].map_routing_context(&tables.data, src_face, node_id);
     let compute_route =
-        || tables.hats[region].compute_data_route(&tables.data, face, expr, node_id);
+        || tables.hats[region].compute_data_route(&tables.data, src_face, expr, node_id);
     match expr
         .resource()
         .as_ref()
@@ -279,6 +279,7 @@ fn get_data_route(
         Some(data_routes) => get_or_set_route(
             data_routes,
             tables.data.hats[region].routes_version,
+            &src_face.region.bound(),
             node_id,
             compute_route,
         ),

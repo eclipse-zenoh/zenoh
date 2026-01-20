@@ -24,7 +24,7 @@ use std::{
 
 use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, ExprId, Region, WireExpr},
+    core::{key_expr::keyexpr, Bound, ExprId, Region, WireExpr},
     network::{
         self,
         declare::{self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
@@ -43,7 +43,7 @@ use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
         queries::disable_matches_query_routes,
-        region::RegionMap,
+        region::{BoundMap, RegionMap},
         tables::{RoutingExpr, Tables},
     },
     interceptor::{InterceptorTrait, InterceptorsChain},
@@ -207,14 +207,17 @@ impl FaceContext {
 pub type RoutesVersion = u64;
 
 pub(crate) struct Routes<T> {
-    by_node_id: Vec<Option<T>>,
+    /// Mapping from **source** [`zenoh_transport::Bound`] and [`NodeId`] to data/query routes.
+    mapping: BoundMap<NodeIdMap<T>>,
     version: u64,
 }
+
+pub(crate) type NodeIdMap<T> = Vec<Option<T>>;
 
 impl<T> Default for Routes<T> {
     fn default() -> Self {
         Self {
-            by_node_id: Vec::new(),
+            mapping: BoundMap::default(),
             version: 0,
         }
     }
@@ -222,44 +225,70 @@ impl<T> Default for Routes<T> {
 
 impl<T> Routes<T> {
     pub(crate) fn clear(&mut self) {
-        self.by_node_id.clear();
+        self.mapping.clear();
     }
 
     #[inline]
-    pub(crate) fn get_route(&self, version: RoutesVersion, context: NodeId) -> Option<&T> {
+    pub(crate) fn get_route(
+        &self,
+        version: RoutesVersion,
+        bound: &Bound,
+        node_id: NodeId,
+    ) -> Option<&T> {
         if version != self.version {
             return None;
         }
-        self.by_node_id.get(context as usize)?.as_ref()
+
+        self.mapping
+            .get(bound)
+            .and_then(|rs| rs.get(node_id as usize))
+            .and_then(|r| r.as_ref())
     }
 
     #[inline]
-    pub(crate) fn set_route(&mut self, version: RoutesVersion, context: NodeId, route: T) {
+    pub(crate) fn set_route(
+        &mut self,
+        version: RoutesVersion,
+        bound: &Bound,
+        node_id: NodeId,
+        route: T,
+    ) {
         if self.version != version {
             self.clear();
             self.version = version;
         }
 
-        self.by_node_id.resize_with(context as usize + 1, || None);
-        self.by_node_id[context as usize] = Some(route);
+        let aux = |routes: &mut NodeIdMap<T>| {
+            routes.resize_with(node_id as usize + 1, || None);
+            routes[node_id as usize] = Some(route);
+        };
+
+        if let Some(routes) = self.mapping.get_mut(bound) {
+            aux(routes);
+        } else {
+            let mut routes = NodeIdMap::default();
+            aux(&mut routes);
+            self.mapping.insert(bound, routes);
+        }
     }
 }
 
 pub(crate) fn get_or_set_route<T: Clone>(
     routes: &RwLock<Routes<T>>,
     version: RoutesVersion,
-    context: NodeId,
+    bound: &Bound,
+    node_id: NodeId,
     compute_route: impl FnOnce() -> T,
 ) -> T {
-    if let Some(route) = routes.read().unwrap().get_route(version, context) {
+    if let Some(route) = routes.read().unwrap().get_route(version, bound, node_id) {
         return route.clone();
     }
     let mut routes = routes.write().unwrap();
-    if let Some(route) = routes.get_route(version, context) {
+    if let Some(route) = routes.get_route(version, bound, node_id) {
         return route.clone();
     }
     let route = compute_route();
-    routes.set_route(version, context, route.clone());
+    routes.set_route(version, bound, node_id, route.clone());
     route
 }
 

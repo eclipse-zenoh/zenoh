@@ -602,15 +602,14 @@ pub(crate) fn disable_matches_query_routes(res: &mut Arc<Resource>, region: &Reg
 #[inline]
 fn get_query_route(
     tables: &Tables,
-    face: &FaceState,
+    src_face: &FaceState,
     expr: &RoutingExpr,
     routing_context: NodeId,
     region: &Region,
 ) -> Arc<QueryTargetQablSet> {
-    let local_context =
-        tables.hats[region].map_routing_context(&tables.data, face, routing_context);
+    let node_id = tables.hats[region].map_routing_context(&tables.data, src_face, routing_context);
     let compute_route =
-        || tables.hats[region].compute_query_route(&tables.data, face, expr, local_context);
+        || tables.hats[region].compute_query_route(&tables.data, src_face, expr, node_id);
     if let Some(query_routes) = expr
         .resource()
         .as_ref()
@@ -620,7 +619,8 @@ fn get_query_route(
         return get_or_set_route(
             query_routes,
             tables.data.hats[region].routes_version,
-            local_context,
+            &src_face.region.bound(),
+            node_id,
             compute_route,
         );
     }
