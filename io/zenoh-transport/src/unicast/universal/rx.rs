@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
+use std::sync::{atomic::Ordering, MutexGuard};
 
 use zenoh_buffers::ZSlice;
 use zenoh_codec::transport::frame::FrameReader;
-use zenoh_core::{zlock, zread};
+use zenoh_core::zlock;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
@@ -108,8 +108,11 @@ impl TransportUnicastUniversal {
             // Drop invalid message and continue
             return Ok(());
         }
-        let callback = zread!(self.callback).clone();
-        if let Some(callback) = callback.as_ref() {
+        if let Some(callback) = self
+            .callback
+            .get()
+            .filter(|_| !self.closed.load(Ordering::Relaxed))
+        {
             for mut msg in frame {
                 self.trigger_callback(
                     callback.as_ref(),
@@ -190,8 +193,11 @@ impl TransportUnicastUniversal {
         if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
             if let Some(mut msg) = guard.defrag.defragment() {
-                let callback = zread!(self.callback).clone();
-                if let Some(callback) = callback.as_ref() {
+                if let Some(callback) = self
+                    .callback
+                    .get()
+                    .filter(|_| !self.closed.load(Ordering::Relaxed))
+                {
                     return self.trigger_callback(
                         callback.as_ref(),
                         msg.as_mut(),
