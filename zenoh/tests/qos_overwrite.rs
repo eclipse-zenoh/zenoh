@@ -243,7 +243,7 @@ fn qos_overwrite_config_error_repeated_id() {
                 },
                 {
                     id: "REPEATED",
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -268,7 +268,7 @@ fn qos_overwrite_config_error_wrong_flow() {
             r#"
               [
                 {
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -292,7 +292,7 @@ fn qos_overwrite_config_error_empty_flow() {
             r#"
               [
                 {
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -341,7 +341,7 @@ fn qos_overwrite_config_error_empty_interface() {
               [
                 {
                     interfaces: [],
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -365,7 +365,7 @@ fn qos_overwrite_config_ok_no_flow() {
             r#"
               [
                 {
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
