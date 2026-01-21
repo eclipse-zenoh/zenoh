@@ -3001,15 +3001,17 @@ impl Primitives for WeakSession {
     #[inline(always)]
     fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, consume: bool) {
         trace!("recv Push {:?}", msg);
-        zread!(self.state)
-            .subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false)
-            .call(
-                consume,
-                msg.ext_qos,
-                &mut msg.payload,
-                #[cfg(feature = "unstable")]
-                _reliability,
-            );
+        let state = zread!(self.state);
+        let callbacks =
+            state.subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false);
+        drop(state);
+        callbacks.call(
+            consume,
+            msg.ext_qos,
+            &mut msg.payload,
+            #[cfg(feature = "unstable")]
+            _reliability,
+        );
     }
 
     fn send_request(&self, msg: &mut Request) {
