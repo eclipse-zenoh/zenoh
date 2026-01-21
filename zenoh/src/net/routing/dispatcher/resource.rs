@@ -565,6 +565,7 @@ impl Resource {
     /// Suffix usually starts with '/', so this first slash is kept as part of the split chunk.
     /// The rest will contain the slash of the split.
     /// For example `split_first_chunk("/a/b") == Some(("/a", "/b"))`.
+    #[inline(always)]
     fn split_first_chunk(suffix: &str) -> Option<(&str, &str)> {
         if suffix.is_empty() {
             return None;
