@@ -231,7 +231,8 @@ mod tests {
             .link_events_listener()
             .history(false)
             .with(flume::bounded(32))
-            .await;
+            .await
+            .expect("Failed to declare link events listener");
 
         // Close session2 - this closes both links
         session2.close().await.unwrap();
