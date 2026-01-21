@@ -14,10 +14,7 @@
 use std::{
     any::Any,
     cell::OnceCell,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc, OnceLock,
-    },
+    sync::{Arc, OnceLock},
 };
 
 use arc_swap::ArcSwapOption;
