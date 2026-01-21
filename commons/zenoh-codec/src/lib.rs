@@ -28,8 +28,7 @@ pub mod transport;
 pub mod zenoh;
 
 use ::core::marker::PhantomData;
-use zenoh_buffers::ZSlice;
-use zenoh_protocol::{core::Reliability, network::NetworkMessage};
+use zenoh_protocol::core::Reliability;
 
 pub trait WCodec<Message, Buffer> {
     type Output;
@@ -153,9 +152,4 @@ impl<T> Zenoh080Sliced<T> {
             codec: Zenoh080Bounded::<T>::new(),
         }
     }
-}
-
-#[unsafe(no_mangle)]
-fn plop(s: &mut ZSlice) -> Option<NetworkMessage> {
-    Zenoh080Reliability::new(Reliability::Reliable).read(s).ok()
 }
