@@ -148,7 +148,8 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 ///     .link_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare link events listener");
 ///
 /// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {
@@ -181,7 +182,8 @@ impl<Handler> LinkEventsListener<Handler> {
     /// let listener = session.info()
     ///     .link_events_listener()
     ///     .with(flume::bounded(32))
-    ///     .await;
+    ///     .await
+    ///     .expect("Failed to declare link events listener");
     /// listener.undeclare().await.unwrap();
     /// # }
     /// ```
@@ -300,7 +302,8 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
 ///     .link_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare link events listener");
 ///
 /// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {

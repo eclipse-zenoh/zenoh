@@ -167,7 +167,8 @@ impl SessionInfo {
     ///     .transport_events_listener()
     ///     .history(true)
     ///     .with(flume::bounded(32))
-    ///     .await;
+    ///     .await
+    ///     .expect("Failed to declare transport events listener");
     ///
     /// while let Ok(event) = events.recv_async().await {
     ///     match event.kind() {
@@ -195,7 +196,8 @@ impl SessionInfo {
     ///     .link_events_listener()
     ///     .history(true)
     ///     .with(flume::bounded(32))
-    ///     .await;
+    ///     .await
+    ///     .expect("Failed to declare link events listener");
     ///
     /// while let Ok(event) = listener.recv_async().await {
     ///     match event.kind() {

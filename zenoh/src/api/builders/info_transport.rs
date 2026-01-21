@@ -116,7 +116,8 @@ impl std::fmt::Debug for TransportEventsListenerInner {
 ///     .transport_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare transport events listener");
 ///
 /// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {
@@ -147,7 +148,8 @@ impl<Handler> TransportEventsListener<Handler> {
     /// let listener = session.info()
     ///     .transport_events_listener()
     ///     .with(flume::bounded(32))
-    ///     .await;
+    ///     .await
+    ///     .expect("Failed to declare transport events listener");
     /// listener.undeclare().await.unwrap();
     /// # }
     /// ```
@@ -263,7 +265,8 @@ impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
 ///     .transport_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare transport events listener");
 ///
 /// while let Ok(event) = events.recv_async().await {
 ///     match event.kind() {
