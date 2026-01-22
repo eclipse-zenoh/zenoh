@@ -28,8 +28,9 @@ pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
 mod unicast;
+pub mod utils;
 
-use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
+use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 use core::{cmp::PartialEq, fmt, hash::Hash};
 
 use async_trait::async_trait;

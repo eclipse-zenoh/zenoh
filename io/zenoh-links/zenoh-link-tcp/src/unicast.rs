@@ -11,17 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    cell::UnsafeCell, convert::TryInto, fmt, io::IoSlice, net::SocketAddr, sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names, tcp::TcpSocketConfig, LinkAuthId, LinkManagerUnicastTrait, LinkUnicast,
-    LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    get_ip_interface_names, tcp::TcpSocketConfig, utils::write_all_vectored, LinkAuthId,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator},
@@ -126,20 +130,21 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        self.get_mut_socket().write(buffer).await.map_err(|e| {
-            let e = zerror!("Write error on TCP link {}: {}", self, e);
-            tracing::trace!("{}", e);
-            e.into()
-        })
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
             e.into()
         })
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.get_mut_socket().is_write_vectored()
+    }
+
+    async fn write_vectored_all(&self, bufs: &mut [IoSlice<'_>]) -> ZResult<()> {
+        write_all_vectored(self.get_mut_socket(), bufs).await?;
+        Ok(())
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
