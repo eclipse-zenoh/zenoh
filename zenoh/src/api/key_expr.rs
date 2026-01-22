@@ -32,7 +32,6 @@ use crate::api::session::{Session, SessionInner, UndeclarableSealed, WeakSession
 pub(crate) struct KeyExprWireDeclaration {
     expr_id: ExprId,
     prefix_len: u32,
-    mapping: Mapping,
     session: WeakSession,
     undeclared: bool,
 }
@@ -47,7 +46,6 @@ impl KeyExprWireDeclaration {
             .map(|expr_id| Self {
                 expr_id,
                 prefix_len,
-                mapping: Mapping::Sender,
                 session: session.downgrade(),
                 undeclared: false,
             }))
@@ -541,21 +539,29 @@ impl<'a> KeyExpr<'a> {
             .unwrap_or(false)
     }
 
-    pub(crate) fn to_wire(&'a self, session: &SessionInner) -> WireExpr<'a> {
+    fn to_wire_inner(&'a self, session: &SessionInner, mapping: Mapping) -> WireExpr<'a> {
         match self.declaration() {
             Some(d) if d.is_declared_on_session_inner(session) => WireExpr {
                 scope: d.expr_id,
                 suffix: std::borrow::Cow::Borrowed(
                     &self.key_expr().as_str()[((d.prefix_len) as usize)..],
                 ),
-                mapping: d.mapping,
+                mapping,
             },
             _ => WireExpr {
                 scope: 0,
                 suffix: std::borrow::Cow::Borrowed(self.key_expr().as_str()),
-                mapping: Mapping::Sender,
+                mapping,
             },
         }
+    }
+
+    pub(crate) fn to_wire(&'a self, session: &SessionInner) -> WireExpr<'a> {
+        self.to_wire_inner(session, Mapping::Sender)
+    }
+
+    pub(crate) fn to_wire_local(&'a self, session: &SessionInner) -> WireExpr<'a> {
+        self.to_wire_inner(session, Mapping::Receiver)
     }
 
     fn undeclare_with_session_check(&mut self, parent_session: Option<&Session>) -> ZResult<()> {
