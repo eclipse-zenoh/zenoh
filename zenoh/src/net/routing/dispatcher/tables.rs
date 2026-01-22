@@ -59,10 +59,15 @@ impl Debug for RoutingExpr<'_> {
 impl<'a> RoutingExpr<'a> {
     #[inline]
     pub(crate) fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
+        let resource = if suffix.is_empty() {
+            Some(prefix).into()
+        } else {
+            OnceCell::new()
+        };
         RoutingExpr {
             prefix,
             suffix,
-            resource: OnceCell::new(),
+            resource,
             key_expr: OnceCell::new(),
         }
     }

@@ -30,11 +30,7 @@ use zenoh_protocol::{
     common::ZExtBody,
     core::{Region, ZenohIdProto},
     network::{
-        declare::{
-            ext::{NodeIdType, QoSType},
-            queryable::ext::QueryableInfoType,
-            QueryableId, SubscriberId, TokenId,
-        },
+        declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
         interest::{InterestId, InterestOptions},
         oam::id::OAM_LINKSTATE,
         Declare, DeclareBody, DeclareFinal, Oam,
@@ -239,9 +235,9 @@ impl HatBaseTrait for Hat {
                 &ctx.src_face.primitives,
                 RoutingContext::new(Declare {
                     interest_id: Some(INITIAL_INTEREST_ID),
-                    ext_qos: QoSType::default(),
+                    ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: NodeIdType::default(),
+                    ext_nodeid: declare::ext::NodeIdType::default(),
                     body: DeclareBody::DeclareFinal(DeclareFinal),
                 }),
             );
