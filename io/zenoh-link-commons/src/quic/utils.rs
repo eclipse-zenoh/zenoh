@@ -512,7 +512,7 @@ pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
     }
 }
 
-pub fn get_quic_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
+pub fn get_quic_host<'a>(address: &Address<'a>) -> ZResult<&'a str> {
     Ok(address
         .as_str()
         .rsplit_once(':')

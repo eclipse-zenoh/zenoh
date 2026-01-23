@@ -12,34 +12,25 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    fmt,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::Arc,
-    time::Duration,
-};
+use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use quinn::{
-    crypto::rustls::{QuicClientConfig, QuicServerConfig},
-    EndpointConfig,
-};
+use quinn::{crypto::rustls::QuicServerConfig, EndpointConfig};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::zasynclock;
 use zenoh_link_commons::{
-    get_ip_interface_names, parse_dscp,
+    get_ip_interface_names,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr, get_quic_host,
-        TlsClientConfig, TlsServerConfig, ALPN_QUIC_HTTP,
+        unicast::QuicLink, TlsServerConfig, ALPN_QUIC_HTTP,
     },
-    set_dscp,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{Address, EndPoint, Locator},
+    core::{EndPoint, Locator},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -250,81 +241,8 @@ impl LinkManagerUnicastQuic {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let epaddr = endpoint.address();
-        let host = get_quic_host(&epaddr)?;
-        let epconf = endpoint.config();
-        let dst_addr = get_quic_addr(&epaddr).await?;
-
-        // if both `iface`, and `bind` are present, return error
-        if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
-            bail!(
-                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
-                BIND_INTERFACE,
-                BIND_SOCKET
-            )
-        }
-
-        // Initialize the QUIC connection
-        let mut client_crypto = TlsClientConfig::new(&epconf)
-            .await
-            .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
-
-        client_crypto.client_config.alpn_protocols =
-            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-
-        let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
-            get_quic_addr(&Address::from(bind_socket_str)).await?
-        } else if dst_addr.is_ipv4() {
-            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
-        } else {
-            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-        };
-
-        let socket = tokio::net::UdpSocket::bind(src_addr).await?;
-        if let Some(dscp) = parse_dscp(&epconf)? {
-            set_dscp(&socket, src_addr, dscp)?;
-        }
-
-        // Initialize the Endpoint
-        if let Some(iface) = client_crypto.bind_iface {
-            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
-        };
-
-        let mut quic_endpoint = {
-            // create the Endpoint with this socket
-            let runtime = quinn::default_runtime()
-                .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
-            ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
-                EndpointConfig::default(),
-                None,
-                runtime.wrap_udp_socket(socket.into_std()?)?,
-                runtime,
-            )?)
-        }
-        .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
-
-        let quic_config: QuicClientConfig = client_crypto
-            .client_config
-            .try_into()
-            .map_err(|e| zerror!("Can not get QUIC config {host}: {e}"))?;
-        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
-
-        let src_addr = quic_endpoint
-            .local_addr()
-            .map_err(|e| zerror!("Can not get QUIC local_addr bound to {}: {}", host, e))?;
-
-        let quic_conn = quic_endpoint
-            .connect(dst_addr, host)
-            .map_err(|e| {
-                zerror!(
-                    "Can not get connect quick endpoint : {} : {} : {}",
-                    dst_addr,
-                    host,
-                    e
-                )
-            })?
-            .await
-            .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+        let (quic_conn, src_addr, dst_addr, host, tls_close_link_on_expiration) =
+            QuicLink::connect(&endpoint).await?;
 
         let (send, recv) = quic_conn
             .open_bi()
@@ -337,7 +255,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let link = Arc::<LinkUnicastQuic>::new_cyclic(|weak_link| {
             let mut expiration_manager = None;
-            if client_crypto.tls_close_link_on_expiration {
+            if tls_close_link_on_expiration {
                 // setup expiration manager
                 expiration_manager = Some(LinkCertExpirationManager::new(
                     weak_link.clone(),
