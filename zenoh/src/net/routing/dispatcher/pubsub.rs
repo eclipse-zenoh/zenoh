@@ -32,6 +32,7 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
+        tables::TablesData,
     },
     hat::{BaseContext, SendDeclare},
     router::{get_or_set_route, Direction, RouteBuilder},
@@ -113,7 +114,8 @@ impl Face {
                         .reduce(|_, _| SubscriberInfo);
 
                     hats[region].propagate_subscription(ctx.reborrow(), res.clone(), other_info);
-                    disable_matches_data_routes(&mut res, &region);
+
+                    disable_matches_data_routes(ctx.tables, &mut res);
                 }
 
                 drop(wtables);
@@ -188,7 +190,7 @@ impl Face {
         if let Some(mut res) =
             hats[region].unregister_subscription(ctx.reborrow(), id, res.clone(), node_id)
         {
-            disable_matches_data_routes(&mut res, &region);
+            disable_matches_data_routes(ctx.tables, &mut res);
 
             let mut remaining = tables
                 .hats
@@ -208,16 +210,29 @@ impl Face {
     }
 }
 
-/// Disables data routes of the given regions's hat.
+/// Disables data routes for the given [`Resource`].
 ///
-/// A subscription declaration or undeclaration should in theory only invalidate data routes of its owner hat.
-pub(crate) fn disable_matches_data_routes(res: &mut Arc<Resource>, region: &Region) {
+/// ## Note
+///
+/// **Changes in data/query routes are not hat-local**. For example, a north peer hat has routes for data
+/// that originate from south-bound remotes but has no routes for data that originate in its north
+/// region, thus a change in a broker's data routes affects the routes of the north peer hat.
+pub(crate) fn disable_matches_data_routes(_tables: &mut TablesData, res: &mut Arc<Resource>) {
     if res.ctx.is_some() {
-        get_mut_unchecked(res).context_mut().hats[region].disable_data_routes();
+        for hat in get_mut_unchecked(res).context_mut().hats.values_mut() {
+            hat.disable_data_routes();
+        }
+
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_).context_mut().hats[region].disable_data_routes();
+                for hat in get_mut_unchecked(&mut match_)
+                    .context_mut()
+                    .hats
+                    .values_mut()
+                {
+                    hat.disable_data_routes();
+                }
             }
         }
     }

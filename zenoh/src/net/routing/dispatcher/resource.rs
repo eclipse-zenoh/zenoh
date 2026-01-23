@@ -939,7 +939,11 @@ pub(crate) fn register_expr(
             }
             None => {
                 let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, wtables) = if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
+                let (mut res, mut wtables) = if res
+                    .as_ref()
+                    .map(|r| r.ctx.is_some())
+                    .unwrap_or(false)
+                {
                     drop(rtables);
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
@@ -968,10 +972,10 @@ pub(crate) fn register_expr(
                     .remote_mappings
                     .insert(expr_id, res.clone());
 
-                for bound in wtables.hats.regions() {
-                    disable_matches_data_routes(&mut res, bound);
-                    disable_matches_query_routes(&mut res, bound);
-                }
+                let tables = &mut wtables.data;
+
+                disable_matches_data_routes(tables, &mut res);
+                disable_matches_query_routes(tables, &mut res);
 
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
@@ -986,11 +990,22 @@ pub(crate) fn register_expr(
 }
 
 pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
-    let wtables = zwrite!(tables.tables);
+    let mut wtables = zwrite!(tables.tables);
+    let tables = &mut wtables.data;
+
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
-        Some(mut res) => Resource::clean(&mut res),
+        Some(mut res) => {
+            if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&face.id) {
+                get_mut_unchecked(ctx).remote_expr_id = None;
+            }
+            disable_matches_data_routes(tables, &mut res);
+            disable_matches_query_routes(tables, &mut res);
+            face.update_interceptors_caches(&mut res);
+            Resource::clean(&mut res);
+        }
         None => tracing::error!("{} Undeclare unknown resource!", face),
     }
+
     drop(wtables);
 }
 

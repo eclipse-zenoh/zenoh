@@ -117,7 +117,8 @@ mod tests {
             .transport_events_listener()
             .history(true)
             .with(flume::bounded(32))
-            .await;
+            .await
+            .expect("Failed to declare transport events listener");
 
         let session2 = open_session_connect(&["tcp/127.0.0.1:17450"]).await;
         tokio::time::sleep(SLEEP).await;
@@ -158,7 +159,8 @@ mod tests {
             .link_events_listener()
             .history(true)
             .with(flume::bounded(32))
-            .await;
+            .await
+            .expect("Failed to declare link events listener");
 
         // Connect two sessions
         let session2 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
@@ -229,7 +231,8 @@ mod tests {
             .link_events_listener()
             .history(false)
             .with(flume::bounded(32))
-            .await;
+            .await
+            .expect("Failed to declare link events listener");
 
         // Close session2 - this closes both links
         session2.close().await.unwrap();
@@ -263,7 +266,8 @@ mod tests {
             .transport_events_listener()
             .history(true)
             .with(flume::bounded(32))
-            .await;
+            .await
+            .expect("Failed to declare transport events listener");
 
         // Should immediately receive event for existing transport
         let event = tokio::time::timeout(
@@ -286,7 +290,8 @@ mod tests {
             .link_events_listener()
             .history(true)
             .with(flume::bounded(32))
-            .await;
+            .await
+            .expect("Failed to declare link events listener");
 
         // Should immediately receive event for existing link
         let event =

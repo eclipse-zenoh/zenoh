@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    ops::Not,
     sync::{Arc, Weak},
     time::Duration,
 };
@@ -42,7 +43,7 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
-        tables::Tables,
+        tables::{Tables, TablesData},
     },
     hat::{BaseContext, SendDeclare, UnregisterResult},
     router::{get_or_set_route, QueryDirection, RouteBuilder},
@@ -122,7 +123,7 @@ impl Face {
                 );
 
                 for region in hats.regions().copied().collect_vec() {
-                    disable_matches_query_routes(&mut res, &region);
+                    disable_matches_query_routes(ctx.tables, &mut res);
 
                     let other_info = hats
                         .values()
@@ -209,7 +210,7 @@ impl Face {
         match hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id) {
             UnregisterResult::Noop => {} // ¯\_(ツ)_/¯
             UnregisterResult::InfoUpdate { mut res } => {
-                disable_matches_query_routes(&mut res, &region);
+                disable_matches_query_routes(ctx.tables, &mut res);
 
                 for region in hats.regions().copied().collect_vec() {
                     let other_info = hats
@@ -587,13 +588,29 @@ impl Timed for QueryCleanup {
     }
 }
 
-pub(crate) fn disable_matches_query_routes(res: &mut Arc<Resource>, region: &Region) {
+/// Disables query routes for the given [`Resource`].
+///
+/// ## Note
+///
+/// **Changes in data/query routes are not hat-local**. For example, a north peer hat has routes for query
+/// that originate from south-bound remotes but has no routes for query that originate in its north
+/// region, thus a change in a broker's query routes affects the routes of the north peer hat.
+pub(crate) fn disable_matches_query_routes(_tables: &mut TablesData, res: &mut Arc<Resource>) {
     if res.ctx.is_some() {
-        get_mut_unchecked(res).context_mut().hats[region].disable_query_routes();
+        for hat in get_mut_unchecked(res).context_mut().hats.values_mut() {
+            hat.disable_query_routes();
+        }
+
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                get_mut_unchecked(&mut match_).context_mut().hats[region].disable_query_routes();
+                for hat in get_mut_unchecked(&mut match_)
+                    .context_mut()
+                    .hats
+                    .values_mut()
+                {
+                    hat.disable_query_routes();
+                }
             }
         }
     }
@@ -632,39 +649,55 @@ pub(crate) fn route_send_response(
     face: &mut Arc<FaceState>,
     msg: &mut Response,
 ) {
-    let queries_lock = zread!(tables_ref.queries_lock);
-    #[cfg(feature = "stats")]
     let tables = zread!(tables_ref.tables);
-    #[cfg(feature = "stats")]
-    let expr = tables
+    match tables
         .data
         .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
-        .map(|prefix| RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref()));
-    #[cfg(feature = "stats")]
-    let payload_observer = super::stats::PayloadObserver::new(msg, expr.as_ref(), &tables);
-    #[cfg(feature = "stats")]
-    payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
+    {
+        Some(prefix) => {
+            let expr = msg
+                .wire_expr
+                .is_empty() // account for empty wire expression in ReplyErr messages
+                .not()
+                .then(|| RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref()));
+            #[cfg(feature = "stats")]
+            let payload_observer = super::stats::PayloadObserver::new(msg, expr.as_ref(), &tables);
+            #[cfg(feature = "stats")]
+            payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
+            let queries_lock = zread!(tables_ref.queries_lock);
+            match face.pending_queries.get(&msg.rid) {
+                Some((query, _)) => {
+                    if let Some(expr) = expr {
+                        msg.wire_expr = expr.get_best_key(query.src_face.id).to_owned();
+                    }
+                    tracing::trace!(
+                        "{}:{} Route reply for query {}:{} ({})",
+                        face,
+                        msg.rid,
+                        query.src_face,
+                        query.src_qid,
+                        msg.wire_expr.suffix.as_ref()
+                    );
+                    drop(tables);
+                    drop(queries_lock);
 
-    match face.pending_queries.get(&msg.rid) {
-        Some((query, _)) => {
-            tracing::trace!(
-                "{}:{} Route reply for query {}:{} ({})",
-                face,
-                msg.rid,
-                query.src_face,
-                query.src_qid,
-                msg.wire_expr.to_string()
-            );
-
-            drop(queries_lock);
-
-            msg.rid = query.src_qid;
-            if query.src_face.primitives.send_response(msg) {
-                #[cfg(feature = "stats")]
-                payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
+                    msg.rid = query.src_qid;
+                    if query.src_face.primitives.send_response(msg) {
+                        #[cfg(feature = "stats")]
+                        payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
+                    }
+                }
+                None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
             }
         }
-        None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
+        None => {
+            tracing::error!(
+                "{} Routing reply {} for unknown scope {}",
+                face,
+                msg.rid,
+                msg.wire_expr.scope
+            )
+        }
     }
 }
 

@@ -566,7 +566,7 @@ impl Primitives for Face {
         let src_fid = ctx.src_face.id;
 
         for mut res in hats[region].unregister_face_subscriptions(ctx.reborrow()) {
-            disable_matches_data_routes(&mut res, &region);
+            disable_matches_data_routes(ctx.tables, &mut res);
 
             let mut remaining = hats
                 .values_mut()
@@ -585,7 +585,7 @@ impl Primitives for Face {
         }
 
         for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
-            disable_matches_query_routes(&mut res, &region);
+            disable_matches_query_routes(ctx.tables, &mut res);
 
             let remaining = hats
                 .iter()

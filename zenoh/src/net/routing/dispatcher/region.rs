@@ -16,7 +16,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use zenoh_protocol::core::Region;
+use zenoh_protocol::core::{Bound, Region};
 
 // TODO(regions): optimization
 #[derive(Debug, Default)]

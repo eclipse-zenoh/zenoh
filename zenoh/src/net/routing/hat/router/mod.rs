@@ -461,7 +461,7 @@ impl HatBaseTrait for Hat {
                     .collect::<RegionMap<_>>();
 
                 for mut res in removed_subscriptions {
-                    dispatcher::pubsub::disable_matches_data_routes(&mut res, &region);
+                    dispatcher::pubsub::disable_matches_data_routes(ctx.tables, &mut res);
 
                     let mut remaining = hats
                         .values_mut()
@@ -480,7 +480,7 @@ impl HatBaseTrait for Hat {
                 }
 
                 for mut res in removed_queryables {
-                    dispatcher::queries::disable_matches_query_routes(&mut res, &region);
+                    dispatcher::queries::disable_matches_query_routes(ctx.tables, &mut res);
 
                     let remaining = hats
                         .iter()
