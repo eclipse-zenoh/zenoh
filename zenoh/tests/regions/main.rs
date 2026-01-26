@@ -75,6 +75,10 @@ impl Node {
         self.insert("gateway", conf)
     }
 
+    pub fn region(self, name: &str) -> Self {
+        self.insert("region_name", &format!("{name:?}"))
+    }
+
     pub async fn open(self) -> Session {
         ztimeout!(zenoh::open(self.c)).unwrap()
     }
