@@ -29,6 +29,7 @@ use zenoh_protocol::{
 use super::dispatcher::face::Face;
 use crate::net::primitives::{EPrimitives, Primitives};
 
+#[derive(Clone)]
 pub(crate) struct Namespace {
     namespace: OwnedNonWildKeyExpr,
     primitives: Arc<Face>,
@@ -77,6 +78,11 @@ impl Namespace {
             DeclareBody::UndeclareToken(_) => {}
             DeclareBody::DeclareFinal(_) => {}
         }
+    }
+
+    pub(crate) fn push_primitives(&self, msg: &mut Push) -> &Face {
+        self.handle_namespace_egress(&mut msg.wire_expr, false);
+        &self.primitives
     }
 }
 

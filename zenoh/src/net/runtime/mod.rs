@@ -44,8 +44,8 @@ use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, ZenohIdProto},
-    network::NetworkMessageMut,
+    core::{Locator, Reliability, WhatAmI, ZenohIdProto},
+    network::{Declare, Interest, NetworkMessageMut, Push, Request, Response, ResponseFinal},
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
@@ -84,6 +84,7 @@ use crate::{
         config::{Config, Notifier},
         info::{Link, Transport},
     },
+    net::routing::dispatcher::face::Face,
     GIT_VERSION,
 };
 
@@ -126,6 +127,29 @@ pub(crate) struct RuntimeState {
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
+}
+
+impl RuntimeState {
+    fn new_primitives(
+        &self,
+        e_primitives: Arc<dyn EPrimitives + Send + Sync>,
+    ) -> (usize, GenericPrimitives) {
+        match &self.namespace {
+            Some(ns) => {
+                let face = self
+                    .router
+                    .new_primitives(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
+                (
+                    face.state.id,
+                    GenericPrimitives::Namespace(Namespace::new(ns.clone(), face)),
+                )
+            }
+            None => {
+                let face = self.router.new_primitives(e_primitives);
+                (face.state.id, GenericPrimitives::Face(face))
+            }
+        }
+    }
 }
 
 #[allow(private_interfaces)]
@@ -315,17 +339,10 @@ impl IRuntime for RuntimeState {
         &self,
         e_primitives: Arc<dyn EPrimitives + Send + Sync>,
     ) -> (usize, Arc<dyn Primitives>) {
-        match &self.namespace {
-            Some(ns) => {
-                let face = self
-                    .router
-                    .new_primitives(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
-                (face.state.id, Arc::new(Namespace::new(ns.clone(), face)))
-            }
-            None => {
-                let face = self.router.new_primitives(e_primitives);
-                (face.state.id, face)
-            }
+        match self.new_primitives(e_primitives) {
+            (id, GenericPrimitives::Face(face)) => (id, face),
+            (id, GenericPrimitives::Namespace(namespace)) => (id, Arc::new(namespace)),
+            _ => unreachable!(),
         }
     }
 
@@ -1003,6 +1020,17 @@ impl GenericRuntime {
     pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
         self.static_runtime.as_ref()
     }
+
+    pub(crate) fn new_primitives(
+        &self,
+        e_primitives: Arc<dyn EPrimitives + Send + Sync>,
+    ) -> (usize, GenericPrimitives) {
+        if let Some(runtime) = self.static_runtime.as_ref() {
+            return runtime.state.new_primitives(e_primitives);
+        }
+        let (face_id, primitives) = self.dynamic_runtime.new_primitives(e_primitives);
+        (face_id, GenericPrimitives::Dyn(primitives))
+    }
 }
 
 impl From<Runtime> for GenericRuntime {
@@ -1012,6 +1040,71 @@ impl From<Runtime> for GenericRuntime {
             dynamic_runtime: value.into(),
             static_runtime: Some(static_runtime),
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum GenericPrimitives {
+    Face(Arc<Face>),
+    Namespace(Namespace),
+    Dyn(Arc<dyn Primitives>),
+}
+
+macro_rules! delegate_primitives {
+    ($self:expr, $primitives:ident => $call:expr) => {
+        match $self {
+            GenericPrimitives::Face($primitives) => $call,
+            GenericPrimitives::Namespace($primitives) => $call,
+            GenericPrimitives::Dyn($primitives) => $call,
+        }
+    };
+}
+
+impl Primitives for GenericPrimitives {
+    fn send_interest(&self, msg: &mut Interest) {
+        delegate_primitives!(self, p => p.send_interest(msg));
+    }
+
+    fn send_declare(&self, msg: &mut Declare) {
+        delegate_primitives!(self, p => p.send_declare(msg));
+    }
+
+    #[inline(always)]
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
+        let face = match self {
+            Self::Face(face) => face,
+            Self::Namespace(namespace) => namespace.push_primitives(msg),
+            Self::Dyn(primitives) => {
+                #[cold]
+                #[inline(never)]
+                fn cold(primitives: &dyn Primitives, msg: &mut Push, reliability: Reliability) {
+                    primitives.send_push(msg, reliability)
+                }
+                cold(primitives.as_ref(), msg, reliability);
+                return;
+            }
+        };
+        face.send_push(msg, reliability);
+    }
+
+    fn send_request(&self, msg: &mut Request) {
+        delegate_primitives!(self, p => p.send_request(msg));
+    }
+
+    fn send_response(&self, msg: &mut Response) {
+        delegate_primitives!(self, p => p.send_response(msg));
+    }
+
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
+        delegate_primitives!(self, p => p.send_response_final(msg));
+    }
+
+    fn send_close(&self) {
+        delegate_primitives!(self, p => p.send_close());
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        delegate_primitives!(self, p => p)
     }
 }
 

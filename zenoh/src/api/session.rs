@@ -112,7 +112,7 @@ use crate::{
     },
     net::{
         primitives::Primitives,
-        runtime::{GenericRuntime, RuntimeBuilder},
+        runtime::{GenericPrimitives, GenericRuntime, RuntimeBuilder},
     },
     query::ReplyError,
     Config,
@@ -154,8 +154,8 @@ impl fmt::Debug for LinkEventsListenerState {
 }
 
 pub(crate) struct SessionState {
-    pub(crate) primitives: Option<Arc<dyn Primitives>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicExprId,           // @TODO: manage rollover and uniqueness
+    pub(crate) primitives: Option<GenericPrimitives>,
+    pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
     pub(crate) local_resources: IntHashMap<ExprId, LocalResource>,
     pub(crate) remote_resources: IntHashMap<ExprId, Resource>,
@@ -213,7 +213,7 @@ impl SessionState {
 
 impl SessionState {
     #[inline]
-    pub(crate) fn primitives(&self) -> ZResult<Arc<dyn Primitives>> {
+    pub(crate) fn primitives(&self) -> ZResult<GenericPrimitives> {
         self.primitives
             .as_ref()
             .cloned()
@@ -2658,7 +2658,7 @@ impl SessionInner {
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
-                Arc::new(WeakSession::new(self))
+                GenericPrimitives::Dyn(Arc::new(WeakSession::new(self)))
             } else {
                 primitives
             },
