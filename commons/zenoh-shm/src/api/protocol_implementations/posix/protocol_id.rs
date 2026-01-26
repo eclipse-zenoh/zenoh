@@ -14,6 +14,6 @@
 
 use crate::api::common::types::ProtocolID;
 
-/// Protocol identifier to use when creating ShmProvider
+/// Protocol identifier to use for POSIX Protocol
 #[zenoh_macros::unstable_doc]
 pub const POSIX_PROTOCOL_ID: ProtocolID = 0;
