@@ -22,7 +22,7 @@ use std::{
 
 use tokio::runtime::Handle;
 use zenoh::{config::WhatAmI, key_expr::KeyExpr, qos::CongestionControl, Session};
-use zenoh_config::{EndPoint, ModeDependentValue};
+use zenoh_config::{EndPoints, ModeDependentValue};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -99,7 +99,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     config
         .connect
         .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
         .unwrap();
     println!("[  ][01a] Opening s01 session");
@@ -110,7 +110,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     config
         .connect
         .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
         .unwrap();
     println!("[  ][02a] Opening s02 session");
@@ -121,7 +121,7 @@ async fn open_client_sessions() -> (Session, Session, Session) {
     config
         .connect
         .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
-            .parse::<EndPoint>()
+            .parse::<EndPoints>()
             .unwrap()]))
         .unwrap();
     println!("[  ][03a] Opening s03 session");
