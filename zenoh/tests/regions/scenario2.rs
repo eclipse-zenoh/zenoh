@@ -45,17 +45,20 @@ async fn test_regions_scenario2_order1_putsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "21aa9100")
         .multicast("224.2.1.1:9100")
-        .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "21aa9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.1.1:9200")
-        .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21aa9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.1.1:9300")
-        .gateway("{north:{filters:[{zids:[\"21aa9100\",\"21aa9200\",\"21aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "21aa9110")
@@ -141,17 +144,20 @@ async fn test_regions_scenario2_order1_pubsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "21ab9100")
         .multicast("224.2.1.2:9100")
-        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "21ab9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.1.2:9200")
-        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21ab9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.1.2:9300")
-        .gateway("{north:{filters:[{zids:[\"21ab9100\",\"21ab9200\",\"21ab9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "21ab9110")
@@ -287,17 +293,20 @@ async fn test_regions_scenario2_order2_putsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "22aa9100")
         .multicast("224.2.2.1:9100")
-        .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "22aa9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.2.1:9200")
-        .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22aa9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.2.1:9300")
-        .gateway("{north:{filters:[{zids:[\"22aa9100\",\"22aa9200\",\"22aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     tokio::time::sleep(Duration::from_secs(8)).await;
@@ -393,17 +402,20 @@ async fn test_regions_scenario2_order2_pubsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "22ab9100")
         .multicast("224.2.2.2:9100")
-        .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "22ab9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.2.2:9200")
-        .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22ab9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.2.2:9300")
-        .gateway("{north:{filters:[{zids:[\"22ab9100\",\"22ab9200\",\"22ab9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     tokio::time::sleep(Duration::from_secs(8)).await;
@@ -449,12 +461,14 @@ async fn test_regions_scenario2_order3_putsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "23aa9100")
         .multicast("224.2.3.1:9100")
-        .gateway("{north:{filters:[{zids:[\"23aa9100\",\"23aa9200\",\"23aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "23aa9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.3.1:9200")
-        .gateway("{north:{filters:[{zids:[\"23aa9100\",\"23aa9200\",\"23aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "23aa9110")
@@ -500,7 +514,8 @@ async fn test_regions_scenario2_order3_putsub() {
     let _z9300 = ztimeout!(Node::new(Peer, "23aa9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.3.1:9300")
-        .gateway("{north:{filters:[{zids:[\"23aa9100\",\"23aa9200\",\"23aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     tokio::time::sleep(SLEEP).await;
@@ -546,12 +561,14 @@ async fn test_regions_scenario2_order3_pubsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "23ab9100")
         .multicast("224.2.3.2:9100")
-        .gateway("{north:{filters:[{zids:[\"23ab9100\",\"23ab9200\",\"23ab9300\"]}]},south:[{filters:[]}]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "23ab9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.3.2:9200")
-        .gateway("{north:{filters:[{zids:[\"23ab9100\",\"23ab9200\",\"23ab9300\"]}]},south:[{filters:[]}]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "23ab9110")
@@ -607,7 +624,8 @@ async fn test_regions_scenario2_order3_pubsub() {
     let _z9300 = ztimeout!(Node::new(Peer, "23ab9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.3.2:9300")
-        .gateway("{north:{filters:[{zids:[\"23ab9100\",\"23ab9200\",\"23ab9300\"]}]},south:[{filters:[]}]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     tokio::time::sleep(SLEEP).await;
@@ -653,12 +671,14 @@ async fn test_regions_scenario2_order4_putsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "24aa9100")
         .multicast("224.2.4.1:9100")
-        .gateway("{north:{filters:[{zids:[\"24aa9100\",\"24aa9200\",\"24aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "24aa9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.4.1:9200")
-        .gateway("{north:{filters:[{zids:[\"24aa9100\",\"24aa9200\",\"24aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "24aa9110")
@@ -691,7 +711,8 @@ async fn test_regions_scenario2_order4_putsub() {
     let _z9300 = ztimeout!(Node::new(Peer, "24aa9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.4.1:9300")
-        .gateway("{north:{filters:[{zids:[\"24aa9100\",\"24aa9200\",\"24aa9300\"]}]},south:[]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "24aa9310")
@@ -751,12 +772,14 @@ async fn test_regions_scenario2_order4_pubsub() {
 
     let _z9100 = ztimeout!(Node::new(Peer, "24ab9100")
         .multicast("224.2.4.2:9100")
-        .gateway("{north:{filters:[{zids:[\"24ab9100\",\"24ab9200\",\"24ab9300\"]}]},south:[{filters:[]}]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Peer, "24ab9200")
         .connect(&[loc!(_z9100)])
         .multicast("224.2.4.2:9200")
-        .gateway("{north:{filters:[{zids:[\"24ab9100\",\"24ab9200\",\"24ab9300\"]}]},south:[{filters:[]}]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9110 = ztimeout!(Node::new(Peer, "24ab9110")
@@ -796,7 +819,8 @@ async fn test_regions_scenario2_order4_pubsub() {
     let _z9300 = ztimeout!(Node::new(Peer, "24ab9300")
         .connect(&[loc!(_z9100), loc!(_z9200)])
         .multicast("224.2.4.2:9300")
-        .gateway("{north:{filters:[{zids:[\"24ab9100\",\"24ab9200\",\"24ab9300\"]}]},south:[{filters:[]}]}")
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let _z9310 = ztimeout!(Node::new(Peer, "24ab9310")
