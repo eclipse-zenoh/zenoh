@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [workspace]
-exclude = ["ci/nostd-check", "ci/valgrind-check"]
+exclude = ["ci/nostd-check", "ci/valgrind-check", "ci/zenoh-1-75"]
 members = [
   "commons/zenoh-buffers",
   "commons/zenoh-codec",
@@ -22,7 +22,6 @@ members = [
   "commons/zenoh-crypto",
   "commons/zenoh-keyexpr",
   "commons/zenoh-macros",
-  "commons/zenoh-pinned-deps-1-75",
   "commons/zenoh-protocol",
   "commons/zenoh-result",
   "commons/zenoh-runtime",
@@ -112,7 +111,7 @@ git-version = "0.3.9"
 hashbrown = "0.16.0"
 hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
-home = "0.5.9"
+home = "=0.5.9"
 http-types = "2.12.0"
 humantime = "2.3.0"
 itertools = "0.14.0"
@@ -177,7 +176,7 @@ syn = "2.0.110"
 talc = { version = "4.4.3", default-features = false }
 test-case = "3.3.1"
 tide = "0.16.0"
-time = "0.3.41"
+time = "=0.3.41"
 token-cell = { version = "2.0.0", default-features = false }
 tokio = { version = "1.47.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-rustls = { version = "0.26.2", default-features = false }
@@ -234,7 +233,6 @@ zenoh-link-unixsock_stream = { version = "=1.7.2", path = "io/zenoh-links/zenoh-
 zenoh-link-vsock = { version = "=1.7.2", path = "io/zenoh-links/zenoh-link-vsock" }
 zenoh-link-ws = { version = "=1.7.2", path = "io/zenoh-links/zenoh-link-ws" }
 zenoh-macros = { version = "=1.7.2", path = "commons/zenoh-macros" }
-zenoh-pinned-deps-1-75 = { version = "=1.7.2", path = "commons/zenoh-pinned-deps-1-75", default-features = false }
 zenoh-plugin-trait = { version = "=1.7.2", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "=1.7.2", path = "commons/zenoh-protocol", default-features = false }
 zenoh-result = { version = "=1.7.2", path = "commons/zenoh-result", default-features = false }

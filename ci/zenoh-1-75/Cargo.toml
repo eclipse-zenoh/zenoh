@@ -1,0 +1,32 @@
+#
+# Copyright (c) 2023 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+authors = ["Davide Della Giustina <davide.dellagiustina@zettascale.tech>"]
+categories = ["network-programming"]
+description = "Internal crate for zenoh."
+edition = "2021"
+homepage = "http://zenoh.io"
+license = "EPL-2.0 OR Apache-2.0"
+name = "zenoh-1-75"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+version = "0.1.0"
+
+[package.metadata.cargo-machete]
+ignored = ["zenoh", "zenoh-ext", "zenoh-pinned-deps-1-75"]
+
+
+[dependencies]
+zenoh = { path = "../../zenoh/" }
+zenoh-ext = { path = "../../zenoh-ext/" }
+zenoh-pinned-deps-1-75 = { path = "../../commons/zenoh-pinned-deps-1-75/" }
