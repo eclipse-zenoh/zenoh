@@ -160,8 +160,8 @@ pub fn init_log_with_callback(
 pub fn init_log_test() {
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
-        .with_thread_ids(true)
-        .with_thread_names(true)
+        .with_thread_ids(false) // Disable thread ids and name because
+        .with_thread_names(false) // there is memory leak in tracincg_subscriber crate with these enabled.
         .with_level(true)
         .with_target(true);
 
