@@ -163,7 +163,7 @@
       /// (e.g. autoconnect_strategy : { peer: { to_router:  "always", to_peer: "greater-zid" } }).
       autoconnect_strategy: { peer: { to_router: "always", to_peer: "always" } },
       /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-      listen: true,
+      listen:  { router: true, peer: true, client: false },
     },
     /// The gossip scouting configuration. Note that instances in "client" mode do not participate in gossip.
     gossip: {

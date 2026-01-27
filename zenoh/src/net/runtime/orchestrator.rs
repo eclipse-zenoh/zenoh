@@ -131,7 +131,7 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
             let guard = &self.state.config.lock();
             (
                 guard
@@ -147,6 +147,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().listen().client()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
@@ -157,30 +158,46 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
-        match peers.len() {
-            0 => {
-                if scouting {
-                    tracing::info!("Scouting...");
-                    let ifaces = Runtime::get_interfaces(&ifaces);
-                    if ifaces.is_empty() {
-                        bail!("Unable to find multicast interface!")
+        if scouting {
+            if listen || peers.is_empty() {
+                let ifaces = Runtime::get_interfaces(&ifaces);
+                let mcast_socket = if listen {
+                    Some(Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?)
+                } else {
+                    None
+                };
+                if ifaces.is_empty() {
+                    bail!("Unable to find multicast interface!")
+                } else {
+                    let sockets: Vec<UdpSocket> = ifaces
+                        .into_iter()
+                        .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
+                        .collect();
+                    if sockets.is_empty() {
+                        bail!("Unable to bind UDP port to any multicast interface!")
                     } else {
-                        let sockets: Vec<UdpSocket> = ifaces
-                            .into_iter()
-                            .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                            .collect();
-                        if sockets.is_empty() {
-                            bail!("Unable to bind UDP port to any multicast interface!")
-                        } else {
+                        if peers.is_empty() {
                             self.connect_first(&sockets, autoconnect, &addr, timeout)
-                                .await
+                                .await?
+                        }
+                        if let Some(mcast_socket) = mcast_socket {
+                            let this = self.clone();
+                            self.spawn_abortable(async move {
+                                this.responder(&mcast_socket, &sockets).await;
+                            });
                         }
                     }
-                } else {
-                    bail!("No peer specified and multicast scouting deactivated!")
                 }
             }
-            _ => self.connect_peers(&peers, true).await,
+            if !peers.is_empty() {
+                self.connect_peers(&peers, true).await
+            } else {
+                Ok(())
+            }
+        } else if peers.is_empty() {
+            bail!("No peer specified and multicast scouting deactivated!")
+        } else {
+            self.connect_peers(&peers, true).await
         }
     }
 

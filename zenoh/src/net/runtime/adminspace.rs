@@ -580,7 +580,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
         Some(region)
     };
     // transports info
-    let transport_unicast_to_json = |transport: &TransportUnicast| {
+    let transport_unicast_to_json = move |transport: &TransportUnicast| {
         let link_to_json = |link: &Link| {
             json!({
                 "src": link.src.to_string(),

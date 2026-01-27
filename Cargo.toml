@@ -185,6 +185,7 @@ tokio-tungstenite = "0.24.0"
 tokio-util = "0.7.16"
 toml = "0.9.6"
 tracing = "0.1.41"
+tracing-capture = "0.1.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # tokio-vsock = see: io/zenoh-links/zenoh-link-vsock/Cargo.toml (workspaces does not support platform dependent dependencies)
 either = "1.15.0"
