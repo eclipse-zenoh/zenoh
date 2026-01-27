@@ -24,7 +24,7 @@ use zenoh_core::{lazy_static, ztimeout};
 use crate::{count, loc, Node};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP: Duration = Duration::from_secs(5);
 
 lazy_static! {
     static ref STORAGE: tracing_capture::SharedStorage = tracing_capture::SharedStorage::default();

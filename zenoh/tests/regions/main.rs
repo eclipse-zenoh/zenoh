@@ -41,6 +41,7 @@ impl Node {
         c.insert_json5("id", &format!("\"{id}\"")).unwrap();
         c.insert_json5("scouting/multicast/enabled", "false")
             .unwrap();
+        c.insert_json5("adminspace/enabled", "true").unwrap();
         Node { c }
     }
 
@@ -71,8 +72,11 @@ impl Node {
             .insert("scouting/multicast/address", &format!("\"{group}\""))
     }
 
-    pub fn gateway(self, conf: &str) -> Self {
-        self.insert("gateway", conf)
+    pub fn gateway<S>(self, conf: S) -> Self
+    where
+        S: AsRef<str>,
+    {
+        self.insert("gateway", conf.as_ref())
     }
 
     pub fn region(self, name: &str) -> Self {
@@ -142,5 +146,12 @@ macro_rules! count {
             })
         })
         .count()
+    }
+}
+
+#[macro_export]
+macro_rules! json {
+    ($($json:tt)+) => {
+        serde_json::json!($($json)+).to_string()
     }
 }
