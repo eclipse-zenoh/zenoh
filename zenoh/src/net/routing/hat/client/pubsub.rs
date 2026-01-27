@@ -13,164 +13,313 @@
 //
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{atomic::Ordering, Arc},
 };
 
+use itertools::Itertools;
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::WhatAmI,
     network::declare::{
-        common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+        self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
         UndeclareSubscriber,
     },
 };
 use zenoh_sync::get_mut_unchecked;
 
-use super::{face_hat, face_hat_mut, HatCode, HatFace};
-use crate::{
-    key_expr::KeyExpr,
-    net::routing::{
-        dispatcher::{
-            face::FaceState,
-            pubsub::SubscriberInfo,
-            resource::{NodeId, Resource, SessionContext},
-            tables::{Route, RoutingExpr, Tables},
-        },
-        hat::{HatPubSubTrait, SendDeclare, Sources},
-        router::RouteBuilder,
-        RoutingContext,
+use super::Hat;
+use crate::net::routing::{
+    dispatcher::{
+        face::FaceState,
+        pubsub::SubscriberInfo,
+        region::RegionMap,
+        resource::{FaceContext, NodeId, Resource},
+        tables::{Route, RoutingExpr, TablesData},
     },
+    hat::{BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, Sources},
+    router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
+    RoutingContext,
 };
 
-#[inline]
-fn propagate_simple_subscription_to(
-    _tables: &mut Tables,
-    dst_face: &mut Arc<FaceState>,
-    res: &Arc<Resource>,
-    _sub_info: &SubscriberInfo,
-    src_face: &mut Arc<FaceState>,
-    send_declare: &mut SendDeclare,
-) {
-    if src_face.id != dst_face.id
-        && !face_hat!(dst_face).local_subs.contains_key(res)
-        && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
-    {
-        let id = face_hat!(dst_face).next_id.fetch_add(1, Ordering::SeqCst);
-        face_hat_mut!(dst_face).local_subs.insert(res.clone(), id);
-        let key_expr = Resource::decl_key(res, dst_face, true);
-        send_declare(
+impl Hat {
+    pub(super) fn pubsub_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+        for res in other_hats
+            .values()
+            .flat_map(|hat| hat.remote_subscriptions(ctx.tables).into_keys())
+        {
+            if self.face_hat(ctx.src_face).local_subs.contains_key(&res) {
+                continue;
+            }
+
+            let id = self
+                .face_hat(ctx.src_face)
+                .next_id
+                .fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(ctx.src_face)
+                .local_subs
+                .insert(res.clone(), id);
+            let key_expr = Resource::decl_key(&res, ctx.src_face);
+            (ctx.send_declare)(
+                &ctx.src_face.primitives,
+                RoutingContext::with_expr(
+                    Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id,
+                            wire_expr: key_expr.clone(),
+                        }),
+                    },
+                    res.expr().to_string(),
+                ),
+            );
+        }
+    }
+}
+
+impl HatPubSubTrait for Hat {
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        // Compute the list of known subscribers (keys)
+        let mut subs = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for sub in self.face_hat(face).remote_subs.values() {
+                // Insert the key in the list of known subscribers
+                let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
+                // Append face as a subscriber source in the proper list
+                match face.whatami {
+                    WhatAmI::Router => srcs.routers.push(face.zid),
+                    WhatAmI::Peer => srcs.peers.push(face.zid),
+                    WhatAmI::Client => srcs.clients.push(face.zid),
+                }
+            }
+        }
+        Vec::from_iter(subs)
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn sourced_publishers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        Vec::default()
+    }
+
+    #[tracing::instrument(level = "debug", skip(tables, _nid), fields(%src_face) ret)]
+    fn compute_data_route(
+        &self,
+        tables: &TablesData,
+        src_face: &FaceState,
+        expr: &RoutingExpr,
+        _nid: NodeId,
+    ) -> Arc<Route> {
+        let mut route = RouteBuilder::<Direction>::new();
+        let Some(key_expr) = expr.key_expr() else {
+            return Arc::new(route.build());
+        };
+
+        let matches = expr
+            .resource()
+            .as_ref()
+            .and_then(|res| res.ctx.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
+
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+
+            for ctx in self.owned_face_contexts(&mres) {
+                if ctx.subs.is_some() && !self.owns(src_face) {
+                    route.insert(ctx.face.id, || {
+                        tracing::trace!(dst = %ctx.face, reason = "resource match");
+                        let wire_expr = expr.get_best_key(ctx.face.id);
+                        Direction {
+                            dst_face: ctx.face.clone(),
+                            wire_expr: wire_expr.to_owned(),
+                            node_id: DEFAULT_NODE_ID,
+                        }
+                    });
+                }
+            }
+        }
+
+        if src_face.region.bound().is_south() {
+            // REVIEW(regions): there should only be one such face?
+            for face in self
+                .owned_faces(tables)
+                .filter(|f| f.region.bound().is_north())
+            {
+                route.try_insert(face.id, || {
+                    let has_interest_finalized = expr
+                        .resource()
+                        .and_then(|res| res.face_ctxs.get(&face.id))
+                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
+                    (!has_interest_finalized).then(|| {
+                        tracing::trace!(dst = %face, reason = "unfinalized subscriber interest");
+                        let wire_expr = expr.get_best_key(face.id);
+                        Direction {
+                            dst_face: face.clone(),
+                            wire_expr: wire_expr.to_owned(),
+                            node_id: DEFAULT_NODE_ID,
+                        }
+                    })
+                });
+            }
+        }
+
+        Arc::new(route.build())
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _nid))]
+    fn register_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        mut res: Arc<Resource>,
+        _nid: NodeId,
+        info: &SubscriberInfo,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+
+        {
+            let res = get_mut_unchecked(&mut res);
+            match res.face_ctxs.get_mut(&ctx.src_face.id) {
+                Some(ctx) => {
+                    if ctx.subs.is_none() {
+                        get_mut_unchecked(ctx).subs = Some(*info);
+                    }
+                }
+                None => {
+                    let ctx = res
+                        .face_ctxs
+                        .entry(ctx.src_face.id)
+                        .or_insert_with(|| Arc::new(FaceContext::new(ctx.src_face.clone())));
+                    get_mut_unchecked(ctx).subs = Some(*info);
+                }
+            }
+        }
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_subs
+            .insert(id, res.clone());
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _nid), ret)]
+    fn unregister_subscription(
+        &mut self,
+        ctx: BaseContext,
+        id: SubscriberId,
+        _res: Option<Arc<Resource>>,
+        _nid: NodeId,
+    ) -> Option<Arc<Resource>> {
+        let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) else {
+            tracing::error!(id, "Unknown subscription");
+            return None;
+        };
+
+        if self
+            .face_hat(ctx.src_face)
+            .remote_subs
+            .values()
+            .contains(&res)
+        {
+            tracing::debug!(id, ?res, "Duplicated subscription");
+            return None;
+        };
+
+        if let Some(ctx) = get_mut_unchecked(&mut res)
+            .face_ctxs
+            .get_mut(&ctx.src_face.id)
+        {
+            get_mut_unchecked(ctx).subs = None;
+        }
+
+        Some(res)
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let fid = ctx.src_face.id;
+
+        self.face_hat_mut(ctx.src_face)
+            .remote_subs
+            .drain()
+            .map(|(_, mut res)| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).subs = None;
+                }
+
+                res
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(level = "trace", skip(ctx))]
+    fn propagate_subscription(
+        &mut self,
+        ctx: BaseContext,
+        res: Arc<Resource>,
+        other_info: Option<SubscriberInfo>,
+    ) {
+        let Some(_) = other_info else {
+            debug_assert!(self.owns(ctx.src_face));
+            return;
+        };
+
+        let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
+            tracing::debug!("Client region is empty; won't unpropagate subscription upstream");
+            return;
+        };
+
+        if self.face_hat(&dst_face).local_subs.contains_key(&res) {
+            return;
+        }
+
+        let id = self
+            .face_hat(&dst_face)
+            .next_id
+            .fetch_add(1, Ordering::SeqCst);
+        self.face_hat_mut(&mut dst_face)
+            .local_subs
+            .insert(res.clone(), id);
+        let key_expr = Resource::decl_key(&res, &mut dst_face);
+        (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::with_expr(
                 Declare {
                     interest_id: None,
-                    ext_qos: ext::QoSType::DECLARE,
+                    ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
+                    ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                         id,
-                        wire_expr: key_expr,
+                        wire_expr: key_expr.clone(),
                     }),
                 },
                 res.expr().to_string(),
             ),
         );
     }
-}
 
-fn propagate_simple_subscription(
-    tables: &mut Tables,
-    res: &Arc<Resource>,
-    sub_info: &SubscriberInfo,
-    src_face: &mut Arc<FaceState>,
-    send_declare: &mut SendDeclare,
-) {
-    for mut dst_face in tables
-        .faces
-        .values()
-        .cloned()
-        .collect::<Vec<Arc<FaceState>>>()
-    {
-        propagate_simple_subscription_to(
-            tables,
-            &mut dst_face,
-            res,
-            sub_info,
-            src_face,
-            send_declare,
-        );
-    }
-}
+    #[tracing::instrument(level = "trace", skip(ctx))]
+    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+        let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
+            tracing::debug!("Client region is empty; won't unpropagate subscription upstream");
+            return;
+        };
 
-fn register_simple_subscription(
-    _tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: SubscriberId,
-    res: &mut Arc<Resource>,
-    sub_info: &SubscriberInfo,
-) {
-    // Register subscription
-    {
-        let res = get_mut_unchecked(res);
-        match res.session_ctxs.get_mut(&face.id) {
-            Some(ctx) => {
-                if ctx.subs.is_none() {
-                    get_mut_unchecked(ctx).subs = Some(*sub_info);
-                }
-            }
-            None => {
-                let ctx = res
-                    .session_ctxs
-                    .entry(face.id)
-                    .or_insert_with(|| Arc::new(SessionContext::new(face.clone())));
-                get_mut_unchecked(ctx).subs = Some(*sub_info);
-            }
-        }
-    }
-    face_hat_mut!(face).remote_subs.insert(id, res.clone());
-}
-
-fn declare_simple_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: SubscriberId,
-    res: &mut Arc<Resource>,
-    sub_info: &SubscriberInfo,
-    send_declare: &mut SendDeclare,
-) {
-    register_simple_subscription(tables, face, id, res, sub_info);
-
-    propagate_simple_subscription(tables, res, sub_info, face, send_declare);
-}
-
-#[inline]
-fn simple_subs(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
-    res.session_ctxs
-        .values()
-        .filter_map(|ctx| {
-            if ctx.subs.is_some() {
-                Some(ctx.face.clone())
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn propagate_forget_simple_subscription(
-    tables: &mut Tables,
-    res: &Arc<Resource>,
-    send_declare: &mut SendDeclare,
-) {
-    for face in tables.faces.values_mut() {
-        if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-            send_declare(
-                &face.primitives,
+        if let Some(id) = self.face_hat_mut(&mut dst_face).local_subs.remove(&res) {
+            (ctx.send_declare)(
+                &dst_face.primitives,
                 RoutingContext::with_expr(
                     Declare {
                         interest_id: None,
-                        ext_qos: ext::QoSType::DECLARE,
+                        ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::DEFAULT,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                             id,
                             ext_wire_expr: WireExprType::null(),
@@ -181,242 +330,25 @@ fn propagate_forget_simple_subscription(
             );
         }
     }
-}
 
-pub(super) fn undeclare_simple_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    res: &mut Arc<Resource>,
-    send_declare: &mut SendDeclare,
-) {
-    if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
-        if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-            get_mut_unchecked(ctx).subs = None;
-        }
-
-        let mut simple_subs = simple_subs(res);
-        if simple_subs.is_empty() {
-            propagate_forget_simple_subscription(tables, res, send_declare);
-        }
-        if simple_subs.len() == 1 {
-            let face = &mut simple_subs[0];
-            if let Some(id) = face_hat_mut!(face).local_subs.remove(res) {
-                send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        res.expr().to_string(),
-                    ),
-                );
-            }
-        }
+    #[tracing::instrument(level = "trace", ret)]
+    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+        self.owned_face_contexts(res)
+            .filter_map(|ctx| ctx.subs)
+            .reduce(|_, _| SubscriberInfo)
     }
-}
 
-fn forget_simple_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    id: SubscriberId,
-    send_declare: &mut SendDeclare,
-) -> Option<Arc<Resource>> {
-    if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_simple_subscription(tables, face, &mut res, send_declare);
-        Some(res)
-    } else {
-        None
-    }
-}
-
-pub(super) fn pubsub_new_face(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    send_declare: &mut SendDeclare,
-) {
-    let sub_info = SubscriberInfo;
-    for src_face in tables
-        .faces
-        .values()
-        .cloned()
-        .collect::<Vec<Arc<FaceState>>>()
-    {
-        for sub in face_hat!(src_face).remote_subs.values() {
-            propagate_simple_subscription_to(
-                tables,
-                face,
-                sub,
-                &sub_info,
-                &mut src_face.clone(),
-                send_declare,
-            );
-        }
-    }
-}
-
-impl HatPubSubTrait for HatCode {
-    fn declare_subscription(
+    #[allow(clippy::incompatible_msrv)]
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    fn remote_subscriptions_matching(
         &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: SubscriberId,
-        res: &mut Arc<Resource>,
-        sub_info: &SubscriberInfo,
-        _node_id: NodeId,
-        send_declare: &mut SendDeclare,
-    ) {
-        declare_simple_subscription(tables, face, id, res, sub_info, send_declare);
-    }
-
-    fn undeclare_subscription(
-        &self,
-        tables: &mut Tables,
-        face: &mut Arc<FaceState>,
-        id: SubscriberId,
-        _res: Option<Arc<Resource>>,
-        _node_id: NodeId,
-        send_declare: &mut SendDeclare,
-    ) -> Option<Arc<Resource>> {
-        forget_simple_subscription(tables, face, id, send_declare)
-    }
-
-    fn get_subscriptions(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
-        // Compute the list of known subscriptions (keys)
-        let mut subs = HashMap::new();
-        for src_face in tables.faces.values() {
-            for sub in face_hat!(src_face).remote_subs.values() {
-                // Insert the key in the list of known subscriptions
-                let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
-                // Append src_face as a subscription source in the proper list
-                match src_face.whatami {
-                    WhatAmI::Router => srcs.routers.push(src_face.zid),
-                    WhatAmI::Peer => srcs.peers.push(src_face.zid),
-                    WhatAmI::Client => srcs.clients.push(src_face.zid),
-                }
-            }
-        }
-        Vec::from_iter(subs)
-    }
-
-    fn get_publications(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)> {
-        let mut result = HashMap::new();
-        for face in tables.faces.values() {
-            for interest in face_hat!(face).remote_interests.values() {
-                if interest.options.subscribers() {
-                    if let Some(res) = interest.res.as_ref() {
-                        let sources = result.entry(res.clone()).or_insert_with(Sources::default);
-                        match face.whatami {
-                            WhatAmI::Router => sources.routers.push(face.zid),
-                            WhatAmI::Peer => sources.peers.push(face.zid),
-                            WhatAmI::Client => sources.clients.push(face.zid),
-                        }
-                    }
-                }
-            }
-        }
-        result.into_iter().collect()
-    }
-
-    fn compute_data_route(
-        &self,
-        tables: &Tables,
-        expr: &RoutingExpr,
-        source: NodeId,
-        source_type: WhatAmI,
-    ) -> Arc<Route> {
-        let mut route = RouteBuilder::new();
-        let Some(key_expr) = expr.key_expr() else {
-            return Arc::new(route.build());
-        };
-        tracing::trace!(
-            "compute_data_route({}, {:?}, {:?})",
-            key_expr,
-            source,
-            source_type
-        );
-
-        let matches = expr
-            .resource()
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
-            for (sid, context) in &mres.session_ctxs {
-                if context.subs.is_some()
-                    && (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client)
-                {
-                    route.insert(*sid, || {
-                        let wire_expr = expr.get_best_key(*sid);
-                        (
-                            context.face.clone(),
-                            wire_expr.to_owned(),
-                            NodeId::default(),
-                        )
-                    });
-                }
-            }
-        }
-
-        if source_type == WhatAmI::Client {
-            for face in tables
-                .faces
-                .values()
-                .filter(|f| f.whatami != WhatAmI::Client)
-            {
-                route.try_insert(face.id, || {
-                    let has_interest_finalized = expr
-                        .resource()
-                        .and_then(|res| res.session_ctxs.get(&face.id))
-                        .is_some_and(|ctx| ctx.subscriber_interest_finalized);
-                    (!has_interest_finalized).then(|| {
-                        let wire_expr = expr.get_best_key(face.id);
-                        (face.clone(), wire_expr.to_owned(), NodeId::default())
-                    })
-                });
-            }
-        }
-
-        Arc::new(route.build())
-    }
-
-    fn get_matching_subscriptions(
-        &self,
-        tables: &Tables,
-        key_expr: &KeyExpr<'_>,
-    ) -> HashMap<usize, Arc<FaceState>> {
-        let mut matching_subscriptions = HashMap::new();
-
-        tracing::trace!("get_matching_subscriptions({})", key_expr,);
-
-        let res = Resource::get_resource(&tables.root_res, key_expr);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, key_expr)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-
-            for (sid, context) in &mres.session_ctxs {
-                if context.subs.is_some() {
-                    matching_subscriptions
-                        .entry(*sid)
-                        .or_insert_with(|| context.face.clone());
-                }
-            }
-        }
-        matching_subscriptions
+        tables: &TablesData,
+        res: Option<&Resource>,
+    ) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.owned_faces(tables)
+            .flat_map(|f| self.face_hat(f).remote_subs.values())
+            .filter(|&sub| res.is_none_or(|res| res.matches(sub)))
+            .map(|sub| (sub.clone(), SubscriberInfo))
+            .collect()
     }
 }

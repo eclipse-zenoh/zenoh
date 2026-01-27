@@ -23,7 +23,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    core::{Region, WhatAmI, WhatAmIMatcher, ZenohIdProto},
     network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
 };
 use zenoh_transport::unicast::TransportUnicast;
@@ -55,6 +55,7 @@ impl Gossip {
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         wait_declares: bool,
+        region: &Region,
     ) -> Self {
         if gossip_multihop {
             Self::Network(Network::new(
@@ -62,12 +63,12 @@ impl Gossip {
                 zid,
                 runtime,
                 false,
-                router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,
                 gossip_target,
                 autoconnect,
                 HashMap::new(),
+                region,
             ))
         } else {
             Self::Gossip(GossipNet::new(
@@ -282,6 +283,7 @@ impl GossipNet {
             },
             links,
             link_weights: None,
+            is_gateway: false, // TODO(regions): should this be aligned with the South ext?
         }
     }
 

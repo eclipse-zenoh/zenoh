@@ -100,7 +100,7 @@ impl StartConditions {
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.terminated = true;
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
@@ -115,7 +115,7 @@ impl StartConditions {
                 terminated: true,
             })
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
@@ -131,9 +131,15 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
-            let guard = &self.state.config.lock().0;
+        let (listeners, peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
+            let guard = &self.state.config.lock();
             (
+                guard
+                    .listen()
+                    .endpoints()
+                    .client()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 guard
                     .connect()
                     .endpoints()
@@ -148,6 +154,9 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
+
+        self.bind_listeners(&listeners).await?;
+
         match peers.len() {
             0 => {
                 if scouting {
@@ -176,19 +185,8 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (
-            listeners,
-            peers,
-            scouting,
-            wait_scouting,
-            listen,
-            autoconnect,
-            addr,
-            ifaces,
-            delay,
-            linkstate,
-        ) = {
-            let guard = &self.state.config.lock().0;
+        let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
+            let guard = &self.state.config.lock();
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
                 guard
@@ -204,7 +202,6 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
-                unwrap_or_default!(guard.routing().peer().mode()) == *"linkstate",
             )
         };
 
@@ -216,9 +213,7 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if linkstate {
-            tokio::time::sleep(delay).await;
-        } else if wait_scouting
+        if wait_scouting
             && (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
@@ -232,7 +227,7 @@ impl Runtime {
 
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = &self.state.config.lock().0;
+            let guard = &self.state.config.lock();
             (
                 guard
                     .listen()
@@ -276,7 +271,7 @@ impl Runtime {
     ) -> ZResult<()> {
         let multicast_ttl = {
             let config_guard = self.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
         let ifaces = Runtime::get_interfaces(&ifaces);
@@ -430,22 +425,22 @@ impl Runtime {
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), true)
     }
 
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_listener_timeout(guard)
     }
 
     fn get_global_connect_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_connect_timeout(guard)
     }
 
@@ -714,7 +709,7 @@ impl Runtime {
             let this = self.clone();
             let idx = self.state.start_conditions.add_peer_connector().await;
             let config_guard = this.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
             let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
@@ -942,7 +937,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(self.whatami())
@@ -1215,7 +1209,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
@@ -1251,7 +1244,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
@@ -1270,16 +1262,21 @@ impl Runtime {
     pub(crate) fn update_network(&self) -> ZResult<()> {
         let router = self.router();
         let _ctrl_lock = zlock!(router.tables.ctrl_lock);
-        let mut tables = zwrite!(router.tables.tables);
-        router
-            .tables
-            .hat_code
-            .update_from_config(&mut tables, &router.tables, self)
+        let mut wtables = zwrite!(router.tables.tables);
+        let tables = &mut *wtables;
+        for hat in tables.hats.values_mut() {
+            hat.update_from_config(&router.tables, self)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        router.tables.hat_code.links_info(&tables)
+        tables
+            .hats
+            .values()
+            .flat_map(|hat| hat.links_info().into_iter())
+            .collect()
     }
 }

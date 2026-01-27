@@ -22,7 +22,7 @@
 //! # Components and concepts
 //!
 //! The main Zenoh components and concepts are described below.
-//!  
+//!
 //! ## Session
 //!
 //! The root element of the Zenoh API is the [session].
@@ -1121,8 +1121,6 @@ pub mod shm {
 #[zenoh_macros::unstable]
 pub mod cancellation {
     pub use crate::api::cancellation::CancellationToken;
-    #[cfg(feature = "internal")]
-    pub use crate::api::cancellation::SyncGroupNotifier;
 }
 #[cfg(test)]
 mod tests;

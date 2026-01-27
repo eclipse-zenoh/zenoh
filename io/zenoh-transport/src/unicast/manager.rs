@@ -505,6 +505,7 @@ impl TransportManager {
             is_qos: transport.get_config().is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
+            region_name: transport.region_name(),
         };
         // Notify the transport handler that there is a new transport and get back a callback
         // NOTE: the read loop of the link the open message was sent on remains blocked

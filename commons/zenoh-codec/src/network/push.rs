@@ -75,7 +75,6 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
-
         // Payload
         self.write(&mut *writer, payload)?;
 

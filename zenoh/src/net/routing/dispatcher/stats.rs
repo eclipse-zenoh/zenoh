@@ -146,8 +146,8 @@ impl<Msg: ObservableMessage> PayloadObserver<Msg> {
         };
         // SAFETY: the tree is always the table's one
         let keys = expr.map_or_else(Default::default, |expr| unsafe {
-            tables.stats_keys.get_keys(
-                || Some(&expr.resource()?.context.as_ref()?.stats_keys),
+            tables.data.stats_keys.get_keys(
+                || Some(&expr.resource()?.ctx.as_ref()?.stats_keys),
                 || expr.key_expr(),
             )
         });

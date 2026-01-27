@@ -36,7 +36,7 @@ use zenoh_result::{bail, ZError};
 ///
 /// A more detailed explanation of each mode is at [Zenoh Documentation](https://zenoh.io/docs/getting-started/deployment/)
 #[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum WhatAmI {
     Router = 0b001,
     #[default]
@@ -61,6 +61,15 @@ impl WhatAmI {
         }
     }
 
+    // FIXME(regions): delete this
+    pub const fn short(self) -> &'static str {
+        match self {
+            Self::Router => "R",
+            Self::Peer => "P",
+            Self::Client => "C",
+        }
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {
@@ -70,6 +79,18 @@ impl WhatAmI {
         *[Self::Router, Self::Peer, Self::Client]
             .choose(&mut rng)
             .unwrap()
+    }
+
+    pub const fn is_client(self) -> bool {
+        matches!(self, WhatAmI::Client)
+    }
+
+    pub const fn is_peer(self) -> bool {
+        matches!(self, WhatAmI::Peer)
+    }
+
+    pub const fn is_router(self) -> bool {
+        matches!(self, WhatAmI::Router)
     }
 }
 
