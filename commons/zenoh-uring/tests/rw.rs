@@ -128,6 +128,8 @@ fn reader_main() {
 
     let reader = Reader::new();
 
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
     let _read_handle = reader
         .setup_read(stream.as_raw_fd(), move |data| {
             //assert!(data.len() == BUF_SIZE);

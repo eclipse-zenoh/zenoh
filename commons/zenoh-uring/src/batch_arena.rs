@@ -14,8 +14,9 @@
 
 use std::ops::{Index, IndexMut};
 
-use crate::{BUF_SIZE, page_arena::PageArena};
+use crate::{page_arena::PageArena, BUF_SIZE};
 
+#[derive(Debug)]
 pub(crate) struct BatchArena {
     arena: PageArena,
 }
@@ -43,6 +44,12 @@ impl BatchArena {
         let size = BUF_SIZE * buf_count;
         let arena = PageArena::new(size);
         Self { arena }
+    }
+
+    pub(crate) unsafe fn index_mut_unchecked(&self, index: usize) -> &'static mut [u8] {
+        let start = index * BUF_SIZE;
+        let end = start + BUF_SIZE;
+        &mut self.arena.as_slice_mut_unchecked()[start..end]
     }
 
     pub(crate) fn provide_root_buffers(&self) -> io_uring::squeue::Entry {

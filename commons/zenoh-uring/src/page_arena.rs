@@ -22,8 +22,9 @@ use libc::{mlock, mmap, MAP_ANON, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 
 use crate::BUF_SIZE;
 
+#[derive(Debug)]
 pub(crate) struct PageArena {
-    memory: AtomicPtr<u8>,
+    pub(crate)  memory: AtomicPtr<u8>,
     size: usize,
 }
 
@@ -77,6 +78,14 @@ impl PageArena {
             size,
         }
     }
+
+    pub(crate) unsafe fn as_slice_mut_unchecked(&self) -> &'static mut [u8] {
+    std::slice::from_raw_parts_mut(
+                self.memory.load(std::sync::atomic::Ordering::Relaxed),
+                self.size,
+            )
+    }
+
 
     pub(crate) fn provide_buffers(&self) -> io_uring::squeue::Entry {
         opcode::ProvideBuffers::new(
