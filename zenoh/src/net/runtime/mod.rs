@@ -623,7 +623,7 @@ impl RuntimeBuilder {
 
         let namespace = config.namespace().clone();
         let config = Notifier::new(config);
-        let span = tracing::trace_span!("rt", zid = %zid.short());
+        let span = tracing::debug_span!("rt", zid = %zid.short());
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid: zid.into(),
@@ -930,14 +930,12 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
 
-                if runtime.config().lock().mode().is_client() {
-                    bail!("Multicast groups are only supported in north peer/router regions");
-                }
+                let region = region::compute_multicast_region(&runtime.config().lock())?;
 
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone(), Region::North)?;
+                    .new_transport_multicast(transport.clone(), region)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -1006,11 +1004,15 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
 
+        let (region, remote_bound) =
+            region::compute_multicast_region_of(&peer, &self.runtime.config().lock())?;
+
         Ok(Arc::new(RuntimeMulticastSession {
             main_handler: self.runtime.state.router.new_peer_multicast(
                 self.transport.clone(),
                 peer,
-                Region::North,
+                region,
+                remote_bound,
             )?,
             slave_handlers,
         }))

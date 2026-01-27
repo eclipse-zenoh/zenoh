@@ -78,9 +78,10 @@ impl Display for InvalidBoundError {
 impl std::error::Error for InvalidBoundError {}
 
 /// Region identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Region {
     /// Main region.
+    #[default]
     North,
     /// Subregion of local sessions.
     Local,
@@ -93,6 +94,14 @@ impl Region {
         match self {
             Region::North => Bound::North,
             Region::South { .. } | Region::Local => Bound::South,
+        }
+    }
+
+    pub fn mode(&self) -> Option<WhatAmI> {
+        match self {
+            Region::North => None,
+            Region::Local => Some(WhatAmI::Client),
+            Region::South { mode, .. } => Some(*mode),
         }
     }
 }

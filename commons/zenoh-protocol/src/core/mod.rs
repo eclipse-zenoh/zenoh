@@ -676,7 +676,7 @@ mod tests {
 
     #[test]
     fn test_region_name_err() {
-        assert!(RegionName::from_str("12345678123456789").is_err());
+        assert!(RegionName::from_str(&std::iter::repeat_n("Z", 33).collect::<String>()).is_err());
         assert!(RegionName::from_str("").is_err());
     }
 }

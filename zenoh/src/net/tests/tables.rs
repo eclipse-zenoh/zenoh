@@ -47,7 +47,7 @@ fn new_router() -> Router {
     let mut config = Config::default().expanded();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     RouterBuilder::new(&config)
-        .hat(Region::Local, WhatAmI::Client)
+        .hat(Region::Local)
         .build()
         .unwrap()
 }

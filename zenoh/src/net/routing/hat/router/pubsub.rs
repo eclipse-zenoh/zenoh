@@ -38,7 +38,7 @@ use crate::net::{
             tables::{Route, RoutingExpr, TablesData},
         },
         hat::{BaseContext, HatBaseTrait, HatPubSubTrait, Sources},
-        router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
+        router::{Direction, RouteBuilder},
         RoutingContext,
     },
 };
@@ -383,18 +383,6 @@ impl HatPubSubTrait for Hat {
                 router_source,
                 &self.res_hat(&mres).router_subs,
             );
-        }
-
-        // HACK(regions)
-        for group in self.multicast_groups(tables) {
-            route.insert(group.id, || {
-                let wire_expr = expr.get_best_key(group.id);
-                Direction {
-                    dst_face: group.clone(),
-                    wire_expr: wire_expr.to_owned(),
-                    node_id: DEFAULT_NODE_ID,
-                }
-            });
         }
 
         Arc::new(route.build())

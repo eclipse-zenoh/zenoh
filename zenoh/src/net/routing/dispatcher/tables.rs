@@ -27,7 +27,7 @@ use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, WireExpr, ZenohIdProto},
+    core::{ExprId, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -153,16 +153,15 @@ impl Debug for TablesData {
 }
 
 pub(crate) struct HatTablesData {
-    pub(crate) whatami: WhatAmI,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
+    // FIXME(regions): this field is apparently of no use (╯°□°)╯︵ ┻━┻
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) routes_version: RoutesVersion,
 }
 
 impl HatTablesData {
-    pub(crate) fn new(whatami: WhatAmI) -> Self {
+    pub(crate) fn new() -> Self {
         HatTablesData {
-            whatami,
             mcast_groups: vec![],
             mcast_faces: vec![],
             routes_version: 0,

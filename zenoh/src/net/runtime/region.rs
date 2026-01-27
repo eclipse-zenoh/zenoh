@@ -86,6 +86,42 @@ pub(crate) fn compute_region_of(
     }
 }
 
+const MULTICAST_LIMITATION_NOTICE: &str =
+    "Multicast is only supported in north peer & south router regions";
+
+/// Computes the [`Region`] of a multicast transport.
+#[tracing::instrument(level = "debug", skip(config), ret)]
+pub(crate) fn compute_multicast_region(config: &ExpandedConfig) -> ZResult<Region> {
+    match config.mode() {
+        WhatAmI::Peer => Ok(Region::North),
+        WhatAmI::Router => Ok(Region::South {
+            id: Default::default(),
+            mode: WhatAmI::Peer,
+        }),
+        WhatAmI::Client => bail!("{MULTICAST_LIMITATION_NOTICE}"),
+    }
+}
+
+/// Computes the [`Region`] and _remote_ [`Bound`] of a multicast remote.
+#[tracing::instrument(level = "debug", skip(config), ret)]
+pub(crate) fn compute_multicast_region_of(
+    peer: &TransportPeer,
+    config: &ExpandedConfig,
+) -> ZResult<(Region, Bound)> {
+    match (config.mode(), peer.whatami) {
+        (WhatAmI::Peer, WhatAmI::Peer) => Ok((Region::North, Bound::North)),
+        (WhatAmI::Router, WhatAmI::Peer) => Ok((
+            Region::South {
+                id: Default::default(),
+                mode: WhatAmI::Peer,
+            },
+            Bound::North,
+        )),
+        (WhatAmI::Peer, WhatAmI::Router) => Ok((Region::North, Bound::South)),
+        _ => bail!("{MULTICAST_LIMITATION_NOTICE}"),
+    }
+}
+
 fn compute_transient_region_of(
     peer: &TransportPeer,
     config: &ExpandedConfig,

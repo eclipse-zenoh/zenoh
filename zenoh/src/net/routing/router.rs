@@ -50,7 +50,7 @@ use crate::net::{
 pub struct RouterBuilder<'c> {
     config: &'c ExpandedConfig,
     hlc: Option<Arc<HLC>>,
-    hats: Vec<(Region, WhatAmI)>,
+    hats: Vec<Region>,
     #[cfg(feature = "stats")]
     stats: Option<zenoh_stats::StatsRegistry>,
 }
@@ -72,8 +72,8 @@ impl<'conf> RouterBuilder<'conf> {
     }
 
     #[allow(dead_code)] // FIXME(regions)
-    pub fn hat(mut self, region: Region, whatami: WhatAmI) -> Self {
-        self.hats.push((region, whatami));
+    pub fn hat(mut self, region: Region) -> Self {
+        self.hats.push(region);
         self
     }
 
@@ -84,37 +84,27 @@ impl<'conf> RouterBuilder<'conf> {
     }
 
     pub fn build(mut self) -> ZResult<Router> {
-        let zid = ZenohIdProto::from(self.config.id());
-        let mode = self.config.mode();
-
         if self.hats.is_empty() {
-            self.hats
-                .extend([(Region::North, mode), (Region::Local, WhatAmI::Client)]);
+            self.hats.extend([(Region::North), (Region::Local)]);
         }
 
-        let south = self.config.gateway.south.clone().unwrap_or_default();
+        let mode = self.config.mode();
 
-        match south {
+        match self.config.gateway.south.clone().unwrap_or_default() {
             GatewaySouthConf::Preset(GatewayPresetConf::Auto) => match mode {
                 WhatAmI::Router => {
                     for mode in [WhatAmI::Client, WhatAmI::Peer] {
-                        self.hats.push((
-                            Region::South {
-                                id: usize::default(),
-                                mode,
-                            },
+                        self.hats.push(Region::South {
+                            id: usize::default(),
                             mode,
-                        ));
+                        });
                     }
                 }
                 WhatAmI::Peer => {
-                    self.hats.push((
-                        Region::South {
-                            id: usize::default(),
-                            mode: WhatAmI::Client,
-                        },
-                        mode,
-                    ));
+                    self.hats.push(Region::South {
+                        id: usize::default(),
+                        mode: WhatAmI::Client,
+                    });
                 }
                 WhatAmI::Client => {}
             },
@@ -123,11 +113,13 @@ impl<'conf> RouterBuilder<'conf> {
                     // NOTE(regions): we create three hats per subregion.
                     // If memory usage is an issue, we should create then lazily.
                     for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-                        self.hats.push((Region::South { id, mode }, mode));
+                        self.hats.push(Region::South { id, mode });
                     }
                 }
             }
         }
+
+        let zid = ZenohIdProto::from(self.config.id());
 
         #[cfg(feature = "stats")]
         let stats = self
@@ -146,7 +138,7 @@ impl<'conf> RouterBuilder<'conf> {
                         self.hats
                             .iter()
                             .copied()
-                            .map(|(b, wai)| (b, tables::HatTablesData::new(wai)))
+                            .map(|b| (b, tables::HatTablesData::new()))
                             .collect(),
                         #[cfg(feature = "stats")]
                         stats,
@@ -155,16 +147,18 @@ impl<'conf> RouterBuilder<'conf> {
                         .hats
                         .iter()
                         .copied()
-                        .map(|(rgn, wai)| -> (Region, Box<dyn HatTrait + Send + Sync>) {
+                        .map(|region| -> (Region, Box<dyn HatTrait + Send + Sync>) {
                             (
-                                rgn,
-                                match (rgn, wai) {
-                                    (Region::North, WhatAmI::Client) => {
-                                        Box::new(hat::client::Hat::new(rgn))
+                                region,
+                                match (region.bound(), region.mode().unwrap_or(mode)) {
+                                    (Bound::North, WhatAmI::Client) => {
+                                        Box::new(hat::client::Hat::new(region))
                                     }
-                                    (_, WhatAmI::Client) => Box::new(hat::broker::Hat::new(rgn)),
-                                    (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(rgn)),
-                                    (_, WhatAmI::Router) => Box::new(hat::router::Hat::new(rgn)),
+                                    (Bound::South, WhatAmI::Client) => {
+                                        Box::new(hat::broker::Hat::new(region))
+                                    }
+                                    (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(region)),
+                                    (_, WhatAmI::Router) => Box::new(hat::router::Hat::new(region)),
                                 },
                             )
                         })
@@ -399,6 +393,7 @@ impl Router {
         transport: TransportMulticast,
         peer: TransportPeer,
         region: Region,
+        remote_bound: Bound,
     ) -> ZResult<Arc<DeMux>> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -415,7 +410,7 @@ impl Router {
             fid,
             peer.zid,
             region,
-            Bound::default(), // HACK(regions): this is a placeholder
+            remote_bound,
             Arc::new(DummyPrimitives),
             tables.hats.map_ref(|hat| hat.new_face()),
         )

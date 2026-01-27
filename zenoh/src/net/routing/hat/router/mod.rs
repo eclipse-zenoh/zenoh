@@ -201,13 +201,6 @@ impl Hat {
         tables.faces.values().find(|face| face.zid == *zid)
     }
 
-    pub(crate) fn multicast_groups<'t>(
-        &self,
-        tables: &'t TablesData,
-    ) -> impl Iterator<Item = &'t Arc<FaceState>> {
-        tables.hats[self.region].mcast_groups.iter()
-    }
-
     #[allow(dead_code)] // FIXME(regions)
     /// Identifies the gateway of this hat's region (if any).
     pub(crate) fn region_gateway(&self) -> Option<NodeId> {
@@ -325,7 +318,7 @@ impl HatBaseTrait for Hat {
     fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
         let config = &config_guard;
-        let whatami = tables.hats[self.region].whatami;
+        let whatami = config.mode();
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
         let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
