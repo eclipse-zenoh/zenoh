@@ -16,7 +16,7 @@
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
-use zenoh::Session;
+use zenoh::{handlers::CallbackDrop, Session};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 
@@ -91,12 +91,22 @@ async fn test_cancellation_get() {
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check that cancelled token cancels operation automatically
+    let n = Arc::new(AtomicBool::new(false));
+    let n_clone = n.clone();
+    let cb = CallbackDrop {
+        callback: |_| {},
+        drop: move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        },
+    };
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(session2
+    assert!(ztimeout!(session2
         .get("test/query_cancellation")
-        .cancellation_token(cancellation_token.clone()))
-    .unwrap();
-    assert!(replies.is_disconnected());
+        .cancellation_token(cancellation_token.clone())
+        .with(cb))
+    .is_err());
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -127,13 +137,23 @@ async fn test_cancellation_liveliness_get() {
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check that cancelled token cancels operation automatically
+    let n = Arc::new(AtomicBool::new(false));
+    let n_clone = n.clone();
+    let cb = CallbackDrop {
+        callback: |_| {},
+        drop: move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        },
+    };
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(session2
+    assert!(ztimeout!(session2
         .liveliness()
         .get("test/liveliness_query_cancellation")
-        .cancellation_token(cancellation_token.clone()))
-    .unwrap();
-    assert!(replies.is_disconnected());
+        .cancellation_token(cancellation_token.clone())
+        .with(cb))
+    .is_err());
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -181,8 +201,21 @@ async fn test_cancellation_querier_get() {
 
     // check that cancelled token cancels operation automatically
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(querier.get().cancellation_token(cancellation_token.clone())).unwrap();
-    assert!(replies.is_disconnected());
+    let n = Arc::new(AtomicBool::new(false));
+    let n_clone = n.clone();
+    let cb = CallbackDrop {
+        callback: |_| {},
+        drop: move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        },
+    };
+    assert!(ztimeout!(querier
+        .get()
+        .cancellation_token(cancellation_token.clone())
+        .with(cb))
+    .is_err());
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
