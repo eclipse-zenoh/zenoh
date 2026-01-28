@@ -29,8 +29,8 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {
-    crate::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
+    crate::api::cancellation::CancellationToken, crate::query::ReplyKeyExpr,
+    zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto,
 };
 
 use super::{
@@ -87,6 +87,8 @@ pub struct Querier<'a> {
     pub(crate) accept_replies: ReplyKeyExpr,
     pub(crate) undeclare_on_drop: bool,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: CancellationToken,
 }
 
 impl fmt::Debug for QuerierState {
@@ -191,7 +193,7 @@ impl<'a> Querier<'a> {
     /// querier.undeclare().await.unwrap();
     /// # }
     /// ```
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> QuerierUndeclaration<'a> {
         UndeclarableSealed::undeclare_inner(self, ())
     }
 
@@ -266,6 +268,8 @@ impl<'a> Querier<'a> {
                 self.target == QueryTarget::AllComplete,
             ),
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            parent_callback_sync_group_notifier: self.cancellation_token.notifier(),
         }
     }
 }
@@ -274,7 +278,11 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
     type Undeclaration = QuerierUndeclaration<'a>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        QuerierUndeclaration(self)
+        QuerierUndeclaration {
+            querier: self,
+            #[cfg(feature = "unstable")]
+            wait_until_callback_execution_ends: false,
+        }
     }
 }
 
@@ -291,7 +299,20 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct QuerierUndeclaration<'a>(Querier<'a>);
+pub struct QuerierUndeclaration<'a> {
+    querier: Querier<'a>,
+    #[cfg(feature = "unstable")]
+    wait_until_callback_execution_ends: bool,
+}
+
+impl<'a> QuerierUndeclaration<'a> {
+    /// Block in undeclare operation until all currently running instances of reply and matching listeners' callbacks (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_until_callback_execution_ends(mut self) -> Self {
+        self.wait_until_callback_execution_ends = true;
+        self
+    }
+}
 
 impl Resolvable for QuerierUndeclaration<'_> {
     type To = ZResult<()>;
@@ -299,7 +320,12 @@ impl Resolvable for QuerierUndeclaration<'_> {
 
 impl Wait for QuerierUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.querier.undeclare_impl()?;
+        #[cfg(feature = "unstable")]
+        if self.wait_until_callback_execution_ends {
+            self.querier.cancellation_token.cancel().wait()?;
+        }
+        Ok(())
     }
 }
 

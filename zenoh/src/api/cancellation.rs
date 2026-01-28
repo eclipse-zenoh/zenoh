@@ -13,7 +13,7 @@
 //
 use core::fmt;
 use std::{
-    collections::VecDeque,
+    collections::HashMap,
     future::IntoFuture,
     ops::DerefMut,
     sync::{Arc, Mutex, OnceLock},
@@ -26,12 +26,12 @@ use zenoh_result::ZResult;
 
 #[zenoh_macros::internal]
 #[allow(dead_code)]
-#[derive(Clone)]
-pub struct SyncGroupNotifier(Arc<OwnedSemaphorePermit>);
+#[derive(Debug)]
+pub struct SyncGroupNotifier(OwnedSemaphorePermit);
 #[cfg(not(feature = "internal"))]
 #[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct SyncGroupNotifier(Arc<OwnedSemaphorePermit>);
+#[derive(Debug)]
+pub(crate) struct SyncGroupNotifier(OwnedSemaphorePermit);
 
 #[derive(Clone)]
 pub(crate) struct SyncGroup {
@@ -55,11 +55,15 @@ impl SyncGroup {
             .clone()
             .try_acquire_owned()
             .ok()
-            .map(|p| SyncGroupNotifier(Arc::new(p)))
+            .map(SyncGroupNotifier)
     }
 
     pub(crate) fn close(&self) {
         self.semaphore.close();
+    }
+
+    pub(crate) fn num_active_notifiers(&self) -> usize {
+        SyncGroup::max_permits() as usize - self.semaphore.available_permits()
     }
 
     pub(crate) fn wait(&self) {
@@ -77,8 +81,61 @@ impl SyncGroup {
         self.semaphore.is_closed()
     }
 }
+impl fmt::Debug for SyncGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SyncGroup")
+            .field("notifiers", &self.num_active_notifiers())
+            .finish()
+    }
+}
 
-pub(crate) type OnCancel = Box<dyn FnOnce() -> ZResult<()> + Send + Sync>;
+#[zenoh_macros::internal]
+pub type OnCancelHandlerId = usize;
+#[cfg(not(feature = "internal"))]
+pub(crate) type OnCancelHandlerId = usize;
+struct OnCancelHandlers {
+    handlers: HashMap<OnCancelHandlerId, Box<dyn FnOnce() -> ZResult<()> + Send + Sync>>,
+    execution_finished_notifier: Option<SyncGroupNotifier>,
+    next_handler_id: usize,
+}
+
+impl OnCancelHandlers {
+    fn new(execution_finished_notifier: Option<SyncGroupNotifier>) -> Self {
+        Self {
+            handlers: HashMap::new(),
+            execution_finished_notifier,
+            next_handler_id: 0,
+        }
+    }
+
+    fn add(
+        &mut self,
+        handler: impl FnOnce() -> ZResult<()> + Send + Sync + 'static,
+    ) -> OnCancelHandlerId {
+        let _ = self
+            .handlers
+            .insert(self.next_handler_id, Box::new(handler));
+        self.next_handler_id += 1;
+        self.next_handler_id - 1
+    }
+
+    fn remove(&mut self, id: OnCancelHandlerId) -> bool {
+        self.handlers.remove(&id).is_some()
+    }
+
+    fn execute(self) -> ZResult<()> {
+        for (_, h) in self.handlers {
+            (h)()?;
+        }
+        drop(self.execution_finished_notifier);
+        Ok(())
+    }
+
+    fn num_handlers(&self) -> usize {
+        self.handlers.len()
+    }
+}
+
 /// A synchronization primitive that can be used to interrupt a get query.
 ///
 /// # Examples
@@ -104,7 +161,7 @@ pub(crate) type OnCancel = Box<dyn FnOnce() -> ZResult<()> + Send + Sync>;
 #[zenoh_macros::unstable]
 #[derive(Clone)]
 pub struct CancellationToken {
-    on_cancel_handlers: Arc<Mutex<Option<VecDeque<OnCancel>>>>,
+    on_cancel_handlers: Arc<Mutex<Option<OnCancelHandlers>>>,
     sync_group: SyncGroup,
     cancel_result: Arc<OnceLock<ZResult<()>>>,
 }
@@ -112,14 +169,9 @@ pub struct CancellationToken {
 impl Default for CancellationToken {
     fn default() -> Self {
         let sync_group = SyncGroup::default();
-        let notifier = sync_group.notifier();
-        let on_cancel_sync: OnCancel = Box::new(move || {
-            // fake handler for concurrent cancel synchronization
-            drop(notifier);
-            Ok(())
-        });
+        let on_cancel_handlers = OnCancelHandlers::new(sync_group.notifier());
         Self {
-            on_cancel_handlers: Arc::new(Mutex::new(Some(VecDeque::from([on_cancel_sync])))),
+            on_cancel_handlers: Arc::new(Mutex::new(Some(on_cancel_handlers))),
             sync_group,
             cancel_result: Default::default(),
         }
@@ -171,26 +223,32 @@ impl CancellationToken {
         self.cancel_result.get().is_some()
     }
 
-    fn add_on_cancel_handler_inner(&self, on_cancel: OnCancel) {
+    fn add_on_cancel_handler_inner<F>(&self, on_cancel: F) -> Result<OnCancelHandlerId, F>
+    where
+        F: FnOnce() -> ZResult<()> + Send + Sync + 'static,
+    {
         let mut lk = self.on_cancel_handlers.lock().unwrap();
         match lk.deref_mut() {
-            Some(actions) => actions.push_front(on_cancel),
-            None => {
-                if let Err(err) = (on_cancel)() {
-                    // ensure sync group does not wait indefinitely if we just failed to cancel the notifier
-                    let _ = self.cancel_result.set(Err(err));
-                    self.sync_group.close();
-                }
-            }
-        };
+            Some(actions) => Ok(actions.add(on_cancel)),
+            None => Err(on_cancel),
+        }
     }
 
     #[zenoh_macros::internal]
-    pub fn add_on_cancel_handler(&self, on_cancel: OnCancel) {
+    /// Register a handler to be called once [`CancellationToken::cancel`] is called.
+    /// If cancel is already invoked, will return passed handler as a error, otherwise
+    /// an id, which can be used to unregister the handler.
+    pub fn add_on_cancel_handler<F>(&self, on_cancel: F) -> Result<OnCancelHandlerId, F>
+    where
+        F: FnOnce() -> ZResult<()> + Send + Sync + 'static,
+    {
         self.add_on_cancel_handler_inner(on_cancel)
     }
     #[cfg(not(feature = "internal"))]
-    pub(crate) fn add_on_cancel_handler(&self, on_cancel: OnCancel) {
+    pub(crate) fn add_on_cancel_handler<F>(&self, on_cancel: F) -> Result<OnCancelHandlerId, F>
+    where
+        F: FnOnce() -> ZResult<()> + Send + Sync + 'static,
+    {
         self.add_on_cancel_handler_inner(on_cancel)
     }
 
@@ -203,11 +261,30 @@ impl CancellationToken {
         self.sync_group.notifier()
     }
 
+    #[zenoh_macros::internal]
+    pub fn remove_on_cancel_handler(&self, id: OnCancelHandlerId) -> bool {
+        self.on_cancel_handlers
+            .lock()
+            .unwrap()
+            .deref_mut()
+            .as_mut()
+            .map(|h| h.remove(id))
+            .unwrap_or(false)
+    }
+    #[cfg(not(feature = "internal"))]
+    pub(crate) fn remove_on_cancel_handler(&self, id: OnCancelHandlerId) -> bool {
+        self.on_cancel_handlers
+            .lock()
+            .unwrap()
+            .deref_mut()
+            .as_mut()
+            .map(|h| h.remove(id))
+            .unwrap_or(false)
+    }
+
     fn execute_on_cancel_handlers(&self) -> ZResult<()> {
-        let actions =
-            std::mem::take(self.on_cancel_handlers.lock().unwrap().deref_mut()).unwrap_or_default();
-        for a in actions {
-            (a)()?;
+        if let Some(actions) = std::mem::take(self.on_cancel_handlers.lock().unwrap().deref_mut()) {
+            actions.execute()?;
         }
         Ok(())
     }
@@ -247,7 +324,7 @@ impl fmt::Debug for CancellationToken {
                     .lock()
                     .unwrap()
                     .as_ref()
-                    .map(|h| h.len())
+                    .map(|h| h.num_handlers())
                     .unwrap_or_default(),
             )
             .field("is_cancelled", &self.is_cancelled())
@@ -278,7 +355,7 @@ mod test {
             n_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         };
-        ct.add_on_cancel_handler(Box::new(f));
+        let _ = ct.add_on_cancel_handler(Box::new(f));
 
         let ct_clone = ct.clone();
         let n_clone = n.clone();
@@ -302,7 +379,7 @@ mod test {
             n_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         };
-        ct.add_on_cancel_handler(Box::new(f));
+        let _ = ct.add_on_cancel_handler(Box::new(f));
 
         let ct_clone = ct.clone();
         let n_clone = n.clone();

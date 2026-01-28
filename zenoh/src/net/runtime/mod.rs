@@ -958,7 +958,8 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
-    async fn close_inner(&self) {
+    type CloseArgs = ();
+    async fn close_inner(&self, _: ()) {
         tracing::trace!("Runtime::close())");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
