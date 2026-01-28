@@ -43,11 +43,23 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: &PushBody) -> Self::Output {
-        match x {
-            PushBody::Put(b) => self.write(&mut *writer, b),
-            PushBody::Del(b) => self.write(&mut *writer, b),
+        if let PushBody::Put(b) = x {
+            return self.write(&mut *writer, b);
         }
+        #[cold]
+        fn write_del<W: Writer>(
+            codec: Zenoh080,
+            writer: &mut W,
+            x: &PushBody,
+        ) -> Result<(), DidntWrite> {
+            match x {
+                PushBody::Del(b) => codec.write(&mut *writer, b),
+                _ => Err(DidntWrite),
+            }
+        }
+        write_del(self, writer, x)
     }
 }
 
@@ -57,17 +69,25 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<PushBody, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
 
         let codec = Zenoh080Header::new(header);
-        let body = match imsg::mid(codec.header) {
-            id::PUT => PushBody::Put(codec.read(&mut *reader)?),
-            id::DEL => PushBody::Del(codec.read(&mut *reader)?),
-            _ => return Err(DidntRead),
-        };
-
-        Ok(body)
+        if imsg::mid(codec.header) == id::PUT {
+            return Ok(PushBody::Put(codec.read(&mut *reader)?));
+        }
+        #[cold]
+        fn read_del<R: Reader>(
+            codec: Zenoh080Header,
+            reader: &mut R,
+        ) -> Result<PushBody, DidntRead> {
+            match imsg::mid(codec.header) {
+                id::DEL => Ok(PushBody::Del(codec.read(&mut *reader)?)),
+                _ => Err(DidntRead),
+            }
+        }
+        read_del(codec, reader)
     }
 }
 
@@ -337,9 +357,7 @@ where
         where
             R: Reader,
         {
-            let mut payload = ZBuf::empty();
-            reader.read_zslices(len, |s| payload.push_zslice(s))?;
-            Ok(payload)
+            reader.read_zbuf(len)
         }
 
         // Calculate how many bytes are left in the payload
@@ -404,8 +422,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<(ext::AttachmentType<{ ID }>, bool), Self::Error> {
         let (h, more): (ZExtZBufHeader<{ ID }>, bool) = self.read(&mut *reader)?;
-        let mut buffer = ZBuf::empty();
-        reader.read_zslices(h.len, |s| buffer.push_zslice(s))?;
+        let buffer = reader.read_zbuf(h.len)?;
 
         Ok((ext::AttachmentType { buffer }, more))
     }

@@ -23,6 +23,7 @@ use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, HasReader, Reader},
     writer::{BacktrackableWriter, DidntWrite, Writer},
+    ZBuf,
 };
 
 /*************************************/
@@ -352,6 +353,7 @@ impl HasReader for &mut ZSlice {
 }
 
 impl Reader for ZSlice {
+    #[inline(always)]
     fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let mut reader = self.as_slice().reader();
         let len = reader.read(into)?;
@@ -360,6 +362,7 @@ impl Reader for ZSlice {
         Ok(len)
     }
 
+    #[inline(always)]
     fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
         let mut reader = self.as_slice().reader();
         reader.read_exact(into)?;
@@ -368,8 +371,14 @@ impl Reader for ZSlice {
         Ok(())
     }
 
+    #[inline(always)]
     fn remaining(&self) -> usize {
         self.len()
+    }
+
+    #[inline(always)]
+    fn read_zbuf(&mut self, len: usize) -> Result<ZBuf, DidntRead> {
+        Ok(self.read_zslice(len)?.into())
     }
 
     fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
@@ -378,12 +387,14 @@ impl Reader for ZSlice {
         Ok(())
     }
 
+    #[inline(always)]
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         let res = self.subslice(..len).ok_or(DidntRead)?;
         self.start += len;
         Ok(res)
     }
 
+    #[inline(always)]
     fn read_u8(&mut self) -> Result<u8, DidntRead> {
         let mut reader = self.as_slice().reader();
         let res = reader.read_u8()?;
@@ -392,6 +403,7 @@ impl Reader for ZSlice {
         Ok(res)
     }
 
+    #[inline(always)]
     fn can_read(&self) -> bool {
         !self.is_empty()
     }
