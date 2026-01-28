@@ -73,6 +73,7 @@ impl LibLoader {
     ///
     /// This function calls [libloading::Library::new()](https://docs.rs/libloading/0.7.0/libloading/struct.Library.html#method.new)
     /// which is unsafe.
+    /// The library should be valid, or it might cause the undefined behavior.
     pub unsafe fn load_file(path: &str) -> ZResult<(Library, PathBuf)> {
         let path = Self::str_to_canonical_path(path)?;
 
@@ -81,7 +82,8 @@ impl LibLoader {
         } else if !path.is_file() {
             bail!("Library file '{}' is not a file", path.display())
         } else {
-            Ok((Library::new(path.clone())?, path))
+            // SAFETY: Call unsafe `libloading::Library::new()`.
+            unsafe { Ok((Library::new(path.clone())?, path)) }
         }
     }
 
@@ -94,6 +96,7 @@ impl LibLoader {
     ///
     /// This function calls [libloading::Library::new()](https://docs.rs/libloading/0.7.0/libloading/struct.Library.html#method.new)
     /// which is unsafe.
+    /// The library should be valid, or it might cause the undefined behavior.
     pub unsafe fn search_and_load(&self, name: &str) -> ZResult<Option<(Library, PathBuf)>> {
         let filename = format!("{}{}{}", *LIB_PREFIX, name, *LIB_SUFFIX);
         let filename_ostr = OsString::from(&filename);
@@ -111,7 +114,8 @@ impl LibLoader {
                     for entry in read_dir.flatten() {
                         if entry.file_name() == filename_ostr {
                             let path = entry.path();
-                            return Ok(Some((Library::new(path.clone())?, path)));
+                            // SAFETY: Call unsafe `libloading::Library::new()`.
+                            return unsafe { Ok(Some((Library::new(path.clone())?, path))) };
                         }
                     }
                 }
@@ -134,6 +138,7 @@ impl LibLoader {
     ///
     /// This function calls [libloading::Library::new()](https://docs.rs/libloading/0.7.0/libloading/struct.Library.html#method.new)
     /// which is unsafe.
+    /// The library should be valid, or it might cause the undefined behavior.
     pub unsafe fn load_all_with_prefix(
         &self,
         prefix: Option<&str>,
@@ -157,9 +162,12 @@ impl LibLoader {
                                     [(lib_prefix.len())..(filename.len() - LIB_SUFFIX.len())];
                                 let path = entry.path();
                                 if !result.iter().any(|(_, _, n)| n == name) {
-                                    match Library::new(path.as_os_str()) {
-                                        Ok(lib) => result.push((lib, path, name.to_string())),
-                                        Err(err) => warn!("{}", err),
+                                    // SAFETY: Call unsafe `libloading::Library::new()`.
+                                    unsafe {
+                                        match Library::new(path.as_os_str()) {
+                                            Ok(lib) => result.push((lib, path, name.to_string())),
+                                            Err(err) => warn!("{}", err),
+                                        }
                                     }
                                 } else {
                                     debug!(

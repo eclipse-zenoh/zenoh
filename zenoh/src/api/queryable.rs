@@ -388,15 +388,15 @@ impl Query {
         Ok(self.parameters().reply_key_expr_any())
     }
 
-    /// Constructs an empty Query without payload or attachment, referencing the same inner query.
+    /// Constructs an empty Query without payload or attachment.
     ///
     /// # Examples
     /// ```
     /// # fn main() {
-    /// let query = unsafe { zenoh::query::Query::empty() };
+    /// let query = zenoh::query::Query::empty();
     /// # }
     #[zenoh_macros::internal]
-    pub unsafe fn empty() -> Self {
+    pub fn empty() -> Self {
         Query {
             inner: Arc::new(QueryInner::empty()),
             eid: 0,
