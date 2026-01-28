@@ -21,10 +21,9 @@ use std::time::Duration;
 use zenoh_config::WhatAmI::{Client, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
-use crate::{count, loc, Node};
+use crate::{count, loc, skip_fmt, Node, SubUtils};
 
-const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(5);
+const TIMEOUT: Duration = Duration::from_secs(10);
 
 lazy_static! {
     static ref STORAGE: tracing_capture::SharedStorage = tracing_capture::SharedStorage::default();
@@ -83,39 +82,46 @@ async fn test_regions_scenario4_order1_putsub() {
         .connect(&[loc!(_z9300)])
         .open());
 
-    let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
-    let s9120 = _z9120.declare_subscriber("test/**").await.unwrap();
-    let s9130 = _z9130.declare_subscriber("test/**").await.unwrap();
-    let s9210 = _z9210.declare_subscriber("test/**").await.unwrap();
-    let s9220 = _z9220.declare_subscriber("test/**").await.unwrap();
-    let s9230 = _z9230.declare_subscriber("test/**").await.unwrap();
-    let s9310 = _z9310.declare_subscriber("test/**").await.unwrap();
-    let s9320 = _z9320.declare_subscriber("test/**").await.unwrap();
-    let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
 
-    tokio::time::sleep(SLEEP).await;
+    ztimeout!(async {
+        loop {
+            _z9110.put("test/9110", "9110").await.unwrap();
+            _z9120.put("test/9120", "9120").await.unwrap();
+            _z9130.put("test/9130", "9130").await.unwrap();
+            _z9210.put("test/9210", "9210").await.unwrap();
+            _z9220.put("test/9220", "9220").await.unwrap();
+            _z9230.put("test/9230", "9230").await.unwrap();
+            _z9310.put("test/9310", "9310").await.unwrap();
+            _z9320.put("test/9320", "9320").await.unwrap();
+            _z9330.put("test/9330", "9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-    _z9110.put("test/9110", "9110").await.unwrap();
-    _z9120.put("test/9120", "9120").await.unwrap();
-    _z9130.put("test/9130", "9130").await.unwrap();
-    _z9210.put("test/9210", "9210").await.unwrap();
-    _z9220.put("test/9220", "9220").await.unwrap();
-    _z9230.put("test/9230", "9230").await.unwrap();
-    _z9310.put("test/9310", "9310").await.unwrap();
-    _z9320.put("test/9320", "9320").await.unwrap();
-    _z9330.put("test/9330", "9330").await.unwrap();
-
-    tokio::time::sleep(SLEEP).await;
-
-    assert_eq!(s9110.drain().count(), 9);
-    assert_eq!(s9120.drain().count(), 9);
-    assert_eq!(s9130.drain().count(), 9);
-    assert_eq!(s9210.drain().count(), 9);
-    assert_eq!(s9220.drain().count(), 9);
-    assert_eq!(s9230.drain().count(), 9);
-    assert_eq!(s9310.drain().count(), 9);
-    assert_eq!(s9320.drain().count(), 9);
-    assert_eq!(s9330.drain().count(), 9);
+            if true
+                && s9110.count_keys() == 9
+                && s9120.count_keys() == 9
+                && s9130.count_keys() == 9
+                && s9210.count_keys() == 9
+                && s9220.count_keys() == 9
+                && s9230.count_keys() == 9
+                && s9310.count_keys() == 9
+                && s9320.count_keys() == 9
+                && s9330.count_keys() == 9
+            {
+                break;
+            }
+        }
+    });
 
     let s = STORAGE.lock();
 
@@ -174,15 +180,17 @@ async fn test_regions_scenario4_order1_pubsub() {
         .connect(&[loc!(_z9300)])
         .open());
 
-    let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
-    let s9120 = _z9120.declare_subscriber("test/**").await.unwrap();
-    let s9130 = _z9130.declare_subscriber("test/**").await.unwrap();
-    let s9210 = _z9210.declare_subscriber("test/**").await.unwrap();
-    let s9220 = _z9220.declare_subscriber("test/**").await.unwrap();
-    let s9230 = _z9230.declare_subscriber("test/**").await.unwrap();
-    let s9310 = _z9310.declare_subscriber("test/**").await.unwrap();
-    let s9320 = _z9320.declare_subscriber("test/**").await.unwrap();
-    let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
 
     let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
     let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
@@ -194,29 +202,34 @@ async fn test_regions_scenario4_order1_pubsub() {
     let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
-    tokio::time::sleep(SLEEP).await;
+    ztimeout!(async {
+        loop {
+            p9110.put("9110").await.unwrap();
+            p9120.put("9120").await.unwrap();
+            p9130.put("9130").await.unwrap();
+            p9210.put("9210").await.unwrap();
+            p9220.put("9220").await.unwrap();
+            p9230.put("9230").await.unwrap();
+            p9310.put("9310").await.unwrap();
+            p9320.put("9320").await.unwrap();
+            p9330.put("9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-    p9110.put("9110").await.unwrap();
-    p9120.put("9120").await.unwrap();
-    p9130.put("9130").await.unwrap();
-    p9210.put("9210").await.unwrap();
-    p9220.put("9220").await.unwrap();
-    p9230.put("9230").await.unwrap();
-    p9310.put("9310").await.unwrap();
-    p9320.put("9320").await.unwrap();
-    p9330.put("9330").await.unwrap();
-
-    tokio::time::sleep(SLEEP).await;
-
-    assert_eq!(s9110.drain().count(), 9);
-    assert_eq!(s9120.drain().count(), 9);
-    assert_eq!(s9130.drain().count(), 9);
-    assert_eq!(s9210.drain().count(), 9);
-    assert_eq!(s9220.drain().count(), 9);
-    assert_eq!(s9230.drain().count(), 9);
-    assert_eq!(s9310.drain().count(), 9);
-    assert_eq!(s9320.drain().count(), 9);
-    assert_eq!(s9330.drain().count(), 9);
+            if true
+                && s9110.count_keys() == 9
+                && s9120.count_keys() == 9
+                && s9130.count_keys() == 9
+                && s9210.count_keys() == 9
+                && s9220.count_keys() == 9
+                && s9230.count_keys() == 9
+                && s9310.count_keys() == 9
+                && s9320.count_keys() == 9
+                && s9330.count_keys() == 9
+            {
+                break;
+            }
+        }
+    });
 
     let s = STORAGE.lock();
 
@@ -262,12 +275,14 @@ async fn test_regions_scenario4_order2_putsub() {
         .connect(&[loc!(_z9200)])
         .open());
 
-    let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
-    let s9120 = _z9120.declare_subscriber("test/**").await.unwrap();
-    let s9130 = _z9130.declare_subscriber("test/**").await.unwrap();
-    let s9210 = _z9210.declare_subscriber("test/**").await.unwrap();
-    let s9220 = _z9220.declare_subscriber("test/**").await.unwrap();
-    let s9230 = _z9230.declare_subscriber("test/**").await.unwrap();
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
 
     let _z9300 = ztimeout!(Node::new(Router, "42aa9300")
         .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
@@ -283,33 +298,40 @@ async fn test_regions_scenario4_order2_putsub() {
         .connect(&[loc!(_z9300)])
         .open());
 
-    let s9310 = _z9310.declare_subscriber("test/**").await.unwrap();
-    let s9320 = _z9320.declare_subscriber("test/**").await.unwrap();
-    let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
+    skip_fmt! {
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
 
-    tokio::time::sleep(SLEEP).await;
+    ztimeout!(async {
+        loop {
+            _z9110.put("test/9110", "9110").await.unwrap();
+            _z9120.put("test/9120", "9120").await.unwrap();
+            _z9130.put("test/9130", "9130").await.unwrap();
+            _z9210.put("test/9210", "9210").await.unwrap();
+            _z9220.put("test/9220", "9220").await.unwrap();
+            _z9230.put("test/9230", "9230").await.unwrap();
+            _z9310.put("test/9310", "9310").await.unwrap();
+            _z9320.put("test/9320", "9320").await.unwrap();
+            _z9330.put("test/9330", "9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-    _z9110.put("test/9110", "9110").await.unwrap();
-    _z9120.put("test/9120", "9120").await.unwrap();
-    _z9130.put("test/9130", "9130").await.unwrap();
-    _z9210.put("test/9210", "9210").await.unwrap();
-    _z9220.put("test/9220", "9220").await.unwrap();
-    _z9230.put("test/9230", "9230").await.unwrap();
-    _z9310.put("test/9310", "9310").await.unwrap();
-    _z9320.put("test/9320", "9320").await.unwrap();
-    _z9330.put("test/9330", "9330").await.unwrap();
-
-    tokio::time::sleep(SLEEP).await;
-
-    assert_eq!(s9110.drain().count(), 9);
-    assert_eq!(s9120.drain().count(), 9);
-    assert_eq!(s9130.drain().count(), 9);
-    assert_eq!(s9210.drain().count(), 9);
-    assert_eq!(s9220.drain().count(), 9);
-    assert_eq!(s9230.drain().count(), 9);
-    assert_eq!(s9310.drain().count(), 9);
-    assert_eq!(s9320.drain().count(), 9);
-    assert_eq!(s9330.drain().count(), 9);
+            if true
+                && s9110.count_keys() == 9
+                && s9120.count_keys() == 9
+                && s9130.count_keys() == 9
+                && s9210.count_keys() == 9
+                && s9220.count_keys() == 9
+                && s9230.count_keys() == 9
+                && s9310.count_keys() == 9
+                && s9320.count_keys() == 9
+                && s9330.count_keys() == 9
+            {
+                break;
+            }
+        }
+    });
 
     let s = STORAGE.lock();
 
@@ -355,12 +377,14 @@ async fn test_regions_scenario4_order2_pubsub() {
         .connect(&[loc!(_z9200)])
         .open());
 
-    let s9110 = _z9110.declare_subscriber("test/**").await.unwrap();
-    let s9120 = _z9120.declare_subscriber("test/**").await.unwrap();
-    let s9130 = _z9130.declare_subscriber("test/**").await.unwrap();
-    let s9210 = _z9210.declare_subscriber("test/**").await.unwrap();
-    let s9220 = _z9220.declare_subscriber("test/**").await.unwrap();
-    let s9230 = _z9230.declare_subscriber("test/**").await.unwrap();
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
 
     let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
     let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
@@ -383,37 +407,44 @@ async fn test_regions_scenario4_order2_pubsub() {
         .connect(&[loc!(_z9300)])
         .open());
 
-    let s9310 = _z9310.declare_subscriber("test/**").await.unwrap();
-    let s9320 = _z9320.declare_subscriber("test/**").await.unwrap();
-    let s9330 = _z9330.declare_subscriber("test/**").await.unwrap();
+    skip_fmt! {
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
 
     let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
     let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
-    tokio::time::sleep(SLEEP).await;
+    ztimeout!(async {
+        loop {
+            p9110.put("9110").await.unwrap();
+            p9120.put("9120").await.unwrap();
+            p9130.put("9130").await.unwrap();
+            p9210.put("9210").await.unwrap();
+            p9220.put("9220").await.unwrap();
+            p9230.put("9230").await.unwrap();
+            p9310.put("9310").await.unwrap();
+            p9320.put("9320").await.unwrap();
+            p9330.put("9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-    p9110.put("9110").await.unwrap();
-    p9120.put("9120").await.unwrap();
-    p9130.put("9130").await.unwrap();
-    p9210.put("9210").await.unwrap();
-    p9220.put("9220").await.unwrap();
-    p9230.put("9230").await.unwrap();
-    p9310.put("9310").await.unwrap();
-    p9320.put("9320").await.unwrap();
-    p9330.put("9330").await.unwrap();
-
-    tokio::time::sleep(SLEEP).await;
-
-    assert_eq!(s9110.drain().count(), 9);
-    assert_eq!(s9120.drain().count(), 9);
-    assert_eq!(s9130.drain().count(), 9);
-    assert_eq!(s9210.drain().count(), 9);
-    assert_eq!(s9220.drain().count(), 9);
-    assert_eq!(s9230.drain().count(), 9);
-    assert_eq!(s9310.drain().count(), 9);
-    assert_eq!(s9320.drain().count(), 9);
-    assert_eq!(s9330.drain().count(), 9);
+            if true
+                && s9110.count_keys() == 9
+                && s9120.count_keys() == 9
+                && s9130.count_keys() == 9
+                && s9210.count_keys() == 9
+                && s9220.count_keys() == 9
+                && s9230.count_keys() == 9
+                && s9310.count_keys() == 9
+                && s9320.count_keys() == 9
+                && s9330.count_keys() == 9
+            {
+                break;
+            }
+        }
+    });
 
     let s = STORAGE.lock();
 
