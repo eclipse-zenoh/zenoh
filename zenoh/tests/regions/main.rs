@@ -23,7 +23,7 @@ mod scenario4;
 
 use std::time::Duration;
 
-use zenoh::Session;
+use zenoh::{pubsub::Subscriber, Session};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 
@@ -153,5 +153,27 @@ macro_rules! count {
 macro_rules! json {
     ($($json:tt)+) => {
         serde_json::json!($($json)+).to_string()
+    }
+}
+
+#[macro_export]
+macro_rules! skip_fmt {
+    ($($code:tt)+) => {
+        $($code)+
+    }
+}
+
+pub trait SubUtils {
+    fn count_keys(&self) -> usize;
+}
+
+impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
+    fn count_keys(&self) -> usize {
+        use itertools::Itertools;
+        self.handler()
+            .try_iter()
+            .map(|s| s.key_expr().clone().into_owned())
+            .unique()
+            .count()
     }
 }
