@@ -15,6 +15,7 @@ use std::{
     collections::HashMap,
     fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    os::fd::{AsRawFd, RawFd},
     sync::{Arc, Mutex, Weak},
     time::Duration,
 };
@@ -230,6 +231,17 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Udp
+    }
+
+    fn get_fd(&self) -> RawFd {
+        match &self.variant {
+            LinkUnicastUdpVariant::Connected(link_unicast_udp_connected) => {
+                link_unicast_udp_connected.socket.as_raw_fd()
+            }
+            LinkUnicastUdpVariant::Unconnected(link_unicast_udp_unconnected) =>{
+                link_unicast_udp_unconnected.socket.upgrade().unwrap().as_raw_fd()
+            },
+        }
     }
 }
 
