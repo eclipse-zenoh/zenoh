@@ -1588,7 +1588,7 @@ impl SessionInner {
 
     #[cfg(feature = "unstable")]
     fn register_callback_drop_notifier<T>(
-        self: &Self,
+        &self,
         external_notifier: Option<SyncGroupNotifier>,
         callback: &mut Callback<T>,
     ) where

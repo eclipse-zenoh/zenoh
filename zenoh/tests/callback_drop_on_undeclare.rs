@@ -238,7 +238,7 @@ async fn test_callback_drop_on_undeclare_querier() {
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
     let (cb, n) = create_callback::<Reply>();
-    let _replies = ztimeout!(querier.get().callback(cb)).unwrap();
+    ztimeout!(querier.get().callback(cb)).unwrap();
     let query = ztimeout!(queryable.recv_async()).unwrap();
     ztimeout!(query.reply(ke, "payload")).unwrap();
     drop(query);
@@ -412,7 +412,7 @@ async fn test_callback_drop_on_undeclare_get() {
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
     let (cb, n) = create_callback::<Reply>();
-    let _replies = ztimeout!(session1.get(ke).callback(cb)).unwrap();
+    ztimeout!(session1.get(ke).callback(cb)).unwrap();
     let query = ztimeout!(queryable.recv_async()).unwrap();
     ztimeout!(query.reply(ke, "payload")).unwrap();
     drop(query);
@@ -438,7 +438,7 @@ async fn test_callback_drop_on_undeclare_get_local() {
     let queryable = ztimeout!(session.declare_queryable(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
     let (cb, n) = create_callback::<Reply>();
-    let _replies = ztimeout!(session.get(ke).callback(cb)).unwrap();
+    ztimeout!(session.get(ke).callback(cb)).unwrap();
     let query = ztimeout!(queryable.recv_async()).unwrap();
     reply_from_another_thread(query, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -455,7 +455,7 @@ async fn test_callback_drop_on_undeclare_liveliness_get() {
     let _token = ztimeout!(session2.liveliness().declare_token(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
     let (cb, n) = create_callback::<Reply>();
-    let _replies = ztimeout!(session1.liveliness().get(ke).callback(cb)).unwrap();
+    ztimeout!(session1.liveliness().get(ke).callback(cb)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
     ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
