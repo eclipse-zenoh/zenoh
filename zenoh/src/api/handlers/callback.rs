@@ -16,8 +16,6 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroupNotifier;
 use crate::api::handlers::IntoHandler;
 
 /// A function that can transform an [`FnMut`]`(T)` into
@@ -53,7 +51,7 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
 pub struct Callback<T: CallbackParameter> {
     callable: Arc<dyn CallbackImpl<T>>,
     #[cfg(feature = "unstable")]
-    on_drop_notifier: Option<SyncGroupNotifier>,
+    drop: Option<Arc<dyn FnOnce() + Send + Sync>>,
 }
 
 impl<T: CallbackParameter> Clone for Callback<T> {
@@ -61,7 +59,7 @@ impl<T: CallbackParameter> Clone for Callback<T> {
         Self {
             callable: self.callable.clone(),
             #[cfg(feature = "unstable")]
-            on_drop_notifier: self.on_drop_notifier.clone(),
+            drop: self.drop.clone(),
         }
     }
 }
@@ -84,8 +82,8 @@ impl<T: CallbackParameter> Callback<T> {
     }
 
     #[cfg(feature = "unstable")]
-    pub(crate) fn set_on_drop_notifier(&mut self, notifier: SyncGroupNotifier) {
-        self.on_drop_notifier = Some(notifier);
+    pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
+        self.drop = Some(Arc::new(drop));
     }
 }
 
@@ -94,7 +92,7 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync + 'static> From<F> for Callbac
         Self {
             callable: Arc::new(value),
             #[cfg(feature = "unstable")]
-            on_drop_notifier: None,
+            drop: None,
         }
     }
 }
