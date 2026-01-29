@@ -34,10 +34,10 @@ use super::{
     },
     TransportEventHandler,
 };
-use crate::multicast::manager::{
+use crate::{multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
-};
+}, uring::Uring};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
 
@@ -129,6 +129,7 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
+    pub uring: Uring,
 }
 
 pub struct TransportManagerParams {
@@ -379,6 +380,7 @@ impl TransportManagerBuilder {
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
+            uring: Uring::default()
         };
 
         let params = TransportManagerParams { config, state };

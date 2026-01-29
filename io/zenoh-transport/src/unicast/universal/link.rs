@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::ZSliceBuffer;
+use zenoh_buffers::{ZSlice, ZSliceBuffer};
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Priority;
@@ -23,6 +23,7 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -287,6 +288,8 @@ async fn rx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
+    return rx_task_uring(link, transport, lease, rx_buffer_size, token).await;
+    
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
         pool: &RecyclingObjectPool<T, F>,
@@ -329,6 +332,128 @@ async fn rx_task(
                 transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
             }
 
+            _ = token.cancelled() => break
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ZRxBuffer(Arc<RxBuffer>);
+
+impl ZSliceBuffer for ZRxBuffer {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+async fn rx_task_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    token: CancellationToken,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+) -> ZResult<()> {
+    // The pool of buffers
+    let mtu = link.config.batch.mtu as usize;
+    let mut n = rx_buffer_size / mtu;
+    if n == 0 {
+        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
+        n = 1;
+    }
+
+    let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
+
+    let l = Link::new_unicast(
+        &link.link,
+        link.config.priorities.clone(),
+        link.config.reliability,
+    );
+
+    let batch_config = link.config.batch;
+    let c_transport = transport.clone();
+
+    let _reader = {
+        match link.link.is_streamed() {
+            true => {
+                let ring_cb = move |data: FragmentedBatch| {
+                    let contigious_data: Vec<u8> = data.iter().copied().collect();
+
+                    let buffer: ZSlice = std::sync::Arc::new(contigious_data).into();
+
+                    let mut batch = RBatch::new(batch_config, buffer);
+                    batch
+                        .initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+                        .unwrap();
+
+                    #[cfg(feature = "stats")]
+                    {
+                        let header_bytes = if l.is_streamed { 2 } else { 0 };
+                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                    }
+                    c_transport
+                        .read_messages(
+                            batch,
+                            &l,
+                            #[cfg(feature = "stats")]
+                            &stats,
+                        )
+                        .unwrap();
+                };
+
+                transport
+                    .manager
+                    .state
+                    .uring
+                    .reader
+                    .setup_fragmented_read(link.link.get_fd(), ring_cb)?
+            }
+            false => {
+                let ring_cb = move |data: Arc<RxBuffer>| {
+                    let buffer: ZSlice = std::sync::Arc::new(ZRxBuffer(data)).into();
+
+                    let mut batch = RBatch::new(batch_config, buffer);
+                    batch
+                        .initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+                        .unwrap();
+
+                    #[cfg(feature = "stats")]
+                    {
+                        let header_bytes = if l.is_streamed { 2 } else { 0 };
+                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                    }
+                    c_transport
+                        .read_messages(
+                            batch,
+                            &l,
+                            #[cfg(feature = "stats")]
+                            &stats,
+                        )
+                        .unwrap();
+                };
+
+                transport
+                    .manager
+                    .state
+                    .uring
+                    .reader
+                    .setup_read(link.link.get_fd(), ring_cb)?
+            }
+        }
+    };
+
+    loop {
+        tokio::select! {
             _ = token.cancelled() => break
         }
     }
