@@ -232,7 +232,12 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_events_listener_inner(callback, false) {
+    if let Err(e) = session.declare_transport_events_listener_inner(
+        callback,
+        false,
+        #[cfg(feature = "unstable")]
+        None,
+    ) {
         tracing::error!("Unable to subscribe to transport events: {}", e);
     }
 
@@ -288,7 +293,13 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None) {
+    if let Err(e) = session.declare_transport_links_listener_inner(
+        callback,
+        false,
+        None,
+        #[cfg(feature = "unstable")]
+        None,
+    ) {
         tracing::error!("Unable to subscribe to link events: {}", e);
     }
 }

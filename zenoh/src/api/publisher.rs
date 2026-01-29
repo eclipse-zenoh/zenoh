@@ -427,7 +427,7 @@ pub struct PublisherUndeclaration<'a> {
 }
 
 impl<'a> PublisherUndeclaration<'a> {
-    /// Block in undeclare operation until all currently instances of matching listeners' callbacks (if any) return.
+    /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.
     #[zenoh_macros::unstable]
     pub fn wait_until_callback_execution_ends(mut self) -> Self {
         self.wait_until_callback_execution_ends = true;

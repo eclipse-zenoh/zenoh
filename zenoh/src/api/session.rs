@@ -2133,14 +2133,17 @@ impl SessionInner {
         }
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_transport_events_listener_inner(
         &self,
-        callback: Callback<TransportEvent>,
+        mut callback: Callback<TransportEvent>,
         history: bool,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<TransportEventsListenerState>> {
         let id = self.runtime.next_id();
         trace!("declare_transport_events_listener_inner() => {id}");
-
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
         zwrite!(self.state)
@@ -2200,15 +2203,18 @@ impl SessionInner {
         }
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_transport_links_listener_inner(
         &self,
-        callback: Callback<LinkEvent>,
+        mut callback: Callback<LinkEvent>,
         history: bool,
         transport: Option<Transport>,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
         let id = self.runtime.next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
-
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(LinkEventsListenerState {
             id,
             callback,
