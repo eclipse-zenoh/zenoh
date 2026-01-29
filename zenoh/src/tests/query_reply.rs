@@ -28,7 +28,7 @@ impl ReplyTestPrimitives {
         }
     }
 
-    fn wire_expr(&self) -> Option<WireExpr> {
+    fn wire_expr(&self) -> Option<WireExpr<'_>> {
         self.wire_expr.lock().unwrap().clone()
     }
 }
@@ -81,14 +81,14 @@ async fn test_reply_preserves_optimized_ke() {
 
     let ke = "test/reply_declared_ke";
     let declared_ke = ztimeout!(session.declare_keyexpr(ke)).unwrap();
-    let _ = ztimeout!(query.reply(declared_ke, "payload")).unwrap();
+    ztimeout!(query.reply(declared_ke, "payload")).unwrap();
 
     let mut we = primitives.wire_expr().unwrap();
     assert!(we.suffix.is_empty());
     assert!(we.scope != 0);
     assert!(we.mapping == Mapping::Sender);
 
-    let _ = ztimeout!(query.reply(ke, "payload")).unwrap();
+    ztimeout!(query.reply(ke, "payload")).unwrap();
     we = primitives.wire_expr().unwrap();
     assert_eq!(&we.suffix, &ke);
     assert!(we.scope == 0);

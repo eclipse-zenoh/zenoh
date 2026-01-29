@@ -101,7 +101,7 @@ impl ReplyPrimitives {
         match self {
             ReplyPrimitives::Local(local) => key_expr.to_wire_local(&local.session).to_owned(),
             ReplyPrimitives::Remote(remote) => match &remote.session {
-                Some(s) => key_expr.to_wire(&s).to_owned(),
+                Some(s) => key_expr.to_wire(s).to_owned(),
                 None => WireExpr {
                     scope: 0,
                     suffix: std::borrow::Cow::Owned(key_expr.as_str().into()),
