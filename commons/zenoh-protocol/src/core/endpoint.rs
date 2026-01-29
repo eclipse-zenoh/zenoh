@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{borrow::ToOwned, format, string::String};
+use alloc::{borrow::ToOwned, format, string::String, vec, vec::Vec};
 use core::{borrow::Borrow, convert::TryFrom, fmt, str::FromStr};
 
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -704,8 +704,140 @@ impl EndPoint {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LocatorsStrategy {
+    AllOf,
+    OneOf,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Locators {
+    pub strategy: LocatorsStrategy,
+    pub locators: Vec<EndPoint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum EndPoints {
+    Single(EndPoint),
+    Locators(Locators),
+}
+impl EndPoints {
+    pub fn flatten(self) -> Vec<EndPoint> {
+        match self {
+            EndPoints::Single(ep) => vec![ep],
+            EndPoints::Locators(l) => l.locators,
+        }
+    }
+
+    pub fn as_vec(&self) -> Vec<EndPoint> {
+        match self {
+            EndPoints::Single(ep) => vec![ep.clone()],
+            EndPoints::Locators(l) => l.locators.clone(),
+        }
+    }
+}
+
+impl From<EndPoint> for EndPoints {
+    fn from(ep: EndPoint) -> EndPoints {
+        EndPoints::Single(ep)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for EndPoints {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct EndPointsVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for EndPointsVisitor {
+            type Value = EndPoints;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(
+                    "a single endpoint string or an object with 'strategy' and 'locators'",
+                )
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                EndPoint::from_str(v)
+                    .map(EndPoints::Single)
+                    .map_err(serde::de::Error::custom)
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                #[derive(serde::Deserialize)]
+                struct LocatorsHelper {
+                    strategy: LocatorsStrategy,
+                    locators: Vec<EndPoint>,
+                }
+
+                let s = serde::Deserialize::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )?;
+                let helper: LocatorsHelper = s;
+                Ok(EndPoints::Locators(Locators {
+                    strategy: helper.strategy,
+                    locators: helper.locators,
+                }))
+            }
+        }
+
+        deserializer.deserialize_any(EndPointsVisitor)
+    }
+}
+
+impl TryFrom<String> for EndPoints {
+    type Error = ZError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        const ERR: &str = "Endpoints must be of the form <endpoint>";
+        EndPoint::from_str(s.as_str())
+            .map(EndPoints::Single)
+            .map_err(|e| zerror!("{}: {}", ERR, e).into())
+    }
+}
+
+impl FromStr for EndPoints {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s.to_owned())
+    }
+}
+
 #[test]
 fn endpoints() {
+    // Single
+    assert_eq!(
+        EndPoints::from_str("udp/127.0.0.1:7447").unwrap(),
+        EndPoints::Single(EndPoint::from_str("udp/127.0.0.1:7447").unwrap())
+    );
+    // Locators
+    let json = r#"{"strategy": "allOf", "locators": ["udp/127.0.0.1:7447?rel=0", "udp/127.0.0.1:7447?rel=1"]}"#;
+    let eps: EndPoints = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        eps,
+        EndPoints::Locators(Locators {
+            strategy: LocatorsStrategy::AllOf,
+            locators: vec![
+                EndPoint::from_str("udp/127.0.0.1:7447?rel=0").unwrap(),
+                EndPoint::from_str("udp/127.0.0.1:7447?rel=1").unwrap()
+            ]
+        })
+    );
+}
+
+#[test]
+fn endpoint() {
     assert!(EndPoint::from_str("/").is_err());
     assert!(EndPoint::from_str("?").is_err());
     assert!(EndPoint::from_str("#").is_err());
