@@ -14,34 +14,26 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    sync::Arc,
 };
 
-use zenoh_core::{Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr;
+use zenoh_config::{WhatAmI, ZenohId};
+use zenoh_core::Wait;
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
+use zenoh_link::Locator;
 use zenoh_macros::ke;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::Reliability;
-use zenoh_protocol::{
-    core::WireExpr,
-    network::NetworkMessageMut,
-    zenoh::{Del, PushBody, Put},
-};
-use zenoh_transport::{
-    TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
-};
+use zenoh_protocol::core::{CongestionControl, Reliability};
 
-use crate as zenoh;
 use crate::{
+    self as zenoh,
     api::{
         encoding::Encoding,
+        info::{Link, LinkEvent, Transport, TransportEvent},
         key_expr::KeyExpr,
+        publisher::Priority,
         queryable::Query,
         sample::{Locality, SampleKind},
         session::WeakSession,
-        subscriber::SubscriberKind,
     },
-    bytes::ZBytes,
     handlers::Callback,
 };
 
@@ -75,251 +67,270 @@ static KE_TRANSPORT_UNICAST: &keyexpr = ke!("transport/unicast");
 static KE_TRANSPORT_MULTICAST: &keyexpr = ke!("transport/multicast");
 static KE_LINK: &keyexpr = ke!("link");
 
+// JSON structures for making adminspace independent of internal structures
+#[derive(serde::Serialize)]
+struct TransportJson {
+    zid: ZenohId,
+    whatami: WhatAmI,
+    is_qos: bool,
+    #[cfg(feature = "shared-memory")]
+    is_shm: bool,
+}
+
+impl From<Transport> for TransportJson {
+    fn from(transport: Transport) -> Self {
+        Self {
+            zid: transport.zid,
+            whatami: transport.whatami,
+            is_qos: transport.is_qos,
+            #[cfg(feature = "shared-memory")]
+            is_shm: transport.is_shm,
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct PrioritiesJson {
+    start: zenoh_protocol::core::Priority,
+    end: zenoh_protocol::core::Priority,
+}
+
+impl From<(u8, u8)> for PrioritiesJson {
+    fn from(priorities: (u8, u8)) -> Self {
+        Self {
+            start: priorities.0.try_into().unwrap_or_default(),
+            end: priorities.1.try_into().unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct LinkJson {
+    src: Locator,
+    dst: Locator,
+    group: Option<Locator>,
+    mtu: u16,
+    is_streamed: bool,
+    interfaces: Vec<String>,
+    auth_identifier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    priorities: Option<PrioritiesJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reliability: Option<Reliability>,
+}
+
+impl From<Link> for LinkJson {
+    fn from(link: Link) -> Self {
+        Self {
+            src: link.src,
+            dst: link.dst,
+            group: link.group,
+            mtu: link.mtu,
+            is_streamed: link.is_streamed,
+            interfaces: link.interfaces,
+            auth_identifier: link.auth_identifier,
+            priorities: link.priorities.map(PrioritiesJson::from),
+            reliability: link.reliability,
+        }
+    }
+}
+
+fn ke_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
+    KE_AT / own_zid / KE_SESSION
+}
+
+fn ke_adv_prefix(own_zid: &keyexpr) -> OwnedKeyExpr {
+    KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT / own_zid / KE_SESSION
+}
+
+fn ke_transport(transport: &Transport) -> OwnedKeyExpr {
+    if transport.is_multicast {
+        KE_TRANSPORT_MULTICAST / &transport.zid.into_keyexpr()
+    } else {
+        KE_TRANSPORT_UNICAST / &transport.zid.into_keyexpr()
+    }
+}
+
+fn ke_link(link: &Link) -> OwnedKeyExpr {
+    let mut s = DefaultHasher::new();
+    link.hash(&mut s);
+    let link_hash = s.finish().to_string();
+    // link_hash is number, no disallowed characters, it is safe to use unchecked
+    let link_key = unsafe { keyexpr::from_str_unchecked(&link_hash) };
+    KE_LINK / link_key
+}
+
 pub(crate) fn init(session: WeakSession) {
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        let _admin_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(KE_AT / own_zid / KE_SESSION / KE_STARSTAR),
-            true,
-            Locality::SessionLocal,
-            Callback::from({
-                let session = session.clone();
-                move |q| on_admin_query(&session, KE_AT, q)
-            }),
-        );
+    // Normal adminspace queryable
+    let own_zid = session.zid().into_keyexpr();
+    let prefix = ke_prefix(&own_zid);
+    let _admin_qabl = session.declare_queryable_inner(
+        &KeyExpr::from(&prefix / KE_STARSTAR),
+        true,
+        Locality::SessionLocal,
+        Callback::from({
+            let session = session.clone();
+            move |q| on_admin_query(&session, &prefix, &prefix, q)
+        }),
+    );
 
-        let adv_prefix = KE_ADV_PREFIX / KE_PUB / own_zid / KE_EMPTY / KE_EMPTY / KE_AT / KE_AT;
+    // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
+    let prefix = ke_prefix(&own_zid);
+    let adv_prefix = ke_adv_prefix(&own_zid);
+    let _admin_adv_qabl = session.declare_queryable_inner(
+        &KeyExpr::from(&adv_prefix / KE_STARSTAR),
+        true,
+        Locality::SessionLocal,
+        Callback::from({
+            let session = session.clone();
+            move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
+        }),
+    );
 
-        let _admin_adv_qabl = session.declare_queryable_inner(
-            &KeyExpr::from(&adv_prefix / own_zid / KE_SESSION / KE_STARSTAR),
-            true,
-            Locality::SessionLocal,
-            Callback::from({
-                let session = session.clone();
-                move |q| on_admin_query(&session, &adv_prefix, q)
-            }),
-        );
-    }
-}
-
-pub(crate) fn on_admin_query(session: &WeakSession, prefix: &keyexpr, query: Query) {
-    fn reply_peer(
-        prefix: &keyexpr,
-        own_zid: &keyexpr,
-        query: &Query,
-        peer: TransportPeer,
-        multicast: bool,
-    ) {
-        let zid = peer.zid.to_string();
-        let transport = if multicast {
-            KE_TRANSPORT_MULTICAST
-        } else {
-            KE_TRANSPORT_UNICAST
-        };
-        if let Ok(zid) = keyexpr::new(&zid) {
-            let key_expr = prefix / own_zid / KE_SESSION / transport / zid;
-            if query.key_expr().intersects(&key_expr) {
-                match serde_json::to_vec(&peer) {
-                    Ok(bytes) => {
-                        let reply_expr = KE_AT / own_zid / KE_SESSION / transport / zid;
-                        let _ = query
-                            .reply(reply_expr, bytes)
-                            .encoding(Encoding::APPLICATION_JSON)
-                            .wait();
-                    }
-                    Err(e) => tracing::debug!("Admin query error: {}", e),
+    // Subscribe to transport events and publish them to the adminspace
+    // key "@/<own_zid>/session/transport/<unicast|multicast>/<peer_zid>"
+    let callback = Callback::from({
+        let session = session.clone();
+        let own_zid = session.zid().into_keyexpr();
+        move |event: TransportEvent| {
+            let key_expr = ke_prefix(&own_zid) / &ke_transport(&event.transport);
+            let key_expr = KeyExpr::from(key_expr);
+            tracing::info!(
+                "Publishing transport event: {:?} : {:?} on {}",
+                &event.kind,
+                &event.transport,
+                key_expr
+            );
+            let payload = match &event.kind {
+                SampleKind::Put => {
+                    let json = TransportJson::from(event.transport);
+                    serde_json::to_vec(&json).unwrap_or_default()
                 }
-            }
-
-            for link in peer.links {
-                let mut s = DefaultHasher::new();
-                link.hash(&mut s);
-                if let Ok(lid) = keyexpr::new(&s.finish().to_string()) {
-                    let key_expr = prefix / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
-                    if query.key_expr().intersects(&key_expr) {
-                        match serde_json::to_vec(&link) {
-                            Ok(bytes) => {
-                                let reply_expr =
-                                    KE_AT / own_zid / KE_SESSION / transport / zid / KE_LINK / lid;
-                                let _ = query
-                                    .reply(reply_expr, bytes)
-                                    .encoding(Encoding::APPLICATION_JSON)
-                                    .wait();
-                            }
-                            Err(e) => tracing::debug!("Admin query error: {}", e),
-                        }
-                    }
-                }
+                SampleKind::Delete => Vec::new(),
+            };
+            if let Err(e) = session.resolve_put(
+                &key_expr,
+                payload.into(),
+                event.kind,
+                Encoding::APPLICATION_JSON,
+                CongestionControl::default(),
+                Priority::default(),
+                false,
+                Locality::SessionLocal,
+                #[cfg(feature = "unstable")]
+                Reliability::default(),
+                None,
+                #[cfg(feature = "unstable")]
+                None,
+                None,
+            ) {
+                tracing::error!("Unable to publish transport event: {}", e);
             }
         }
+    });
+    if let Err(e) = session.declare_transport_events_listener_inner(callback, false) {
+        tracing::error!("Unable to subscribe to transport events: {}", e);
     }
 
-    if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for peer in session.runtime().get_transports_unicast_peers() {
-            reply_peer(prefix, own_zid, &query, peer, false);
-        }
-        for transport_peers in session.runtime().get_transports_multicast_peers() {
-            for peer in transport_peers {
-                reply_peer(prefix, own_zid, &query, peer, true);
-            }
-        }
-    }
-}
+    // Subscribe to link events and publish them to the adminspace
+    // key "@/<own_zid>/session/transport/<unicast|multicast>/<peer_zid>/link/<link_hash>"
+    let callback = Callback::from({
+        let session = session.clone();
+        let own_zid = session.zid().into_keyexpr();
+        move |event: LinkEvent| {
+            // Find the transport to determine if it's multicast
+            let transport_zid = &event.link.zid;
+            let transport = session
+                .runtime()
+                .get_transports()
+                .find(|t| t.zid == *transport_zid);
 
-#[derive(Clone)]
-pub(crate) struct Handler {
-    pub(crate) session: WeakSession,
-}
-
-impl Handler {
-    pub(crate) fn new(session: WeakSession) -> Self {
-        Self { session }
-    }
-}
-
-impl TransportEventHandler for Handler {
-    fn new_unicast(
-        &self,
-        peer: zenoh_transport::TransportPeer,
-        _transport: zenoh_transport::unicast::TransportUnicast,
-    ) -> ZResult<Arc<dyn zenoh_transport::TransportPeerEventHandler>> {
-        self.new_peer(peer, false)
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: zenoh_transport::multicast::TransportMulticast,
-    ) -> ZResult<Arc<dyn zenoh_transport::TransportMulticastEventHandler>> {
-        Ok(Arc::new(self.clone()))
-    }
-}
-
-impl Handler {
-    fn new_peer(
-        &self,
-        peer: zenoh_transport::TransportPeer,
-        multicast: bool,
-    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        let transport = if multicast {
-            KE_TRANSPORT_MULTICAST
-        } else {
-            KE_TRANSPORT_UNICAST
-        };
-        if let Ok(own_zid) = keyexpr::new(&self.session.zid().to_string()) {
-            if let Ok(zid) = keyexpr::new(&peer.zid.to_string()) {
-                let wire_expr =
-                    WireExpr::from(&(KE_AT / own_zid / KE_SESSION / transport / zid)).to_owned();
-                let mut body = None;
-                self.session.execute_subscriber_callbacks(
-                    true,
-                    SubscriberKind::Subscriber,
-                    &wire_expr,
-                    Default::default(),
-                    || {
-                        body.insert(PushBody::from(Put {
-                            encoding: Encoding::APPLICATION_JSON.into(),
-                            payload: serde_json::to_vec(&peer).unwrap().into(),
-                            ..Put::default()
-                        }))
-                    },
-                    false,
-                    #[cfg(feature = "unstable")]
-                    Reliability::Reliable,
+            if let Some(transport) = transport {
+                let key_expr =
+                    ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
+                let key_expr = KeyExpr::from(key_expr);
+                tracing::info!(
+                    "Publishing link event: {:?} : {:?} on {}",
+                    &event.kind,
+                    &event.link,
+                    key_expr
                 );
-                Ok(Arc::new(PeerHandler {
-                    expr: wire_expr,
-                    session: self.session.clone(),
-                }))
+                let payload = match &event.kind {
+                    SampleKind::Put => {
+                        serde_json::to_vec(&LinkJson::from(event.link)).unwrap_or_default()
+                    }
+                    SampleKind::Delete => Vec::new(),
+                };
+                if let Err(e) = session.resolve_put(
+                    &key_expr,
+                    payload.into(),
+                    event.kind,
+                    Encoding::APPLICATION_JSON,
+                    CongestionControl::default(),
+                    Priority::default(),
+                    false,
+                    Locality::SessionLocal,
+                    #[cfg(feature = "unstable")]
+                    Reliability::default(),
+                    None,
+                    #[cfg(feature = "unstable")]
+                    None,
+                    None,
+                ) {
+                    tracing::error!("Unable to publish link event: {}", e);
+                }
             } else {
-                bail!("Unable to build keyexpr from zid")
+                tracing::warn!("Unable to find transport for link event: {}", transport_zid);
             }
-        } else {
-            bail!("Unable to build keyexpr from zid")
+        }
+    });
+    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None) {
+        tracing::error!("Unable to subscribe to link events: {}", e);
+    }
+}
+
+fn reply<T: serde::Serialize>(
+    match_prefix: &keyexpr,
+    reply_prefix: &keyexpr,
+    key: &keyexpr,
+    query: &Query,
+    payload: &T,
+) {
+    let match_keyexpr = match_prefix / key;
+    if query.key_expr().intersects(&match_keyexpr) {
+        let reply_keyexpr = reply_prefix / key;
+        match serde_json::to_vec(payload) {
+            Ok(bytes) => {
+                let _ = query
+                    .reply(reply_keyexpr, bytes)
+                    .encoding(Encoding::APPLICATION_JSON)
+                    .wait();
+            }
+            Err(e) => tracing::debug!("Admin query error: {}", e),
         }
     }
 }
 
-impl TransportMulticastEventHandler for Handler {
-    fn new_peer(
-        &self,
-        peer: zenoh_transport::TransportPeer,
-    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        self.new_peer(peer, true)
-    }
-
-    fn closed(&self) {}
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-}
-
-pub(crate) struct PeerHandler {
-    pub(crate) expr: WireExpr<'static>,
-    pub(crate) session: WeakSession,
-}
-
-impl PeerHandler {
-    fn push(
-        &self,
-        kind: SampleKind,
-        suffix: &str,
-        encoding: Option<Encoding>,
-        payload: Option<ZBytes>,
-    ) {
-        let mut body = None;
-        let msg = || match kind {
-            SampleKind::Put => body.insert(PushBody::Put(Put {
-                encoding: encoding.unwrap_or_default().into(),
-                payload: payload.unwrap_or_default().into(),
-                ..Put::default()
-            })),
-            SampleKind::Delete => body.insert(PushBody::Del(Del::default())),
-        };
-        self.session.execute_subscriber_callbacks(
-            true,
-            SubscriberKind::Subscriber,
-            &self.expr.clone().with_suffix(suffix),
-            Default::default(),
-            msg,
-            false,
-            #[cfg(feature = "unstable")]
-            Reliability::Reliable,
+pub(crate) fn on_admin_query(
+    session: &WeakSession,
+    match_prefix: &keyexpr,
+    reply_prefix: &keyexpr,
+    query: Query,
+) {
+    for transport in session.runtime().get_transports() {
+        let ke_transport = ke_transport(&transport);
+        let transport_json = TransportJson::from(transport.clone());
+        reply(
+            match_prefix,
+            reply_prefix,
+            &ke_transport,
+            &query,
+            &transport_json,
         );
-    }
-}
-
-impl TransportPeerEventHandler for PeerHandler {
-    fn handle_message(&self, _msg: NetworkMessageMut) -> ZResult<()> {
-        Ok(())
-    }
-
-    fn new_link(&self, link: zenoh_link::Link) {
-        let mut s = DefaultHasher::new();
-        link.hash(&mut s);
-        self.push(
-            SampleKind::Put,
-            &format!("/link/{}", s.finish()),
-            Some(Encoding::APPLICATION_JSON),
-            Some(serde_json::to_vec(&link).unwrap().into()),
-        );
-    }
-
-    fn del_link(&self, link: zenoh_link::Link) {
-        let mut s = DefaultHasher::new();
-        link.hash(&mut s);
-        self.push(
-            SampleKind::Delete,
-            &format!("/link/{}", s.finish()),
-            None,
-            None,
-        );
-    }
-
-    fn closed(&self) {
-        self.push(SampleKind::Delete, "", None, None);
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+        for link in session.runtime().get_links(Some(&transport)) {
+            let ke_link = &ke_transport / &ke_link(&link);
+            let link_json = LinkJson::from(link);
+            reply(match_prefix, reply_prefix, &ke_link, &query, &link_json);
+        }
     }
 }

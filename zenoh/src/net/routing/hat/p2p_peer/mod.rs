@@ -210,7 +210,7 @@ impl HatBaseTrait for HatCode {
                 &face.state.primitives,
                 RoutingContext::new(Declare {
                     interest_id: Some(0),
-                    ext_qos: QoSType::default(),
+                    ext_qos: QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: NodeIdType::default(),
                     body: DeclareBody::DeclareFinal(DeclareFinal),

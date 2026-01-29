@@ -135,7 +135,7 @@ fn declare_simple_token(
                 RoutingContext::with_expr(
                     Declare {
                         interest_id: Some(interest.src_interest_id),
-                        ext_qos: ext::QoSType::default(),
+                        ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
@@ -346,7 +346,7 @@ pub(crate) fn declare_token_interest(
                             RoutingContext::with_expr(
                                 Declare {
                                     interest_id,
-                                    ext_qos: ext::QoSType::default(),
+                                    ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::default(),
                                     body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
