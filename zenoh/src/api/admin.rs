@@ -172,6 +172,8 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &prefix, &prefix, q)
         }),
+        #[cfg(feature = "unstable")]
+        None,
     );
 
     // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
@@ -185,6 +187,8 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
         }),
+        #[cfg(feature = "unstable")]
+        None,
     );
 
     // Subscribe to transport events and publish them to the adminspace

@@ -22,6 +22,8 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroup;
+#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
@@ -501,6 +503,8 @@ impl Wait for PublisherBuilder<'_, '_> {
             reliability: self.reliability,
             matching_listeners: Default::default(),
             undeclare_on_drop: true,
+            #[cfg(feature = "unstable")]
+            sync_group: SyncGroup::default(),
         })
     }
 }
