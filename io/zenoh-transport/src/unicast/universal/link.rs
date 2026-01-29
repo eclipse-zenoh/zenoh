@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::{ZSlice, ZSliceBuffer};
@@ -23,7 +23,7 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
-use zenoh_uring::reader::RxBuffer;
+use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -288,10 +288,8 @@ async fn rx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
-    if link.link.is_streamed() == false {
-        return rx_task_uring(link, transport, lease, rx_buffer_size, token).await;
-    }
-
+    return rx_task_uring(link, transport, lease, rx_buffer_size, token).await;
+    
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
         pool: &RecyclingObjectPool<T, F>,
@@ -342,7 +340,7 @@ async fn rx_task(
 }
 
 #[derive(Debug)]
-struct ZRxBuffer(RxBuffer);
+struct ZRxBuffer(Arc<RxBuffer>);
 
 impl ZSliceBuffer for ZRxBuffer {
     fn as_slice(&self) -> &[u8] {
@@ -382,17 +380,35 @@ async fn rx_task_uring(
         link.config.reliability,
     );
 
+    let batch_config = link.config.batch;
+    let c_transport = transport.clone();
+
     let _reader = {
         match link.link.is_streamed() {
             true => {
-                let ring_cb = |data: RxBuffer| {
-                    let buffer: ZSlice = std::sync::Arc::new(ZRxBuffer(data)).into();
+                let ring_cb = move |data: FragmentedBatch| {
+                    let contigious_data: Vec<u8> = data.iter().copied().collect();
 
-                    //let mut batch = RBatch::new(link.config.batch, buffer);
-                    //batch
-                    //    .initialize(buffer)
-                    //    .map_err(|e| zerror!("{ERR}{self}. {e}."))
-                    //    .unwrap();
+                    let buffer: ZSlice = std::sync::Arc::new(contigious_data).into();
+
+                    let mut batch = RBatch::new(batch_config, buffer);
+                    batch
+                        .initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+                        .unwrap();
+
+                    #[cfg(feature = "stats")]
+                    {
+                        let header_bytes = if l.is_streamed { 2 } else { 0 };
+                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                    }
+                    c_transport
+                        .read_messages(
+                            batch,
+                            &l,
+                            #[cfg(feature = "stats")]
+                            &stats,
+                        )
+                        .unwrap();
                 };
 
                 transport
@@ -400,12 +416,10 @@ async fn rx_task_uring(
                     .state
                     .uring
                     .reader
-                    .setup_read(link.link.get_fd(), ring_cb)?
+                    .setup_fragmented_read(link.link.get_fd(), ring_cb)?
             }
             false => {
-                let batch_config = link.config.batch;
-                let c_transport = transport.clone();
-                let ring_cb = move |data: RxBuffer| {
+                let ring_cb = move |data: Arc<RxBuffer>| {
                     let buffer: ZSlice = std::sync::Arc::new(ZRxBuffer(data)).into();
 
                     let mut batch = RBatch::new(batch_config, buffer);

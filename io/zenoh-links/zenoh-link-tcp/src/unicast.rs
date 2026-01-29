@@ -11,7 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{
+    cell::UnsafeCell,
+    convert::TryInto,
+    fmt,
+    net::SocketAddr,
+    os::fd::{AsRawFd, RawFd},
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use tokio::{
@@ -196,6 +204,10 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Tcp
+    }
+
+    fn get_fd(&self) -> RawFd {
+        unsafe { &*self.socket.get() }.as_raw_fd()
     }
 }
 

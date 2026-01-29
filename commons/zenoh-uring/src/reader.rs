@@ -16,7 +16,10 @@ use nix::sys::eventfd::{EfdFlags, EventFd};
 use zenoh_result::ZResult;
 
 use std::{
-    cell::UnsafeCell, collections::{LinkedList, VecDeque}, ops::{Deref, DerefMut, Neg}, os::fd::{AsRawFd, RawFd}, sync::{Arc, atomic::AtomicBool, mpsc::Sender}
+    cell::UnsafeCell,
+    ops::{Deref, DerefMut, Neg},
+    os::fd::{AsRawFd, RawFd},
+    sync::{atomic::AtomicBool, mpsc::Sender, Arc},
 };
 
 use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
@@ -24,11 +27,11 @@ use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 use crate::{batch_arena::BatchArena, BUF_SIZE};
 
 struct RxCallback {
-    pub callback: UnsafeCell<Box<dyn FnMut(RxBuffer) + 'static>>,
+    pub callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) + 'static>>,
 }
 
 impl RxCallback {
-    fn new(callback: UnsafeCell<Box<dyn FnMut(RxBuffer) + 'static>>) -> Self {
+    fn new(callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) + 'static>>) -> Self {
         Self { callback }
     }
 }
@@ -42,7 +45,7 @@ struct Rx {
 }
 
 impl Rx {
-    fn new(callback: Box<dyn FnMut(RxBuffer)>, fd: RawFd) -> Self {
+    fn new(callback: Box<dyn FnMut(Arc<RxBuffer>)>, fd: RawFd) -> Self {
         Self {
             callback: RxCallback::new(UnsafeCell::new(callback)),
             fd,
@@ -67,7 +70,7 @@ impl Drop for ReadTask {
 impl ReadTask {
     fn new<Cb>(fd: RawFd, callback: Cb, inner: Arc<ReaderInner>) -> ZResult<Self>
     where
-        Cb: FnMut(RxBuffer) + 'static,
+        Cb: FnMut(Arc<RxBuffer>) + 'static,
     {
         let rx = Arc::new(Rx::new(Box::new(callback), fd.clone()));
         let user_data = unsafe { std::mem::transmute(rx.clone()) };
@@ -135,152 +138,241 @@ impl Drop for ReaderInner {
 }
 
 #[derive(Debug)]
-struct FragmentedBatch {
-    size: u16,
-    data_offset: u16,
+pub struct FragmentedBatch {
+    size: usize,
+    data_offset: usize,
     buffers: Vec<Arc<RxBuffer>>,
 }
 
+impl FragmentedBatch {
+    pub fn iter(&self) -> impl Iterator<Item = &u8> {
+        self.buffers
+            .iter()
+            .flat_map(|inner| inner.iter())
+            .skip(self.data_offset)
+            .take(self.size)
+    }
+}
 
 #[derive(Debug)]
 struct BatchAccumulator {
-    accumulated_size: u16,
+    accumulated_size: usize,
     batch: FragmentedBatch,
+}
+
+impl BatchAccumulator {
+    fn new(accumulated_size: usize, batch: FragmentedBatch) -> Self {
+        Self {
+            accumulated_size,
+            batch,
+        }
+    }
 }
 
 #[derive(Debug)]
 enum RxWindowState {
     Initial,
     SizeFragmented(u8),
-    Accumulating(BatchAccumulator)
+    Accumulating(BatchAccumulator),
 }
 
 #[derive(Debug)]
 pub struct RxWindow {
-    state: RxWindowState
+    state: RxWindowState,
 }
 
 impl Default for RxWindow {
     fn default() -> Self {
-        Self { state: RxWindowState::Initial }
+        Self {
+            state: RxWindowState::Initial,
+        }
     }
 }
 
 impl RxWindow {
-    fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: F)
+    fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: &mut F)
     where
-        F: FnMut(FragmentedBatch)
+        F: FnMut(FragmentedBatch),
     {
         match &mut self.state {
             RxWindowState::Initial => {
+                let mut leftover = buffer.len() as usize;
+                let mut pos = 0;
 
-                if buffer.len() == 1 {
-                    self.state = RxWindowState::SizeFragmented(buffer[0]);
-                }
-                else {
-                    let size = u16::from_le_bytes(buffer[0..2].try_into().unwrap());
-                    let mut data_offset = 2u16;
-                    let mut leftover = buffer.len() as u16 - data_offset;
-
-                    if leftover == size { // buffer contains exactly one batch
-                        on_batch( FragmentedBatch{size, data_offset, buffers: vec!(buffer)});
-                    } else if leftover > size { // buffer contains more than one batch
-
-                        while leftover > 0 {
-                            if leftover == 1 {
-                                self.state = RxWindowState::SizeFragmented(buffer[0]);
-                                leftover = 0;
-                            } 
-                        }
-                    } else {
-
+                while leftover > 0 {
+                    // buffer contains size fragment
+                    if leftover == 1 {
+                        self.state = RxWindowState::SizeFragmented(buffer[pos]);
+                        break;
                     }
+
+                    let size = u16::from_le_bytes(buffer[pos..pos+2].try_into().unwrap()) as usize;
+                    pos += 2;
+                    leftover -= 2;
+
+                    // only size
+                    if leftover == 0 {
+                        let fragment = FragmentedBatch {
+                            size,
+                            data_offset: 0,
+                            buffers: vec![],
+                        };
+                        let accumulator = BatchAccumulator::new(leftover, fragment);
+                        self.state = RxWindowState::Accumulating(accumulator);
+                        break;
+                    }
+
+                    // buffer contains batch fragment
+                    if leftover < size {
+                        let fragment = FragmentedBatch {
+                            size,
+                            data_offset: pos,
+                            buffers: vec![buffer],
+                        };
+                        let accumulator = BatchAccumulator::new(leftover, fragment);
+                        self.state = RxWindowState::Accumulating(accumulator);
+                        break;
+                    }
+
+                    // buffer contains at least one more batch
+                    let batch = FragmentedBatch {
+                        size,
+                        data_offset: pos,
+                        buffers: vec![buffer.clone()],
+                    };
+                    on_batch(batch);
+                    pos += size;
+                    leftover -= size;
                 }
-            },
-            RxWindowState::SizeFragmented(size_fragment) => todo!(),
-            RxWindowState::Accumulating(batch_accumulator) => todo!(),
+            }
+            RxWindowState::SizeFragmented(size_fragment) => {
+                // defragment size
+                let mut size = u16::from_le_bytes([*size_fragment, buffer[0]]) as usize;
+                let mut leftover = buffer.len() as usize - 1;
+                let mut pos = 1;
+
+                loop {
+                    // only size
+                    if leftover == 0 {
+                        let fragment = FragmentedBatch {
+                            size,
+                            data_offset: 0,
+                            buffers: vec![],
+                        };
+                        let accumulator = BatchAccumulator::new(leftover, fragment);
+                        self.state = RxWindowState::Accumulating(accumulator);
+                        break;
+                    }
+
+                    // buffer contains batch fragment
+                    if leftover < size {
+                        let fragment = FragmentedBatch {
+                            size,
+                            data_offset: pos,
+                            buffers: vec![buffer],
+                        };
+                        let accumulator = BatchAccumulator::new(leftover, fragment);
+                        self.state = RxWindowState::Accumulating(accumulator);
+                        break;
+                    }
+
+                    // buffer contains at least one more batch
+                    let batch = FragmentedBatch {
+                        size,
+                        data_offset: pos,
+                        buffers: vec![buffer.clone()],
+                    };
+                    on_batch(batch);
+                    pos += size;
+                    leftover -= size;
+
+                    // buffer ends with some exact number of batches
+                    if leftover == 0 {
+                        self.state = RxWindowState::Initial;
+                        break;
+                    }
+
+                    // buffer contains size fragment
+                    if leftover == 1 {
+                        self.state = RxWindowState::SizeFragmented(buffer[pos]);
+                        break;
+                    }
+
+                    size = u16::from_le_bytes(buffer[pos..pos+2].try_into().unwrap()) as usize;
+                    pos += 2;
+                    leftover -= 2;
+                }
+            }
+            RxWindowState::Accumulating(batch_accumulator) => {
+                batch_accumulator.accumulated_size += buffer.len();
+                batch_accumulator.batch.buffers.push(buffer.clone());
+
+                if batch_accumulator.accumulated_size >= batch_accumulator.batch.size {
+                    let mut leftover =
+                        batch_accumulator.accumulated_size - batch_accumulator.batch.size;
+                    let mut pos = buffer.len() - leftover;
+
+                    {
+                        // send fragmented batch
+                        let mut batch = FragmentedBatch {
+                            size: batch_accumulator.batch.size,
+                            data_offset: batch_accumulator.batch.data_offset,
+                            buffers: vec![],
+                        };
+                        std::mem::swap(&mut batch.buffers, &mut batch_accumulator.batch.buffers);
+                        on_batch(batch);
+                    }
+
+                    while leftover > 0 {
+                        // buffer contains size fragment
+                        if leftover == 1 {
+                            self.state = RxWindowState::SizeFragmented(buffer[pos]);
+                            break;
+                        }
+
+                        let size = u16::from_le_bytes(buffer[pos..pos+2].try_into().unwrap()) as usize;
+                        pos += 2;
+                        leftover -= 2;
+
+                        // only size
+                        if leftover == 0 {
+                            let fragment = FragmentedBatch {
+                                size,
+                                data_offset: 0,
+                                buffers: vec![],
+                            };
+                            let accumulator = BatchAccumulator::new(leftover, fragment);
+                            self.state = RxWindowState::Accumulating(accumulator);
+                            break;
+                        }
+
+                        // buffer contains batch fragment
+                        if leftover < size {
+                            let fragment = FragmentedBatch {
+                                size,
+                                data_offset: pos,
+                                buffers: vec![buffer],
+                            };
+                            let accumulator = BatchAccumulator::new(leftover, fragment);
+                            self.state = RxWindowState::Accumulating(accumulator);
+                            break;
+                        }
+
+                        // buffer contains at least one more batch
+                        let batch = FragmentedBatch {
+                            size,
+                            data_offset: pos,
+                            buffers: vec![buffer.clone()],
+                        };
+                        on_batch(batch);
+                        pos += size;
+                        leftover -= size;
+                    }
+                    self.state = RxWindowState::Initial;
+                }
+            }
         }
-        None
     }
-
-
-
-    /// Parse as many batches as possible starting at `offset` within `buffer`.
-    ///
-    /// This handles:
-    /// - 0 bytes left: do nothing
-    /// - 1 byte left: save SizeFragmented and return
-    /// - 2+ bytes: read size, then either:
-    ///   - emit full batch in-place
-    ///   - start accumulation if fragmented across buffers
-    fn parse_from_offset<F>(
-        &mut self,
-        buffer: Arc<RxBuffer>,
-        mut offset: usize,
-        on_batch: &mut F,
-    ) where
-        F: FnMut(FragmentedBatch),
-    {
-        while offset < buffer.len() {
-            let remaining = buffer.len() - offset;
-
-            if remaining == 1 {
-                // Not enough to read u16 size.
-                self.state = RxWindowState::SizeFragmented(buffer[offset]);
-                return;
-            }
-
-            // remaining >= 2
-            let size = u16::from_le_bytes(
-                buffer[offset..offset + 2].try_into().unwrap(),
-            );
-            let data_offset = (offset + 2) as u16;
-            let payload_start = offset + 2;
-
-            let payload_available = buffer.len() - payload_start;
-
-            if payload_available == size as usize {
-                // Exactly one full batch until end of buffer.
-                on_batch(FragmentedBatch {
-                    size,
-                    data_offset,
-                    buffers: vec![buffer.clone()],
-                });
-
-                self.state = RxWindowState::Initial;
-                return;
-            }
-
-            if payload_available > size as usize {
-                // Batch completes and there is more data after it (multiple batches).
-                on_batch(FragmentedBatch {
-                    size,
-                    data_offset,
-                    buffers: vec![buffer.clone()],
-                });
-
-                // Move offset to the next size prefix.
-                offset = payload_start + size as usize;
-                self.state = RxWindowState::Initial;
-                continue;
-            }
-
-            // payload_available < size => batch is fragmented across buffers.
-            self.state = RxWindowState::Accumulating(BatchAccumulator {
-                accumulated_size: payload_available as u16,
-                batch: FragmentedBatch {
-                    size,
-                    data_offset,
-                    buffers: vec![buffer],
-                },
-            });
-            return;
-        }
-
-        // No more bytes.
-        self.state = RxWindowState::Initial;
-    }
-}
 }
 
 #[derive(Debug)]
@@ -364,9 +456,21 @@ pub struct Reader {
 }
 
 impl Reader {
+    pub fn setup_fragmented_read<Cb>(&self, fd: RawFd, mut callback: Cb) -> ZResult<ReadTask>
+    where
+        Cb: FnMut(FragmentedBatch) + 'static,
+    {
+        let mut window = RxWindow::default();
+        let raw_callback = move |buffer| {
+            window.push(buffer, &mut callback);
+        };
+
+        ReadTask::new(fd, raw_callback, self.inner.clone())
+    }
+
     pub fn setup_read<Cb>(&self, fd: RawFd, callback: Cb) -> ZResult<ReadTask>
     where
-        Cb: FnMut(RxBuffer) + 'static,
+        Cb: FnMut(Arc<RxBuffer>) + 'static,
     {
         ReadTask::new(fd, callback, self.inner.clone())
     }
@@ -534,7 +638,7 @@ impl Reader {
                     //println!("buf_id: {buf_id}, buf_len: {buf_len}");
 
                     if buf_len > 0 {
-                        let rx_bufer = unsafe { arena.buffer(buf_id, buf_len) };
+                        let rx_bufer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
                         let callback = unsafe { &mut *rx.callback.callback.get() };
                         callback(rx_bufer);
                     } else {
