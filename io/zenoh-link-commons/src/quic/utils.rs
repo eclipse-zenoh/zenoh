@@ -14,12 +14,13 @@
 use std::{
     fmt::{self, Debug},
     fs::File,
-    io,
-    io::{BufReader, Cursor},
+    io::{self, BufReader, Cursor},
     net::SocketAddr,
     sync::Arc,
+    time::Duration,
 };
 
+use quinn::TransportConfig;
 use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
     server::WebPkiClientVerifier,
@@ -44,6 +45,10 @@ use crate::{
 
 // Default ALPN protocol
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
+
+// QUIC MTU config
+pub const QUIC_INITIAL_MTU: &str = "initial_mtu";
+pub const QUIC_MTU_DISCOVERY_INTERVAL: &str = "mtu_discovery_interval_secs";
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -585,5 +590,55 @@ impl Debug for QuicAuthId {
 impl From<QuicAuthId> for LinkAuthId {
     fn from(value: QuicAuthId) -> Self {
         LinkAuthId::Quic(value.auth_value.clone())
+    }
+}
+
+pub struct QuicMtuConfig {
+    initial_mtu: Option<u16>,
+    mtu_discovery_interval_secs: Option<u64>,
+}
+
+impl QuicMtuConfig {
+    pub(crate) fn apply_to_transport(&self, quic_transport_conf: &mut TransportConfig) {
+        if let Some(initial_mtu) = self.initial_mtu {
+            quic_transport_conf.initial_mtu(initial_mtu);
+        }
+
+        if let Some(mtu_discovery_interval) =
+            self.mtu_discovery_interval_secs.map(Duration::from_secs)
+        {
+            let mut mtu_discovery_config = quinn::MtuDiscoveryConfig::default();
+            mtu_discovery_config.interval(mtu_discovery_interval);
+            quic_transport_conf.mtu_discovery_config(Some(mtu_discovery_config));
+        }
+    }
+}
+
+impl TryFrom<&Config<'_>> for QuicMtuConfig {
+    type Error = zenoh_result::Error;
+
+    fn try_from(config: &Config) -> ZResult<Self> {
+        let mut initial_mtu = None;
+        if let Some(v) = config.get(QUIC_INITIAL_MTU) {
+            initial_mtu = Some(v.parse::<u16>().map_err(|err| {
+                zerror!("could not parse QUIC endpoint's {QUIC_INITIAL_MTU} value `{v}`: {err}")
+            })?);
+        }
+
+        let mut mtu_discovery_interval_secs = None;
+        if let Some(interval_secs) = config.get(QUIC_MTU_DISCOVERY_INTERVAL) {
+            mtu_discovery_interval_secs = Some(interval_secs
+            .parse::<u64>()
+            .map_err(|err| {
+                zerror!(
+                    "could not parse QUIC endpoint's {QUIC_MTU_DISCOVERY_INTERVAL} value `{interval_secs}`: {err}"
+                )
+            })?);
+        }
+
+        Ok(Self {
+            initial_mtu,
+            mtu_discovery_interval_secs,
+        })
     }
 }

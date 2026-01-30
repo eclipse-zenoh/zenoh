@@ -15,14 +15,10 @@
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use quinn::{crypto::rustls::QuicServerConfig, EndpointConfig};
 use tokio_util::{bytes::Bytes, sync::CancellationToken};
 use zenoh_link_commons::{
     get_ip_interface_names,
-    quic::{
-        get_cert_chain_expiration, get_cert_common_name, get_quic_addr, get_quic_host,
-        unicast::QuicLink, TlsServerConfig, ALPN_QUIC_HTTP,
-    },
+    quic::{get_cert_chain_expiration, get_cert_common_name, get_quic_addr, unicast::QuicLink},
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender,
@@ -31,11 +27,10 @@ use zenoh_protocol::{
     core::{EndPoint, Locator},
     transport::BatchSize,
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{zerror, ZResult};
 
 use super::{
-    set_mtu_config, QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME, QUIC_DATAGRAM_DEFAULT_MTU,
-    QUIC_DATAGRAM_LOCATOR_PREFIX,
+    QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME, QUIC_DATAGRAM_DEFAULT_MTU, QUIC_DATAGRAM_LOCATOR_PREFIX,
 };
 
 pub struct LinkUnicastQuicDatagram {
@@ -253,94 +248,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let epaddr = endpoint.address();
-        let epconf = endpoint.config();
+        let (quic_endpoint, locator, local_addr, tls_close_link_on_expiration) =
+            QuicLink::server(&endpoint).await?;
 
-        if epconf.is_empty() {
-            bail!("No unreliable QUIC configuration provided");
-        };
-
-        let addr = get_quic_addr(&epaddr).await?;
-        let host = get_quic_host(&epaddr)?;
-
-        // Server config
-        let mut server_crypto = TlsServerConfig::new(&epconf)
-            .await
-            .map_err(|e| zerror!("Cannot create a new unreliable QUIC listener on {addr}: {e}"))?;
-        server_crypto.server_config.alpn_protocols =
-            ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
-
-        // Install ring based rustls CryptoProvider.
-        rustls::crypto::ring::default_provider()
-            // This can be called successfully at most once in any process execution.
-            // Call this early in your process to configure which provider is used for the provider.
-            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
-            .install_default()
-            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
-            // when there are multiple quic links, and all but the first execution will fail.
-            .ok();
-
-        let quic_config: QuicServerConfig = server_crypto
-            .server_config
-            .try_into()
-            .map_err(|e| zerror!("Can not create a new unreliable QUIC listener on {addr}: {e}"))?;
-        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
-
-        // We do not accept unidireactional streams.
-        Arc::get_mut(&mut server_config.transport)
-            .unwrap()
-            .max_concurrent_uni_streams(0_u8.into());
-        // For the time being we only allow one bidirectional stream
-        Arc::get_mut(&mut server_config.transport)
-            .unwrap()
-            .max_concurrent_bidi_streams(1_u8.into());
-
-        set_mtu_config(epconf, &mut server_config)?;
-
-        // Initialize the Endpoint
-        let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
-            async {
-                // Bind the UDP socket
-                let socket = tokio::net::UdpSocket::bind(addr).await?;
-                zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
-
-                // create the Endpoint with this socket
-                let runtime = quinn::default_runtime()
-                    .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
-                ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
-                    EndpointConfig::default(),
-                    Some(server_config),
-                    runtime.wrap_udp_socket(socket.into_std()?)?,
-                    runtime,
-                )?)
-            }
-            .await
-        } else {
-            quinn::Endpoint::server(server_config, addr).map_err(Into::into)
-        }
-        .map_err(|e| {
-            zerror!(
-                "Can not create a new unreliable QUIC listener on {}: {}",
-                addr,
-                e
-            )
-        })?;
-
-        let local_addr = quic_endpoint.local_addr().map_err(|e| {
-            zerror!(
-                "Can not create a new unreliable QUIC listener on {}: {}",
-                addr,
-                e
-            )
-        })?;
-        let local_port = local_addr.port();
-
-        // Update the endpoint locator address
-        let locator = Locator::new(
-            endpoint.protocol(),
-            format!("{host}:{local_port}"),
-            endpoint.metadata(),
-        )?;
         let endpoint = EndPoint::new(
             locator.protocol(),
             locator.address(),
@@ -355,15 +265,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             let token = token.clone();
             let manager = self.manager.clone();
 
-            async move {
-                accept_task(
-                    quic_endpoint,
-                    token,
-                    manager,
-                    server_crypto.tls_close_link_on_expiration,
-                )
-                .await
-            }
+            async move { accept_task(quic_endpoint, token, manager, tls_close_link_on_expiration).await }
         };
 
         // Initialize the QuicAcceptor
