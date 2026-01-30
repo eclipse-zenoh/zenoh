@@ -40,7 +40,6 @@ impl KeyExprWireDeclaration {
     pub(crate) fn new(prefix: &str, session: &Session, force: bool) -> ZResult<Option<Self>> {
         let prefix_len = prefix.len() as u32;
         Ok(session
-            .0
             .declare_prefix(prefix, force)
             .wait()?
             .map(|expr_id| Self {
@@ -528,7 +527,7 @@ impl<'a> KeyExpr<'a> {
             .unwrap_or(false)
     }
 
-    fn to_wire_inner(&'a self, session: &WeakSession, mapping: Mapping) -> WireExpr<'a> {
+    fn to_wire_inner(&'a self, session: &Session, mapping: Mapping) -> WireExpr<'a> {
         match self.declaration() {
             Some(d) if d.session == *session => WireExpr {
                 scope: d.expr_id,
@@ -545,11 +544,11 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    pub(crate) fn to_wire(&'a self, session: &WeakSession) -> WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
         self.to_wire_inner(session, Mapping::Sender)
     }
 
-    pub(crate) fn to_wire_local(&'a self, session: &WeakSession) -> WireExpr<'a> {
+    pub(crate) fn to_wire_local(&'a self, session: &Session) -> WireExpr<'a> {
         self.to_wire_inner(session, Mapping::Receiver)
     }
 

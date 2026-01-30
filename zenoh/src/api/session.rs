@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[zenoh_macros::internal]
-use std::ops::Deref;
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::TryInto,
-    fmt, mem,
+    fmt,
+    mem::{self, ManuallyDrop},
+    ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock, RwLockReadGuard,
@@ -27,7 +27,6 @@ use std::{
 use async_trait::async_trait;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
-use ref_cast::{ref_cast_custom, RefCastCustom};
 use tracing::{error, info, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -622,36 +621,36 @@ impl fmt::Debug for SessionInner {
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
 /// ```
-#[derive(Debug, RefCastCustom)]
+#[derive(Debug)]
 #[repr(transparent)]
-pub struct Session(pub(crate) WeakSession);
+pub struct Session(Arc<SessionInner>);
 
 impl Session {
     #[cfg(not(feature = "internal"))]
     pub(crate) fn downgrade(&self) -> WeakSession {
-        self.0.clone()
+        WeakSession {
+            inner: ManuallyDrop::new(Session(self.0.clone())),
+        }
     }
 
     #[zenoh_macros::internal]
     pub fn downgrade(&self) -> WeakSession {
-        self.0.clone()
+        WeakSession {
+            inner: ManuallyDrop::new(Session(self.0.clone())),
+        }
     }
-
-    #[doc(hidden)]
-    #[ref_cast_custom]
-    pub(crate) const fn ref_cast(from: &WeakSession) -> &Self;
 }
 
 impl Clone for Session {
     fn clone(&self) -> Self {
-        self.0 .0.strong_counter.fetch_add(1, Ordering::Relaxed);
+        self.0.strong_counter.fetch_add(1, Ordering::Relaxed);
         Self(self.0.clone())
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.0 .0.strong_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
+        if self.0.strong_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
             if let Err(error) = self.close().wait() {
                 tracing::error!(error)
             }
@@ -668,10 +667,26 @@ impl Drop for Session {
 //
 // (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
 // closing, because the primitive implementation seemed to be used in the closing operation.)
-#[derive(Debug, Clone)]
-pub struct WeakSession(Arc<SessionInner>);
+#[derive(Debug)]
+pub struct WeakSession {
+    inner: ManuallyDrop<Session>,
+}
 
-impl PartialEq for WeakSession {
+impl Clone for WeakSession {
+    fn clone(&self) -> Self {
+        self.inner.downgrade()
+    }
+}
+
+impl Drop for WeakSession {
+    fn drop(&mut self) {
+        // SAFETY: Rust does not call drop on ManuallyDrop and all Session-allocated resources
+        // except Arc<SessionInner>, will be released once last "strong" Session is dropped.
+        unsafe { std::ptr::drop_in_place(&mut self.inner.0 as *mut _) };
+    }
+}
+
+impl PartialEq for Session {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
@@ -679,16 +694,15 @@ impl PartialEq for WeakSession {
 
 impl PartialEq<Session> for WeakSession {
     fn eq(&self, other: &Session) -> bool {
-        *self == other.0
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
-#[zenoh_macros::internal]
 impl Deref for WeakSession {
     type Target = Session;
 
     fn deref(&self) -> &Self::Target {
-        Session::ref_cast(self)
+        &self.inner
     }
 }
 
@@ -723,14 +737,14 @@ impl Session {
                 aggregated_publishers,
                 publisher_qos.into(),
             ));
-            let session = Session(WeakSession(Arc::new(SessionInner {
+            let session = Session(Arc::new(SessionInner {
                 strong_counter: AtomicUsize::new(1),
                 runtime: runtime.clone(),
                 state,
                 id: runtime.next_id(),
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
-            })));
+            }));
 
             // Register connectivity handler
             runtime.new_handler(Arc::new(connectivity::ConnectivityHandler::new(
@@ -739,8 +753,8 @@ impl Session {
 
             let (_face_id, primitives) = runtime.new_primitives(Arc::new(session.downgrade()));
 
-            zwrite!(session.0 .0.state).primitives = Some(primitives);
-            session.0 .0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
+            zwrite!(session.0.state).primitives = Some(primitives);
+            session.0.face_id.set(_face_id).unwrap(); // this is the only attempt to set value
 
             admin::init(session.downgrade());
 
@@ -751,7 +765,7 @@ impl Session {
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
     pub fn zid(&self) -> ZenohId {
-        self.info().zid().wait()
+        self.0.runtime.zid()
     }
 
     /// Returns the [`EntityGlobalId`] of this Session.
@@ -759,14 +773,14 @@ impl Session {
     pub fn id(&self) -> EntityGlobalId {
         zenoh_protocol::core::EntityGlobalIdProto {
             zid: self.zid().into(),
-            eid: self.0 .0.id,
+            eid: self.0.id,
         }
         .into()
     }
 
     #[zenoh_macros::internal]
     pub fn hlc(&self) -> Option<&HLC> {
-        self.0 .0.runtime.hlc()
+        self.0.runtime.hlc()
     }
 
     /// Close the zenoh [`Session`](Session).
@@ -823,7 +837,7 @@ impl Session {
     /// # }
     /// ```
     pub fn is_closed(&self) -> bool {
-        zread!(self.0 .0.state).primitives.is_none()
+        zread!(self.0.state).primitives.is_none()
     }
 
     /// Undeclare a zenoh entity declared by the session.
@@ -867,7 +881,7 @@ impl Session {
     /// ```
     #[zenoh_macros::unstable]
     pub fn config(&self) -> GenericConfig {
-        self.0 .0.runtime.get_config()
+        self.0.runtime.get_config()
     }
 
     /// Get a new Timestamp from a Zenoh [`Session`].
@@ -885,13 +899,13 @@ impl Session {
     /// # }
     /// ```
     pub fn new_timestamp(&self) -> Timestamp {
-        match self.0 .0.runtime.hlc() {
+        match self.0.runtime.hlc() {
             Some(hlc) => hlc.new_timestamp(),
             None => {
                 // Called when the runtime is not initialized with an HLC.
                 // UNIX_EPOCH returns a Timespec::zero(); unwrap should be permissible here.
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-                Timestamp::new(now, self.0.zid().into())
+                Timestamp::new(now, self.zid().into())
             }
         }
     }
@@ -911,7 +925,7 @@ impl Session {
     /// ```
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
-            session: self.0.clone(),
+            session: self.downgrade(),
         }
     }
 
@@ -943,7 +957,7 @@ impl Session {
     #[cfg(feature = "shared-memory")]
     #[zenoh_macros::unstable]
     pub fn get_shm_provider(&self) -> ShmProviderState {
-        self.0 .0.runtime.get_shm_provider()
+        self.0.runtime.get_shm_provider()
     }
 
     /// Create a [`Subscriber`](crate::pubsub::Subscriber) for the given key expression.
@@ -1100,7 +1114,7 @@ impl Session {
             destination: Locality::default(),
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            timeout: self.0.queries_default_timeout(),
+            timeout: self.queries_default_timeout(),
             #[cfg(feature = "unstable")]
             accept_replies: ReplyKeyExpr::default(),
         }
@@ -1278,7 +1292,7 @@ impl Session {
             consolidation: QueryConsolidation::DEFAULT,
             qos: qos.into(),
             destination: Locality::default(),
-            timeout: self.0.queries_default_timeout(),
+            timeout: self.queries_default_timeout(),
             value: None,
             attachment: None,
             handler: DefaultHandler::default(),
@@ -1318,15 +1332,9 @@ impl Session {
             Ok(session)
         })
     }
-}
 
-impl WeakSession {
     pub(crate) fn runtime(&self) -> &GenericRuntime {
         &self.0.runtime
-    }
-
-    pub(crate) fn zid(&self) -> ZenohId {
-        self.0.runtime.zid()
     }
 
     pub(crate) fn queries_default_timeout(&self) -> Duration {
@@ -2045,7 +2053,7 @@ impl WeakSession {
                 self.0
                     .task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = self.clone();
+                        let session = self.downgrade();
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -2450,7 +2458,7 @@ impl WeakSession {
         self.0
             .task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = self.clone();
+                let session = self.downgrade();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2569,7 +2577,7 @@ impl WeakSession {
         let token = self.0.task_controller.get_cancellation_token();
         self.0.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = self.clone();
+                let session = self.downgrade();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
@@ -2662,9 +2670,9 @@ impl WeakSession {
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
-                ReplyPrimitives::new_local(self.clone())
+                ReplyPrimitives::new_local(self.downgrade())
             } else {
-                ReplyPrimitives::new_remote(Some(self.clone()), primitives)
+                ReplyPrimitives::new_remote(Some(self.downgrade()), primitives)
             },
         });
         if !queryables.is_empty() {
@@ -3334,6 +3342,6 @@ impl Closeable for Session {
     type TClosee = WeakSession;
 
     fn get_closee(&self) -> Self::TClosee {
-        self.0.clone()
+        self.downgrade()
     }
 }

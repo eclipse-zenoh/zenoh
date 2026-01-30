@@ -195,7 +195,7 @@ impl<'a> Liveliness<'a> {
         LivelinessGetBuilder {
             session: self.session,
             key_expr,
-            timeout: self.session.0.queries_default_timeout(),
+            timeout: self.session.queries_default_timeout(),
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             cancellation_token: None,

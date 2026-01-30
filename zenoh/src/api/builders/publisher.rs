@@ -229,7 +229,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.resolve_put(
             &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
@@ -252,7 +252,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.resolve_put(
             &self.publisher.key_expr?,
             ZBytes::new(),
             SampleKind::Delete,
@@ -399,7 +399,7 @@ impl PublisherBuilder<'_, '_> {
     /// Returns a new builder with the overwritten QoS parameters.
     pub(crate) fn apply_qos_overwrites(self) -> Self {
         let qos_overwrites = self.key_expr.as_ref().map_or(Default::default(), |ke| {
-            self.session.0.get_publisher_qos_overwrite(ke)
+            self.session.get_publisher_qos_overwrite(ke)
         });
         Self {
             congestion_control: qos_overwrites
@@ -461,7 +461,6 @@ impl Wait for PublisherBuilder<'_, '_> {
         key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),

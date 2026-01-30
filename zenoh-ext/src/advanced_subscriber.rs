@@ -905,7 +905,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let liveliness_subscriber = if let Some(historyconf) = conf.history.as_ref() {
             if historyconf.liveliness {
                 let live_callback = {
-                    let session = conf.session.clone();
+                    let session = conf.session.downgrade();
                     let statesref = statesref.clone();
                     let key_expr = key_expr.clone().into_owned();
                     let historyconf = historyconf.clone();
