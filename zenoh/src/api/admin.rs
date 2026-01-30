@@ -241,7 +241,7 @@ pub(crate) fn init(session: WeakSession) {
             // Find the transport to determine if it's multicast
             let transport_zid = &event.link.zid;
             let transport = session
-                .runtime
+                .runtime()
                 .get_transports()
                 .find(|t| t.zid == *transport_zid);
 
@@ -317,7 +317,7 @@ pub(crate) fn on_admin_query(
     reply_prefix: &keyexpr,
     query: Query,
 ) {
-    for transport in session.runtime.get_transports() {
+    for transport in session.runtime().get_transports() {
         let ke_transport = ke_transport(&transport);
         let transport_json = TransportJson::from(transport.clone());
         reply(
@@ -327,7 +327,7 @@ pub(crate) fn on_admin_query(
             &query,
             &transport_json,
         );
-        for link in session.runtime.get_links(Some(&transport)) {
+        for link in session.runtime().get_links(Some(&transport)) {
             let ke_link = &ke_transport / &ke_link(&link);
             let link_json = LinkJson::from(link);
             reply(match_prefix, reply_prefix, &ke_link, &query, &link_json);

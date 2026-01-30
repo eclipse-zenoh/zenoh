@@ -216,7 +216,6 @@ where
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         session
-            .0
             .declare_subscriber_inner(&key_expr, self.origin, callback)
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
@@ -253,7 +252,6 @@ impl Wait for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
         let mut key_expr = self.key_expr?;
         key_expr = self.session.declare_nonwild_prefix(key_expr)?;
         self.session
-            .0
             .declare_subscriber_inner(&key_expr, self.origin, self.handler)?;
         Ok(())
     }

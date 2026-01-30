@@ -102,7 +102,7 @@ impl Resolvable for LinksBuilder<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LinksBuilder<'_> {
     fn wait(self) -> Self::To {
-        self.session.runtime.get_links(self.transport.as_ref())
+        self.session.runtime().get_links(self.transport.as_ref())
     }
 }
 

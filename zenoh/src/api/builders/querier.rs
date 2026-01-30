@@ -176,7 +176,6 @@ impl Wait for QuerierBuilder<'_, '_> {
         key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_querier_inner(key_expr.clone(), self.destination)?;
         Ok(Querier {
             session: self.session.downgrade(),
