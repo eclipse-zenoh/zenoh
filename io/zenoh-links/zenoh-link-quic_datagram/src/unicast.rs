@@ -15,10 +15,13 @@
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use tokio_util::{bytes::Bytes, sync::CancellationToken};
+use tokio_util::bytes::Bytes;
 use zenoh_link_commons::{
     get_ip_interface_names,
-    quic::{get_cert_chain_expiration, get_cert_common_name, get_quic_addr, unicast::QuicLink},
+    quic::{
+        get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
+        unicast::{QuicLink, QuicLinkMaterial},
+    },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender,
@@ -265,7 +268,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             let token = token.clone();
             let manager = self.manager.clone();
 
-            async move { accept_task(quic_endpoint, token, manager, tls_close_link_on_expiration).await }
+            async move {
+                QuicLink::accept_task(
+                    quic_endpoint,
+                    token,
+                    manager,
+                    false,
+                    Duration::from_micros(*QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME),
+                    |link_material| acceptor_callback(link_material, tls_close_link_on_expiration),
+                )
+                .await
+            }
         };
 
         // Initialize the QuicAcceptor
@@ -291,111 +304,65 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     }
 }
 
-async fn accept_task(
-    quic_endpoint: quinn::Endpoint,
-    token: CancellationToken,
-    manager: NewLinkChannelSender,
+fn acceptor_callback(
+    link_material: QuicLinkMaterial,
     tls_close_link_on_expiration: bool,
-) -> ZResult<()> {
-    async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
-        let qc = acceptor.await.ok_or_else(|| {
-            zerror!("Can not accept unreliable QUIC connections: acceptor closed")
-        })?;
+) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+    let QuicLinkMaterial {
+        connection: quic_conn,
+        src_addr,
+        dst_addr,
+        streams,
+    } = link_material;
 
-        let conn = qc.await.map_err(|e| {
-            let e = zerror!("Unreliable QUIC acceptor failed: {:?}", e);
-            tracing::warn!("{}", e);
-            e
-        })?;
-
-        Ok(conn)
-    }
-
-    let src_addr = quic_endpoint
-        .local_addr()
-        .map_err(|e| zerror!("Can not accept unreliable QUIC connections: {}", e))?;
-
-    // The accept future
-    tracing::trace!(
-        "Ready to accept unreliable QUIC connections on: {:?}",
-        src_addr
+    debug_assert!(
+        streams.is_none(),
+        "Unrealiable QUIC should not open streams"
     );
 
-    loop {
-        tokio::select! {
-            _ = token.cancelled() => break,
+    let dst_locator = Locator::new(QUIC_DATAGRAM_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
+    // Get Quic auth identifier
+    let auth_id = get_cert_common_name(&quic_conn)?;
 
-            res = accept(quic_endpoint.accept()) => {
-                match res {
-                    Ok(quic_conn) => {
-                        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
-                        let src_addr =  match quic_conn.local_ip()  {
-                            Some(ip) => SocketAddr::new(ip, src_addr.port()),
-                            None => {
-                                tracing::debug!("Can not accept unreliable QUIC connection: empty local IP");
-                                continue;
-                            }
-                        };
-                        let dst_addr = quic_conn.remote_address();
-                        let dst_locator = Locator::new(QUIC_DATAGRAM_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
-                        // Get Quic auth identifier
-                        let auth_id = get_cert_common_name(&quic_conn)?;
-
-                        // Get certificate chain expiration
-                        let mut maybe_expiration_time = None;
-                        if tls_close_link_on_expiration {
-                            match get_cert_chain_expiration(&quic_conn)? {
-                                exp @ Some(_) => maybe_expiration_time = exp,
-                                None => tracing::warn!(
-                                    "Cannot monitor expiration for unreliable QUIC link {:?} => {:?} : client does not have certificates",
-                                    src_addr,
-                                    dst_addr,
-                                ),
-                            }
-                        }
-
-                        tracing::debug!("Accepted unreliable QUIC connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_id);
-                        // Create the new link object
-                        let link = Arc::<LinkUnicastQuicDatagram>::new_cyclic(|weak_link| {
-                            let mut expiration_manager = None;
-                            if let Some(certchain_expiration_time) = maybe_expiration_time {
-                                // setup expiration manager
-                                expiration_manager = Some(LinkCertExpirationManager::new(
-                                    weak_link.clone(),
-                                    src_addr,
-                                    dst_addr,
-                                    QUIC_DATAGRAM_LOCATOR_PREFIX,
-                                    certchain_expiration_time,
-                                ));
-                            }
-                            LinkUnicastQuicDatagram::new(
-                                quic_conn,
-                                src_addr,
-                                dst_locator,
-                                auth_id.into(),
-                                expiration_manager,
-                            )
-                        });
-
-                        // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                            tracing::error!("{}-{}: {}", file!(), line!(), e)
-                        }
-
-                    }
-                    Err(e) => {
-                        tracing::warn!("{} Hint: increase the system open file limit.", e);
-                        // Throttle the accept loop upon an error
-                        // NOTE: This might be due to various factors. However, the most common case is that
-                        //       the process has reached the maximum number of open files in the system. On
-                        //       Linux systems this limit can be changed by using the "ulimit" command line
-                        //       tool. In case of systemd-based systems, this can be changed by using the
-                        //       "sysctl" command line tool.
-                        tokio::time::sleep(Duration::from_micros(*QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME)).await;
-                    }
-                }
-            }
+    // Get certificate chain expiration
+    let mut maybe_expiration_time = None;
+    if tls_close_link_on_expiration {
+        match get_cert_chain_expiration(&quic_conn)? {
+            exp @ Some(_) => maybe_expiration_time = exp,
+            None => tracing::warn!(
+                "Cannot monitor expiration for unreliable QUIC link {:?} => {:?} : client does not have certificates",
+                src_addr,
+                dst_addr,
+            ),
         }
     }
-    Ok(())
+
+    tracing::debug!(
+        "Accepted unreliable QUIC connection on {:?}: {:?}. {:?}.",
+        src_addr,
+        dst_addr,
+        auth_id
+    );
+    // Create the new link object
+    let link = Arc::<LinkUnicastQuicDatagram>::new_cyclic(|weak_link| {
+        let mut expiration_manager = None;
+        if let Some(certchain_expiration_time) = maybe_expiration_time {
+            // setup expiration manager
+            expiration_manager = Some(LinkCertExpirationManager::new(
+                weak_link.clone(),
+                src_addr,
+                dst_addr,
+                QUIC_DATAGRAM_LOCATOR_PREFIX,
+                certchain_expiration_time,
+            ));
+        }
+        LinkUnicastQuicDatagram::new(
+            quic_conn,
+            src_addr,
+            dst_locator,
+            auth_id.into(),
+            expiration_manager,
+        )
+    });
+    Ok(link)
 }

@@ -15,12 +15,14 @@
 use std::{
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
+    time::Duration,
 };
 
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
+use tokio_util::sync::CancellationToken;
 use zenoh_config::{EndPoint, Locator};
 use zenoh_core::{bail, zerror};
 use zenoh_protocol::core::Address;
@@ -32,7 +34,7 @@ use crate::{
         get_quic_addr, get_quic_host, QuicMtuConfig, TlsClientConfig, TlsServerConfig,
         ALPN_QUIC_HTTP,
     },
-    set_dscp, BIND_INTERFACE, BIND_SOCKET,
+    set_dscp, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 
 pub struct QuicLink {}
@@ -215,4 +217,101 @@ impl QuicLink {
             client_crypto.tls_close_link_on_expiration,
         ))
     }
+
+    pub async fn accept_task<Callback>(
+        quic_endpoint: quinn::Endpoint,
+        token: CancellationToken,
+        manager: NewLinkChannelSender,
+        is_streamed: bool,
+        throttle_time: Duration,
+        make_link: Callback,
+    ) -> ZResult<()>
+    where
+        Callback: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>>,
+    {
+        async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
+            let qc = acceptor
+                .await
+                .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
+
+            let conn = qc.await.map_err(|e| {
+                let e = zerror!("QUIC acceptor failed: {:?}", e);
+                tracing::warn!("{}", e);
+                e
+            })?;
+
+            Ok(conn)
+        }
+
+        let src_addr = quic_endpoint
+            .local_addr()
+            .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
+
+        tracing::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
+
+        loop {
+            tokio::select! {
+                _ = token.cancelled() => break,
+
+                res = accept(quic_endpoint.accept()) => {
+                    match res {
+                        Ok(quic_conn) => {
+                            let mut streams = None;
+                            if is_streamed {
+                                // Get the bideractional streams. Note that we don't allow unidirectional streams.
+                                match quic_conn.accept_bi().await {
+                                    Ok(stream) => { streams = Some(stream) },
+                                    Err(e) => {
+                                        tracing::warn!("QUIC connection has no streams: {:?}", e);
+                                        continue;
+                                    }
+                                }
+                            };
+
+                            // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+                            let src_addr =  match quic_conn.local_ip()  {
+                                Some(ip) => SocketAddr::new(ip, src_addr.port()),
+                                None => {
+                                    tracing::debug!("Can not accept QUIC connection: empty local IP");
+                                    continue;
+                                }
+                            };
+                            let dst_addr = quic_conn.remote_address();
+
+                            let link = make_link(QuicLinkMaterial {
+                                connection: quic_conn,
+                                src_addr,
+                                dst_addr,
+                                streams
+                            })?;
+                            // Communicate the new link to the initial transport manager
+                            if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                                tracing::error!("{}-{}: {}", file!(), line!(), e)
+                            }
+
+                        }
+                        Err(e) => {
+                            tracing::warn!("{} Hint: increase the system open file limit.", e);
+                            // Throttle the accept loop upon an error
+                            // NOTE: This might be due to various factors. However, the most common case is that
+                            //       the process has reached the maximum number of open files in the system. On
+                            //       Linux systems this limit can be changed by using the "ulimit" command line
+                            //       tool. In case of systemd-based systems, this can be changed by using the
+                            //       "sysctl" command line tool.
+                            tokio::time::sleep(throttle_time).await;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Material for building a link after accepting a new connection on a QUIC listener
+pub struct QuicLinkMaterial {
+    pub connection: quinn::Connection,
+    pub src_addr: SocketAddr,
+    pub dst_addr: SocketAddr,
+    pub streams: Option<(quinn::SendStream, quinn::RecvStream)>,
 }
