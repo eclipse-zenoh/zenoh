@@ -254,6 +254,7 @@ pub fn route_data(
     face: &FaceState,
     msg: &mut Push,
     reliability: Reliability,
+    consume: bool,
 ) {
     let tables = zread!(tables_ref.tables);
     match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
@@ -290,14 +291,18 @@ pub fn route_data(
                             .egress_filter(&tables, face, outface, &expr)
                         {
                             drop(tables);
+                            let mut msg_clone;
+                            let mut msg = &mut *msg;
+                            if !consume {
+                                msg_clone = msg.clone();
+                                msg = &mut msg_clone;
+                            }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
                             if outface.primitives.send_push(msg, reliability) {
                                 #[cfg(feature = "stats")]
                                 payload_observer.observe_payload(zenoh_stats::Tx, outface, msg);
                             }
-                            // Reset the wire_expr to indicate the message has been consumed
-                            msg.wire_expr = WireExpr::empty();
                         }
                     } else {
                         let route = route

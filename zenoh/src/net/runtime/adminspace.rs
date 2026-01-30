@@ -370,7 +370,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
+    fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, _consume: bool) {
         trace!("recv Push {:?}", msg);
         {
             let conf = &self.context.runtime.state.config.lock().0;
