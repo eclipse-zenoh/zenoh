@@ -309,7 +309,7 @@ fn acceptor_callback(
     tls_close_link_on_expiration: bool,
 ) -> ZResult<Arc<dyn LinkUnicastTrait>> {
     let QuicLinkMaterial {
-        connection: quic_conn,
+        quic_conn,
         src_addr,
         dst_addr,
         streams,

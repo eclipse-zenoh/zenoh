@@ -279,7 +279,7 @@ impl QuicLink {
                             let dst_addr = quic_conn.remote_address();
 
                             let link = make_link(QuicLinkMaterial {
-                                connection: quic_conn,
+                                quic_conn,
                                 src_addr,
                                 dst_addr,
                                 streams
@@ -310,7 +310,7 @@ impl QuicLink {
 
 /// Material for building a link after accepting a new connection on a QUIC listener
 pub struct QuicLinkMaterial {
-    pub connection: quinn::Connection,
+    pub quic_conn: quinn::Connection,
     pub src_addr: SocketAddr,
     pub dst_addr: SocketAddr,
     pub streams: Option<(quinn::SendStream, quinn::RecvStream)>,
