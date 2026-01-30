@@ -21,11 +21,11 @@ use std::{any::Any, collections::HashMap, sync::Arc};
 
 use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
-    core::ZenohIdProto,
+    core::{Reliability, ZenohIdProto},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
         interest::{InterestId, InterestMode, InterestOptions},
-        Declare, Oam,
+        Declare, Oam, Push,
     },
 };
 use zenoh_result::ZResult;
@@ -43,6 +43,7 @@ use crate::{
     key_expr::KeyExpr,
     net::{
         protocol::{linkstate::LinkInfo, network::SuccessorEntry},
+        routing::router::route_data,
         runtime::Runtime,
     },
 };
@@ -78,6 +79,15 @@ pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPr
 pub(crate) trait HatTrait:
     HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
+    fn route_data(
+        &self,
+        tables_ref: &Arc<TablesLock>,
+        face: &FaceState,
+        msg: &mut Push,
+        reliability: Reliability,
+    ) {
+        route_data(self, tables_ref, face, msg, reliability);
+    }
 }
 
 pub(crate) trait HatBaseTrait {

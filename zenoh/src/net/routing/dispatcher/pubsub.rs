@@ -215,7 +215,7 @@ macro_rules! treat_timestamp {
 
 #[inline]
 fn get_data_route(
-    hat_code: &(dyn HatTrait + Send + Sync),
+    hat_code: &(impl HatTrait + ?Sized),
     tables: &Tables,
     face: &FaceState,
     expr: &RoutingExpr,
@@ -249,7 +249,9 @@ pub(crate) fn get_matching_subscriptions(
     hat_code.get_matching_subscriptions(tables, key_expr)
 }
 
+#[inline(always)]
 pub fn route_data(
+    hat_code: &(impl HatTrait + ?Sized),
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
     msg: &mut Push,
@@ -271,24 +273,15 @@ pub fn route_data(
             #[cfg(feature = "stats")]
             payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
 
-            if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
-                let route = get_data_route(
-                    tables_ref.hat_code.as_ref(),
-                    &tables,
-                    face,
-                    &expr,
-                    msg.ext_nodeid.node_id,
-                );
+            if hat_code.ingress_filter(&tables, face, &expr) {
+                let route = get_data_route(hat_code, &tables, face, &expr, msg.ext_nodeid.node_id);
 
                 if !route.is_empty() {
                     treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 {
                         let (outface, key_expr, context) = route.iter().next().unwrap();
-                        if tables_ref
-                            .hat_code
-                            .egress_filter(&tables, face, outface, &expr)
-                        {
+                        if hat_code.egress_filter(&tables, face, outface, &expr) {
                             drop(tables);
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
@@ -303,9 +296,7 @@ pub fn route_data(
                         let route = route
                             .iter()
                             .filter(|(outface, _key_expr, _context)| {
-                                tables_ref
-                                    .hat_code
-                                    .egress_filter(&tables, face, outface, &expr)
+                                hat_code.egress_filter(&tables, face, outface, &expr)
                             })
                             .cloned()
                             .collect::<Vec<Direction>>();
