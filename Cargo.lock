@@ -5867,7 +5867,6 @@ dependencies = [
  "petgraph 0.8.3",
  "phf",
  "rand 0.8.5",
- "ref-cast",
  "rustc_version 0.4.1",
  "serde",
  "serde_json",

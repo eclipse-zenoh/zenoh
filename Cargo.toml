@@ -142,7 +142,6 @@ quote = "1.0.40"
 rand = { version = "0.8.5", default-features = false } # Default features are disabled due to usage in no_std crates
 rand_chacha = "0.3.1"
 rcgen = "0.14.4"
-ref-cast = "1.0.24"
 regex = "1.11.2"
 ringbuffer-spsc = "0.1.15"
 ron = "0.12.0"

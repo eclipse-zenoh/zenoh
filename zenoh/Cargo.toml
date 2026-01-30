@@ -99,7 +99,6 @@ once_cell = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
-ref-cast = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
