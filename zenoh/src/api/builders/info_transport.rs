@@ -116,7 +116,8 @@ impl std::fmt::Debug for TransportEventsListenerInner {
 ///     .transport_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare transport events listener");
 ///
 /// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {
@@ -147,7 +148,8 @@ impl<Handler> TransportEventsListener<Handler> {
     /// let listener = session.info()
     ///     .transport_events_listener()
     ///     .with(flume::bounded(32))
-    ///     .await;
+    ///     .await
+    ///     .expect("Failed to declare transport events listener");
     /// listener.undeclare().await.unwrap();
     /// # }
     /// ```
@@ -263,7 +265,8 @@ impl<Handler> IntoFuture for TransportEventsListenerUndeclaration<Handler> {
 ///     .transport_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare transport events listener");
 ///
 /// while let Ok(event) = events.recv_async().await {
 ///     match event.kind() {
@@ -378,7 +381,7 @@ where
     Handler: IntoHandler<TransportEvent> + Send,
     Handler::Handler: Send,
 {
-    type To = TransportEventsListener<Handler::Handler>;
+    type To = ZResult<TransportEventsListener<Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
@@ -391,17 +394,16 @@ where
         let (callback, handler) = self.handler.into_handler();
         let state = self
             .session
-            .declare_transport_events_listener_inner(callback, self.history)
-            .expect("Failed to declare transport events listener");
+            .declare_transport_events_listener_inner(callback, self.history)?;
 
-        TransportEventsListener {
+        Ok(TransportEventsListener {
             inner: TransportEventsListenerInner {
                 session: self.session.clone(),
                 id: state.id,
                 undeclare_on_drop: true,
             },
             handler,
-        }
+        })
     }
 }
 

@@ -104,7 +104,7 @@ use crate::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
             Reply,
         },
-        queryable::{Query, QueryInner, QueryableState},
+        queryable::{Query, QueryInner, QueryableState, ReplyPrimitives},
         sample::{Locality, QoS, Sample, SampleKind},
         selector::Selector,
         subscriber::{SubscriberKind, SubscriberState},
@@ -2658,9 +2658,9 @@ impl SessionInner {
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
-                Arc::new(WeakSession::new(self))
+                ReplyPrimitives::new_local(WeakSession::new(self))
             } else {
-                primitives
+                ReplyPrimitives::new_remote(Some(WeakSession::new(self)), primitives)
             },
         });
         if !queryables.is_empty() {
