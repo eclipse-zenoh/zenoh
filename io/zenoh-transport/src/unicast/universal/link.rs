@@ -289,7 +289,7 @@ async fn rx_task(
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     return rx_task_uring(link, transport, lease, rx_buffer_size, token).await;
-    
+
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
         pool: &RecyclingObjectPool<T, F>,
@@ -388,6 +388,8 @@ async fn rx_task_uring(
             true => {
                 let ring_cb = move |data: FragmentedBatch| {
                     let contigious_data: Vec<u8> = data.iter().copied().collect();
+                    let mut batch_config = batch_config;
+                    batch_config.is_streamed = false;
 
                     let buffer: ZSlice = std::sync::Arc::new(contigious_data).into();
 

@@ -152,6 +152,10 @@ impl FragmentedBatch {
             .skip(self.data_offset)
             .take(self.size)
     }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
 }
 
 #[derive(Debug)]
@@ -189,6 +193,16 @@ impl Default for RxWindow {
     }
 }
 
+macro_rules! log {
+    ($level:expr, $($arg:tt)*) => {
+        //eprintln!("[{}] {}:{} - {}",
+        //    $level,
+        //    file!(),
+        //    line!(),
+        //    format_args!($($arg)*));
+    };
+}
+
 impl RxWindow {
     fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: &mut F)
     where
@@ -206,7 +220,8 @@ impl RxWindow {
                         break;
                     }
 
-                    let size = u16::from_le_bytes(buffer[pos..pos+2].try_into().unwrap()) as usize;
+                    let size =
+                        u16::from_le_bytes(buffer[pos..pos + 2].try_into().unwrap()) as usize;
                     pos += 2;
                     leftover -= 2;
 
@@ -240,6 +255,7 @@ impl RxWindow {
                         data_offset: pos,
                         buffers: vec![buffer.clone()],
                     };
+                    log!("INFO", "on_batch");
                     on_batch(batch);
                     pos += size;
                     leftover -= size;
@@ -282,6 +298,7 @@ impl RxWindow {
                         data_offset: pos,
                         buffers: vec![buffer.clone()],
                     };
+                    log!("INFO", "on_batch");
                     on_batch(batch);
                     pos += size;
                     leftover -= size;
@@ -298,7 +315,7 @@ impl RxWindow {
                         break;
                     }
 
-                    size = u16::from_le_bytes(buffer[pos..pos+2].try_into().unwrap()) as usize;
+                    size = u16::from_le_bytes(buffer[pos..pos + 2].try_into().unwrap()) as usize;
                     pos += 2;
                     leftover -= 2;
                 }
@@ -320,17 +337,25 @@ impl RxWindow {
                             buffers: vec![],
                         };
                         std::mem::swap(&mut batch.buffers, &mut batch_accumulator.batch.buffers);
+                        log!("INFO", "on_batch");
                         on_batch(batch);
                     }
 
-                    while leftover > 0 {
+                    loop {
+                        // no more data
+                        if leftover == 0 {
+                            self.state = RxWindowState::Initial;
+                            break;
+                        }
+
                         // buffer contains size fragment
                         if leftover == 1 {
                             self.state = RxWindowState::SizeFragmented(buffer[pos]);
                             break;
                         }
 
-                        let size = u16::from_le_bytes(buffer[pos..pos+2].try_into().unwrap()) as usize;
+                        let size =
+                            u16::from_le_bytes(buffer[pos..pos + 2].try_into().unwrap()) as usize;
                         pos += 2;
                         leftover -= 2;
 
@@ -364,11 +389,11 @@ impl RxWindow {
                             data_offset: pos,
                             buffers: vec![buffer.clone()],
                         };
+                        log!("INFO", "on_batch");
                         on_batch(batch);
                         pos += size;
                         leftover -= size;
                     }
-                    self.state = RxWindowState::Initial;
                 }
             }
         }
