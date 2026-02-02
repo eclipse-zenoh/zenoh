@@ -70,6 +70,8 @@ fn reader_main() {
             }
 
             c_iteration.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+            Ok(())
         })
         .unwrap();
 

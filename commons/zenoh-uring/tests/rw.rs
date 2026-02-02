@@ -143,6 +143,8 @@ fn reader_main() {
             c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             c_len.fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
             c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
+
+            Ok(())
         })
         .unwrap();
 

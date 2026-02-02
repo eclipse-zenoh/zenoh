@@ -356,29 +356,6 @@ impl ZSliceBuffer for ZRxBuffer {
     }
 }
 
-struct CallbackContext {
-    token: CancellationToken,
-    transport: TransportUnicastUniversal,
-}
-
-impl CallbackContext {
-    fn new(transport: TransportUnicastUniversal) -> (Self, CancellationToken) {
-        let token = CancellationToken::new();
-        let task_token = token.clone();
-        (Self { token, transport }, task_token)
-    }
-
-    fn transport(&self) -> &TransportUnicastUniversal {
-        &self.transport
-    }
-}
-
-impl Drop for CallbackContext {
-    fn drop(&mut self) {
-        self.token.cancel(); // async task will wake up
-    }
-}
-
 async fn rx_task_uring(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
@@ -404,10 +381,9 @@ async fn rx_task_uring(
     );
 
     let batch_config = link.config.batch;
+    let c_transport = transport.clone();
 
-    let (context, task_cancellation_token) = CallbackContext::new(transport.clone());
-
-    let _reader = {
+    let mut uring_read_task = {
         match link.link.is_streamed() {
             true => {
                 let ring_cb = move |data: FragmentedBatch| {
@@ -420,7 +396,7 @@ async fn rx_task_uring(
                             data.data_offset,
                             data.data_offset + data.size,
                         )
-                        .unwrap(),
+                        .map_err(|_| zerror!("Error constructing slice...."))?,
                         None => {
                             let contigious_data: Vec<u8> = data.iter().copied().collect();
                             std::sync::Arc::new(contigious_data).into()
@@ -428,24 +404,19 @@ async fn rx_task_uring(
                     };
 
                     let mut batch = RBatch::new(batch_config, buffer);
-                    batch
-                        .initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
-                        .unwrap();
+                    batch.initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
 
                     #[cfg(feature = "stats")]
                     {
                         let header_bytes = if l.is_streamed { 2 } else { 0 };
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
-                    context
-                        .transport()
-                        .read_messages(
-                            batch,
-                            &l,
-                            #[cfg(feature = "stats")]
-                            &stats,
-                        )
-                        .unwrap();
+                    c_transport.read_messages(
+                        batch,
+                        &l,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    )
                 };
 
                 transport
@@ -460,24 +431,19 @@ async fn rx_task_uring(
                     let buffer: ZSlice = std::sync::Arc::new(ZRxBuffer(data)).into();
 
                     let mut batch = RBatch::new(batch_config, buffer);
-                    batch
-                        .initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
-                        .unwrap();
+                    batch.initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
 
                     #[cfg(feature = "stats")]
                     {
                         let header_bytes = if l.is_streamed { 2 } else { 0 };
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
-                    context
-                        .transport()
-                        .read_messages(
-                            batch,
-                            &l,
-                            #[cfg(feature = "stats")]
-                            &stats,
-                        )
-                        .unwrap();
+                    c_transport.read_messages(
+                        batch,
+                        &l,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    )
                 };
 
                 transport
@@ -490,11 +456,14 @@ async fn rx_task_uring(
         }
     };
 
-    loop {
-        tokio::select! {
-            _ = task_cancellation_token.cancelled() => break,
-            _ = token.cancelled() => break
-        }
+    tokio::select! {
+        e = uring_read_task.read_error() => {
+            tracing::debug!("Uring RX task stopped by uring error event");
+            return Err(e);
+        },
+        _ = token.cancelled() => {
+            tracing::debug!("Uring RX task stopped by transport cancellation");
+        },
     }
 
     Ok(())

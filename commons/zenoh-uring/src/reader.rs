@@ -1,3 +1,4 @@
+use libc::rand;
 //
 // Copyright (c) 2025 ZettaScale Technology
 //
@@ -11,10 +12,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use nix::sys::eventfd::{EfdFlags, EventFd};
 #[cfg(unix)]
 use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use zenoh_core::zerror;
 use zenoh_result::ZResult;
 
 use std::{
@@ -30,11 +32,11 @@ use crate::{batch_arena::BatchArena, BUF_SIZE};
 
 #[derive(Debug)]
 struct RxCallback {
-    pub callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) + 'static>>,
+    pub callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static>>,
 }
 
 impl RxCallback {
-    fn new(callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) + 'static>>) -> Self {
+    fn new(callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static>>) -> Self {
         Self { callback }
     }
 }
@@ -44,18 +46,36 @@ unsafe impl Sync for RxCallback {}
 
 #[derive(Debug)]
 struct Rx {
-    pub callback: RxCallback,
+    cb: RxCallback,
     pub fd: RawFd,
+    error_sender: UnboundedSender<zenoh_result::Error>,
 }
 
 impl Rx {
-    fn new(callback: Box<dyn FnMut(Arc<RxBuffer>)>, fd: RawFd) -> Self {
+    fn new(
+        callback: Box<dyn FnMut(Arc<RxBuffer>) -> ZResult<()>>,
+        fd: RawFd,
+    ) -> (Self, UnboundedReceiver<zenoh_result::Error>) {
+        let (error_sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+
         let rx = Self {
-            callback: RxCallback::new(UnsafeCell::new(callback)),
+            cb: RxCallback::new(UnsafeCell::new(callback)),
+            error_sender,
             fd,
         };
         tracing::debug!("RX context created: {:?}", rx);
-        rx
+        (rx, receiver)
+    }
+
+    fn run_callback(&self, buffer: Arc<RxBuffer>) {
+        let callback = unsafe { &mut *self.cb.callback.get() };
+        if let Err(e) = (callback)(buffer) {
+            self.post_error(e);
+        }
+    }
+
+    fn post_error(&self, error: zenoh_result::Error) {
+        let _ = self.error_sender.send(error);
     }
 }
 
@@ -69,6 +89,7 @@ impl Drop for Rx {
 pub struct ReadTask {
     user_data: u64,
     inner: Arc<ReaderInner>,
+    error_listener: UnboundedReceiver<zenoh_result::Error>,
 }
 
 impl Drop for ReadTask {
@@ -83,9 +104,10 @@ impl Drop for ReadTask {
 impl ReadTask {
     fn new<Cb>(fd: RawFd, callback: Cb, inner: Arc<ReaderInner>) -> ZResult<Self>
     where
-        Cb: FnMut(Arc<RxBuffer>) + 'static,
+        Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static,
     {
-        let rx = Arc::new(Rx::new(Box::new(callback), fd.clone()));
+        let (rx, error_listener) = Rx::new(Box::new(callback), fd.clone());
+        let rx = Arc::new(rx);
         let user_data = unsafe { std::mem::transmute(rx) };
 
         let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
@@ -97,11 +119,17 @@ impl ReadTask {
         let task = Self {
             user_data,
             inner,
+            error_listener,
         };
 
         tracing::debug!("Read task created: {:?}", task);
 
         Ok(task)
+    }
+
+    pub async fn read_error(&mut self) -> zenoh_result::Error {
+        let e = self.error_listener.recv().await;
+        e.unwrap_or_else(|| zerror!("Task stopped").into())
     }
 }
 
@@ -228,9 +256,9 @@ macro_rules! log {
 }
 
 impl RxWindow {
-    fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: &mut F)
+    fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: &mut F) -> ZResult<()>
     where
-        F: FnMut(FragmentedBatch),
+        F: FnMut(FragmentedBatch) -> ZResult<()>,
     {
         match &mut self.state {
             RxWindowState::Initial => {
@@ -280,7 +308,7 @@ impl RxWindow {
                         buffers: vec![buffer.clone()],
                     };
                     log!("INFO", "on_batch");
-                    on_batch(batch);
+                    on_batch(batch)?;
                     pos += size;
                     leftover -= size;
                 }
@@ -323,7 +351,7 @@ impl RxWindow {
                         buffers: vec![buffer.clone()],
                     };
                     log!("INFO", "on_batch");
-                    on_batch(batch);
+                    on_batch(batch)?;
                     pos += size;
                     leftover -= size;
 
@@ -362,7 +390,7 @@ impl RxWindow {
                         };
                         std::mem::swap(&mut batch.buffers, &mut batch_accumulator.batch.buffers);
                         log!("INFO", "on_batch");
-                        on_batch(batch);
+                        on_batch(batch)?;
                     }
 
                     loop {
@@ -414,13 +442,14 @@ impl RxWindow {
                             buffers: vec![buffer.clone()],
                         };
                         log!("INFO", "on_batch");
-                        on_batch(batch);
+                        on_batch(batch)?;
                         pos += size;
                         leftover -= size;
                     }
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -507,21 +536,19 @@ pub struct Reader {
 impl Reader {
     pub fn setup_fragmented_read<Cb>(&self, fd: RawFd, mut callback: Cb) -> ZResult<ReadTask>
     where
-        Cb: FnMut(FragmentedBatch) + 'static,
+        Cb: FnMut(FragmentedBatch) -> ZResult<()> + 'static,
     {
         tracing::debug!("Setting up fragmented read task for fd: {fd}");
-        
+
         let mut window = RxWindow::default();
-        let raw_callback = move |buffer| {
-            window.push(buffer, &mut callback);
-        };
+        let raw_callback = move |buffer| window.push(buffer, &mut callback);
 
         ReadTask::new(fd, raw_callback, self.inner.clone())
     }
 
     pub fn setup_read<Cb>(&self, fd: RawFd, callback: Cb) -> ZResult<ReadTask>
     where
-        Cb: FnMut(Arc<RxBuffer>) + 'static,
+        Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static,
     {
         tracing::debug!("Setting up read task for fd: {fd}");
 
@@ -533,16 +560,11 @@ impl Reader {
         let waker = Arc::new(
             nix::sys::eventfd::EventFd::from_value_and_flags(
                 0,
-                EfdFlags::EFD_CLOEXEC | EfdFlags::EFD_NONBLOCK,
+                EfdFlags::EFD_CLOEXEC,
             )
             .unwrap(),
         );
 
-        // Create memory for waker's read events
-        let mut dummy_mem = {
-            let mem: [u8; 8] = [0; 8];
-            Box::new(mem)
-        };
         let c_waker = waker.clone();
 
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -557,10 +579,17 @@ impl Reader {
         #[cfg(unix)]
         let builder = ThreadBuilder::default()
             .name("uring_task")
-            .policy(thread_priority::ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo))
+            .policy(thread_priority::ThreadSchedulePolicy::Realtime(
+                RealtimeThreadSchedulePolicy::Fifo,
+            ))
             .priority(ThreadPriority::Min);
 
         let _ = builder.spawn(move |result| {
+            // Create memory for waker's read events
+            let mut dummy_mem = {
+                let mem: [u8; 8] = [0; 8];
+                Box::new(mem)
+            };
 
             if let Err(e) = result {
                 let mut err = format!(
@@ -635,7 +664,7 @@ impl Reader {
 
                     if e.user_data() == 0 {
                         println!("Zero-user-data entry: {:?}", e);
-                        unsafe { ring.submission_shared().push(&waker_read).unwrap() };
+                        unsafe { sq.push(&waker_read).unwrap() };
                         continue;
                     }
 
@@ -732,8 +761,7 @@ impl Reader {
 
                     if buf_len > 0 {
                         let rx_bufer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
-                        let callback = unsafe { &mut *rx.callback.callback.get() };
-                        callback(rx_bufer);
+                        rx.run_callback(rx_bufer);
                     } else {
                         println!("zero buf len");
                     }
@@ -741,12 +769,12 @@ impl Reader {
                 None => {
                     println!("no IORING_CQE_F_BUFFER!");
 
-                    println!("Stopping reaD task");
+                    println!("Stopping read task");
                     assert!(e.user_data() != 0);
                     let rx: Arc<Rx> = unsafe { std::mem::transmute(e.user_data()) };
+                    rx.post_error(zerror!("Read task interrupt").into());
                     drop(rx);
-
-                },
+                }
             };
         }
         need_submit
