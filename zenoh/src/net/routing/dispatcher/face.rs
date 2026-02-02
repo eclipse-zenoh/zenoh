@@ -503,8 +503,8 @@ impl Primitives for Face {
     }
 
     #[inline]
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        route_data(&self.tables, &self.state, msg, reliability);
+    fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool) {
+        route_data(&self.tables, &self.state, msg, reliability, consume);
     }
 
     fn send_request(&self, msg: &mut Request) {

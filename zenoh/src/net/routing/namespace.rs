@@ -93,9 +93,14 @@ impl Primitives for Namespace {
         self.primitives.send_declare(msg);
     }
 
-    fn send_push(&self, msg: &mut Push, reliability: zenoh_protocol::core::Reliability) {
+    fn send_push_consume(
+        &self,
+        msg: &mut Push,
+        reliability: zenoh_protocol::core::Reliability,
+        consume: bool,
+    ) {
         self.handle_namespace_egress(&mut msg.wire_expr, false);
-        self.primitives.send_push(msg, reliability);
+        self.primitives.send_push_consume(msg, reliability, consume);
     }
 
     fn send_request(&self, msg: &mut Request) {
