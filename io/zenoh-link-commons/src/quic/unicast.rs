@@ -22,9 +22,10 @@ use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
+use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use zenoh_config::{EndPoint, Locator};
-use zenoh_core::{bail, zerror};
+use zenoh_core::{bail, zasynclock, zerror};
 use zenoh_protocol::core::Address;
 use zenoh_result::ZResult;
 
@@ -132,7 +133,14 @@ impl QuicLink {
 
     pub async fn connect(
         endpoint: &EndPoint,
-    ) -> ZResult<(quinn::Connection, SocketAddr, SocketAddr, &str, bool)> {
+        is_streamed: bool,
+    ) -> ZResult<(
+        quinn::Connection,
+        Option<QuicStreams>,
+        SocketAddr,
+        SocketAddr,
+        bool,
+    )> {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
@@ -209,11 +217,23 @@ impl QuicLink {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
+        let mut streams = None;
+        if is_streamed {
+            let (send, recv) = connection
+                .open_bi()
+                .await
+                .map_err(|e| zerror!("Can not open QUIC bi-directional channel {}: {}", host, e))?;
+            streams = Some(QuicStreams {
+                tx: AsyncMutex::new(send),
+                rx: AsyncMutex::new(recv),
+            });
+        }
+
         Ok((
             connection,
+            streams,
             src_addr,
             dst_addr,
-            host,
             client_crypto.tls_close_link_on_expiration,
         ))
     }
@@ -260,7 +280,12 @@ impl QuicLink {
                             if is_streamed {
                                 // Get the bideractional streams. Note that we don't allow unidirectional streams.
                                 match quic_conn.accept_bi().await {
-                                    Ok(stream) => { streams = Some(stream) },
+                                    Ok(bi_stream) => {
+                                        streams = Some(QuicStreams {
+                                            tx: AsyncMutex::new(bi_stream.0),
+                                            rx: AsyncMutex::new(bi_stream.1),
+                                        })
+                                    },
                                     Err(e) => {
                                         tracing::warn!("QUIC connection has no streams: {:?}", e);
                                         continue;
@@ -313,5 +338,42 @@ pub struct QuicLinkMaterial {
     pub quic_conn: quinn::Connection,
     pub src_addr: SocketAddr,
     pub dst_addr: SocketAddr,
-    pub streams: Option<(quinn::SendStream, quinn::RecvStream)>,
+    pub streams: Option<QuicStreams>,
+}
+
+pub struct QuicStreams {
+    tx: AsyncMutex<quinn::SendStream>,
+    rx: AsyncMutex<quinn::RecvStream>,
+}
+
+impl QuicStreams {
+    pub async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+        let mut rx = zasynclock!(self.rx);
+        rx.read(buffer)
+            .await
+            .map_err(Into::<zenoh_result::Error>::into)?
+            .ok_or_else(|| zerror!("stream {} has been closed", rx.id()).into())
+    }
+
+    pub async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+        let mut rx = zasynclock!(self.rx);
+        rx.read_exact(buffer).await.map_err(Into::into)
+    }
+
+    pub async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+        zasynclock!(self.tx).write(buffer).await.map_err(Into::into)
+    }
+
+    pub async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+        zasynclock!(self.tx)
+            .write_all(buffer)
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn close(&self) -> ZResult<()> {
+        // Flush the QUIC stream
+        let mut guard = zasynclock!(self.tx);
+        guard.finish().map_err(Into::into)
+    }
 }

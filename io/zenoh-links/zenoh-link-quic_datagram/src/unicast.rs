@@ -219,8 +219,13 @@ impl LinkManagerUnicastQuicDatagram {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let (quic_conn, src_addr, dst_addr, _host, tls_close_link_on_expiration) =
-            QuicLink::connect(&endpoint).await?;
+        let (quic_conn, streams, src_addr, dst_addr, tls_close_link_on_expiration) =
+            QuicLink::connect(&endpoint, false).await?;
+
+        debug_assert!(
+            streams.is_none(),
+            "Unrealiable QUIC should not open streams"
+        );
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =

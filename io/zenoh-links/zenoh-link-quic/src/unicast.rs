@@ -15,13 +15,11 @@
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use tokio::sync::Mutex as AsyncMutex;
-use zenoh_core::zasynclock;
 use zenoh_link_commons::{
     get_ip_interface_names,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
-        unicast::{QuicLink, QuicLinkMaterial},
+        unicast::{QuicLink, QuicLinkMaterial, QuicStreams},
     },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
@@ -40,8 +38,7 @@ pub struct LinkUnicastQuic {
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    send: AsyncMutex<quinn::SendStream>,
-    recv: AsyncMutex<quinn::RecvStream>,
+    streams: QuicStreams,
     auth_identifier: LinkAuthId,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
@@ -51,8 +48,7 @@ impl LinkUnicastQuic {
         connection: quinn::Connection,
         src_addr: SocketAddr,
         dst_locator: Locator,
-        send: quinn::SendStream,
-        recv: quinn::RecvStream,
+        streams: QuicStreams,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
@@ -62,8 +58,7 @@ impl LinkUnicastQuic {
             src_addr,
             src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
-            send: AsyncMutex::new(send),
-            recv: AsyncMutex::new(recv),
+            streams,
             auth_identifier,
             expiration_manager,
         }
@@ -71,9 +66,7 @@ impl LinkUnicastQuic {
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
-        // Flush the QUIC stream
-        let mut guard = zasynclock!(self.send);
-        if let Err(e) = guard.finish() {
+        if let Err(e) = self.streams.close().await {
             tracing::trace!("Error closing QUIC stream {}: {}", self, e);
         }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
@@ -99,45 +92,31 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.send);
-        guard.write(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
+        self.streams.write(buffer).await.map_err(|e| {
+            let e = zerror!("Write error on QUIC link {}: {}", self, e);
+            tracing::trace!("{}", &e);
+            e.into()
         })
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.send);
-        guard.write_all(buffer).await.map_err(|e| {
-            tracing::trace!("Write error on QUIC link {}: {}", self, e);
-            zerror!(e).into()
+        self.streams.write_all(buffer).await.map_err(|e| {
+            let e = zerror!("Write error on QUIC link {}: {}", self, e);
+            tracing::trace!("{}", &e);
+            e.into()
         })
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.recv);
-        guard
-            .read(buffer)
-            .await
-            .map_err(|e| {
-                let e = zerror!("Read error on QUIC link {}: {}", self, e);
-                tracing::trace!("{}", &e);
-                e
-            })?
-            .ok_or_else(|| {
-                let e = zerror!(
-                    "Read error on QUIC link {}: stream {} has been closed",
-                    self,
-                    guard.id()
-                );
-                tracing::trace!("{}", &e);
-                e.into()
-            })
+        self.streams.read(buffer).await.map_err(|e| {
+            let e = zerror!("Read error on QUIC link {}: {}", self, e);
+            tracing::trace!("{}", &e);
+            e.into()
+        })
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let mut guard = zasynclock!(self.recv);
-        guard.read_exact(buffer).await.map_err(|e| {
+        self.streams.read_exact(buffer).await.map_err(|e| {
             let e = zerror!("Read error on QUIC link {}: {}", self, e);
             tracing::trace!("{}", &e);
             e.into()
@@ -239,13 +218,8 @@ impl LinkManagerUnicastQuic {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let (quic_conn, src_addr, dst_addr, host, tls_close_link_on_expiration) =
-            QuicLink::connect(&endpoint).await?;
-
-        let (send, recv) = quic_conn
-            .open_bi()
-            .await
-            .map_err(|e| zerror!("Can not open Quic bi-directional channel {}: {}", host, e))?;
+        let (quic_conn, streams, src_addr, dst_addr, tls_close_link_on_expiration) =
+            QuicLink::connect(&endpoint, true).await?;
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
@@ -267,8 +241,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 quic_conn,
                 src_addr,
                 endpoint.into(),
-                send,
-                recv,
+                streams.expect("reliable QUIC streams should have been opened"),
                 auth_id.into(),
                 expiration_manager,
             )
@@ -342,7 +315,7 @@ fn acceptor_callback(
         dst_addr,
         streams,
     } = link_material;
-    let (send, recv) = streams.expect("Streams should be initialized");
+    let streams = streams.expect("Streams should be initialized");
 
     let dst_locator = Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
     // Get Quic auth identifier
@@ -384,8 +357,7 @@ fn acceptor_callback(
             quic_conn,
             src_addr,
             dst_locator,
-            send,
-            recv,
+            streams,
             auth_id.into(),
             expiration_manager,
         )
