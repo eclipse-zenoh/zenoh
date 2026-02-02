@@ -356,6 +356,29 @@ impl ZSliceBuffer for ZRxBuffer {
     }
 }
 
+struct CallbackContext {
+    token: CancellationToken,
+    transport: TransportUnicastUniversal,
+}
+
+impl CallbackContext {
+    fn new(transport: TransportUnicastUniversal) -> (Self, CancellationToken) {
+        let token = CancellationToken::new();
+        let task_token = token.clone();
+        (Self { token, transport }, task_token)
+    }
+
+    fn transport(&self) -> &TransportUnicastUniversal {
+        &self.transport
+    }
+}
+
+impl Drop for CallbackContext {
+    fn drop(&mut self) {
+        self.token.cancel(); // async task will wake up
+    }
+}
+
 async fn rx_task_uring(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
@@ -381,17 +404,28 @@ async fn rx_task_uring(
     );
 
     let batch_config = link.config.batch;
-    let c_transport = transport.clone();
+
+    let (context, task_cancellation_token) = CallbackContext::new(transport.clone());
 
     let _reader = {
         match link.link.is_streamed() {
             true => {
                 let ring_cb = move |data: FragmentedBatch| {
-                    let contigious_data: Vec<u8> = data.iter().copied().collect();
                     let mut batch_config = batch_config;
                     batch_config.is_streamed = false;
 
-                    let buffer: ZSlice = std::sync::Arc::new(contigious_data).into();
+                    let buffer: ZSlice = match data.try_contigious_zerocopy() {
+                        Some(buffer) => ZSlice::new(
+                            std::sync::Arc::new(ZRxBuffer(buffer)),
+                            data.data_offset,
+                            data.data_offset + data.size,
+                        )
+                        .unwrap(),
+                        None => {
+                            let contigious_data: Vec<u8> = data.iter().copied().collect();
+                            std::sync::Arc::new(contigious_data).into()
+                        }
+                    };
 
                     let mut batch = RBatch::new(batch_config, buffer);
                     batch
@@ -403,7 +437,8 @@ async fn rx_task_uring(
                         let header_bytes = if l.is_streamed { 2 } else { 0 };
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
-                    c_transport
+                    context
+                        .transport()
                         .read_messages(
                             batch,
                             &l,
@@ -434,7 +469,8 @@ async fn rx_task_uring(
                         let header_bytes = if l.is_streamed { 2 } else { 0 };
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
-                    c_transport
+                    context
+                        .transport()
                         .read_messages(
                             batch,
                             &l,
@@ -456,6 +492,7 @@ async fn rx_task_uring(
 
     loop {
         tokio::select! {
+            _ = task_cancellation_token.cancelled() => break,
             _ = token.cancelled() => break
         }
     }

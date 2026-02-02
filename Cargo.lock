@@ -6603,6 +6603,8 @@ dependencies = [
  "io-uring",
  "libc",
  "nix 0.29.0",
+ "thread-priority",
+ "tracing",
  "zenoh-core",
  "zenoh-result",
 ]

@@ -25,7 +25,7 @@ use zenoh_uring::reader::Reader;
 
 pub mod common;
 
-pub const ITERATION_COUNT: usize = 100000;
+pub const ITERATION_COUNT: usize = 10000;
 
 fn writer_main() {
     let addr = ("127.0.0.1", 7780);

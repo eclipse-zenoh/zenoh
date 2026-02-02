@@ -49,7 +49,7 @@ fn main() {
     println!("Warming up for {warmup:?}...");
     let now = Instant::now();
     while now.elapsed() < warmup {
-        std::thread::sleep(Duration::from_millis(100));
+        //std::thread::sleep(Duration::from_millis(1));
 
         let data = data.clone();
         publisher.put(data).wait().unwrap();
@@ -58,7 +58,7 @@ fn main() {
     }
 
     for _ in 0..n {
-        std::thread::sleep(Duration::from_millis(100));
+        //std::thread::sleep(Duration::from_millis(1));
 
         let data = data.clone();
         let write_time = Instant::now();

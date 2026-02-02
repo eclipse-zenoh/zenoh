@@ -13,6 +13,8 @@
 //
 
 use nix::sys::eventfd::{EfdFlags, EventFd};
+#[cfg(unix)]
+use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
 use zenoh_result::ZResult;
 
 use std::{
@@ -26,6 +28,7 @@ use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 
 use crate::{batch_arena::BatchArena, BUF_SIZE};
 
+#[derive(Debug)]
 struct RxCallback {
     pub callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) + 'static>>,
 }
@@ -39,6 +42,7 @@ impl RxCallback {
 unsafe impl Send for RxCallback {}
 unsafe impl Sync for RxCallback {}
 
+#[derive(Debug)]
 struct Rx {
     pub callback: RxCallback,
     pub fd: RawFd,
@@ -46,23 +50,32 @@ struct Rx {
 
 impl Rx {
     fn new(callback: Box<dyn FnMut(Arc<RxBuffer>)>, fd: RawFd) -> Self {
-        Self {
+        let rx = Self {
             callback: RxCallback::new(UnsafeCell::new(callback)),
             fd,
-        }
+        };
+        tracing::debug!("RX context created: {:?}", rx);
+        rx
     }
 }
 
+impl Drop for Rx {
+    fn drop(&mut self) {
+        tracing::debug!("Destroy RX context: {:?}", self);
+    }
+}
+
+#[derive(Debug)]
 pub struct ReadTask {
-    _rx: Arc<Rx>,
     user_data: u64,
     inner: Arc<ReaderInner>,
 }
 
 impl Drop for ReadTask {
     fn drop(&mut self) {
-        let event = opcode::AsyncCancel::new(self.user_data).build();
+        tracing::debug!("Stopping read task: {:?}", self);
 
+        let event = opcode::AsyncCancel::new(self.user_data).build();
         let _ = self.inner.submitter.submit(event);
     }
 }
@@ -73,7 +86,7 @@ impl ReadTask {
         Cb: FnMut(Arc<RxBuffer>) + 'static,
     {
         let rx = Arc::new(Rx::new(Box::new(callback), fd.clone()));
-        let user_data = unsafe { std::mem::transmute(rx.clone()) };
+        let user_data = unsafe { std::mem::transmute(rx) };
 
         let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
             .build()
@@ -81,11 +94,14 @@ impl ReadTask {
 
         inner.submitter.submit(recv)?;
 
-        Ok(Self {
-            _rx: rx,
+        let task = Self {
             user_data,
             inner,
-        })
+        };
+
+        tracing::debug!("Read task created: {:?}", task);
+
+        Ok(task)
     }
 }
 
@@ -115,6 +131,7 @@ impl SubmissionIface {
     }
 }
 
+#[derive(Debug)]
 pub struct ReaderInner {
     submitter: SubmissionIface,
     exit_flag: Arc<AtomicBool>,
@@ -139,8 +156,8 @@ impl Drop for ReaderInner {
 
 #[derive(Debug)]
 pub struct FragmentedBatch {
-    size: usize,
-    data_offset: usize,
+    pub size: usize,
+    pub data_offset: usize,
     buffers: Vec<Arc<RxBuffer>>,
 }
 
@@ -151,6 +168,13 @@ impl FragmentedBatch {
             .flat_map(|inner| inner.iter())
             .skip(self.data_offset)
             .take(self.size)
+    }
+
+    pub fn try_contigious_zerocopy(&self) -> Option<Arc<RxBuffer>> {
+        if self.buffers.len() == 1 {
+            return Some(self.buffers[0].clone());
+        }
+        None
     }
 
     pub fn size(&self) -> usize {
@@ -485,6 +509,8 @@ impl Reader {
     where
         Cb: FnMut(FragmentedBatch) + 'static,
     {
+        tracing::debug!("Setting up fragmented read task for fd: {fd}");
+        
         let mut window = RxWindow::default();
         let raw_callback = move |buffer| {
             window.push(buffer, &mut callback);
@@ -497,6 +523,8 @@ impl Reader {
     where
         Cb: FnMut(Arc<RxBuffer>) + 'static,
     {
+        tracing::debug!("Setting up read task for fd: {fd}");
+
         ReadTask::new(fd, callback, self.inner.clone())
     }
 
@@ -525,7 +553,47 @@ impl Reader {
         let exit_flag = Arc::new(AtomicBool::new(false));
 
         let c_exit_flag = exit_flag.clone();
-        let _ = std::thread::spawn(move || {
+
+        #[cfg(unix)]
+        let builder = ThreadBuilder::default()
+            .name("uring_task")
+            .policy(thread_priority::ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo))
+            .priority(ThreadPriority::Min);
+
+        let _ = builder.spawn(move |result| {
+
+            if let Err(e) = result {
+                let mut err = format!(
+                    "{:?}: error setting scheduling priority for thread: {:?}, will run with ",
+                    std::thread::current().name(),
+                    e
+                );
+                #[cfg(windows)]
+                {
+                    err.push_str("the default one. ");
+                }
+                #[cfg(unix)]
+                {
+                    use thread_priority::ThreadPriorityValue;
+
+                    for priority in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
+                        if let Ok(p) = priority.try_into() {
+                            use thread_priority::set_current_thread_priority;
+
+                            if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok()
+                            {
+                                err.push_str(&format!("priority {priority}. "));
+                                break;
+                            }
+                        }
+                    }
+                }
+                err.push_str("This is not an hard error and it can be safely ignored under normal operating conditions. \
+                Though the SHM subsystem may experience some timeouts in case of an heavy congested system where this watchdog thread may not be scheduled at the required frequency.");
+                println!("{}", err);
+            }
+
+
             // io_uring read
             let ring = IoUring::builder()
                 .setup_submit_all()
@@ -571,7 +639,7 @@ impl Reader {
                         continue;
                     }
 
-                    let rx: &Arc<Rx> = unsafe { std::mem::transmute(&mut e.user_data()) };
+                    let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
 
                     let need_submit = Reader::read_multi(&e, rx, &arena, &mut sq);
 
@@ -670,7 +738,15 @@ impl Reader {
                         println!("zero buf len");
                     }
                 }
-                None => println!("no IORING_CQE_F_BUFFER!"),
+                None => {
+                    println!("no IORING_CQE_F_BUFFER!");
+
+                    println!("Stopping reaD task");
+                    assert!(e.user_data() != 0);
+                    let rx: Arc<Rx> = unsafe { std::mem::transmute(e.user_data()) };
+                    drop(rx);
+
+                },
             };
         }
         need_submit
