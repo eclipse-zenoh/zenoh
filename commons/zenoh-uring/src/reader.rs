@@ -1,4 +1,3 @@
-use libc::rand;
 //
 // Copyright (c) 2025 ZettaScale Technology
 //
@@ -145,9 +144,13 @@ impl SubmissionIface {
     }
 
     fn submit(&self, entry: io_uring::squeue::Entry) -> ZResult<()> {
-        self.sender.send(entry).map_err(|e| e.to_string())?;
+        self.submit_quiet(entry)?;
         self.wake_reader_thread();
         Ok(())
+    }
+
+    fn submit_quiet(&self, entry: io_uring::squeue::Entry) -> ZResult<()> {
+        self.sender.send(entry).map_err(|e| e.to_string().into())
     }
 
     fn wake_reader_thread(&self) {
@@ -496,7 +499,7 @@ impl Drop for RxBuffer {
         .build()
         .flags(Flags::SKIP_SUCCESS);
 
-        self.arena.submitter.submit(provide_buffers).unwrap();
+        self.arena.submitter.submit_quiet(provide_buffers).unwrap();
     }
 }
 
