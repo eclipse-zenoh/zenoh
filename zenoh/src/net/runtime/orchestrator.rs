@@ -73,40 +73,55 @@ impl StartConditions {
     }
 
     pub(crate) async fn add_peer_connector(&self) -> usize {
+        tracing::info!("add_peer_connector: 🍏");
         let mut peer_connectors = self.peer_connectors.lock().await;
+        tracing::info!("add_peer_connector: 🍎");
         peer_connectors.push(PeerConnector::default());
-        peer_connectors.len() - 1
+        let n = peer_connectors.len() - 1;
+        tracing::info!("add_peer_connector: 🚮");
+        n
     }
 
     pub(crate) async fn add_peer_connector_zid(&self, zid: ZenohIdProto) {
+        tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🍏");
         let mut peer_connectors = self.peer_connectors.lock().await;
+        tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🍎");
         if !peer_connectors.iter().any(|pc| pc.zid == Some(zid)) {
             peer_connectors.push(PeerConnector {
                 zid: Some(zid),
                 terminated: false,
             })
         }
+        tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🚮");
     }
 
     pub(crate) async fn set_peer_connector_zid(&self, idx: usize, zid: ZenohIdProto) {
+        tracing::info!(other_zid = ?zid, "set_peer_connector_zid: 🍏");
         let mut peer_connectors = self.peer_connectors.lock().await;
+        tracing::info!(other_zid = ?zid, "set_peer_connector_zid: 🍎");
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.zid = Some(zid);
         }
+        tracing::info!(other_zid = ?zid, "set_peer_connector_zid: 🚮");
     }
 
     pub(crate) async fn terminate_peer_connector(&self, idx: usize) {
+        tracing::info!("terminate_peer_connector: 🍏");
         let mut peer_connectors = self.peer_connectors.lock().await;
+        tracing::info!("terminate_peer_connector: 🍎");
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.terminated = true;
         }
         if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
+        tracing::info!("terminate_peer_connector: 🚮");
     }
 
     pub(crate) async fn terminate_peer_connector_zid(&self, zid: ZenohIdProto) {
+        tracing::info!(other_zid = ?zid, "terminate_peer_connector_zid: 🍏");
         let mut peer_connectors = self.peer_connectors.lock().await;
+        tracing::info!(other_zid = ?zid, "terminate_peer_connector_zid: 🍎");
         if let Some(peer_connector) = peer_connectors.iter_mut().find(|pc| pc.zid == Some(zid)) {
             peer_connector.terminated = true;
         } else {
@@ -118,6 +133,7 @@ impl StartConditions {
         if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
+        tracing::info!(other_zid = ?zid, "terminate_peer_connector_zid: 🚮");
     }
 }
 

@@ -18,12 +18,13 @@
 
 use std::time::Duration;
 
+use tracing_subscriber::{util::SubscriberInitExt, EnvFilter, Layer};
 use zenoh_config::WhatAmI::{Peer, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
-use crate::{count, loc, skip_fmt, Node, SubUtils};
+use crate::{count, loc, skip_fmt, LocalData, Node, SubUtils};
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_hours(24);
 
 lazy_static! {
     static ref STORAGE: tracing_capture::SharedStorage = tracing_capture::SharedStorage::default();
@@ -31,14 +32,23 @@ lazy_static! {
 
 fn init_tracing_subscriber() {
     use tracing_subscriber::layer::SubscriberExt;
-    let subscriber = tracing_subscriber::fmt()
-        .with_env_filter("debug,zenoh::net::routing::dispatcher=trace")
-        .finish();
-    let subscriber = subscriber.with(tracing_capture::CaptureLayer::new(&STORAGE));
-    tracing::subscriber::set_global_default(subscriber).ok();
+
+    // spawn the console server in the background,
+    // returning a `Layer`:
+    let console_layer = console_subscriber::spawn();
+
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_names(true)
+                .with_filter(EnvFilter::new("info")),
+        )
+        .with(tracing_capture::CaptureLayer::new(&STORAGE))
+        .init();
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_regions_scenario3_order1_putsub() {
     init_tracing_subscriber();
 
@@ -96,6 +106,146 @@ async fn test_regions_scenario3_order1_putsub() {
         let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
         let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
     }
+
+    async fn validate_topology(sess: &zenoh::Session) -> bool {
+        let local_data = LocalData::with_session(sess).await;
+
+        tracing::info!(?local_data);
+
+        local_data
+            == [
+                // Router 31aa9100
+                (
+                    "31aa9100",
+                    vec![
+                        ("31aa9200", "north"),
+                        ("31aa9300", "north"),
+                        ("31aa9110", "south:0:peer"),
+                        ("31aa9120", "south:0:peer"),
+                        ("31aa9130", "south:0:peer"),
+                    ],
+                )
+                    .into(),
+                // Router 31aa9200
+                (
+                    "31aa9200",
+                    vec![
+                        ("31aa9100", "north"),
+                        ("31aa9300", "north"),
+                        ("31aa9210", "south:0:peer"),
+                        ("31aa9220", "south:0:peer"),
+                        ("31aa9230", "south:0:peer"),
+                    ],
+                )
+                    .into(),
+                // Router 31aa9300
+                (
+                    "31aa9300",
+                    vec![
+                        ("31aa9100", "north"),
+                        ("31aa9200", "north"),
+                        ("31aa9310", "south:0:peer"),
+                        ("31aa9320", "south:0:peer"),
+                        ("31aa9330", "south:0:peer"),
+                    ],
+                )
+                    .into(),
+                // Peers in region 9100
+                (
+                    "31aa9110",
+                    vec![
+                        ("31aa9100", "north"),
+                        ("31aa9120", "north"),
+                        ("31aa9130", "north"),
+                    ],
+                )
+                    .into(),
+                (
+                    "31aa9120",
+                    vec![
+                        ("31aa9100", "north"),
+                        ("31aa9110", "north"),
+                        ("31aa9130", "north"),
+                    ],
+                )
+                    .into(),
+                (
+                    "31aa9130",
+                    vec![
+                        ("31aa9100", "north"),
+                        ("31aa9110", "north"),
+                        ("31aa9120", "north"),
+                    ],
+                )
+                    .into(),
+                // Peers in region 9200
+                (
+                    "31aa9210",
+                    vec![
+                        ("31aa9200", "north"),
+                        ("31aa9220", "north"),
+                        ("31aa9230", "north"),
+                    ],
+                )
+                    .into(),
+                (
+                    "31aa9220",
+                    vec![
+                        ("31aa9200", "north"),
+                        ("31aa9210", "north"),
+                        ("31aa9230", "north"),
+                    ],
+                )
+                    .into(),
+                (
+                    "31aa9230",
+                    vec![
+                        ("31aa9200", "north"),
+                        ("31aa9210", "north"),
+                        ("31aa9220", "north"),
+                    ],
+                )
+                    .into(),
+                // Peers in region 9300
+                (
+                    "31aa9310",
+                    vec![
+                        ("31aa9300", "north"),
+                        ("31aa9320", "north"),
+                        ("31aa9330", "north"),
+                    ],
+                )
+                    .into(),
+                (
+                    "31aa9320",
+                    vec![
+                        ("31aa9300", "north"),
+                        ("31aa9310", "north"),
+                        ("31aa9330", "north"),
+                    ],
+                )
+                    .into(),
+                (
+                    "31aa9330",
+                    vec![
+                        ("31aa9300", "north"),
+                        ("31aa9310", "north"),
+                        ("31aa9320", "north"),
+                    ],
+                )
+                    .into(),
+            ]
+            .into()
+    }
+
+    // NOTE: running this at all eliminates the possibility that a failure may due to an invalid
+    // topology instead of a bug in routing logic. Running it *after* subscriber declarations covers
+    // more code paths as subscribers may be declared before or after the topology is stablized.
+    ztimeout!(async {
+        while !validate_topology(&_z9100).await {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
 
     ztimeout!(async {
         loop {

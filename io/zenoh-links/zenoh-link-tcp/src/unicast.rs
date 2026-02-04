@@ -24,7 +24,7 @@ use zenoh_link_commons::{
     LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, ZenohIdProto},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -234,10 +234,10 @@ pub struct LinkManagerUnicastTcp {
 }
 
 impl LinkManagerUnicastTcp {
-    pub fn new(manager: NewLinkChannelSender) -> Self {
+    pub fn new(manager: NewLinkChannelSender, zid: ZenohIdProto) -> Self {
         Self {
             manager,
-            listeners: ListenersUnicastIP::new(),
+            listeners: ListenersUnicastIP::new(zid),
         }
     }
 }

@@ -21,7 +21,7 @@ mod scenario3;
 #[cfg(feature = "unstable")]
 mod scenario4;
 
-use std::time::Duration;
+use std::{collections::BTreeSet, time::Duration};
 
 use zenoh::{pubsub::Subscriber, Session};
 use zenoh_config::WhatAmI;
@@ -42,6 +42,12 @@ impl Node {
         c.insert_json5("scouting/multicast/enabled", "false")
             .unwrap();
         c.insert_json5("adminspace/enabled", "true").unwrap();
+        c.insert_json5("queries_default_timeout", "1000000000") // 1wk 4day 13hr 46min 40sec
+            .unwrap();
+        c.insert_json5("transport/unicast/open_timeout", "1000000000") // 1wk 4day 13hr 46min 40sec
+            .unwrap();
+        c.insert_json5("transport/unicast/accept_timeout", "1000000000") // 1wk 4day 13hr 46min 40sec
+            .unwrap();
         Node { c }
     }
 
@@ -175,5 +181,49 @@ impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
             .map(|s| s.key_expr().clone().into_owned())
             .unique()
             .count()
+    }
+}
+
+#[derive(Debug, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LocalData {
+    zid: String,
+    sessions: BTreeSet<LocalSessionsData>,
+}
+
+#[derive(Debug, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+struct LocalSessionsData {
+    peer: String,
+    region: String,
+}
+
+impl LocalData {
+    pub async fn with_session(sess: &zenoh::Session) -> BTreeSet<Self> {
+        sess.get("@/*/*")
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|reply| {
+                reply.into_result().ok().and_then(|s| {
+                    serde_json::from_slice::<LocalData>(s.payload().to_bytes().as_ref()).ok()
+                })
+            })
+            .collect()
+    }
+}
+
+impl From<(&str, Vec<(&str, &str)>)> for LocalData {
+    fn from((zid, sessions): (&str, Vec<(&str, &str)>)) -> Self {
+        let sessions = sessions
+            .into_iter()
+            .map(|(peer, region)| LocalSessionsData {
+                peer: peer.to_string(),
+                region: region.to_string(),
+            })
+            .collect();
+
+        LocalData {
+            zid: zid.to_string(),
+            sessions,
+        }
     }
 }

@@ -258,7 +258,7 @@ impl LinkManagerUnicastUdp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: ListenersUnicastIP::new(),
+            listeners: ListenersUnicastIP::default(),
         }
     }
 }

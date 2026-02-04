@@ -434,6 +434,7 @@ impl Primitives for AdminSpace {
                 let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
                 {
                     let conf = &self.context.runtime.state.config.lock();
+                    tracing::debug!("lock(config)");
                     if !conf.adminspace.permissions().read {
                         tracing::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
@@ -545,8 +546,9 @@ impl crate::net::primitives::EPrimitives for AdminSpace {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
+    tracing::debug!("enter");
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
@@ -571,6 +573,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let links_info = context.runtime.get_links_info();
 
     let config = context.runtime.config().lock().clone();
+    tracing::debug!("lock(config)");
     // FIXME(regions): this should not be re-computed (and the config need not be cloned).
     let transport_unicast_to_region = move |transport: &TransportUnicast| -> Option<Region> {
         let peer = transport.get_peer().ok()?;
@@ -631,7 +634,10 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
         };
     let mut transports: Vec<serde_json::Value> = vec![];
     zenoh_runtime::ZRuntime::Net.block_in_place(async {
-        for transport in transport_mgr.get_transports_unicast().await {
+        tracing::info!("local_data: 🍏");
+        let transports2 = transport_mgr.get_transports_unicast().await;
+        tracing::info!("local_data: 🍎");
+        for transport in transports2 {
             transports.push(transport_unicast_to_json(&transport));
         }
         for mcast_transport in transport_mgr.get_transports_multicast().await {
@@ -681,7 +687,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
     #[cfg(not(feature = "stats"))]
     let mut metrics = format!(
@@ -751,34 +757,34 @@ where
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn subscribers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     resources_data(prefix, context, query, |tables| {
         tables.sourced_subscribers()
     });
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn publishers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     resources_data(prefix, context, query, |tables| tables.sourced_publishers());
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn queryables_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     resources_data(prefix, context, query, |tables| tables.sourced_queryables());
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn queriers_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     resources_data(prefix, context, query, |tables| tables.sourced_queriers());
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn tokens_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     resources_data(prefix, context, query, |tables| tables.sourced_tokens());
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
     let rtables = zread!(tables.tables);
@@ -802,7 +808,7 @@ fn linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let reply = |ke: &keyexpr, successor: ZenohIdProto| {
         if let Err(e) = query
@@ -855,7 +861,7 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
 }
 
 #[cfg(feature = "plugins")]
-#[tracing::instrument(level = "trace", skip_all)]
+#[tracing::instrument(level = "debug", skip_all, ret)]
 fn plugins_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let guard = context.runtime.plugins_manager();
     tracing::debug!("requested plugins status {:?}", query.key_expr());

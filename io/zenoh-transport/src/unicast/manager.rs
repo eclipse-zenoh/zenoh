@@ -13,6 +13,8 @@
 //
 use std::{
     collections::HashMap,
+    fmt::Debug,
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
@@ -20,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use tokio::sync::Mutex as AsyncMutex;
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
 use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
@@ -103,13 +105,67 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) link_managers: Arc<AsyncMutex<HashMap<LinkKey, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<AsyncMutex<HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>>,
+    transports: Arc<AsyncMutex<HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
     // Active authenticators
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Arc<Auth>,
+}
+
+impl TransportManagerStateUnicast {
+    #[tracing::instrument(level = "info", skip(self))]
+    pub(super) async fn transports(&self, zid: ZenohIdProto) -> T<'_> {
+        let x = rand::random::<u16>();
+        tracing::info!(x, "transports: 🍏"); // 1550
+        let guard = match tokio::time::timeout(Duration::from_secs(5), self.transports.lock()).await
+        {
+            Ok(g) => g,
+            Err(_) => {
+                tracing::info!(x, bt = ?std::backtrace::Backtrace::force_capture(), "deadlock");
+                std::process::abort();
+            }
+        };
+        tracing::info!(x, "transports: 🍎"); // 1533
+        T(guard, x, zid)
+    }
+}
+
+pub(super) struct T<'a>(
+    tokio::sync::MutexGuard<'a, HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>,
+    u16,
+    ZenohIdProto,
+);
+
+impl<'a> Deref for T<'a> {
+    type Target =
+        tokio::sync::MutexGuard<'a, HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> DerefMut for T<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Drop for T<'_> {
+    fn drop(&mut self) {
+        let _span = tracing::info_span!("transports", zid = ?self.2).entered();
+        tracing::info!(x = self.1, "transports: 🚮"); // 1533
+    }
+}
+
+impl Debug for T<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("T")
+            .field(&self.0.keys().collect::<Vec<_>>())
+            .finish()
+    }
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -307,10 +363,12 @@ impl TransportManager {
     pub async fn close_unicast(&self) {
         tracing::trace!("TransportManagerUnicast::clear())");
 
+        tracing::info!(zid = ?self.zid(), "close_unicast: 🍏");
         let mut pl_guard = zasynclock!(self.state.unicast.link_managers)
             .drain()
             .map(|(_, v)| v)
             .collect::<Vec<Arc<dyn LinkManagerUnicastTrait>>>();
+        tracing::info!(zid = ?self.zid(), "close_unicast: 🍎");
 
         for pl in pl_guard.drain(..) {
             for ep in pl.get_listeners().await.iter() {
@@ -318,7 +376,12 @@ impl TransportManager {
             }
         }
 
-        let mut tu_guard = zasynclock!(self.state.unicast.transports)
+        let mut tu_guard = self
+            .state
+            .unicast
+            .transports
+            .lock()
+            .await
             .drain()
             .map(|(_, v)| v)
             .collect::<Vec<Arc<dyn TransportUnicastTrait>>>();
@@ -341,20 +404,29 @@ impl TransportManager {
             );
         }
 
+        tracing::info!(zid = ?self.zid(), "new_link_manager_unicast: 🍏");
         let mut w_guard = zasynclock!(self.state.unicast.link_managers);
+        tracing::info!(zid = ?self.zid(), "new_link_manager_unicast: 🍎");
+
         let key = LinkKey::from(endpoint);
         if let Some(lm) = w_guard.get(&key) {
             Ok(lm.clone())
         } else {
-            let lm =
-                LinkManagerBuilderUnicast::make(self.new_unicast_link_sender.clone(), endpoint)?;
+            let lm = LinkManagerBuilderUnicast::make(
+                self.new_unicast_link_sender.clone(),
+                endpoint,
+                self.zid(),
+            )?;
             w_guard.insert(key, lm.clone());
             Ok(lm)
         }
     }
 
     async fn get_link_manager_unicast(&self, endpoint: &EndPoint) -> ZResult<LinkManagerUnicast> {
-        match zasynclock!(self.state.unicast.link_managers).get(&LinkKey::from(endpoint)) {
+        tracing::info!(zid = ?self.zid(), "get_link_manager_unicast: 🍏");
+        let x = zasynclock!(self.state.unicast.link_managers);
+        tracing::info!(zid = ?self.zid(), "get_link_manager_unicast: 🍎");
+        match x.get(&LinkKey::from(endpoint)) {
             Some(manager) => Ok(manager.clone()),
             None => bail!(
                 "Can not get the link manager for protocol ({}) because it has not been found",
@@ -364,7 +436,10 @@ impl TransportManager {
     }
 
     async fn del_link_manager_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        match zasynclock!(self.state.unicast.link_managers).remove(&LinkKey::from(endpoint)) {
+        tracing::info!(zid = ?self.zid(), "del_link_manager_unicast: 🍏");
+        let mut x = zasynclock!(self.state.unicast.link_managers);
+        tracing::info!(zid = ?self.zid(), "del_link_manager_unicast: 🍎");
+        match x.remove(&LinkKey::from(endpoint)) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
@@ -419,7 +494,10 @@ impl TransportManager {
 
     pub async fn get_listeners_unicast(&self) -> Vec<EndPoint> {
         let mut vec: Vec<EndPoint> = vec![];
-        for p in zasynclock!(self.state.unicast.link_managers).values() {
+        tracing::info!(zid = ?self.zid(), "get_listeners_unicast: 🍏");
+        let x = zasynclock!(self.state.unicast.link_managers);
+        tracing::info!(zid = ?self.zid(), "get_listeners_unicast: 🍎");
+        for p in x.values() {
             vec.extend_from_slice(&p.get_listeners().await);
         }
         vec
@@ -427,7 +505,10 @@ impl TransportManager {
 
     pub async fn get_locators_unicast(&self) -> Vec<Locator> {
         let mut vec: Vec<Locator> = vec![];
-        for p in zasynclock!(self.state.unicast.link_managers).values() {
+        tracing::info!(zid = ?self.zid(), "get_listeners_unicast: 🍏");
+        let x = zasynclock!(self.state.unicast.link_managers);
+        tracing::info!(zid = ?self.zid(), "get_listeners_unicast: 🍎");
+        for p in x.values() {
             vec.extend_from_slice(&p.get_locators().await);
         }
         vec
@@ -528,7 +609,7 @@ impl TransportManager {
         link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
-        mut guard: AsyncMutexGuard<'_, HashMap<ZenohIdProto, Arc<dyn TransportUnicastTrait>>>,
+        mut guard: T<'_>,
     ) -> InitTransportResult {
         macro_rules! link_error {
             ($s:expr, $reason:expr) => {
@@ -652,11 +733,14 @@ impl TransportManager {
 
         // Complete establish procedure
         let c_link = ack.link();
+        // tracing::info!(zid = ?self.zid(), other_zid = ?config.zid, "send_open_ack: 🍏");
         transport_error!(ack.send_open_ack().await, close::reason::GENERIC);
+        // tracing::info!(zid = ?self.zid(), other_zid = ?config.zid, "send_open_ack: 🍎");
 
         // Add the transport transport to the list of active transports
         guard.insert(config.zid, t.clone());
         drop(guard);
+        // tracing::info!(zid = ?self.zid(), other_zid = ?config.zid, "init_new_transport_unicast: 🚮");
 
         start_tx();
 
@@ -716,11 +800,14 @@ impl TransportManager {
     ) -> ZResult<TransportUnicast> {
         // First verify if the transport already exists
         let init_result = {
-            let guard = zasynclock!(self.state.unicast.transports);
+            // tracing::info!(zid = ?self.zid(), other_zid = ?config.zid, "init_transport_unicast: 🍏");
+            let guard = self.state.unicast.transports(self.config.zid).await;
+            // tracing::info!(zid = ?self.zid(), other_zid = ?config.zid, "init_transport_unicast: 🍎");
             match guard.get(&config.zid) {
                 Some(transport) => {
                     let transport = transport.clone();
                     drop(guard);
+                    // tracing::info!(zid = ?self.zid(), other_zid = ?config.zid, "init_transport_unicast: 🚮");
                     self.init_existing_transport_unicast(
                         config,
                         link,
@@ -802,20 +889,29 @@ impl TransportManager {
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
-        zasynclock!(self.state.unicast.transports)
+        self.state
+            .unicast
+            .transports(self.config.zid)
+            .await
             .get(peer)
             .map(|t| TransportUnicast(Arc::downgrade(t)))
     }
 
     pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
-        zasynclock!(self.state.unicast.transports)
+        self.state
+            .unicast
+            .transports(self.config.zid)
+            .await
             .values()
             .map(|t| TransportUnicast(Arc::downgrade(t)))
             .collect()
     }
 
     pub(super) async fn del_transport_unicast(&self, peer: &ZenohIdProto) -> ZResult<()> {
-        zasynclock!(self.state.unicast.transports)
+        self.state
+            .unicast
+            .transports(self.config.zid)
+            .await
             .remove(peer)
             .ok_or_else(|| {
                 let e = zerror!("Can not delete the transport of peer: {}", peer);

@@ -139,6 +139,7 @@ impl ZRuntime {
         self.deref().spawn(future)
     }
 
+    #[tracing::instrument(level = "info", skip(f))]
     pub fn block_in_place<F, R>(&self, f: F) -> R
     where
         F: Future<Output = R>,
@@ -159,7 +160,11 @@ impl ZRuntime {
         #[cfg(feature = "tracing-instrument")]
         let f = tracing::Instrument::instrument(f, tracing::Span::current());
 
-        tokio::task::block_in_place(move || self.block_on(f))
+        tracing::info!(?self, "block_in_place: 🍏");
+        let result = tokio::task::block_in_place(move || self.block_on(f));
+        tracing::info!(?self, "block_in_place: 🍎");
+
+        result
     }
 }
 

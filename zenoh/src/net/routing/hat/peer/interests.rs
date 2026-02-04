@@ -92,7 +92,7 @@ impl Hat {
 
 impl HatInterestTrait for Hat {
     #[allow(clippy::incompatible_msrv)]
-    #[tracing::instrument(level = "trace", skip(ctx, msg), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
     fn route_interest(
         &mut self,
         ctx: BaseContext,
@@ -143,6 +143,8 @@ impl HatInterestTrait for Hat {
                 .cloned()
                 .collect_vec()
         };
+
+        tracing::error!(?dsts);
 
         for mut dst in dsts {
             let id = self.face_hat(&dst).next_id.fetch_add(1, Ordering::SeqCst);
@@ -201,7 +203,7 @@ impl HatInterestTrait for Hat {
         None
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx, _msg))]
+    #[tracing::instrument(level = "debug", skip(ctx, _msg))]
     fn route_interest_final(
         &mut self,
         ctx: BaseContext,
@@ -243,28 +245,35 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn route_declare_final(
         &mut self,
         ctx: BaseContext,
         interest_id: InterestId,
     ) -> Option<CurrentInterest> {
-        if let Some(interest) = get_mut_unchecked(ctx.src_face)
+        if get_mut_unchecked(ctx.src_face)
             .local_interests
             .get_mut(&interest_id)
+            .map(|i| i.set_finalized())
+            .is_some()
         {
-            interest.set_finalized();
-            tracing::trace!(?interest, "Finalized interest");
-        } else {
-            tracing::error!(
-                id = interest_id,
-                src = %ctx.src_face,
-                "Unknown local interest"
-            );
-            return None;
-        };
+            debug_assert!(self.owns(ctx.src_face));
+            debug_assert!(self.region().bound().is_north());
+            debug_assert!(ctx.src_face.region.bound().is_north());
 
-        if interest_id == INITIAL_INTEREST_ID {
+            let PendingCurrentInterest {
+                interest,
+                cancellation_token,
+                ..
+            } = get_mut_unchecked(ctx.src_face)
+                .pending_current_interests
+                .remove(&interest_id)?;
+
+            cancellation_token.cancel();
+            if let Some(interest) = Arc::into_inner(interest) {
+                return Some(interest);
+            }
+        } else if interest_id == INITIAL_INTEREST_ID {
             debug_assert!(self.owns(ctx.src_face));
             debug_assert!(ctx.src_face.remote_bound.is_north());
 
@@ -281,36 +290,18 @@ impl HatInterestTrait for Hat {
                 }
             });
         } else {
-            debug_assert!(self.owns(ctx.src_face));
-            debug_assert!(self.region().bound().is_north());
-            debug_assert!(ctx.src_face.region.bound().is_north());
-
-            let Some(PendingCurrentInterest {
-                interest,
-                cancellation_token,
-                ..
-            }) = get_mut_unchecked(ctx.src_face)
-                .pending_current_interests
-                .remove(&interest_id)
-            else {
-                tracing::error!(
-                    id = interest_id,
-                    src = %ctx.src_face,
-                    "Unknown current interest"
-                );
-                return None;
-            };
-
-            cancellation_token.cancel();
-            if let Some(interest) = Arc::into_inner(interest) {
-                return Some(interest);
-            }
-        }
+            tracing::error!(
+                id = interest_id,
+                src = %ctx.src_face,
+                "Unknown local interest"
+            );
+            return None;
+        };
 
         None
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn route_current_token(
         &mut self,
         ctx: BaseContext,

@@ -29,3 +29,13 @@ ci/valgrind-check/*.log
 
 # Code coverage reports
 *.profraw
+
+*.jl
+*.out
+*.sh
+*.err
+*.png
+*.md
+*.bash
+*.log
+*.dot

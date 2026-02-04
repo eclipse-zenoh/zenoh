@@ -1,0 +1,1 @@
+ZENOH_RUNTIME='(app: (worker_threads: 10), net: (worker_threads: 10), rx: (worker_threads: 10), acc: (worker_threads: 10))' RUSTFLAGS="--cfg tokio_unstable" NO_COLOR=1 time cargo test -p zenoh --test regions --features tracing-instrument,internal,unstable,stats,shared-memory -- --exact scenario3::test_regions_scenario3_order1_putsub --nocapture o> scenario3.out

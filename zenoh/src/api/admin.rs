@@ -240,10 +240,12 @@ pub(crate) fn init(session: WeakSession) {
         move |event: LinkEvent| {
             // Find the transport to determine if it's multicast
             let transport_zid = &event.link.zid;
+            tracing::info!("admin::init: 🍏");
             let transport = session
                 .runtime
                 .get_transports()
                 .find(|t| t.zid == *transport_zid);
+            tracing::info!("admin::init: 🍎");
 
             if let Some(transport) = transport {
                 let key_expr =

@@ -14,6 +14,7 @@
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
+    str::FromStr,
     sync::{Arc, RwLock},
 };
 
@@ -21,7 +22,7 @@ use futures::Future;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zread, zwrite};
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator, ZenohIdProto};
 use zenoh_result::{zerror, ZResult};
 
 use crate::BIND_INTERFACE;
@@ -54,13 +55,15 @@ pub struct ListenersUnicastIP {
     // TODO(yuyuan): should we change this to AsyncRwLock?
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastIP>>>,
     pub token: CancellationToken,
+    zid: ZenohIdProto,
 }
 
 impl ListenersUnicastIP {
-    pub fn new() -> ListenersUnicastIP {
+    pub fn new(zid: ZenohIdProto) -> ListenersUnicastIP {
         ListenersUnicastIP {
             listeners: Arc::new(RwLock::new(HashMap::new())),
             token: CancellationToken::new(),
+            zid,
         }
     }
 
@@ -115,7 +118,9 @@ impl ListenersUnicastIP {
     pub fn get_locators(&self) -> Vec<Locator> {
         let mut locators = vec![];
 
+        tracing::info!(zid = ?self.zid, "get_locators: 🍏");
         let guard = zread!(self.listeners);
+        tracing::info!(zid = ?self.zid, "get_locators: 🍎");
         for (key, value) in guard.iter() {
             let (kip, kpt) = (key.ip(), key.port());
             let config = value.endpoint.config();
@@ -141,12 +146,14 @@ impl ListenersUnicastIP {
             }
         }
 
+        tracing::info!(zid = ?self.zid, "get_locators: 🚮");
+
         locators
     }
 }
 
 impl Default for ListenersUnicastIP {
     fn default() -> Self {
-        Self::new()
+        Self::new(ZenohIdProto::from_str("111").unwrap())
     }
 }

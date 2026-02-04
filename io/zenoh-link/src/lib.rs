@@ -78,6 +78,7 @@ use zenoh_link_vsock::{LinkManagerUnicastVsock, VsockLocatorInspector, VSOCK_LOC
 pub use zenoh_link_ws as ws;
 #[cfg(feature = "transport_ws")]
 use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
+use zenoh_protocol::core::ZenohIdProto;
 pub use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, ZResult};
 
@@ -374,12 +375,15 @@ impl LinkManagerBuilderUnicast {
     pub fn make(
         _manager: NewLinkChannelSender,
         endpoint: &EndPoint,
+        _zid: ZenohIdProto,
     ) -> ZResult<LinkManagerUnicast> {
         #[allow(unused_imports)]
         use zenoh_link_commons::LocatorInspector;
         match LinkKind::try_from(endpoint)? {
             #[cfg(feature = "transport_tcp")]
-            LinkKind::Tcp => Ok(std::sync::Arc::new(LinkManagerUnicastTcp::new(_manager))),
+            LinkKind::Tcp => Ok(std::sync::Arc::new(LinkManagerUnicastTcp::new(
+                _manager, _zid,
+            ))),
             #[cfg(feature = "transport_udp")]
             LinkKind::Udp => Ok(std::sync::Arc::new(LinkManagerUnicastUdp::new(_manager))),
             #[cfg(feature = "transport_tls")]
