@@ -66,9 +66,6 @@ impl LinkUnicastQuic {
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
-        if let Err(e) = self.streams.close().await {
-            tracing::trace!("Error closing QUIC stream {}: {}", self, e);
-        }
         self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
     }
@@ -92,35 +89,43 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        self.streams.write(buffer).await.map_err(|e| {
-            let e = zerror!("Write error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+        unsafe { self.streams.write(buffer, None) }
+            .await
+            .map_err(|e| {
+                let e = zerror!("Write error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e.into()
+            })
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        self.streams.write_all(buffer).await.map_err(|e| {
-            let e = zerror!("Write error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+        unsafe { self.streams.write_all(buffer, None) }
+            .await
+            .map_err(|e| {
+                let e = zerror!("Write error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e.into()
+            })
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        self.streams.read(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+        unsafe { self.streams.read(buffer, None) }
+            .await
+            .map_err(|e| {
+                let e = zerror!("Read error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e.into()
+            })
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        self.streams.read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on QUIC link {}: {}", self, e);
-            tracing::trace!("{}", &e);
-            e.into()
-        })
+        unsafe { self.streams.read_exact(buffer, None) }
+            .await
+            .map_err(|e| {
+                let e = zerror!("Read error on QUIC link {}: {}", self, e);
+                tracing::trace!("{}", &e);
+                e.into()
+            })
     }
 
     #[inline(always)]
@@ -251,8 +256,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+        let is_streamed = true;
         let (quic_endpoint, locator, local_addr, tls_close_link_on_expiration) =
-            QuicLink::server(&endpoint).await?;
+            QuicLink::server(&endpoint, is_streamed).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(
@@ -274,7 +280,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                     quic_endpoint,
                     token,
                     manager,
-                    true,
+                    is_streamed,
                     Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME),
                     |link_material| acceptor_callback(link_material, tls_close_link_on_expiration),
                 )

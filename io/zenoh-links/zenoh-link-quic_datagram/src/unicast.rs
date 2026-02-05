@@ -256,8 +256,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+        let is_streamed = false;
         let (quic_endpoint, locator, local_addr, tls_close_link_on_expiration) =
-            QuicLink::server(&endpoint).await?;
+            QuicLink::server(&endpoint, is_streamed).await?;
 
         let endpoint = EndPoint::new(
             locator.protocol(),
@@ -278,7 +279,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
                     quic_endpoint,
                     token,
                     manager,
-                    false,
+                    is_streamed,
                     Duration::from_micros(*QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME),
                     |link_material| acceptor_callback(link_material, tls_close_link_on_expiration),
                 )
