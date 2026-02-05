@@ -2571,6 +2571,7 @@ impl SessionInner {
                 }
             });
 
+        let primitives = state.primitives()?;
         tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
@@ -2583,8 +2584,6 @@ impl SessionInner {
                 callback,
             },
         );
-
-        let primitives = state.primitives()?;
         drop(state);
 
         if destination != Locality::SessionLocal {
@@ -2699,13 +2698,12 @@ impl SessionInner {
                 }
             });
 
+        let primitives = state.primitives()?;
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
         state
             .liveliness_queries
             .insert(id, LivelinessQueryState { callback });
-
-        let primitives = state.primitives()?;
         drop(state);
 
         primitives.send_interest(&mut Interest {
