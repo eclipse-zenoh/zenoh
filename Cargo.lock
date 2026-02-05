@@ -2338,6 +2338,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96051b46fc183dc9cd4a223960ef37b9af631b55191852a8274bfef064cda20f"
+dependencies = [
+ "hashbrown 0.16.1",
+]
+
+[[package]]
 name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6008,14 +6017,15 @@ dependencies = [
 name = "zenoh-ext"
 version = "1.7.2"
 dependencies = [
- "async-trait",
  "bincode",
  "flume",
  "futures",
  "leb128",
+ "lru",
  "rand 0.8.5",
  "serde",
  "tokio",
+ "tokio-util",
  "tracing",
  "uhlc",
  "zenoh",
