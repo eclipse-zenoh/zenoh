@@ -27,6 +27,7 @@ use crate::{
     self as zenoh,
     api::{
         encoding::Encoding,
+        handlers::AsyncCallback,
         info::{Link, LinkEvent, Transport, TransportEvent},
         key_expr::KeyExpr,
         publisher::Priority,
@@ -195,7 +196,7 @@ pub(crate) fn init(session: WeakSession) {
         move |event: TransportEvent| {
             let key_expr = ke_prefix(&own_zid) / &ke_transport(&event.transport);
             let key_expr = KeyExpr::from(key_expr);
-            tracing::info!(
+            tracing::debug!(
                 "Publishing transport event: {:?} : {:?} on {}",
                 &event.kind,
                 &event.transport,
@@ -234,55 +235,60 @@ pub(crate) fn init(session: WeakSession) {
 
     // Subscribe to link events and publish them to the adminspace
     // key "@/<own_zid>/session/transport/<unicast|multicast>/<peer_zid>/link/<link_hash>"
-    let callback = Callback::from({
+    let callback = AsyncCallback::new({
         let session = session.clone();
-        let own_zid = session.zid().into_keyexpr();
         move |event: LinkEvent| {
-            // Find the transport to determine if it's multicast
-            let transport_zid = &event.link.zid;
-            tracing::info!("admin::init: 🍏");
-            let transport = session
-                .runtime
-                .get_transports()
-                .find(|t| t.zid == *transport_zid);
-            tracing::info!("admin::init: 🍎");
+            let session = session.clone();
+            let own_zid = session.zid().into_keyexpr();
+            async move {
+                // Find the transport to determine if it's multicast
+                let transport_zid = &event.link.zid;
+                tracing::info!("admin::init: 🍏");
+                let transport = session
+                    .runtime
+                    .get_transports_async()
+                    .await
+                    .into_iter()
+                    .find(|t| t.zid == *transport_zid);
+                tracing::info!("admin::init: 🍎");
 
-            if let Some(transport) = transport {
-                let key_expr =
-                    ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
-                let key_expr = KeyExpr::from(key_expr);
-                tracing::info!(
-                    "Publishing link event: {:?} : {:?} on {}",
-                    &event.kind,
-                    &event.link,
-                    key_expr
-                );
-                let payload = match &event.kind {
-                    SampleKind::Put => {
-                        serde_json::to_vec(&LinkJson::from(event.link)).unwrap_or_default()
+                if let Some(transport) = transport {
+                    let key_expr =
+                        ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
+                    let key_expr = KeyExpr::from(key_expr);
+                    tracing::info!(
+                        "Publishing link event: {:?} : {:?} on {}",
+                        &event.kind,
+                        &event.link,
+                        key_expr
+                    );
+                    let payload = match &event.kind {
+                        SampleKind::Put => {
+                            serde_json::to_vec(&LinkJson::from(event.link)).unwrap_or_default()
+                        }
+                        SampleKind::Delete => Vec::new(),
+                    };
+                    if let Err(e) = session.resolve_put(
+                        &key_expr,
+                        payload.into(),
+                        event.kind,
+                        Encoding::APPLICATION_JSON,
+                        CongestionControl::default(),
+                        Priority::default(),
+                        false,
+                        Locality::SessionLocal,
+                        #[cfg(feature = "unstable")]
+                        Reliability::default(),
+                        None,
+                        #[cfg(feature = "unstable")]
+                        None,
+                        None,
+                    ) {
+                        tracing::error!("Unable to publish link event: {}", e);
                     }
-                    SampleKind::Delete => Vec::new(),
-                };
-                if let Err(e) = session.resolve_put(
-                    &key_expr,
-                    payload.into(),
-                    event.kind,
-                    Encoding::APPLICATION_JSON,
-                    CongestionControl::default(),
-                    Priority::default(),
-                    false,
-                    Locality::SessionLocal,
-                    #[cfg(feature = "unstable")]
-                    Reliability::default(),
-                    None,
-                    #[cfg(feature = "unstable")]
-                    None,
-                    None,
-                ) {
-                    tracing::error!("Unable to publish link event: {}", e);
+                } else {
+                    tracing::warn!("Unable to find transport for link event: {}", transport_zid);
                 }
-            } else {
-                tracing::warn!("Unable to find transport for link event: {}", transport_zid);
             }
         }
     });

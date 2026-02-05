@@ -266,3 +266,6 @@ debug = false     # If you want debug symbol in release mode, set the env variab
 lto = "fat"
 opt-level = 3
 panic = "abort"
+
+[patch.crates-io]
+tokio = { path = "/Users/fuzzypixelz/src/tokio/tokio" }

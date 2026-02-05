@@ -36,7 +36,7 @@ use std::{
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
-use futures::Future;
+use futures::{future::BoxFuture, Future, FutureExt};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -157,6 +157,8 @@ pub trait IRuntime: Send + Sync {
 
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
 
+    fn get_transports_async(&self) -> BoxFuture<'_, Vec<Transport>>;
+
     fn get_links(
         &self,
         transport: Option<&Transport>,
@@ -261,6 +263,33 @@ impl IRuntime for RuntimeState {
             .map(|ref peer| Transport::new(peer, true));
 
         Box::new(unicast_transports.chain(multicast_transports))
+    }
+
+    fn get_transports_async(&self) -> BoxFuture<'_, Vec<Transport>> {
+        async {
+            let mut result = Vec::new();
+
+            let unicast_transports = self
+                .manager
+                .get_transports_unicast()
+                .await
+                .into_iter()
+                .filter_map(|t| t.get_peer().ok())
+                .map(|ref peer| Transport::new(peer, false));
+            result.extend(unicast_transports);
+
+            let multicast_transports = self
+                .manager
+                .get_transports_multicast()
+                .await
+                .into_iter()
+                .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+                .map(|ref peer| Transport::new(peer, true));
+            result.extend(multicast_transports);
+
+            result
+        }
+        .boxed()
     }
 
     fn get_links(

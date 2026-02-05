@@ -467,7 +467,12 @@ impl GossipNet {
                 if let Some(locators) = locators {
                     let runtime = strong_runtime.clone();
                     let wait_declares = self.wait_declares;
+                    // let span = tracing::info_span!(
+                    //     "link_states",
+                    //     thread_name = std::thread::current().name().unwrap_or("?")
+                    // );
                     strong_runtime.spawn(async move {
+                        // let _span = span.enter();
                         if runtime
                             .manager()
                             .get_transport_unicast(&zid)

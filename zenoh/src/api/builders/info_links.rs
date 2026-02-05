@@ -491,7 +491,7 @@ impl Resolvable for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
 impl Wait for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let state = self.session.declare_transport_links_listener_inner(
-            self.handler,
+            todo!(),
             self.history,
             self.transport,
         )?;

@@ -83,16 +83,16 @@ impl StartConditions {
     }
 
     pub(crate) async fn add_peer_connector_zid(&self, zid: ZenohIdProto) {
-        tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🍏");
+        // tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🍏");
         let mut peer_connectors = self.peer_connectors.lock().await;
-        tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🍎");
+        // tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🍎");
         if !peer_connectors.iter().any(|pc| pc.zid == Some(zid)) {
             peer_connectors.push(PeerConnector {
                 zid: Some(zid),
                 terminated: false,
             })
         }
-        tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🚮");
+        // tracing::info!(other_zid = ?zid, "add_peer_connector_zid: 🚮");
     }
 
     pub(crate) async fn set_peer_connector_zid(&self, idx: usize, zid: ZenohIdProto) {

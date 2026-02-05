@@ -14,7 +14,7 @@
 
 //! Callback handler trait.
 
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
 
 #[cfg(feature = "unstable")]
 use crate::api::cancellation::SyncGroupNotifier;
@@ -54,6 +54,27 @@ pub struct Callback<T: CallbackParameter> {
     callable: Arc<dyn CallbackImpl<T>>,
     #[cfg(feature = "unstable")]
     on_drop_notifier: Option<SyncGroupNotifier>,
+}
+
+pub(crate) struct AsyncCallback<T> {
+    #[allow(clippy::type_complexity)]
+    callable: Arc<dyn Fn(T) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>,
+}
+
+impl<T> AsyncCallback<T> {
+    pub fn new<F, Fut>(f: F) -> Self
+    where
+        F: Fn(T) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        Self {
+            callable: Arc::new(move |t| Box::pin(f(t))),
+        }
+    }
+
+    pub fn call(&self, arg: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        (self.callable)(arg)
+    }
 }
 
 impl<T: CallbackParameter> Clone for Callback<T> {

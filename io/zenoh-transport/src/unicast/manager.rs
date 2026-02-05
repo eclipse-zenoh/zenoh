@@ -118,12 +118,12 @@ impl TransportManagerStateUnicast {
     #[tracing::instrument(level = "info", skip(self))]
     pub(super) async fn transports(&self, zid: ZenohIdProto) -> T<'_> {
         let x = rand::random::<u16>();
-        tracing::info!(x, "transports: 🍏"); // 1550
+        tracing::info!(x, bt = ?std::backtrace::Backtrace::force_capture(), "transports: 🍏"); // 1550
         let guard = match tokio::time::timeout(Duration::from_secs(5), self.transports.lock()).await
         {
             Ok(g) => g,
             Err(_) => {
-                tracing::info!(x, bt = ?std::backtrace::Backtrace::force_capture(), "deadlock");
+                tracing::info!(x, bt = ?std::backtrace::Backtrace::force_capture(), "OUCH");
                 std::process::abort();
             }
         };

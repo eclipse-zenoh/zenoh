@@ -14,7 +14,9 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::TryInto,
-    fmt, mem,
+    fmt,
+    future::Future,
+    mem,
     ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -93,7 +95,7 @@ use crate::{
         },
         bytes::ZBytes,
         encoding::Encoding,
-        handlers::{Callback, DefaultHandler},
+        handlers::{AsyncCallback, Callback, DefaultHandler},
         info::{Link, LinkEvent, SessionInfo, Transport, TransportEvent},
         key_expr::KeyExpr,
         liveliness::Liveliness,
@@ -140,7 +142,7 @@ impl fmt::Debug for TransportEventsListenerState {
 
 pub(crate) struct LinkEventsListenerState {
     pub(crate) id: Id,
-    pub(crate) callback: Callback<LinkEvent>,
+    pub(crate) callback: AsyncCallback<LinkEvent>,
     pub(crate) transport: Option<Transport>,
 }
 
@@ -2214,7 +2216,9 @@ impl SessionInner {
                     kind: SampleKind::Put,
                     link,
                 };
-                listener_state.callback.call(event);
+
+                let _ =
+                    zenoh_runtime::ZRuntime::Application.spawn(listener_state.callback.call(event));
             }
         }
 

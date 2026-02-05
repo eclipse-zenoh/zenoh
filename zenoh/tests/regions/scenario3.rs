@@ -49,7 +49,7 @@ fn init_tracing_subscriber() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_regions_scenario3_order1_putsub() {
+async fn wtf() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "31aa9100")
