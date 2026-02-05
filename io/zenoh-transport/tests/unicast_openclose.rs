@@ -576,6 +576,32 @@ async fn openclose_tls_only() {
     openclose_universal_transport(&endpoint).await;
 }
 
+#[cfg(feature = "transport_tls")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tls_only_cert_without_common_name() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let (ca, cert, key) = get_tls_certs_without_common_name();
+
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 13035).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    openclose_universal_transport(&endpoint).await;
+}
+
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only() {
@@ -585,6 +611,31 @@ async fn openclose_quic_only() {
 
     // Define the locator
     let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    openclose_universal_transport(&endpoint).await;
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_quic_only_cert_without_common_name() {
+    use zenoh_link_commons::tls::config::*;
+
+    let (ca, cert, key) = get_tls_certs_without_common_name();
+
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 13045).parse().unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
@@ -893,4 +944,53 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
     (ca, cert, key)
+}
+
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
+const fn get_tls_certs_without_common_name() -> (&'static str, &'static str, &'static str) {
+    // NOTE: this an auto-generated pair of certificate and key.
+    //       The target domain is localhost, so it has no real
+    //       mapping to any existing domain.
+    //
+    //       minica does not currently support generating
+    //       certificates without a Common Name, so this was
+    //       generated using OpenSSL with the following commands:
+    //           openssl req -new -x509 -noenc -days 365000 -batch -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha384 -keyout ca-key.pem -out ca.pem
+    //           openssl req -new -x509 -noenc -days 365000 -batch -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha384 -keyout server-key.pem -out server-cert.pem -CA ca.pem -CAkey ca-key.pem -addext "authorityKeyIdentifier=keyid,issuer" -addext "basicConstraints=CA:FALSE" -addext "subjectAltName=DNS:localhost" -addext "extendedKeyUsage=serverAuth,clientAuth"
+
+    const SERVER_KEY_NO_CN: &'static str = "-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgK7z8MHmX75qSSGh9
+4wpqRXA0d3Bsb5tFp9kqHmmCYwuhRANCAAQhiWwnr2iHk/bV86RMYfuntz4o+gPH
+ayFAA6DbVZnxvNz4MxY889I7HSrD5iqtO8iaxlQeavx9F1Ff73agYgBj
+-----END PRIVATE KEY-----";
+
+    const SERVER_CERT_NO_CN: &'static str = "-----BEGIN CERTIFICATE-----
+MIICEjCCAbigAwIBAgIUK+gTxmEapjy9K2AOKy+FaWkjACkwCgYIKoZIzj0EAwMw
+RTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGElu
+dGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAgFw0yNjAyMDUxMjQ5MTNaGA8zMDI1MDYw
+ODEyNDkxM1owRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAf
+BgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDBZMBMGByqGSM49AgEGCCqG
+SM49AwEHA0IABCGJbCevaIeT9tXzpExh+6e3Pij6A8drIUADoNtVmfG83PgzFjzz
+0jsdKsPmKq07yJrGVB5q/H0XUV/vdqBiAGOjgYMwgYAwHQYDVR0OBBYEFITqkHg7
+V7s6YEFEjayZ1x0nZ7yVMB8GA1UdIwQYMBaAFC1uOxD1e2c3O9JWFJpbYrk+VQ99
+MAkGA1UdEwQCMAAwFAYDVR0RBA0wC4IJbG9jYWxob3N0MB0GA1UdJQQWMBQGCCsG
+AQUFBwMBBggrBgEFBQcDAjAKBggqhkjOPQQDAwNIADBFAiARmqtIYRygkWrMZg6j
+kYikJVUysUelvUMRfljBCbB1jgIhALzl57XtBhJ+QVy5jNMKjU6s9yfCvnzZPTpk
+3Z0eRdp3
+-----END CERTIFICATE-----";
+
+    const SERVER_CA_NO_CN: &'static str = "-----BEGIN CERTIFICATE-----
+MIIB4DCCAYegAwIBAgIUVaRwyx5e+C+ZVCMYh11Smkf596kwCgYIKoZIzj0EAwMw
+RTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGElu
+dGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAgFw0yNjAyMDUxMjQ5MTNaGA8zMDI1MDYw
+ODEyNDkxM1owRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAf
+BgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDBZMBMGByqGSM49AgEGCCqG
+SM49AwEHA0IABAmwRasT0VNT640z3AsZ51uV9YplwGvJ5dbnCqPw3Rrcup8cSUB0
+UAun3bQTOXp/5Xe6dwanBdNbzHkHLRzD1lajUzBRMB0GA1UdDgQWBBQtbjsQ9Xtn
+NzvSVhSaW2K5PlUPfTAfBgNVHSMEGDAWgBQtbjsQ9XtnNzvSVhSaW2K5PlUPfTAP
+BgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMDA0cAMEQCIEwCMydwyjYB8OWHL/3s
+WbTOA/3LtgGrXHq9LzGrHv1JAiBdLXw1r42i5Ttsa6yYDNFHde2MQaIlPhToOkta
+IEGASQ==
+-----END CERTIFICATE-----";
+    (SERVER_CA_NO_CN, SERVER_CERT_NO_CN, SERVER_KEY_NO_CN)
 }
