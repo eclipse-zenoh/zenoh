@@ -26,7 +26,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -43,7 +43,10 @@ pub struct LinkUnicastQuic {
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
+unsafe impl Sync for LinkUnicastQuic {}
+
 impl LinkUnicastQuic {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         connection: quinn::Connection,
         src_addr: SocketAddr,
@@ -52,7 +55,6 @@ impl LinkUnicastQuic {
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuic {
-        // Build the Quic object
         LinkUnicastQuic {
             connection,
             src_addr,
@@ -88,8 +90,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        unsafe { self.streams.write(buffer, None) }
+    async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize> {
+        unsafe { self.streams.write(buffer, priority) }
             .await
             .map_err(|e| {
                 let e = zerror!("Write error on QUIC link {}: {}", self, e);
@@ -98,8 +100,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        unsafe { self.streams.write_all(buffer, None) }
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()> {
+        unsafe { self.streams.write_all(buffer, priority) }
             .await
             .map_err(|e| {
                 let e = zerror!("Write error on QUIC link {}: {}", self, e);
@@ -108,8 +110,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        unsafe { self.streams.read(buffer, None) }
+    async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize> {
+        unsafe { self.streams.read(buffer, priority) }
             .await
             .map_err(|e| {
                 let e = zerror!("Read error on QUIC link {}: {}", self, e);
@@ -118,8 +120,8 @@ impl LinkUnicastTrait for LinkUnicastQuic {
             })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        unsafe { self.streams.read_exact(buffer, None) }
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()> {
+        unsafe { self.streams.read_exact(buffer, priority) }
             .await
             .map_err(|e| {
                 let e = zerror!("Read error on QUIC link {}: {}", self, e);
@@ -161,6 +163,11 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        self.streams.is_multistream
     }
 }
 
