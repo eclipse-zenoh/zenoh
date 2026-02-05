@@ -467,6 +467,59 @@ async fn openclose_lowlatency_transport(endpoint: &EndPoint) {
     openclose_transport(endpoint, endpoint, true).await
 }
 
+#[cfg(any(feature = "transport_tls", feature = "transport_quic"))]
+async fn openclose_universal_transport_tls(
+    mut endpoint: EndPoint,
+    with_certificate_common_name: bool,
+    with_mtls: bool,
+) {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let (ca, cert, key) = match with_certificate_common_name {
+        false => get_tls_certs(),
+        true => get_tls_certs_without_common_name(),
+    };
+
+    endpoint
+        .config_mut()
+        .extend_from_iter([(TLS_ROOT_CA_CERTIFICATE_RAW, ca)].into_iter())
+        .unwrap();
+
+    let mut listen_endpoint = endpoint.clone();
+    listen_endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
+                (TLS_LISTEN_CERTIFICATE_RAW, cert),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+    let mut connect_endpoint = endpoint;
+    if with_mtls {
+        listen_endpoint
+            .config_mut()
+            .extend_from_iter([(TLS_ENABLE_MTLS, "true")].into_iter())
+            .unwrap();
+        connect_endpoint
+            .config_mut()
+            .extend_from_iter(
+                [
+                    (TLS_CONNECT_PRIVATE_KEY_RAW, key),
+                    (TLS_CONNECT_CERTIFICATE_RAW, cert),
+                    (TLS_ENABLE_MTLS, "true"),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+    }
+
+    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+}
+
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only() {
@@ -553,103 +606,57 @@ async fn openclose_unix_only() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only() {
-    use zenoh_link_commons::tls::config::*;
-
-    zenoh_util::init_log_from_env_or("error");
-
-    let (ca, cert, key) = get_tls_certs();
-
-    let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
-    endpoint
-        .config_mut()
-        .extend_from_iter(
-            [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
-            ]
-            .iter()
-            .copied(),
-        )
-        .unwrap();
-
-    openclose_universal_transport(&endpoint).await;
+    let endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, false, false).await;
 }
 
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn openclose_tls_only_cert_without_common_name() {
-    use zenoh_link_commons::tls::config::*;
+async fn openclose_tls_only_with_mtls() {
+    let endpoint: EndPoint = format!("tls/localhost:{}", 13031).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, false, true).await;
+}
 
-    zenoh_util::init_log_from_env_or("error");
+#[cfg(feature = "transport_tls")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tls_only_with_no_common_name() {
+    let endpoint: EndPoint = format!("tls/localhost:{}", 13032).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, true, false).await;
+}
 
-    let (ca, cert, key) = get_tls_certs_without_common_name();
-
-    let mut endpoint: EndPoint = format!("tls/localhost:{}", 13035).parse().unwrap();
-    endpoint
-        .config_mut()
-        .extend_from_iter(
-            [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
-            ]
-            .iter()
-            .copied(),
-        )
-        .unwrap();
-
-    openclose_universal_transport(&endpoint).await;
+#[cfg(feature = "transport_tls")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_tls_only_with_mtls_and_no_common_name() {
+    let endpoint: EndPoint = format!("tls/localhost:{}", 13033).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, true, true).await;
 }
 
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only() {
-    use zenoh_link_commons::tls::config::*;
-
-    let (ca, cert, key) = get_tls_certs();
-
-    // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
-    endpoint
-        .config_mut()
-        .extend_from_iter(
-            [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
-            ]
-            .iter()
-            .copied(),
-        )
-        .unwrap();
-
-    openclose_universal_transport(&endpoint).await;
+    let endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, false, false).await;
 }
 
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn openclose_quic_only_cert_without_common_name() {
-    use zenoh_link_commons::tls::config::*;
+async fn openclose_quic_only_with_mtls() {
+    let endpoint: EndPoint = format!("quic/localhost:{}", 13041).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, false, true).await;
+}
 
-    let (ca, cert, key) = get_tls_certs_without_common_name();
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_quic_only_with_no_common_name() {
+    let endpoint: EndPoint = format!("quic/localhost:{}", 13042).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, true, false).await;
+}
 
-    // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 13045).parse().unwrap();
-    endpoint
-        .config_mut()
-        .extend_from_iter(
-            [
-                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-                (TLS_LISTEN_PRIVATE_KEY_RAW, key),
-                (TLS_LISTEN_CERTIFICATE_RAW, cert),
-            ]
-            .iter()
-            .copied(),
-        )
-        .unwrap();
-
-    openclose_universal_transport(&endpoint).await;
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn openclose_quic_only_with_mtls_and_no_common_name() {
+    let endpoint: EndPoint = format!("quic/localhost:{}", 13043).parse().unwrap();
+    openclose_universal_transport_tls(endpoint, true, true).await;
 }
 
 #[cfg(feature = "transport_tcp")]
