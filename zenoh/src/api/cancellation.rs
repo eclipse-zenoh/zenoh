@@ -95,12 +95,12 @@ pub type OnCancelHandlerId = usize;
 pub(crate) type OnCancelHandlerId = usize;
 struct OnCancelHandlers {
     handlers: HashMap<OnCancelHandlerId, Box<dyn FnOnce() -> ZResult<()> + Send + Sync>>,
-    execution_finished_notifier: Option<SyncGroupNotifier>,
+    execution_finished_notifier: SyncGroupNotifier,
     next_handler_id: usize,
 }
 
 impl OnCancelHandlers {
-    fn new(execution_finished_notifier: Option<SyncGroupNotifier>) -> Self {
+    fn new(execution_finished_notifier: SyncGroupNotifier) -> Self {
         Self {
             handlers: HashMap::new(),
             execution_finished_notifier,
@@ -123,12 +123,13 @@ impl OnCancelHandlers {
         self.handlers.remove(&id).is_some()
     }
 
-    fn execute(self) -> ZResult<()> {
+    fn execute(self) -> (SyncGroupNotifier, ZResult<()>) {
         for (_, h) in self.handlers {
-            (h)()?;
+            if let Err(e) = (h)() {
+                return (self.execution_finished_notifier, Err(e));
+            }
         }
-        drop(self.execution_finished_notifier);
-        Ok(())
+        (self.execution_finished_notifier, Ok(()))
     }
 
     fn num_handlers(&self) -> usize {
@@ -169,7 +170,11 @@ pub struct CancellationToken {
 impl Default for CancellationToken {
     fn default() -> Self {
         let sync_group = SyncGroup::default();
-        let on_cancel_handlers = OnCancelHandlers::new(sync_group.notifier());
+        let on_cancel_handlers = OnCancelHandlers::new(
+            sync_group
+                .notifier()
+                .expect("Notifier should be valid if sync group is not closed"),
+        );
         Self {
             on_cancel_handlers: Arc::new(Mutex::new(Some(on_cancel_handlers))),
             sync_group,
@@ -282,34 +287,56 @@ impl CancellationToken {
             .unwrap_or(false)
     }
 
-    fn execute_on_cancel_handlers(&self) -> ZResult<()> {
+    fn execute_on_cancel_handlers(&self) -> Option<&ZResult<()>> {
         if let Some(actions) = std::mem::take(self.on_cancel_handlers.lock().unwrap().deref_mut()) {
-            actions.execute()?;
+            let (notifier, res) = actions.execute();
+            let out = Some(self.cancel_result.get_or_init(|| res));
+            drop(notifier);
+            out
+        } else {
+            None
         }
-        Ok(())
     }
 
     fn cancel_inner(&self) -> ZResult<()> {
-        let res = self.execute_on_cancel_handlers();
-        match res {
-            Ok(_) => self.sync_group.wait(),
-            Err(_) => self.sync_group.close(),
-        };
-        match self.cancel_result.get_or_init(|| res).as_ref() {
-            Ok(_) => Ok(()),
-            Err(e) => bail!("Cancel failed: {e}"),
+        if let Some(res) = self.execute_on_cancel_handlers() {
+            match res {
+                Ok(_) => self.sync_group.wait(),
+                Err(_) => self.sync_group.close(),
+            };
+        } else {
+            self.sync_group.wait();
+        }
+        // self.cancel_result is guaranteed to be set after this point
+        if let Some(res) = self.cancel_result.get() {
+            match res {
+                Ok(_) => Ok(()),
+                Err(e) => bail!("Cancel failed: {e}"),
+            }
+        } else {
+            // normally should never happen
+            bail!("Cancellation token invariant is broken")
         }
     }
 
     async fn cancel_inner_async(&self) -> ZResult<()> {
-        let res = self.execute_on_cancel_handlers();
-        match res {
-            Ok(_) => self.sync_group.wait_async().await,
-            Err(_) => self.sync_group.close(),
-        };
-        match self.cancel_result.get_or_init(|| res).as_ref() {
-            Ok(_) => Ok(()),
-            Err(e) => bail!("Cancel failed: {e}"),
+        if let Some(res) = self.execute_on_cancel_handlers() {
+            match res {
+                Ok(_) => self.sync_group.wait_async().await,
+                Err(_) => self.sync_group.close(),
+            };
+        } else {
+            self.sync_group.wait_async().await;
+        }
+        // self.cancel_result is guaranteed to be set after this point
+        if let Some(res) = self.cancel_result.get() {
+            match res {
+                Ok(_) => Ok(()),
+                Err(e) => bail!("Cancel failed: {e}"),
+            }
+        } else {
+            // normally should never happen
+            bail!("Cancellation token invariant is broken")
         }
     }
 }
@@ -364,6 +391,30 @@ mod test {
             n_clone.load(std::sync::atomic::Ordering::SeqCst)
         });
         ct.cancel().wait().unwrap();
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(t.join().unwrap(), 1);
+    }
+
+    #[test]
+    fn concurrent_cancel_with_err() {
+        let ct = CancellationToken::default();
+
+        let n = std::sync::Arc::new(AtomicUsize::new(0));
+        let n_clone = n.clone();
+        let f = move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            bail!("Error");
+        };
+        let _ = ct.add_on_cancel_handler(Box::new(f));
+
+        let ct_clone = ct.clone();
+        let n_clone = n.clone();
+        let t = std::thread::spawn(move || {
+            ct_clone.cancel().wait().unwrap_err();
+            n_clone.load(std::sync::atomic::Ordering::SeqCst)
+        });
+        ct.cancel().wait().unwrap_err();
         assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(t.join().unwrap(), 1);
     }
