@@ -965,13 +965,13 @@ const fn get_tls_certs_without_common_name() -> (&'static str, &'static str, &'s
     //           openssl req -new -x509 -noenc -days 365000 -batch -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha384 -keyout ca-key.pem -out ca.pem
     //           openssl req -new -x509 -noenc -days 365000 -batch -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha384 -keyout server-key.pem -out server-cert.pem -CA ca.pem -CAkey ca-key.pem -addext "authorityKeyIdentifier=keyid,issuer" -addext "basicConstraints=CA:FALSE" -addext "subjectAltName=DNS:localhost" -addext "extendedKeyUsage=serverAuth,clientAuth"
 
-    const SERVER_KEY_NO_CN: &'static str = "-----BEGIN PRIVATE KEY-----
+    const SERVER_KEY_NO_CN: &str = "-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgK7z8MHmX75qSSGh9
 4wpqRXA0d3Bsb5tFp9kqHmmCYwuhRANCAAQhiWwnr2iHk/bV86RMYfuntz4o+gPH
 ayFAA6DbVZnxvNz4MxY889I7HSrD5iqtO8iaxlQeavx9F1Ff73agYgBj
 -----END PRIVATE KEY-----";
 
-    const SERVER_CERT_NO_CN: &'static str = "-----BEGIN CERTIFICATE-----
+    const SERVER_CERT_NO_CN: &str = "-----BEGIN CERTIFICATE-----
 MIICEjCCAbigAwIBAgIUK+gTxmEapjy9K2AOKy+FaWkjACkwCgYIKoZIzj0EAwMw
 RTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGElu
 dGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAgFw0yNjAyMDUxMjQ5MTNaGA8zMDI1MDYw
@@ -986,7 +986,7 @@ kYikJVUysUelvUMRfljBCbB1jgIhALzl57XtBhJ+QVy5jNMKjU6s9yfCvnzZPTpk
 3Z0eRdp3
 -----END CERTIFICATE-----";
 
-    const SERVER_CA_NO_CN: &'static str = "-----BEGIN CERTIFICATE-----
+    const SERVER_CA_NO_CN: &str = "-----BEGIN CERTIFICATE-----
 MIIB4DCCAYegAwIBAgIUVaRwyx5e+C+ZVCMYh11Smkf596kwCgYIKoZIzj0EAwMw
 RTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGElu
 dGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAgFw0yNjAyMDUxMjQ5MTNaGA8zMDI1MDYw
