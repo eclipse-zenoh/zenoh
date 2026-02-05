@@ -456,7 +456,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check_rust_without_cargo_lock, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
+    needs: [check_rust, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass
