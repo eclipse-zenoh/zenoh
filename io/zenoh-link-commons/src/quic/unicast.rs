@@ -217,7 +217,11 @@ impl QuicLink {
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
         let multistream = MultiStreamConfig::new(endpoint.metadata())?;
-        server_crypto.server_config.alpn_protocols = multistream.alpn_protocols();
+        server_crypto.server_config.alpn_protocols = if is_streamed {
+            multistream.alpn_protocols()
+        } else {
+            vec![PROTOCOL_LEGACY.into()]
+        };
 
         // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()
@@ -315,7 +319,11 @@ impl QuicLink {
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
         let multistream = MultiStreamConfig::new(endpoint.metadata())?;
-        client_crypto.client_config.alpn_protocols = multistream.alpn_protocols();
+        client_crypto.client_config.alpn_protocols = if is_streamed {
+            multistream.alpn_protocols()
+        } else {
+            vec![PROTOCOL_LEGACY.into()]
+        };
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
             get_quic_addr(&Address::from(bind_socket_str)).await?
