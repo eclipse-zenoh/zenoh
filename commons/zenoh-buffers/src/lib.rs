@@ -98,7 +98,7 @@ pub mod buffer {
         /// Gets all the slices of this buffer.
         fn slices(&self) -> Self::Slices<'_>;
 
-        /// Returns all the bytes of this buffer in a conitguous slice.
+        /// Returns all the bytes of this buffer in a conitiguous slice.
         /// This may require allocation and copy if the original buffer
         /// is not contiguous.
         fn contiguous(&self) -> Cow<'_, [u8]> {
