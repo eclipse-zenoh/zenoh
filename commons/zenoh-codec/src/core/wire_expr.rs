@@ -30,6 +30,7 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: &WireExpr<'_>) -> Self::Output {
         let WireExpr {
             scope,
@@ -41,8 +42,12 @@ where
         zodec.write(&mut *writer, *scope)?;
 
         if x.has_suffix() {
-            let zodec = Zenoh080Bounded::<ExprLen>::new();
-            zodec.write(&mut *writer, suffix.as_ref())?;
+            #[cold]
+            fn write_suffix<W: Writer>(writer: &mut W, suffix: &str) -> Result<(), DidntWrite> {
+                let zodec = Zenoh080Bounded::<ExprLen>::new();
+                zodec.write(&mut *writer, suffix)
+            }
+            write_suffix(writer, suffix)?;
         }
         Ok(())
     }
@@ -54,13 +59,18 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<WireExpr<'static>, Self::Error> {
         let zodec = Zenoh080Bounded::<ExprId>::new();
         let scope: ExprId = zodec.read(&mut *reader)?;
 
         let suffix: String = if self.condition {
-            let zodec = Zenoh080Bounded::<ExprLen>::new();
-            zodec.read(&mut *reader)?
+            #[cold]
+            fn read_suffix<R: Reader>(reader: &mut R) -> Result<String, DidntRead> {
+                let zodec = Zenoh080Bounded::<ExprLen>::new();
+                zodec.read(&mut *reader)
+            }
+            read_suffix(reader)?
         } else {
             String::new()
         };

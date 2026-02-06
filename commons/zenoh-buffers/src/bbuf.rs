@@ -116,6 +116,7 @@ impl Writer for BBuf {
         Ok(len)
     }
 
+    #[inline(always)]
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
         let mut writer = self.as_writable_slice().writer();
         writer.write_exact(bytes)?;

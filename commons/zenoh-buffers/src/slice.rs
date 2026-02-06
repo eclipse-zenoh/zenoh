@@ -23,7 +23,7 @@ use crate::{
     buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    ZSlice,
+    ZBuf, ZSlice,
 };
 
 // Buffer
@@ -63,6 +63,7 @@ impl HasWriter for &mut [u8] {
 }
 
 impl Writer for &mut [u8] {
+    #[inline(always)]
     fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
         let Some(len) = NonZeroUsize::new(bytes.len().min(self.len())) else {
             return Err(DidntWrite);
@@ -73,6 +74,7 @@ impl Writer for &mut [u8] {
         Ok(len)
     }
 
+    #[inline(always)]
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
         let len = bytes.len();
         if self.len() < len {
@@ -135,6 +137,7 @@ impl HasReader for &[u8] {
 }
 
 impl Reader for &[u8] {
+    #[inline(always)]
     fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let Some(len) = NonZeroUsize::new(self.len().min(into.len())) else {
             return Err(DidntRead);
@@ -145,6 +148,7 @@ impl Reader for &[u8] {
         Ok(len)
     }
 
+    #[inline(always)]
     fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
         let len = into.len();
         if self.len() < len {
@@ -158,6 +162,10 @@ impl Reader for &[u8] {
 
     fn remaining(&self) -> usize {
         self.len()
+    }
+
+    fn read_zbuf(&mut self, len: usize) -> Result<ZBuf, DidntRead> {
+        Ok(self.read_zslice(len)?.into())
     }
 
     fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
@@ -175,6 +183,7 @@ impl Reader for &[u8] {
         Ok(buffer.into())
     }
 
+    #[inline(always)]
     fn read_u8(&mut self) -> Result<u8, DidntRead> {
         let mut buf = [0; 1];
         self.read(&mut buf)?;
