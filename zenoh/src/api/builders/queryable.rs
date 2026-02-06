@@ -232,7 +232,6 @@ where
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
         session
-            .0
             .declare_queryable_inner(
                 &ke,
                 self.complete,
@@ -276,7 +275,7 @@ impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
-        self.session.0.declare_queryable_inner(
+        self.session.declare_queryable_inner(
             &ke,
             self.complete,
             self.origin,

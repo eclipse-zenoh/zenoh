@@ -272,6 +272,11 @@ impl<'a> Querier<'a> {
             parent_callback_sync_group_notifier: self.cancellation_token.notifier(),
         }
     }
+
+    #[zenoh_macros::internal]
+    pub fn session(&self) -> &WeakSession {
+        &self.session
+    }
 }
 
 impl<'a> UndeclarableSealed<()> for Querier<'a> {

@@ -218,7 +218,6 @@ where
         #[cfg(feature = "unstable")]
         let callback_sync_group = crate::api::cancellation::SyncGroup::default();
         session
-            .0
             .declare_subscriber_inner(
                 &key_expr,
                 self.origin,
@@ -262,7 +261,7 @@ impl Wait for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         key_expr = self.session.declare_nonwild_prefix(key_expr)?;
-        self.session.0.declare_subscriber_inner(
+        self.session.declare_subscriber_inner(
             &key_expr,
             self.origin,
             self.handler,

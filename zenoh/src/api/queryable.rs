@@ -56,6 +56,64 @@ use crate::{
     net::primitives::Primitives,
 };
 
+pub(crate) struct LocalReplyPrimitives {
+    session: WeakSession,
+}
+
+pub(crate) struct RemoteReplyPrimitives {
+    pub(crate) session: Option<WeakSession>,
+    pub(crate) primitives: Arc<dyn Primitives>,
+}
+
+pub(crate) enum ReplyPrimitives {
+    Local(LocalReplyPrimitives),
+    Remote(RemoteReplyPrimitives),
+}
+
+impl ReplyPrimitives {
+    pub(crate) fn new_local(session: WeakSession) -> Self {
+        ReplyPrimitives::Local(LocalReplyPrimitives { session })
+    }
+
+    pub(crate) fn new_remote(
+        session: Option<WeakSession>,
+        primitives: Arc<dyn Primitives>,
+    ) -> Self {
+        ReplyPrimitives::Remote(RemoteReplyPrimitives {
+            session,
+            primitives,
+        })
+    }
+
+    pub(crate) fn send_response_final(&self, msg: &mut ResponseFinal) {
+        match self {
+            ReplyPrimitives::Local(local) => local.session.send_response_final(msg),
+            ReplyPrimitives::Remote(remote) => remote.primitives.send_response_final(msg),
+        }
+    }
+
+    pub(crate) fn send_response(&self, msg: &mut Response) {
+        match self {
+            ReplyPrimitives::Local(local) => local.session.send_response(msg),
+            ReplyPrimitives::Remote(remote) => remote.primitives.send_response(msg),
+        }
+    }
+
+    pub(crate) fn keyexpr_to_wire(&self, key_expr: &KeyExpr) -> WireExpr<'static> {
+        match self {
+            ReplyPrimitives::Local(local) => key_expr.to_wire_local(&local.session).to_owned(),
+            ReplyPrimitives::Remote(remote) => match &remote.session {
+                Some(s) => key_expr.to_wire(s).to_owned(),
+                None => WireExpr {
+                    scope: 0,
+                    suffix: std::borrow::Cow::Owned(key_expr.as_str().into()),
+                    mapping: Mapping::Sender,
+                },
+            },
+        }
+    }
+}
+
 pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
@@ -63,7 +121,7 @@ pub(crate) struct QueryInner {
     pub(crate) zid: ZenohIdProto,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
-    pub(crate) primitives: Arc<dyn Primitives>,
+    pub(crate) primitives: ReplyPrimitives,
 }
 
 impl QueryInner {
@@ -76,7 +134,7 @@ impl QueryInner {
             zid: ZenohIdProto::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
-            primitives: Arc::new(DummyPrimitives),
+            primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
         }
     }
 }
@@ -480,11 +538,7 @@ impl Query {
         let ext_sinfo = sample.source_info.map(Into::into);
         self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
-            wire_expr: WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
-                mapping: Mapping::Sender,
-            },
+            wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
             payload: ResponseBody::Reply(zenoh::Reply {
                 consolidation: zenoh::ConsolidationMode::DEFAULT,
                 ext_unknown: vec![],

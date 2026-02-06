@@ -379,7 +379,7 @@ where
             key_expr,
             parameters,
         } = self.selector?;
-        self.session.0.query(
+        self.session.query(
             &key_expr,
             &parameters,
             self.target,
