@@ -39,6 +39,7 @@ use zenoh_protocol::core::{
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
 use crate::{
+    quic::unicast::MultiStreamConfig,
     tls::{config::*, WebPkiVerifierAnyServerName},
     ConfigurationInspector, LinkAuthId, BIND_INTERFACE,
 };
@@ -645,5 +646,22 @@ impl TryFrom<&Config<'_>> for QuicMtuConfig {
             initial_mtu,
             mtu_discovery_interval_secs,
         })
+    }
+}
+
+/// Helper wrapper for configuring QUIC transport
+pub(crate) struct QuicTransportConfigurator<'a>(pub(crate) &'a mut quinn::TransportConfig);
+
+impl QuicTransportConfigurator<'_> {
+    pub(crate) fn configure_max_concurrent_streams(
+        &mut self,
+        multistream: Option<&MultiStreamConfig>,
+    ) {
+        if let Some(m) = multistream {
+            m.set_nb_concurrent_streams(self.0);
+        } else {
+            self.0.max_concurrent_bidi_streams(0u8.into());
+            self.0.max_concurrent_uni_streams(0u8.into());
+        }
     }
 }

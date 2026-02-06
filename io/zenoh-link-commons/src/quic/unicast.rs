@@ -39,6 +39,7 @@ use crate::{
         get_quic_addr,
         get_quic_host,
         QuicMtuConfig,
+        QuicTransportConfigurator,
         TlsClientConfig,
         TlsServerConfig,
         PROTOCOL_LEGACY,
@@ -49,7 +50,7 @@ use crate::{
 };
 
 /// Quic endpoint `multistream` config
-enum MultiStreamConfig {
+pub(crate) enum MultiStreamConfig {
     /// `multistream=false`
     Disabled,
     /// `multistream=true`
@@ -102,18 +103,12 @@ impl MultiStreamConfig {
         }
     }
 
-    fn set_nb_concurrent_streams(
+    pub(crate) fn set_nb_concurrent_streams(
         &self,
         quic_transport_conf: &mut quinn::TransportConfig,
-        is_streamed: bool,
     ) {
-        quic_transport_conf
-            .max_concurrent_bidi_streams(is_streamed.then(|| 1u8).unwrap_or(0u8).into());
-        quic_transport_conf.max_concurrent_uni_streams(
-            is_streamed
-                .then(|| self.max_concurrent_uni_streams())
-                .unwrap_or(0u8.into()),
-        );
+        quic_transport_conf.max_concurrent_bidi_streams(1u8.into());
+        quic_transport_conf.max_concurrent_uni_streams(self.max_concurrent_uni_streams());
     }
 }
 
@@ -218,12 +213,15 @@ impl QuicLink {
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
         let is_streamed = acceptor_params.is_streamed;
-        let multistream = MultiStreamConfig::new(endpoint.metadata())?;
-        server_crypto.server_config.alpn_protocols = if is_streamed {
-            multistream.alpn_protocols()
+        let multistream = if is_streamed {
+            Some(MultiStreamConfig::new(endpoint.metadata())?)
         } else {
-            vec![PROTOCOL_LEGACY.into()]
+            None
         };
+        server_crypto.server_config.alpn_protocols = multistream
+            .as_ref()
+            .map(|m| m.alpn_protocols())
+            .unwrap_or(vec![PROTOCOL_LEGACY.into()]);
 
         // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()
@@ -241,14 +239,14 @@ impl QuicLink {
             .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
 
         let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
-        multistream.set_nb_concurrent_streams(
-            Arc::get_mut(&mut server_config.transport).unwrap(),
-            is_streamed,
-        );
-
-        let mtu_config = QuicMtuConfig::try_from(&epconf)?;
-        mtu_config.apply_to_transport(Arc::get_mut(&mut server_config.transport).unwrap());
-
+        {
+            let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
+            QuicTransportConfigurator(transport_config)
+                .configure_max_concurrent_streams(multistream.as_ref());
+            // TODO: add MTU config to QuicTransportConfigurator
+            let mtu_config = QuicMtuConfig::try_from(&epconf)?;
+            mtu_config.apply_to_transport(transport_config);
+        }
         // Initialize the Endpoint
         let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
             async {
@@ -323,12 +321,16 @@ impl QuicLink {
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
-        let multistream = MultiStreamConfig::new(endpoint.metadata())?;
-        client_crypto.client_config.alpn_protocols = if is_streamed {
-            multistream.alpn_protocols()
+        let multistream = if is_streamed {
+            Some(MultiStreamConfig::new(endpoint.metadata())?)
         } else {
-            vec![PROTOCOL_LEGACY.into()]
+            None
         };
+
+        client_crypto.client_config.alpn_protocols = multistream
+            .as_ref()
+            .map(|m| m.alpn_protocols())
+            .unwrap_or(vec![PROTOCOL_LEGACY.into()]);
 
         let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
             get_quic_addr(&Address::from(bind_socket_str)).await?
@@ -368,7 +370,8 @@ impl QuicLink {
         quic_endpoint.set_default_client_config({
             let mut client_config = quinn::ClientConfig::new(Arc::new(quic_config));
             let mut transport_config = quinn::TransportConfig::default();
-            multistream.set_nb_concurrent_streams(&mut transport_config, is_streamed);
+            QuicTransportConfigurator(&mut transport_config)
+                .configure_max_concurrent_streams(multistream.as_ref());
             client_config.transport_config(transport_config.into());
             client_config
         });
