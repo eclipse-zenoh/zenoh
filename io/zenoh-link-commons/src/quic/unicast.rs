@@ -510,13 +510,19 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
                             };
                             let dst_addr = quic_conn.remote_address();
 
-                            let link = make_link(QuicLinkMaterial {
+                            let link = match make_link(QuicLinkMaterial {
                                 quic_conn,
                                 src_addr,
                                 dst_addr,
                                 streams,
                                 tls_close_link_on_expiration,
-                            })?;
+                            }) {
+                                Ok(link) => link,
+                                Err(e) => {
+                                    tracing::error!("Can not accept QUIC connection: {e:?}");
+                                    continue;
+                                },
+                            };
                             // Communicate the new link to the initial transport manager
                             if let Err(e) = manager.send_async(LinkUnicast(link)).await {
                                 tracing::error!("{}-{}: {}", file!(), line!(), e)
