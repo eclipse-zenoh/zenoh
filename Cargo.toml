@@ -191,7 +191,7 @@ prost = "0.14.1"
 thread-priority = "1.2.0"
 tls-listener = { version = "0.11.0", features = ["rustls-ring"] }
 typenum = "1.18.0"
-uhlc = { version = "0.8.0", default-features = false } # Default features are disabled due to usage in no_std crates
+uhlc = { version = "0.9.0", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.5.7"
 urlencoding = "2.1.3"
