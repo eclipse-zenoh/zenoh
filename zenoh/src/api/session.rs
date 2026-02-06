@@ -2541,7 +2541,7 @@ impl Session {
         self.register_query_cancellation(
             cancellation_tokens,
             {
-                let s = self.clone();
+                let s = self.downgrade();
                 move || {
                     let _ = s.cancel_query(qid);
                     Ok(())
@@ -2679,7 +2679,7 @@ impl Session {
         self.register_query_cancellation(
             cancellation_tokens,
             {
-                let s = self.clone();
+                let s = self.downgrade();
                 move || {
                     let _ = s.cancel_liveliness_query(id);
                     Ok(())
