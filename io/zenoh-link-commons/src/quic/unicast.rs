@@ -242,10 +242,8 @@ impl QuicLink {
         {
             let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
             QuicTransportConfigurator(transport_config)
-                .configure_max_concurrent_streams(multistream.as_ref());
-            // TODO: add MTU config to QuicTransportConfigurator
-            let mtu_config = QuicMtuConfig::try_from(&epconf)?;
-            mtu_config.apply_to_transport(transport_config);
+                .configure_max_concurrent_streams(multistream.as_ref())
+                .configure_mtu(&QuicMtuConfig::try_from(&epconf)?);
         }
         // Initialize the Endpoint
         let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {

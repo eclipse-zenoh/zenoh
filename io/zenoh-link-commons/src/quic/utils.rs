@@ -599,13 +599,13 @@ impl From<QuicAuthId> for LinkAuthId {
     }
 }
 
-pub struct QuicMtuConfig {
+pub(crate) struct QuicMtuConfig {
     initial_mtu: Option<u16>,
     mtu_discovery_interval_secs: Option<u64>,
 }
 
 impl QuicMtuConfig {
-    pub(crate) fn apply_to_transport(&self, quic_transport_conf: &mut TransportConfig) {
+    fn apply_to_transport(&self, quic_transport_conf: &mut TransportConfig) {
         if let Some(initial_mtu) = self.initial_mtu {
             quic_transport_conf.initial_mtu(initial_mtu);
         }
@@ -654,14 +654,20 @@ pub(crate) struct QuicTransportConfigurator<'a>(pub(crate) &'a mut quinn::Transp
 
 impl QuicTransportConfigurator<'_> {
     pub(crate) fn configure_max_concurrent_streams(
-        &mut self,
+        self,
         multistream: Option<&MultiStreamConfig>,
-    ) {
+    ) -> Self {
         if let Some(m) = multistream {
             m.set_nb_concurrent_streams(self.0);
         } else {
             self.0.max_concurrent_bidi_streams(0u8.into());
             self.0.max_concurrent_uni_streams(0u8.into());
         }
+        self
+    }
+
+    pub(crate) fn configure_mtu(self, mtu_config: &QuicMtuConfig) -> Self {
+        mtu_config.apply_to_transport(self.0);
+        self
     }
 }
