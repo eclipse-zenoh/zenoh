@@ -206,16 +206,13 @@ pub mod ext {
     ///  +---------------+
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ValueType<const VID: u8, const SID: u8> {
-        #[cfg(feature = "shared-memory")]
-        pub ext_shm: Option<ShmType<{ SID }>>,
+    pub struct ValueType<const VID: u8> {
         pub encoding: Encoding,
         pub payload: ZBuf,
     }
 
-    impl<const VID: u8, const SID: u8> ValueType<{ VID }, { SID }> {
+    impl<const VID: u8> ValueType<{ VID }> {
         pub const VID: u8 = VID;
-        pub const SID: u8 = SID;
 
         #[cfg(feature = "test")]
         #[doc(hidden)]
@@ -223,14 +220,12 @@ pub mod ext {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
-            #[cfg(feature = "shared-memory")]
-            let ext_shm = rng.gen_bool(0.5).then_some(ShmType::rand());
             let encoding = Encoding::rand();
             let payload = ZBuf::rand(rng.gen_range(1..=64));
 
             Self {
-                #[cfg(feature = "shared-memory")]
-                ext_shm,
+                //#[cfg(feature = "shared-memory")]
+                //ext_shm,
                 encoding,
                 payload,
             }

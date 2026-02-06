@@ -170,7 +170,7 @@ pub trait NetworkMessageExt {
                 PushBody::Del(_) => false,
             },
             NetworkBodyRef::Request(Request { payload, .. }) => match payload {
-                RequestBody::Query(b) => b.ext_body.as_ref().is_some_and(|b| b.ext_shm.is_some()),
+                RequestBody::Query(q) => q.ext_shm.is_some(),
             },
             NetworkBodyRef::Response(Response { payload, .. }) => match payload {
                 ResponseBody::Reply(b) => match &b.payload {
