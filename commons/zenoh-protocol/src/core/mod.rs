@@ -613,11 +613,6 @@ impl CongestionControl {
     pub(crate) const DEFAULT_REQUEST: Self = Self::Block;
 
     #[cfg(feature = "internal")]
-    pub const DEFAULT_RESPONSE: Self = Self::Block;
-    #[cfg(not(feature = "internal"))]
-    pub(crate) const DEFAULT_RESPONSE: Self = Self::Block;
-
-    #[cfg(feature = "internal")]
     pub const DEFAULT_DECLARE: Self = Self::Block;
     #[cfg(not(feature = "internal"))]
     pub(crate) const DEFAULT_DECLARE: Self = Self::Block;
