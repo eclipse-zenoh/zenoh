@@ -193,7 +193,7 @@ impl RecvStream {
 pub struct QuicLink {}
 
 impl QuicLink {
-    pub async fn server<F: AcceptorCallback>(
+    pub async fn listen<F: AcceptorCallback>(
         endpoint: &EndPoint,
         acceptor_params: QuicAcceptorParams<F>,
     ) -> ZResult<(QuicAcceptor<F>, Locator, SocketAddr)> {

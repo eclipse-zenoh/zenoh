@@ -266,7 +266,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
         };
 
         let (quic_acceptor, locator, local_addr) =
-            QuicLink::server(&endpoint, acceptor_params).await?;
+            QuicLink::listen(&endpoint, acceptor_params).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(
