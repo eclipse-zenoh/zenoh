@@ -93,6 +93,10 @@ impl Buffer for ZBuf {
             .iter()
             .fold(0, |len, slice| len + slice.len())
     }
+
+    fn is_empty(&self) -> bool {
+        self.slices.as_ref().iter().all(|s| s.is_empty())
+    }
 }
 
 // SplitBuffer
@@ -319,11 +323,8 @@ impl SiphonableReader for ZBufReader<'_> {
     {
         let mut read = 0;
         while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
-            // Subslice from the current read slice
             // SAFETY: self.cursor.byte is ensured by the reader.
-            let from = crate::unsafe_slice!(slice.as_slice(), self.cursor.byte..);
-            // Copy the slice content
-            match writer.write(from) {
+            match unsafe { writer.write_zslice_subslice(slice, self.cursor.byte..) } {
                 Ok(len) => {
                     // Update the counter
                     read += len.get();
