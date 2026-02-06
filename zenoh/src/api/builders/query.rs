@@ -393,7 +393,6 @@ where
         } = self.selector?;
         #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.session
-            .0
             .query(
                 &key_expr,
                 &parameters,

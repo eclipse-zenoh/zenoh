@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
-    handlers::{Callback, CallbackParameter, IntoHandler},
+    handlers::{Callback, CallbackDrop, CallbackParameter, IntoHandler},
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::SubscriberBuilder,
@@ -23,7 +23,7 @@ use zenoh::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
     sample::{Locality, Sample, SampleKind},
-    session::{EntityGlobalId, EntityId},
+    session::{EntityGlobalId, EntityId, WeakSession},
     Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
     KE_SUB,
 };
@@ -400,14 +400,17 @@ struct State {
     global_pending_queries: u64,
     sequenced_states: HashMap<EntityGlobalId, SourceState<WrappingSn>>,
     timestamped_states: HashMap<ID, SourceState<Timestamp>>,
-    session: Session,
+    session: WeakSession,
     key_expr: KeyExpr<'static>,
     retransmission: bool,
     period: Option<Period>,
     history_depth: usize,
     query_target: QueryTarget,
     query_timeout: Duration,
-    callback: Callback<Sample>,
+    // Callback must be dropped when the underlying subscriber is undeclared
+    // (for example when session is closed), in order to "close" the advanced
+    // subscriber receiver, hence the `Option`.
+    callback: Option<Callback<Sample>>,
     miss_handlers: HashMap<usize, Callback<Miss>>,
     token: Option<LivelinessToken>,
 }
@@ -544,6 +547,9 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 
 #[zenoh_macros::unstable]
 fn handle_sample(states: &mut State, sample: Sample) -> bool {
+    let Some(callback) = states.callback.as_ref() else {
+        return false;
+    };
     if let Some(source_info) = sample.source_info().cloned() {
         #[inline]
         fn deliver_and_flush(
@@ -573,14 +579,14 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             // Avoid going through the Map if history_depth == 1
             if states.history_depth == 1 {
                 state.last_delivered = Some(source_info.source_sn().into());
-                states.callback.call(sample);
+                callback.call(sample);
             } else {
                 state
                     .pending_samples
                     .insert(source_info.source_sn().into(), sample);
                 if state.pending_samples.len() >= states.history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
-                        deliver_and_flush(sample, sn, &states.callback, state);
+                        deliver_and_flush(sample, sn, callback, state);
                     }
                 }
             }
@@ -604,12 +610,12 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                             nb: source_info.source_sn() - state.last_delivered.unwrap() - 1,
                         });
                     }
-                    states.callback.call(sample);
+                    callback.call(sample);
                     state.last_delivered = Some(source_info.source_sn().into());
                 }
             }
         } else {
-            deliver_and_flush(sample, source_info.source_sn(), &states.callback, state);
+            deliver_and_flush(sample, source_info.source_sn(), callback, state);
         }
         new
     } else if let Some(timestamp) = sample.timestamp() {
@@ -624,17 +630,17 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 || states.history_depth == 1
             {
                 state.last_delivered = Some(*timestamp);
-                states.callback.call(sample);
+                callback.call(sample);
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
                 if state.pending_samples.len() >= states.history_depth {
-                    flush_timestamped_source(state, &states.callback);
+                    flush_timestamped_source(state, Some(callback));
                 }
             }
         }
         false
     } else {
-        states.callback.call(sample);
+        callback.call(sample);
         false
     }
 }
@@ -731,13 +737,12 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let retransmission = conf.retransmission;
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
-        let session = conf.session.clone();
         let statesref = Arc::new(Mutex::new(State {
             next_id: 0,
             sequenced_states: HashMap::new(),
             timestamped_states: HashMap::new(),
             global_pending_queries: if conf.history.is_some() { 1 } else { 0 },
-            session,
+            session: conf.session.downgrade(),
             period: retransmission.as_ref().and_then(|r| {
                 let _rt = ZRuntime::Application.enter();
                 r.periodic_queries.map(|p| Period {
@@ -754,14 +759,14 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .unwrap_or_default(),
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
-            callback: callback.clone(),
+            callback: Some(callback),
             miss_handlers: HashMap::new(),
             token: None,
         }));
 
         let sub_callback = {
             let statesref = statesref.clone();
-            let session = conf.session.clone();
+            let session = conf.session.downgrade();
             let key_expr = key_expr.clone().into_owned();
 
             move |s: Sample| {
@@ -824,10 +829,24 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }
         };
 
+        // When the underlying subscriber is undeclared (for example when the session is closed)
+        // the advanced subscriber callback must be dropped to "close" the receiver.
+        let drop_callback = {
+            let statesref = statesref.clone();
+            move || {
+                let mut states = statesref.lock().unwrap();
+                states.callback.take();
+                states.miss_handlers.clear();
+            }
+        };
+
         let subscriber = conf
             .session
             .declare_subscriber(&key_expr)
-            .callback(sub_callback)
+            .with(CallbackDrop {
+                callback: sub_callback,
+                drop: drop_callback,
+            })
             .allowed_origin(conf.origin)
             .wait()?;
 
@@ -886,7 +905,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let liveliness_subscriber = if let Some(historyconf) = conf.history.as_ref() {
             if historyconf.liveliness {
                 let live_callback = {
-                    let session = conf.session.clone();
+                    let session = conf.session.downgrade();
                     let statesref = statesref.clone();
                     let key_expr = key_expr.clone().into_owned();
                     let historyconf = historyconf.clone();
@@ -935,7 +954,6 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         let handler = TimestampedRepliesHandler {
                                             id: ID::from(zid),
                                             statesref: statesref.clone(),
-                                            callback: callback.clone(),
                                         };
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
@@ -1340,10 +1358,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
 #[inline]
 fn flush_sequenced_source(
     state: &mut SourceState<WrappingSn>,
-    callback: &Callback<Sample>,
+    callback: Option<&Callback<Sample>>,
     source_id: &EntityGlobalId,
     miss_handlers: &HashMap<usize, Callback<Miss>>,
 ) {
+    let Some(callback) = callback else {
+        return;
+    };
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
@@ -1382,7 +1403,13 @@ fn flush_sequenced_source(
 
 #[zenoh_macros::unstable]
 #[inline]
-fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callback<Sample>) {
+fn flush_timestamped_source(
+    state: &mut SourceState<Timestamp>,
+    callback: Option<&Callback<Sample>>,
+) {
+    let Some(callback) = callback else {
+        return;
+    };
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
@@ -1417,11 +1444,16 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(state, &states.callback, source_id, &states.miss_handlers);
+                flush_sequenced_source(
+                    state,
+                    states.callback.as_ref(),
+                    source_id,
+                    &states.miss_handlers,
+                );
                 spawn_periodic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
-                flush_timestamped_source(state, &states.callback);
+                flush_timestamped_source(state, states.callback.as_ref());
             }
         }
     }
@@ -1447,7 +1479,7 @@ impl Drop for SequencedRepliesHandler {
                 );
                 flush_sequenced_source(
                     state,
-                    &states.callback,
+                    states.callback.as_ref(),
                     &self.source_id,
                     &states.miss_handlers,
                 )
@@ -1461,7 +1493,6 @@ impl Drop for SequencedRepliesHandler {
 struct TimestampedRepliesHandler {
     id: ID,
     statesref: Arc<Mutex<State>>,
-    callback: Callback<Sample>,
 }
 
 #[zenoh_macros::unstable]
@@ -1475,7 +1506,7 @@ impl Drop for TimestampedRepliesHandler {
                     "AdvancedSubscriber{{key_expr: {}}}: Flush timestamped samples",
                     states.key_expr
                 );
-                flush_timestamped_source(state, &self.callback);
+                flush_timestamped_source(state, states.callback.as_ref());
             }
         }
     }
