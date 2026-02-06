@@ -15,9 +15,10 @@
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
+    future::{Future, IntoFuture},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    pin::Pin,
     sync::Arc,
-    time::Duration,
 };
 
 use futures::FutureExt;
@@ -197,10 +198,10 @@ impl RecvStream {
 pub struct QuicLink {}
 
 impl QuicLink {
-    pub async fn server(
+    pub async fn server<F: AcceptorCallback>(
         endpoint: &EndPoint,
-        is_streamed: bool,
-    ) -> ZResult<(quinn::Endpoint, Locator, SocketAddr, bool)> {
+        acceptor_params: QuicAcceptorParams<F>,
+    ) -> ZResult<(QuicAcceptor<F>, Locator, SocketAddr)> {
         let epaddr = endpoint.address();
         let epconf = endpoint.config();
 
@@ -216,6 +217,7 @@ impl QuicLink {
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
+        let is_streamed = acceptor_params.is_streamed;
         let multistream = MultiStreamConfig::new(endpoint.metadata())?;
         server_crypto.server_config.alpn_protocols = if is_streamed {
             multistream.alpn_protocols()
@@ -282,10 +284,13 @@ impl QuicLink {
         )?;
 
         Ok((
-            quic_endpoint,
+            QuicAcceptor {
+                quic_endpoint,
+                tls_close_link_on_expiration: server_crypto.tls_close_link_on_expiration,
+                inner: acceptor_params,
+            },
             locator,
             local_addr,
-            server_crypto.tls_close_link_on_expiration,
         ))
     }
 
@@ -401,18 +406,45 @@ impl QuicLink {
             client_crypto.tls_close_link_on_expiration,
         ))
     }
+}
 
-    pub async fn accept_task<Callback>(
-        quic_endpoint: quinn::Endpoint,
-        token: CancellationToken,
-        manager: NewLinkChannelSender,
-        is_streamed: bool,
-        throttle_time: Duration,
-        make_link: Callback,
-    ) -> ZResult<()>
-    where
-        Callback: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>>,
-    {
+// Boilerplate to avoid repeating the Fn bound in all generics that require it
+pub trait AcceptorCallback:
+    Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + 'static
+{
+}
+
+impl<T: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + 'static>
+    AcceptorCallback for T
+{
+}
+
+pub struct QuicAcceptorParams<F: AcceptorCallback> {
+    pub is_streamed: bool,
+    pub token: CancellationToken,
+    pub manager: NewLinkChannelSender,
+    pub throttle_time: std::time::Duration,
+    pub make_link: F,
+}
+
+pub struct QuicAcceptor<F: AcceptorCallback> {
+    quic_endpoint: quinn::Endpoint,
+    tls_close_link_on_expiration: bool,
+    inner: QuicAcceptorParams<F>,
+}
+
+impl<F: AcceptorCallback> IntoFuture for QuicAcceptor<F> {
+    type Output = ZResult<()>;
+
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.accept_task())
+    }
+}
+
+impl<F: AcceptorCallback> QuicAcceptor<F> {
+    async fn accept_task(self) -> ZResult<()> {
         async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
             let qc = acceptor
                 .await
@@ -427,6 +459,18 @@ impl QuicLink {
             Ok(conn)
         }
 
+        let Self {
+            quic_endpoint,
+            tls_close_link_on_expiration,
+            inner:
+                QuicAcceptorParams {
+                    is_streamed,
+                    token,
+                    manager,
+                    throttle_time,
+                    make_link,
+                },
+        } = self;
         let src_addr = quic_endpoint
             .local_addr()
             .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
@@ -467,7 +511,8 @@ impl QuicLink {
                                 quic_conn,
                                 src_addr,
                                 dst_addr,
-                                streams
+                                streams,
+                                tls_close_link_on_expiration,
                             })?;
                             // Communicate the new link to the initial transport manager
                             if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -499,6 +544,7 @@ pub struct QuicLinkMaterial {
     pub src_addr: SocketAddr,
     pub dst_addr: SocketAddr,
     pub streams: Option<QuicStreams>,
+    pub tls_close_link_on_expiration: bool,
 }
 
 pub struct QuicStreams {

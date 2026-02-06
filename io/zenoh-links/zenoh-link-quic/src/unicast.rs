@@ -19,7 +19,7 @@ use zenoh_link_commons::{
     get_ip_interface_names,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
-        unicast::{QuicLink, QuicLinkMaterial, QuicStreams},
+        unicast::{QuicAcceptorParams, QuicLink, QuicLinkMaterial, QuicStreams},
     },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
@@ -263,9 +263,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let is_streamed = true;
-        let (quic_endpoint, locator, local_addr, tls_close_link_on_expiration) =
-            QuicLink::server(&endpoint, is_streamed).await?;
+        let token = self.listeners.token.child_token();
+        let acceptor_params = QuicAcceptorParams {
+            is_streamed: true,
+            token: token.clone(),
+            manager: self.manager.clone(),
+            throttle_time: Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME),
+            make_link: acceptor_callback,
+        };
+
+        let (quic_acceptor, locator, local_addr) =
+            QuicLink::server(&endpoint, acceptor_params).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(
@@ -275,26 +283,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.config(),
         )?;
 
-        // Spawn the accept loop for the listener
-        let token = self.listeners.token.child_token();
-
-        let task = {
-            let token = token.clone();
-            let manager = self.manager.clone();
-
-            async move {
-                QuicLink::accept_task(
-                    quic_endpoint,
-                    token,
-                    manager,
-                    is_streamed,
-                    Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME),
-                    |link_material| acceptor_callback(link_material, tls_close_link_on_expiration),
-                )
-                .await
-            }
-        };
-
+        let task = async move { quic_acceptor.await };
         // Initialize the QuicAcceptor
         self.listeners
             .add_listener(endpoint, local_addr, task, token)
@@ -318,15 +307,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 }
 
-fn acceptor_callback(
-    link_material: QuicLinkMaterial,
-    tls_close_link_on_expiration: bool,
-) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> {
     let QuicLinkMaterial {
         quic_conn,
         src_addr,
         dst_addr,
         streams,
+        tls_close_link_on_expiration,
     } = link_material;
     let streams = streams.expect("Streams should be initialized");
 
