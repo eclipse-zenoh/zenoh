@@ -16,6 +16,8 @@ use std::future::{IntoFuture, Ready};
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroup;
 use crate::{
     api::{
         handlers::{locked, DefaultHandler, IntoHandler},
@@ -223,12 +225,21 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
+        #[cfg(feature = "unstable")]
+        let callback_sync_group = SyncGroup::default();
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
         session
-            .declare_queryable_inner(&ke, self.complete, self.origin, callback)
+            .declare_queryable_inner(
+                &ke,
+                self.complete,
+                self.origin,
+                callback,
+                #[cfg(feature = "unstable")]
+                callback_sync_group.notifier(),
+            )
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
                     session: self.session.downgrade(),
@@ -237,6 +248,8 @@ where
                     key_expr: ke.into_owned(),
                 },
                 handler: receiver,
+                #[cfg(feature = "unstable")]
+                callback_sync_group,
             })
     }
 }
@@ -262,8 +275,14 @@ impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
-        self.session
-            .declare_queryable_inner(&ke, self.complete, self.origin, self.handler)?;
+        self.session.declare_queryable_inner(
+            &ke,
+            self.complete,
+            self.origin,
+            self.handler,
+            #[cfg(feature = "unstable")]
+            None,
+        )?;
         Ok(())
     }
 }

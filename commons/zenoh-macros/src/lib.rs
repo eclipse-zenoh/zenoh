@@ -19,7 +19,10 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, ItemImpl, LitStr, TraitItem};
+use syn::{
+    parse_macro_input, parse_quote, spanned::Spanned, Attribute, Error, Item, ItemImpl, LitStr,
+    TraitItem,
+};
 use zenoh_keyexpr::{
     format::{
         macro_support::{self, SegmentBuilder},
@@ -661,4 +664,54 @@ pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #struct_methods_output
     })
     .into()
+}
+
+#[proc_macro_attribute]
+pub fn pub_visibility_if_internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut out = TokenStream::new();
+    let mut item_original: syn::Item = syn::parse(tokens).expect("failed to parse input");
+    let item_modified;
+    let not_internal_feature_gate: Attribute = parse_quote!(#[cfg(not(feature = "internal"))]);
+    let internal_feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
+    let allow_dead_code: Attribute = parse_quote!(#[allow(dead_code)]);
+    match &mut item_original {
+        Item::Fn(item_fn) => {
+            let mut item_fn_modified = item_fn.clone();
+            item_fn_modified.vis = syn::Visibility::Public(syn::token::Pub(item_fn.span()));
+            item_fn_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_modified = Item::Fn(item_fn_modified);
+            item_fn.attrs.splice(0..0, vec![not_internal_feature_gate]);
+        }
+        Item::Struct(item_struct) => {
+            let mut item_struct_modified = item_struct.clone();
+            item_struct_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_struct_modified.vis = syn::Visibility::Public(syn::token::Pub(item_struct.span()));
+            item_modified = Item::Struct(item_struct_modified);
+            item_struct
+                .attrs
+                .splice(0..0, vec![not_internal_feature_gate]);
+        }
+        Item::Type(item_type) => {
+            let mut item_type_modified = item_type.clone();
+            item_type_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_type_modified.vis = syn::Visibility::Public(syn::token::Pub(item_type.span()));
+            item_modified = Item::Type(item_type_modified);
+            item_type
+                .attrs
+                .splice(0..0, vec![not_internal_feature_gate]);
+        }
+        _ => panic!("pub_visibility_if_internal only works with struct, type and fn"),
+    }
+    let ts: TokenStream = item_original.into_token_stream().into();
+    out.extend(ts);
+    let ts: TokenStream = item_modified.into_token_stream().into();
+    out.extend(ts);
+    out
 }
