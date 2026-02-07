@@ -24,15 +24,12 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
-#[zenoh_macros::internal]
-#[allow(dead_code)]
+#[zenoh_macros::pub_visibility_if_internal]
 #[derive(Debug)]
-pub struct SyncGroupNotifier(OwnedSemaphorePermit);
-#[cfg(not(feature = "internal"))]
 #[allow(dead_code)]
-#[derive(Debug)]
 pub(crate) struct SyncGroupNotifier(OwnedSemaphorePermit);
 
+#[zenoh_macros::pub_visibility_if_internal]
 #[derive(Clone)]
 pub(crate) struct SyncGroup {
     semaphore: Arc<Semaphore>,
@@ -50,6 +47,7 @@ impl SyncGroup {
         Semaphore::MAX_PERMITS.try_into().unwrap_or(u32::MAX)
     }
 
+    #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
         self.semaphore
             .clone()
@@ -66,11 +64,14 @@ impl SyncGroup {
         SyncGroup::max_permits() as usize - self.semaphore.available_permits()
     }
 
+    #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn wait(&self) {
         let s = self.semaphore.clone();
         let _p = futures::executor::block_on(s.acquire_many(Self::max_permits()));
         self.close();
     }
+
+    #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) async fn wait_async(&self) {
         let _p = self.semaphore.acquire_many(Self::max_permits()).await;
         self.close();
@@ -89,9 +90,7 @@ impl fmt::Debug for SyncGroup {
     }
 }
 
-#[zenoh_macros::internal]
-pub type OnCancelHandlerId = usize;
-#[cfg(not(feature = "internal"))]
+#[zenoh_macros::pub_visibility_if_internal]
 pub(crate) type OnCancelHandlerId = usize;
 struct OnCancelHandlers {
     handlers: HashMap<OnCancelHandlerId, Box<dyn FnOnce() -> ZResult<()> + Send + Sync>>,
@@ -288,7 +287,9 @@ impl CancellationToken {
     }
 
     fn execute_on_cancel_handlers(&self) -> Option<&ZResult<()>> {
-        if let Some(actions) = std::mem::take(self.on_cancel_handlers.lock().unwrap().deref_mut()) {
+        let mut lk = self.on_cancel_handlers.lock().unwrap();
+        if let Some(actions) = std::mem::take(lk.deref_mut()) {
+            drop(lk);
             let (notifier, res) = actions.execute();
             let out = Some(self.cancel_result.get_or_init(|| res));
             drop(notifier);
