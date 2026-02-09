@@ -792,8 +792,8 @@ impl Reader {
                     //println!("buf_id: {buf_id}, buf_len: {buf_len}");
 
                     if buf_len > 0 {
-                        let rx_bufer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
-                        rx.run_callback(rx_bufer);
+                        let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
+                        rx.run_callback(rx_buffer);
                     } else {
                         println!("zero buf len");
                     }

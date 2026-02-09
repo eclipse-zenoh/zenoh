@@ -64,8 +64,11 @@ impl<'a> DerefMut for BorrowedBuffer<'a> {
 }
 
 impl<'a> BorrowedBuffer<'a> {
-    fn new(arena: &'a mut BatchArena, available_bufers: &atomic_queue::Queue<u16>) -> Option<Self> {
-        available_bufers
+    fn new(
+        arena: &'a mut BatchArena,
+        available_buffers: &atomic_queue::Queue<u16>,
+    ) -> Option<Self> {
+        available_buffers
             .pop()
             .map(|index| Self::from_index(arena, index))
     }
@@ -77,7 +80,7 @@ impl<'a> BorrowedBuffer<'a> {
 
 struct BufferPool {
     arena: UnsafeCell<BatchArena>,
-    available_bufers: atomic_queue::Queue<u16>,
+    available_buffers: atomic_queue::Queue<u16>,
 }
 
 impl BufferPool {
@@ -86,14 +89,14 @@ impl BufferPool {
         let write_buffers = arena.get_mut().register_buffers();
         unsafe { ring.submitter().register_buffers(&write_buffers).unwrap() };
 
-        let available_bufers = atomic_queue::bounded(write_buffers.len());
+        let available_buffers = atomic_queue::bounded(write_buffers.len());
         for i in 0..write_buffers.len() {
-            available_bufers.push(i as u16);
+            available_buffers.push(i as u16);
         }
 
         Self {
             arena,
-            available_bufers,
+            available_buffers,
         }
     }
 
@@ -104,7 +107,7 @@ impl BufferPool {
 
     fn try_select_available_buffer(&'_ self) -> Option<BorrowedBuffer<'_>> {
         let mutable_arena = unsafe { &mut *self.arena.get() };
-        BorrowedBuffer::new(mutable_arena, &self.available_bufers)
+        BorrowedBuffer::new(mutable_arena, &self.available_buffers)
     }
 }
 
