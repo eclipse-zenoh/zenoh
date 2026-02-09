@@ -29,7 +29,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {
-    crate::api::cancellation::CancellationToken, crate::query::ReplyKeyExpr,
+    crate::api::cancellation::SyncGroup, crate::query::ReplyKeyExpr,
     zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto,
 };
 
@@ -88,7 +88,7 @@ pub struct Querier<'a> {
     pub(crate) undeclare_on_drop: bool,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     #[cfg(feature = "unstable")]
-    pub(crate) cancellation_token: CancellationToken,
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 impl fmt::Debug for QuerierState {
@@ -269,7 +269,7 @@ impl<'a> Querier<'a> {
             ),
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
-            parent_callback_sync_group_notifier: self.cancellation_token.notifier(),
+            parent_callback_sync_group_notifier: self.callback_sync_group.notifier(),
         }
     }
 
@@ -328,7 +328,7 @@ impl Wait for QuerierUndeclaration<'_> {
         self.querier.undeclare_impl()?;
         #[cfg(feature = "unstable")]
         if self.wait_until_callback_execution_ends {
-            self.querier.cancellation_token.cancel().wait()?;
+            self.querier.callback_sync_group.wait();
         }
         Ok(())
     }

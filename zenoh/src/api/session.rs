@@ -1567,13 +1567,17 @@ impl Session {
         Ok(id)
     }
 
-    pub(crate) fn undeclare_querier_inner(&self, pid: Id) -> ZResult<()> {
+    pub(crate) fn undeclare_querier_inner(&self, querier_id: Id) -> ZResult<()> {
         let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
         };
-        if let Some(querier_state) = state.queriers.remove(&pid) {
+        if let Some(querier_state) = state.queriers.remove(&querier_id) {
             trace!("undeclare_querier({:?})", querier_state);
+            // remove all pending queries from this querier
+            state
+                .queries
+                .retain(|_, q| q.querier_id != Some(querier_id));
             if querier_state.destination != Locality::SessionLocal {
                 // Note: there might be several queriers on the same KeyExpr.
                 // Before calling forget_queriers(key_expr), check if this was the last one.
@@ -2472,37 +2476,34 @@ impl Session {
     #[cfg(feature = "unstable")]
     fn register_query_cancellation<F>(
         &self,
-        cancellation_tokens: Vec<CancellationToken>,
+        cancellation_token: Option<CancellationToken>,
+        querier_notifier: Option<SyncGroupNotifier>,
         on_cancel: F,
         callback: &mut Callback<Reply>,
     ) -> ZResult<()>
     where
         F: FnOnce() -> ZResult<()> + Clone + Send + Sync + 'static,
     {
-        let num_cancellation_tokens = cancellation_tokens.len();
-        let mut notifier_ct_handler_id_list = Vec::new();
-        for ct in cancellation_tokens {
-            if let Some(n) = ct.notifier() {
-                // Note: since we are holding the state lock here, it is guaranteed that on_cancel will not be executed before we return
+        let session_notifier = self.0.callbacks_drop_sync_group.notifier();
+        if let Some(ct) = cancellation_token {
+            if let Some(ct_notifier) = ct.notifier() {
                 if let Ok(handler_id) = ct.add_on_cancel_handler(on_cancel.clone()) {
-                    notifier_ct_handler_id_list.push((n, ct, handler_id));
+                    callback.set_on_drop(move || {
+                        drop(session_notifier);
+                        ct.remove_on_cancel_handler(handler_id);
+                        drop(ct_notifier);
+                        drop(querier_notifier);
+                    });
+                    return Ok(());
                 }
             }
+            bail!("Query was cancelled")
         }
-        let already_cancelled = num_cancellation_tokens != notifier_ct_handler_id_list.len();
-        callback.set_on_drop({
-            let session_notifier = self.0.callbacks_drop_sync_group.notifier();
-            move || {
-                for (n, ct, id) in notifier_ct_handler_id_list.into_iter() {
-                    ct.remove_on_cancel_handler(id);
-                    drop(n)
-                }
-                drop(session_notifier);
-            }
+
+        callback.set_on_drop(move || {
+            drop(session_notifier);
+            drop(querier_notifier);
         });
-        if already_cancelled {
-            bail!("Query was cancelled");
-        }
         Ok(())
     }
 
@@ -2521,7 +2522,9 @@ impl Session {
         attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: Option<SourceInfo>,
         mut callback: Callback<Reply>,
-        #[cfg(feature = "unstable")] cancellation_tokens: Vec<CancellationToken>,
+        #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
+        querier_id: Option<EntityId>,
+        #[cfg(feature = "unstable")] querier_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<()> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
@@ -2539,7 +2542,8 @@ impl Session {
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         #[cfg(feature = "unstable")]
         self.register_query_cancellation(
-            cancellation_tokens,
+            cancellation_token,
+            querier_notifier,
             {
                 let s = self.downgrade();
                 move || {
@@ -2594,6 +2598,7 @@ impl Session {
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
+                querier_id,
             },
         );
         drop(state);
@@ -2667,7 +2672,7 @@ impl Session {
         key_expr: &KeyExpr<'_>,
         timeout: Duration,
         mut callback: Callback<Reply>,
-        #[cfg(feature = "unstable")] cancellation_tokens: Vec<CancellationToken>,
+        #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.0.state);
@@ -2677,7 +2682,8 @@ impl Session {
         let id = self.0.runtime.next_id();
         #[cfg(feature = "unstable")]
         self.register_query_cancellation(
-            cancellation_tokens,
+            cancellation_token,
+            None,
             {
                 let s = self.downgrade();
                 move || {

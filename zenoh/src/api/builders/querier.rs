@@ -25,7 +25,7 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::{CancellationToken, CancellationTokenBuilderTrait};
+use crate::api::cancellation::{CancellationTokenBuilderTrait, SyncGroup};
 #[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
@@ -191,7 +191,7 @@ impl Wait for QuerierBuilder<'_, '_> {
             accept_replies: self.accept_replies,
             matching_listeners: Default::default(),
             #[cfg(feature = "unstable")]
-            cancellation_token: CancellationToken::default(),
+            callback_sync_group: SyncGroup::default(),
         })
     }
 }
@@ -497,10 +497,10 @@ where
             self.source_info,
             callback,
             #[cfg(feature = "unstable")]
-            match self.cancellation_token {
-                Some(ct) => vec![self.querier.cancellation_token.clone(), ct],
-                None => vec![self.querier.cancellation_token.clone()],
-            },
+            self.cancellation_token,
+            Some(self.querier.id),
+            #[cfg(feature = "unstable")]
+            self.querier.callback_sync_group.notifier(),
         )?;
         Ok(receiver)
     }

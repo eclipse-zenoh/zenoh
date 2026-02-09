@@ -47,6 +47,7 @@ use crate::api::{
     key_expr::KeyExpr,
     sample::Sample,
     selector::Selector,
+    Id,
 };
 
 /// The reply consolidation strategy to apply to replies to a [`get`](crate::Session::get).
@@ -227,6 +228,7 @@ pub(crate) struct QueryState {
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<Reply>,
+    pub(crate) querier_id: Option<Id>,
 }
 
 impl QueryState {

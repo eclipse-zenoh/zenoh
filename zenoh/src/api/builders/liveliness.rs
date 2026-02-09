@@ -522,7 +522,7 @@ where
             self.timeout,
             callback,
             #[cfg(feature = "unstable")]
-            self.cancellation_token.into_iter().collect(),
+            self.cancellation_token,
         )?;
         Ok(receiver)
     }

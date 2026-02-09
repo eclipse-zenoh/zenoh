@@ -393,7 +393,10 @@ where
             self.source_info,
             callback,
             #[cfg(feature = "unstable")]
-            self.cancellation_token.into_iter().collect(),
+            self.cancellation_token,
+            None,
+            #[cfg(feature = "unstable")]
+            None,
         )?;
         Ok(receiver)
     }
