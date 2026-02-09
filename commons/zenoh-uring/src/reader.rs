@@ -200,7 +200,7 @@ impl FragmentedBatch {
             .take(self.size)
     }
 
-    pub fn try_contigious_zerocopy(&self) -> Option<Arc<RxBuffer>> {
+    pub fn try_contagious_zerocopy(&self) -> Option<Arc<RxBuffer>> {
         if self.buffers.len() == 1 {
             return Some(self.buffers[0].clone());
         }

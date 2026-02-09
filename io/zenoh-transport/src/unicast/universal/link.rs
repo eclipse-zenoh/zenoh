@@ -452,7 +452,7 @@ async fn rx_task_uring(
                     let mut batch_config = batch_config;
                     batch_config.is_streamed = false;
 
-                    let buffer: ZSlice = match data.try_contigious_zerocopy() {
+                    let buffer: ZSlice = match data.try_contagious_zerocopy() {
                         Some(buffer) => ZSlice::new(
                             std::sync::Arc::new(ZRxBuffer(buffer)),
                             data.data_offset,
@@ -460,8 +460,8 @@ async fn rx_task_uring(
                         )
                         .map_err(|_| zerror!("Error constructing slice...."))?,
                         None => {
-                            let contigious_data: Vec<u8> = data.iter().copied().collect();
-                            std::sync::Arc::new(contigious_data).into()
+                            let contagious_data: Vec<u8> = data.iter().copied().collect();
+                            std::sync::Arc::new(contagious_data).into()
                         }
                     };
 
