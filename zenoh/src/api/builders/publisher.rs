@@ -13,10 +13,7 @@
 //
 use std::future::{IntoFuture, Ready};
 
-use itertools::Itertools;
-use zenoh_config::qos::PublisherQoSConfig;
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode};
 use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
@@ -232,7 +229,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.resolve_put(
             &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
@@ -255,7 +252,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.resolve_put(
             &self.publisher.key_expr?,
             ZBytes::new(),
             SampleKind::Delete,
@@ -401,31 +398,9 @@ impl PublisherBuilder<'_, '_> {
     /// Looks up whether any configured QoS overwrites apply to the builder's key expression.
     /// Returns a new builder with the overwritten QoS parameters.
     pub(crate) fn apply_qos_overwrites(self) -> Self {
-        let mut qos_overwrites = PublisherQoSConfig::default();
-        if let Ok(key_expr) = &self.key_expr {
-            // get overwritten builder
-            let state = zread!(self.session.0.state);
-            let nodes_including = state
-                .publisher_qos_tree
-                .nodes_including(key_expr)
-                .filter(|n| n.weight().is_some())
-                .collect_vec();
-            if let Some(node) = nodes_including.first() {
-                qos_overwrites = node
-                    .weight()
-                    .expect("first node weight should not be None")
-                    .clone();
-                if nodes_including.len() > 1 {
-                    tracing::warn!(
-                        "Publisher declared on `{}` which is included by multiple key_exprs in qos config ({}). Using qos config for `{}`",
-                        key_expr,
-                        nodes_including.iter().map(|n| n.keyexpr().to_string()).join(", "),
-                        node.keyexpr(),
-                    );
-                }
-            }
-        }
-
+        let qos_overwrites = self.key_expr.as_ref().map_or(Default::default(), |ke| {
+            self.session.get_publisher_qos_overwrite(ke)
+        });
         Self {
             congestion_control: qos_overwrites
                 .congestion_control
@@ -486,7 +461,6 @@ impl Wait for PublisherBuilder<'_, '_> {
         key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),
