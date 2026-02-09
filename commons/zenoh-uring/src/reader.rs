@@ -249,7 +249,7 @@ impl Default for RxWindow {
 
 macro_rules! log {
     ($level:expr, $($arg:tt)*) => {
-        //eprintln!("[{}] {}:{} - {}",
+        //elog!("INFO", "[{}] {}:{} - {}",
         //    $level,
         //    file!(),
         //    line!(),
@@ -637,7 +637,7 @@ impl Reader {
                 }
                 err.push_str("This is not an hard error and it can be safely ignored under normal operating conditions. \
                 Though the SHM subsystem may experience some timeouts in case of an heavy congested system where this watchdog thread may not be scheduled at the required frequency.");
-                println!("{}", err);
+                log!("INFO", "{}", err);
             }
 
 
@@ -678,9 +678,9 @@ impl Reader {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
                     let mut sq = unsafe { ring.submission_shared() };
 
-                    //println!("e: {:?}", e);
+                    //log!("INFO", "e: {:?}", e);
                     if e.user_data() == 0 {
-                        println!("Zero-user-data entry: {:?}", e);
+                        log!("INFO", "Zero-user-data entry: {:?}", e);
                         unsafe { sq.push(&waker_read).unwrap() };
                         continue;
                     }
@@ -708,8 +708,8 @@ impl Reader {
                     }
                 }
 
-                //println!("loop_ctr: {loop_ctr}");
-                //println!("recv_ctr: {recv_ctr}");
+                //log!("INFO", "loop_ctr: {loop_ctr}");
+                //log!("INFO", "recv_ctr: {recv_ctr}");
 
                 // receive external submissions
                 let mut sq = unsafe { ring.submission_shared() };
@@ -750,7 +750,7 @@ impl Reader {
             match e.result().neg() {
                 libc::ENOBUFS => {
                     // We are out of buffers
-                    //println!("ENOBUFS: Restart multishot receive!!!");
+                    //log!("INFO", "ENOBUFS: Restart multishot receive!!!");
 
                     //let provide_buffers = arena
                     //    .inner
@@ -766,15 +766,17 @@ impl Reader {
                     unsafe { sq.push(&recv).unwrap() };
                     need_submit = true;
                 }
-                unexpected => println!("Unexpected uring error: {unexpected}"),
+                unexpected => {
+                    log!("INFO", "Unexpected uring error: {}", unexpected);
+                }
             }
         } else {
             match io_uring::cqueue::buffer_select(e.flags()) {
                 Some(buf_id) => {
-                    //println!("Read multishot entry: {:?}", e);
+                    //log!("INFO", "Read multishot entry: {:?}", e);
 
                     if !io_uring::cqueue::more(e.flags()) {
-                        println!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
+                        log!("INFO", "IORING_CQE_F_BUFFER: Restart multishot receive!!!");
                         let recv = opcode::RecvMulti::new(types::Fd(rx.fd), 0)
                             .build()
                             .user_data(e.user_data());
@@ -789,19 +791,19 @@ impl Reader {
 
                     sock_nonempty |= io_uring::cqueue::sock_nonempty(e.flags());
 
-                    //println!("buf_id: {buf_id}, buf_len: {buf_len}");
+                    //log!("INFO", "buf_id: {buf_id}, buf_len: {buf_len}");
 
                     if buf_len > 0 {
                         let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
                         rx.run_callback(rx_buffer);
                     } else {
-                        println!("zero buf len");
+                        log!("INFO", "zero buf len");
                     }
                 }
                 None => {
-                    println!("no IORING_CQE_F_BUFFER!");
+                    log!("INFO", "no IORING_CQE_F_BUFFER!");
 
-                    println!("Stopping read task");
+                    log!("INFO", "Stopping read task");
                     assert!(e.user_data() != 0);
                     let rx: Arc<Rx> = unsafe { std::mem::transmute(e.user_data()) };
                     rx.post_error(zerror!("Read task interrupt").into());
