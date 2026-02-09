@@ -15,7 +15,7 @@ use nix::sys::eventfd::{EfdFlags, EventFd};
 #[cfg(unix)]
 use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use zenoh_core::zerror;
+use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 
 use std::{
@@ -25,7 +25,7 @@ use std::{
     sync::{atomic::AtomicBool, mpsc::Sender, Arc},
 };
 
-use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
+use io_uring::{EnterFlags, IoUring, SubmissionQueue, opcode, squeue::Flags, types};
 
 use crate::{batch_arena::BatchArena, BUF_SIZE};
 
@@ -187,7 +187,7 @@ impl Drop for ReaderInner {
 
 #[derive(Debug)]
 pub struct FragmentedBatch {
-    pub size: usize,
+    size: usize,
     pub data_offset: usize,
     buffers: Vec<Arc<RxBuffer>>,
 }
@@ -263,6 +263,18 @@ impl RxWindow {
     where
         F: FnMut(FragmentedBatch) -> ZResult<()>,
     {
+        log!("INFO", "Buffer len: {}", buffer.len());
+
+        fn parse_size(bytes: [u8; 2]) -> ZResult<usize> {
+            let size = u16::from_le_bytes(bytes) as usize;
+            assert!(size != 0);
+            if size == 0 {
+                bail!("Zero-sized buffer in stream!");
+            }
+            log!("INFO", "parsed size: {}", size);
+            Ok(size as usize)
+        }
+
         match &mut self.state {
             RxWindowState::Initial => {
                 let mut leftover = buffer.len() as usize;
@@ -275,8 +287,7 @@ impl RxWindow {
                         break;
                     }
 
-                    let size =
-                        u16::from_le_bytes(buffer[pos..pos + 2].try_into().unwrap()) as usize;
+                    let size = parse_size(buffer[pos..pos + 2].try_into().unwrap())?;
                     pos += 2;
                     leftover -= 2;
 
@@ -289,6 +300,7 @@ impl RxWindow {
                         };
                         let accumulator = BatchAccumulator::new(leftover, fragment);
                         self.state = RxWindowState::Accumulating(accumulator);
+                        assert!(size != 0);
                         break;
                     }
 
@@ -301,6 +313,7 @@ impl RxWindow {
                         };
                         let accumulator = BatchAccumulator::new(leftover, fragment);
                         self.state = RxWindowState::Accumulating(accumulator);
+                        assert!(size != 0);
                         break;
                     }
 
@@ -318,7 +331,7 @@ impl RxWindow {
             }
             RxWindowState::SizeFragmented(size_fragment) => {
                 // defragment size
-                let mut size = u16::from_le_bytes([*size_fragment, buffer[0]]) as usize;
+                let mut size = parse_size([*size_fragment, buffer[0]])?;
                 let mut leftover = buffer.len() as usize - 1;
                 let mut pos = 1;
 
@@ -332,6 +345,7 @@ impl RxWindow {
                         };
                         let accumulator = BatchAccumulator::new(leftover, fragment);
                         self.state = RxWindowState::Accumulating(accumulator);
+                        assert!(size != 0);
                         break;
                     }
 
@@ -344,6 +358,7 @@ impl RxWindow {
                         };
                         let accumulator = BatchAccumulator::new(leftover, fragment);
                         self.state = RxWindowState::Accumulating(accumulator);
+                        assert!(size != 0);
                         break;
                     }
 
@@ -370,7 +385,7 @@ impl RxWindow {
                         break;
                     }
 
-                    size = u16::from_le_bytes(buffer[pos..pos + 2].try_into().unwrap()) as usize;
+                    size = parse_size(buffer[pos..pos + 2].try_into().unwrap())?;
                     pos += 2;
                     leftover -= 2;
                 }
@@ -389,7 +404,7 @@ impl RxWindow {
                         let mut batch = FragmentedBatch {
                             size: batch_accumulator.batch.size,
                             data_offset: batch_accumulator.batch.data_offset,
-                            buffers: vec![],
+                            buffers: vec![], //  batch_accumulator.batch.buffers.clone(),
                         };
                         std::mem::swap(&mut batch.buffers, &mut batch_accumulator.batch.buffers);
                         log!("INFO", "on_batch");
@@ -400,17 +415,18 @@ impl RxWindow {
                         // no more data
                         if leftover == 0 {
                             self.state = RxWindowState::Initial;
+                            log!("INFO", "Accumulating -> Initial");
                             break;
                         }
 
                         // buffer contains size fragment
                         if leftover == 1 {
                             self.state = RxWindowState::SizeFragmented(buffer[pos]);
+                            log!("INFO", "Accumulating -> SizeFragmented");
                             break;
                         }
 
-                        let size =
-                            u16::from_le_bytes(buffer[pos..pos + 2].try_into().unwrap()) as usize;
+                        let size = parse_size(buffer[pos..pos + 2].try_into().unwrap())?;
                         pos += 2;
                         leftover -= 2;
 
@@ -423,6 +439,8 @@ impl RxWindow {
                             };
                             let accumulator = BatchAccumulator::new(leftover, fragment);
                             self.state = RxWindowState::Accumulating(accumulator);
+                            assert!(size != 0);
+                            log!("INFO", "Accumulating -> Accumulating (only size)");
                             break;
                         }
 
@@ -435,6 +453,8 @@ impl RxWindow {
                             };
                             let accumulator = BatchAccumulator::new(leftover, fragment);
                             self.state = RxWindowState::Accumulating(accumulator);
+                            assert!(size != 0);
+                            log!("INFO", "Accumulating -> Accumulating (fragment)");
                             break;
                         }
 
@@ -561,11 +581,7 @@ impl Reader {
     pub fn new() -> Self {
         // create eventfd to wake io_uring on demand by producing read events
         let waker = Arc::new(
-            nix::sys::eventfd::EventFd::from_value_and_flags(
-                0,
-                EfdFlags::EFD_CLOEXEC,
-            )
-            .unwrap(),
+            nix::sys::eventfd::EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap(),
         );
 
         let c_waker = waker.clone();
@@ -636,7 +652,7 @@ impl Reader {
                 .setup_defer_taskrun()
                 .setup_single_issuer()
                 .build((1024).try_into().unwrap()).unwrap();
-            let arena = BatchArena::new(64);
+            let arena = BatchArena::new(16);
             {
                 let provide_buffers = arena.provide_root_buffers();
                 unsafe { ring.submission_shared().push(&provide_buffers).unwrap() };
@@ -660,11 +676,10 @@ impl Reader {
             unsafe { ring.submission_shared().push(&waker_read).unwrap() };
 
             loop {
-                let mut sq = unsafe { ring.submission_shared() };
-                let mut cq = unsafe { ring.completion_shared() };
-                while let Some(e) = cq.next() {
+                while let Some(e) = unsafe { ring.completion_shared() }.next() {
+                    let mut sq = unsafe { ring.submission_shared() };
+                    
                     //println!("e: {:?}", e);
-
                     if e.user_data() == 0 {
                         println!("Zero-user-data entry: {:?}", e);
                         unsafe { sq.push(&waker_read).unwrap() };
@@ -673,17 +688,32 @@ impl Reader {
 
                     let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
 
-                    let need_submit = Reader::read_multi(&e, rx, &arena, &mut sq);
+                    let (need_submit, _sock_nonempty) = Reader::read_multi(&e, rx, &arena, &mut sq);
+                    
+                    while let Ok(val) = receiver.try_recv() {
+                        unsafe { sq.push(&val).unwrap() };
+                        //recv_ctr += 1;
+                    }
 
                     if need_submit {
-                        sq.sync();
-                        ring.submit().unwrap();
-                        cq.sync();
-                    }
+                        let len = sq.len() as u32;
+                        drop(sq);
+
+                        unsafe { ring.submitter().enter::<libc::sigset_t>(
+                            len,
+                             0,
+                              EnterFlags::GETEVENTS.bits(),
+                               None).unwrap(); }
+                    } else {
+                        drop(sq);
+                    }            
                 }
-                drop(cq);
+
+                //println!("loop_ctr: {loop_ctr}");
+                //println!("recv_ctr: {recv_ctr}");
 
                 // receive external submissions
+                let mut sq = unsafe { ring.submission_shared() };
                 while let Ok(val) = receiver.try_recv() {
                     unsafe { sq.push(&val).unwrap() };
                 }
@@ -695,18 +725,12 @@ impl Reader {
 
                 // this wait can be interrupted by Self::wake_reader_thread
                 ring.submit_and_wait(1).unwrap();
-                //                c_ring.submit().unwrap();
-
-                //                sq.sync();
-                //                cq.sync();
-                //                if cq.is_empty() {
-                //                    println!("cq empty");
-                //                    c_ring.submit_and_wait(1).unwrap();
-                //                } else {
-                //                    println!("cq non-empty");
-                //                    c_ring.submit().unwrap();
-                //                }
-                //                cq.sync();
+                
+                //unsafe { ring.submitter().enter::<libc::sigset_t>(
+                //            sq.len() as u32,
+                //             0,
+                //              EnterFlags::GETEVENTS.bits(),
+                //               None).unwrap(); }
             }
         });
 
@@ -720,20 +744,21 @@ impl Reader {
         rx: &Rx,
         arena: &ReservableArena,
         sq: &mut SubmissionQueue<'_>,
-    ) -> bool {
+    ) -> (bool, bool) {
         let mut need_submit = false;
+        let mut sock_nonempty = false;
         if e.result() < 0 {
             match e.result().neg() {
                 libc::ENOBUFS => {
                     // We are out of buffers
-                    println!("ENOBUFS: Restart multishot receive!!!");
+                    //println!("ENOBUFS: Restart multishot receive!!!");
 
-                    let provide_buffers = arena
-                        .inner
-                        .arena
-                        .provide_root_buffers()
-                        .flags(Flags::SKIP_SUCCESS);
-                    unsafe { sq.push(&provide_buffers).unwrap() };
+                    //let provide_buffers = arena
+                    //    .inner
+                    //    .arena
+                    //    .provide_root_buffers()
+                    //    .flags(Flags::SKIP_SUCCESS);
+                    //unsafe { sq.push(&provide_buffers).unwrap() };
 
                     let recv = opcode::RecvMulti::new(types::Fd(rx.fd), 0)
                         .build()
@@ -760,6 +785,11 @@ impl Reader {
 
                     let buf_len = e.result() as usize;
 
+                    assert!(io_uring::cqueue::buffer_more(e.flags()) == false);
+                    assert!(io_uring::cqueue::notif(e.flags()) == false);
+
+                    sock_nonempty |= io_uring::cqueue::sock_nonempty(e.flags());
+
                     //println!("buf_id: {buf_id}, buf_len: {buf_len}");
 
                     if buf_len > 0 {
@@ -780,6 +810,6 @@ impl Reader {
                 }
             };
         }
-        need_submit
+        (need_submit, sock_nonempty)
     }
 }

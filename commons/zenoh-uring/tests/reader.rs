@@ -25,7 +25,7 @@ use zenoh_uring::reader::Reader;
 
 pub mod common;
 
-pub const ITERATION_COUNT: usize = 10000;
+pub const ITERATION_COUNT: usize = 100000;
 
 fn writer_main() {
     let addr = ("127.0.0.1", 7780);
@@ -33,7 +33,7 @@ fn writer_main() {
 
     let mut i = 0u8;
     for _ in 0..ITERATION_COUNT {
-        let size = (unsafe { rand() + 1 } % u16::MAX as i32) as u16;
+        let size = ( (unsafe { rand().abs() as u32 } % u16::MAX as u32) as u16).saturating_add(1);
 
         let mut data = Vec::new();
         data.reserve(size as usize + 2);
@@ -63,6 +63,11 @@ fn reader_main() {
     let _read_handle = reader
         .setup_fragmented_read(stream.as_raw_fd(), move |data| {
 //            println!("Got {} bytes!", data.size());
+
+            if data.size() == 0 {
+                println!("Unexpected size: {}", data.size());
+                assert!(data.size() != 0);
+            }
 
             for cell in data.iter() {
                 assert!(*cell == i);

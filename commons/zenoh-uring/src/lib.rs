@@ -23,7 +23,7 @@ pub(crate) mod batch_arena;
 pub mod reader;
 pub mod writer;
 
-pub const BUF_SIZE: usize = 65536;
+pub const BUF_SIZE: usize = 65535;
 pub const BUF_COUNT: usize = 1 * 1024 * 1024 / BUF_SIZE;
 
 //const BUF_SIZE: usize = 16;

@@ -89,14 +89,23 @@ fn writer_main() {
 
     // standard write
     {
-        let mut arr = [0u8; BUF_SIZE];
+        const SIZE: usize = BUF_SIZE;
+
+        let mut arr = [0u8; SIZE];
+        let length = (SIZE-2) as u16;
+        arr[0..2].copy_from_slice(&length.to_le_bytes());
+        //let mut iteration = 1u8;
+        //arr[18..].fill(iteration);
         loop {
             let time = monotonic_now_ns();
-            arr[0..16].copy_from_slice(&time.to_le_bytes());
+            arr[2..18].copy_from_slice(&time.to_le_bytes());            
+            //arr[18..20].fill(iteration);
+            //arr[BUF_SIZE-10..].fill(iteration);
             client.write_all(&arr).unwrap();
+            //iteration = iteration.wrapping_add(1);
 
             //std::thread::yield_now();
-            //std::thread::sleep(Duration::from_millis(100));
+            //std::thread::sleep(Duration::from_micros(100));
         }
     }
 
@@ -131,17 +140,32 @@ fn reader_main() {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     let _read_handle = reader
-        .setup_read(stream.as_raw_fd(), move |data| {
-            //assert!(data.len() == BUF_SIZE);
+        .setup_fragmented_read(stream.as_raw_fd(), move |data| {
+            //if data.size() != BUF_SIZE-2 {
+            //    println!("Unexpected size: {}", data.size());
+            //    assert!(data.size() == BUF_SIZE-2);
+            //}
 
             let time = monotonic_now_ns();
-            let restored = u128::from_le_bytes(data[0..16].try_into().unwrap());
+
+            let bytes = data
+                .iter()
+                .take(16)
+                .enumerate()
+                .try_fold([0u8; 16], |mut acc, (i, b)| {
+                    acc[i] = *b;
+                    Ok::<_, ()>(acc)
+                })
+                .ok()
+                .unwrap(); // unwrap if you know there are 2 bytes
+
+            let restored = u128::from_le_bytes(bytes);
 
             let latency = (time - restored) as usize;
             //println!("latency: {latency} ns");
 
             c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            c_len.fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
+            c_len.fetch_add(data.size(), std::sync::atomic::Ordering::SeqCst);
             c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
 
             Ok(())
@@ -173,7 +197,11 @@ fn reader_main() {
         let len = len.swap(0, std::sync::atomic::Ordering::SeqCst);
         let mean_latency = accum_latency.swap(0, std::sync::atomic::Ordering::SeqCst) / ctr.max(1);
 
-        let full_msg_count = len / BUF_SIZE;
+        //let full_msg_count = len / (BUF_SIZE-2);
+        //let mbps = (len as f64) / (1024.0 * 1024.0);
+        //let avg_fragments = ctr as f64 / full_msg_count.max(1) as f64;
+
+        let full_msg_count = ctr;
         let mbps = (len as f64) / (1024.0 * 1024.0);
         let avg_fragments = ctr as f64 / full_msg_count.max(1) as f64;
 

@@ -394,7 +394,7 @@ async fn rx_task_uring(
                         Some(buffer) => ZSlice::new(
                             std::sync::Arc::new(ZRxBuffer(buffer)),
                             data.data_offset,
-                            data.data_offset + data.size,
+                            data.data_offset + data.size(),
                         )
                         .map_err(|_| zerror!("Error constructing slice...."))?,
                         None => {
