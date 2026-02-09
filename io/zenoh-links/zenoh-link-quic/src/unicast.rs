@@ -192,6 +192,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         &self.auth_identifier
     }
 
+    #[cfg(feature = "uring")]
     fn get_fd(&self) -> ZResult<RawFd> {
         //TODO: expose FD for quinn???
         bail!("Not supported");
