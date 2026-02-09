@@ -16,6 +16,7 @@ use std::{
     cell::UnsafeCell,
     collections::HashMap,
     fmt,
+    os::fd::RawFd,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -136,6 +137,11 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         }
 
         Ok(())
+    }
+
+    fn get_fd(&self) -> ZResult<RawFd> {
+        //TODO: expose FD for ZSerial
+        bail!("Not supported");
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {

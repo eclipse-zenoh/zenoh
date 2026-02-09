@@ -92,13 +92,13 @@ fn writer_main() {
         const SIZE: usize = BUF_SIZE;
 
         let mut arr = [0u8; SIZE];
-        let length = (SIZE-2) as u16;
+        let length = (SIZE - 2) as u16;
         arr[0..2].copy_from_slice(&length.to_le_bytes());
         //let mut iteration = 1u8;
         //arr[18..].fill(iteration);
         loop {
             let time = monotonic_now_ns();
-            arr[2..18].copy_from_slice(&time.to_le_bytes());            
+            arr[2..18].copy_from_slice(&time.to_le_bytes());
             //arr[18..20].fill(iteration);
             //arr[BUF_SIZE-10..].fill(iteration);
             client.write_all(&arr).unwrap();

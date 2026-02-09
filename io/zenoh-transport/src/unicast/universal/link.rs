@@ -11,10 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{sync::Arc, time::Duration};
+#[cfg(feature = "uring")]
+use std::sync::Arc;
+use std::time::Duration;
 
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_buffers::{ZSlice, ZSliceBuffer};
+#[cfg(feature = "uring")]
+use zenoh_buffers::ZSlice;
+use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Priority;
@@ -23,6 +27,7 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+#[cfg(feature = "uring")]
 use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
 
 use super::transport::TransportUnicastUniversal;
@@ -280,6 +285,7 @@ async fn tx_task(
     Ok(())
 }
 
+#[cfg(not(feature = "uring"))]
 async fn rx_task(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
@@ -288,8 +294,60 @@ async fn rx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
-    return rx_task_uring(link, transport, lease, rx_buffer_size, token).await;
+    rx_task_non_uring(
+        link,
+        transport.clone(),
+        lease,
+        rx_buffer_size,
+        token,
+        #[cfg(feature = "stats")]
+        stats,
+    )
+    .await
+}
 
+#[cfg(feature = "uring")]
+async fn rx_task(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    token: CancellationToken,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+) -> ZResult<()> {
+    if link.link.get_fd().is_ok() {
+        return rx_task_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            token,
+            #[cfg(feature = "stats")]
+            stats,
+        )
+        .await;
+    }
+
+    rx_task_non_uring(
+        link,
+        transport.clone(),
+        lease,
+        rx_buffer_size,
+        token,
+        #[cfg(feature = "stats")]
+        stats,
+    )
+    .await
+}
+
+async fn rx_task_non_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    token: CancellationToken,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+) -> ZResult<()> {
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
         pool: &RecyclingObjectPool<T, F>,
@@ -339,9 +397,11 @@ async fn rx_task(
     Ok(())
 }
 
+#[cfg(feature = "uring")]
 #[derive(Debug)]
 struct ZRxBuffer(Arc<RxBuffer>);
 
+#[cfg(feature = "uring")]
 impl ZSliceBuffer for ZRxBuffer {
     fn as_slice(&self) -> &[u8] {
         &self.0
@@ -356,10 +416,12 @@ impl ZSliceBuffer for ZRxBuffer {
     }
 }
 
+#[cfg(feature = "uring")]
 async fn rx_task_uring(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
-    lease: Duration,
+    // TODO: implement timeout
+    _lease: Duration,
     rx_buffer_size: usize,
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
@@ -424,7 +486,7 @@ async fn rx_task_uring(
                     .state
                     .uring
                     .reader
-                    .setup_fragmented_read(link.link.get_fd(), ring_cb)?
+                    .setup_fragmented_read(link.link.get_fd()?, ring_cb)?
             }
             false => {
                 let ring_cb = move |data: Arc<RxBuffer>| {
@@ -451,7 +513,7 @@ async fn rx_task_uring(
                     .state
                     .uring
                     .reader
-                    .setup_read(link.link.get_fd(), ring_cb)?
+                    .setup_read(link.link.get_fd()?, ring_cb)?
             }
         }
     };

@@ -31,9 +31,15 @@ use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
-    TransportManager, TransportPeerEventHandler, common::priority::{TransportPriorityRx, TransportPriorityTx}, unicast::{
-        TransportConfigUnicast, authentication::TransportAuthId, link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection}, transport_unicast_inner::{AddLinkResult, TransportUnicastTrait}, universal::link::TransportLinkUnicastUniversal
+    common::priority::{TransportPriorityRx, TransportPriorityTx},
+    unicast::{
+        authentication::TransportAuthId,
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
+        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
+        universal::link::TransportLinkUnicastUniversal,
+        TransportConfigUnicast,
     },
+    TransportManager, TransportPeerEventHandler,
 };
 
 /*************************************/

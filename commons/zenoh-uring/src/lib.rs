@@ -18,8 +18,8 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-pub(crate) mod page_arena;
 pub(crate) mod batch_arena;
+pub(crate) mod page_arena;
 pub mod reader;
 pub mod writer;
 

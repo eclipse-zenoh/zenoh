@@ -19,7 +19,7 @@ use zenoh_uring::{reader::Reader, writer::Writer};
 #[derive(Clone)]
 pub struct Uring {
     pub writer: Arc<Writer>,
-    pub reader: Reader
+    pub reader: Reader,
 }
 
 impl Default for Uring {

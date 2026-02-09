@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "uring")]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
@@ -529,6 +531,14 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Unixpipe
+    }
+
+    #[cfg(feature = "uring")]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match self.get_r_mut().pipe.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
     }
 }
 

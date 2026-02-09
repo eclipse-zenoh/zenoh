@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{cell::UnsafeCell, ops::{Deref, DerefMut}};
+use std::{
+    cell::UnsafeCell,
+    ops::{Deref, DerefMut},
+};
 
 use io_uring::{cqueue, opcode, types, IoUring};
 
@@ -46,7 +49,6 @@ pub struct BorrowedBuffer<'a> {
     arena: &'a mut BatchArena,
 }
 
-
 impl<'a> Deref for BorrowedBuffer<'a> {
     type Target = [u8];
 
@@ -62,20 +64,14 @@ impl<'a> DerefMut for BorrowedBuffer<'a> {
 }
 
 impl<'a> BorrowedBuffer<'a> {
-    fn new(
-        arena: &'a mut BatchArena,
-        available_bufers: &atomic_queue::Queue<u16>,
-    ) -> Option<Self> {
+    fn new(arena: &'a mut BatchArena, available_bufers: &atomic_queue::Queue<u16>) -> Option<Self> {
         available_bufers
             .pop()
             .map(|index| Self::from_index(arena, index))
     }
 
     fn from_index(arena: &'a mut BatchArena, index: u16) -> Self {
-        Self {
-            index,
-            arena
-        }
+        Self { index, arena }
     }
 }
 
@@ -101,12 +97,12 @@ impl BufferPool {
         }
     }
 
-    fn reuse_busy_buffer(&self, index: u16) -> BorrowedBuffer {
+    fn reuse_busy_buffer(&'_ self, index: u16) -> BorrowedBuffer<'_> {
         let mutable_arena = unsafe { &mut *self.arena.get() };
         BorrowedBuffer::from_index(mutable_arena, index)
     }
 
-    fn try_select_available_buffer(&self) -> Option<BorrowedBuffer> {
+    fn try_select_available_buffer(&'_ self) -> Option<BorrowedBuffer<'_>> {
         let mutable_arena = unsafe { &mut *self.arena.get() };
         BorrowedBuffer::new(mutable_arena, &self.available_bufers)
     }
@@ -138,7 +134,7 @@ impl Writer {
         Self { ring, pool }
     }
 
-    pub fn select_buffer(&self) -> BorrowedBuffer {
+    pub fn select_buffer(&'_ self) -> BorrowedBuffer<'_> {
         loop {
             {
                 let mut cq = unsafe { self.ring.completion_shared() };

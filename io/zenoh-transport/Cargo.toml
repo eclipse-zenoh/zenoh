@@ -51,6 +51,7 @@ transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
 transport_vsock = ["zenoh-link/transport_vsock"]
 transport_ws = ["zenoh-link/transport_ws"]
 unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
+uring = ["zenoh-link/uring", "zenoh-uring"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -89,7 +90,7 @@ zenoh-stats = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-uring = { workspace = true }
+zenoh-uring = { workspace = true, optional = true }
 
 [dev-dependencies]
 futures = { workspace = true }

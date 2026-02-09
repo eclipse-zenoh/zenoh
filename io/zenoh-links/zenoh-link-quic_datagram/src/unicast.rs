@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "uring")]
+use std::os::fd::RawFd;
 use std::{
     fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -168,6 +170,11 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+
+    fn get_fd(&self) -> ZResult<RawFd> {
+        //TODO: expose FD for quinn???
+        bail!("Not supported");
     }
 }
 

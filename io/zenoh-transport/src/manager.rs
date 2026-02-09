@@ -34,12 +34,14 @@ use super::{
     },
     TransportEventHandler,
 };
-use crate::{multicast::manager::{
+use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
-}, uring::Uring};
+};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
+#[cfg(feature = "uring")]
+use crate::uring::Uring;
 
 fn duration_from_i64us(us: i64) -> Duration {
     if us >= 0 {
@@ -129,6 +131,7 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
+    #[cfg(feature = "uring")]
     pub uring: Uring,
 }
 
@@ -380,7 +383,8 @@ impl TransportManagerBuilder {
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
-            uring: Uring::default()
+            #[cfg(feature = "uring")]
+            uring: Uring::default(),
         };
 
         let params = TransportManagerParams { config, state };

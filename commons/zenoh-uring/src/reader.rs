@@ -11,13 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use nix::sys::eventfd::{EfdFlags, EventFd};
-#[cfg(unix)]
-use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use zenoh_core::{bail, zerror};
-use zenoh_result::ZResult;
-
 use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut, Neg},
@@ -25,7 +18,13 @@ use std::{
     sync::{atomic::AtomicBool, mpsc::Sender, Arc},
 };
 
-use io_uring::{EnterFlags, IoUring, SubmissionQueue, opcode, squeue::Flags, types};
+use io_uring::{opcode, squeue::Flags, types, EnterFlags, IoUring, SubmissionQueue};
+use nix::sys::eventfd::{EfdFlags, EventFd};
+#[cfg(unix)]
+use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use zenoh_core::{bail, zerror};
+use zenoh_result::ZResult;
 
 use crate::{batch_arena::BatchArena, BUF_SIZE};
 
@@ -678,7 +677,7 @@ impl Reader {
             loop {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
                     let mut sq = unsafe { ring.submission_shared() };
-                    
+
                     //println!("e: {:?}", e);
                     if e.user_data() == 0 {
                         println!("Zero-user-data entry: {:?}", e);
@@ -689,7 +688,7 @@ impl Reader {
                     let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
 
                     let (need_submit, _sock_nonempty) = Reader::read_multi(&e, rx, &arena, &mut sq);
-                    
+
                     while let Ok(val) = receiver.try_recv() {
                         unsafe { sq.push(&val).unwrap() };
                         //recv_ctr += 1;
@@ -706,7 +705,7 @@ impl Reader {
                                None).unwrap(); }
                     } else {
                         drop(sq);
-                    }            
+                    }
                 }
 
                 //println!("loop_ctr: {loop_ctr}");
@@ -725,7 +724,7 @@ impl Reader {
 
                 // this wait can be interrupted by Self::wake_reader_thread
                 ring.submit_and_wait(1).unwrap();
-                
+
                 //unsafe { ring.submitter().enter::<libc::sigset_t>(
                 //            sq.len() as u32,
                 //             0,

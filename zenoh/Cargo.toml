@@ -80,6 +80,7 @@ unstable = [
   "zenoh-keyexpr/unstable",
   "zenoh-protocol/unstable",
 ]
+uring = ["zenoh-transport/uring"]
 
 [dependencies]
 ahash = { workspace = true, default-features = true }

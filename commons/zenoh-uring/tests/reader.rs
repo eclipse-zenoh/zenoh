@@ -33,7 +33,7 @@ fn writer_main() {
 
     let mut i = 0u8;
     for _ in 0..ITERATION_COUNT {
-        let size = ( (unsafe { rand().abs() as u32 } % u16::MAX as u32) as u16).saturating_add(1);
+        let size = ((unsafe { rand().abs() as u32 } % u16::MAX as u32) as u16).saturating_add(1);
 
         let mut data = Vec::new();
         data.reserve(size as usize + 2);
@@ -44,7 +44,7 @@ fn writer_main() {
             i = i.wrapping_add(1);
         }
 
-//        println!("Write {size} bytes!");
+        //        println!("Write {size} bytes!");
         client.write_all(&data).unwrap();
     }
 }
@@ -62,7 +62,7 @@ fn reader_main() {
     let mut i = 0u8;
     let _read_handle = reader
         .setup_fragmented_read(stream.as_raw_fd(), move |data| {
-//            println!("Got {} bytes!", data.size());
+            //            println!("Got {} bytes!", data.size());
 
             if data.size() == 0 {
                 println!("Unexpected size: {}", data.size());
