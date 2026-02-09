@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "uring")]
+use std::os::fd::RawFd;
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
     fmt,
-    os::fd::RawFd,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -139,6 +140,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         Ok(())
     }
 
+    #[cfg(feature = "uring")]
     fn get_fd(&self) -> ZResult<RawFd> {
         //TODO: expose FD for ZSerial
         bail!("Not supported");
