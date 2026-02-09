@@ -17,15 +17,12 @@ use std::{
     sync::atomic::AtomicPtr,
 };
 
-use io_uring::opcode;
 use libc::{mlock, mmap, MAP_ANON, MAP_PRIVATE, PROT_READ, PROT_WRITE};
-
-use crate::BUF_SIZE;
 
 #[derive(Debug)]
 pub(crate) struct PageArena {
     pub(crate) memory: AtomicPtr<u8>,
-    size: usize,
+    pub(crate) size: usize,
 }
 
 impl Deref for PageArena {
@@ -84,37 +81,6 @@ impl PageArena {
             self.memory.load(std::sync::atomic::Ordering::Relaxed),
             self.size,
         )
-    }
-
-    pub(crate) fn provide_buffers(&self) -> io_uring::squeue::Entry {
-        opcode::ProvideBuffers::new(
-            self.memory.load(std::sync::atomic::Ordering::Relaxed),
-            BUF_SIZE.try_into().unwrap(),
-            (self.size / BUF_SIZE).try_into().unwrap(),
-            0,
-            0,
-        )
-        .build()
-    }
-
-    pub(crate) fn register_buffers(&self) -> Vec<libc::iovec> {
-        let buf_count = (self.size / BUF_SIZE).try_into().unwrap();
-
-        let mut bufs = Vec::with_capacity(buf_count);
-
-        for i in 0..buf_count {
-            let ptr = unsafe {
-                self.memory
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                    .add(i * BUF_SIZE)
-            };
-            bufs.push(libc::iovec {
-                iov_base: ptr as *mut libc::c_void,
-                iov_len: BUF_SIZE,
-            });
-        }
-
-        bufs
     }
 }
 

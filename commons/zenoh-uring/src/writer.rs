@@ -19,7 +19,7 @@ use std::{
 
 use io_uring::{cqueue, opcode, types, IoUring};
 
-use crate::{batch_arena::BatchArena, BUF_COUNT};
+use crate::{batch_arena::BatchArena, BUF_COUNT, BUF_SIZE};
 
 /*
 |____________________ARENA______________________|
@@ -85,7 +85,7 @@ struct BufferPool {
 
 impl BufferPool {
     fn new(ring: &IoUring) -> Self {
-        let mut arena = UnsafeCell::new(BatchArena::new(BUF_COUNT));
+        let mut arena = UnsafeCell::new(BatchArena::new(BUF_SIZE, BUF_COUNT));
         let write_buffers = arena.get_mut().register_buffers();
         unsafe { ring.submitter().register_buffers(&write_buffers).unwrap() };
 

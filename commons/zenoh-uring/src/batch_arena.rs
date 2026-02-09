@@ -14,49 +14,76 @@
 
 use std::ops::{Index, IndexMut};
 
-use crate::{page_arena::PageArena, BUF_SIZE};
+use io_uring::opcode;
+
+use crate::page_arena::PageArena;
 
 #[derive(Debug)]
 pub(crate) struct BatchArena {
     arena: PageArena,
+    batch_size: usize,
 }
 
 impl Index<usize> for BatchArena {
     type Output = [u8];
 
     fn index(&self, index: usize) -> &Self::Output {
-        let start = index * BUF_SIZE;
-        let end = start + BUF_SIZE;
+        let start = index * self.batch_size;
+        let end = start + self.batch_size;
         &self.arena[start..end]
     }
 }
 
 impl IndexMut<usize> for BatchArena {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let start = index * BUF_SIZE;
-        let end = start + BUF_SIZE;
+        let start = index * self.batch_size;
+        let end = start + self.batch_size;
         &mut self.arena[start..end]
     }
 }
 
 impl BatchArena {
-    pub(crate) fn new(buf_count: usize) -> Self {
-        let size = BUF_SIZE * buf_count;
+    pub(crate) fn new(batch_size: usize, batch_count: usize) -> Self {
+        let size = batch_size * batch_count;
         let arena = PageArena::new(size);
-        Self { arena }
+        Self { arena, batch_size }
     }
 
     pub(crate) unsafe fn index_mut_unchecked(&self, index: usize) -> &'static mut [u8] {
-        let start = index * BUF_SIZE;
-        let end = start + BUF_SIZE;
+        let start = index * self.batch_size;
+        let end = start + self.batch_size;
         &mut self.arena.as_slice_mut_unchecked()[start..end]
     }
 
     pub(crate) fn provide_root_buffers(&self) -> io_uring::squeue::Entry {
-        self.arena.provide_buffers()
+        opcode::ProvideBuffers::new(
+            self.arena.memory.load(std::sync::atomic::Ordering::Relaxed),
+            self.batch_size as i32,
+            (self.arena.size / self.batch_size).try_into().unwrap(),
+            0,
+            0,
+        )
+        .build()
     }
 
     pub(crate) fn register_buffers(&self) -> Vec<libc::iovec> {
-        self.arena.register_buffers()
+        let batch_count = (self.arena.size / self.batch_size).try_into().unwrap();
+
+        let mut batches = Vec::with_capacity(batch_count);
+
+        for i in 0..batch_count {
+            let ptr = unsafe {
+                self.arena
+                    .memory
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    .add(i * self.batch_size)
+            };
+            batches.push(libc::iovec {
+                iov_base: ptr as *mut libc::c_void,
+                iov_len: self.batch_size,
+            });
+        }
+
+        batches
     }
 }

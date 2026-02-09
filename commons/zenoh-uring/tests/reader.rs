@@ -54,7 +54,7 @@ fn reader_main() {
     let listener = TcpListener::bind(addr).unwrap();
     let (stream, _addr) = listener.accept().unwrap();
 
-    let reader = Reader::new();
+    let reader = Reader::new(65535, 16);
 
     let iteration = Arc::new(AtomicUsize::new(0));
     let c_iteration = iteration.clone();

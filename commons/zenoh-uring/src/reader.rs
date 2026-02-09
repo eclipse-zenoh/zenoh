@@ -577,7 +577,7 @@ impl Reader {
         ReadTask::new(fd, callback, self.inner.clone())
     }
 
-    pub fn new() -> Self {
+    pub fn new(batch_size: usize, batch_count: usize) -> Self {
         // create eventfd to wake io_uring on demand by producing read events
         let waker = Arc::new(
             nix::sys::eventfd::EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap(),
@@ -651,7 +651,7 @@ impl Reader {
                 .setup_defer_taskrun()
                 .setup_single_issuer()
                 .build((1024).try_into().unwrap()).unwrap();
-            let arena = BatchArena::new(16);
+            let arena = BatchArena::new(batch_size, batch_count);
             {
                 let provide_buffers = arena.provide_root_buffers();
                 unsafe { ring.submission_shared().push(&provide_buffers).unwrap() };

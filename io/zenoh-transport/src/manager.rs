@@ -384,7 +384,7 @@ impl TransportManagerBuilder {
             #[cfg(feature = "shared-memory")]
             shm_context,
             #[cfg(feature = "uring")]
-            uring: Uring::default(),
+            uring: Uring::new(65535 + 2, 16),
         };
 
         let params = TransportManagerParams { config, state };

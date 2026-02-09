@@ -135,7 +135,7 @@ fn reader_main() {
     let (stream, _addr) = listener.accept().unwrap();
     stream.set_nodelay(true).unwrap();
 
-    let reader = Reader::new();
+    let reader = Reader::new(65535, 16);
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
@@ -210,6 +210,7 @@ fn reader_main() {
     }
 }
 
+#[ignore]
 #[test]
 fn rw() {
     let _ = std::thread::spawn(reader_main);

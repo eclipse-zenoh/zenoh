@@ -22,10 +22,10 @@ pub struct Uring {
     pub reader: Reader,
 }
 
-impl Default for Uring {
-    fn default() -> Self {
+impl Uring {
+    pub fn new(batch_size: usize, batch_count: usize) -> Self {
         let writer = Arc::new(Writer::new());
-        let reader = Reader::new();
+        let reader = Reader::new(batch_size, batch_count);
         Self { writer, reader }
     }
 }
