@@ -26,13 +26,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::api::session::{Session, SessionInner, UndeclarableSealed, WeakSession};
+use crate::api::session::{Session, UndeclarableSealed, WeakSession};
 
 #[derive(Debug)]
 pub(crate) struct KeyExprWireDeclaration {
     expr_id: ExprId,
     prefix_len: u32,
-    mapping: Mapping,
     session: WeakSession,
     undeclared: bool,
 }
@@ -41,13 +40,11 @@ impl KeyExprWireDeclaration {
     pub(crate) fn new(prefix: &str, session: &Session, force: bool) -> ZResult<Option<Self>> {
         let prefix_len = prefix.len() as u32;
         Ok(session
-            .0
             .declare_prefix(prefix, force)
             .wait()?
             .map(|expr_id| Self {
                 expr_id,
                 prefix_len,
-                mapping: Mapping::Sender,
                 session: session.downgrade(),
                 undeclared: false,
             }))
@@ -60,15 +57,6 @@ impl KeyExprWireDeclaration {
             self.undeclared = true;
             self.session.undeclare_prefix(self.expr_id)
         }
-    }
-
-    pub(crate) fn is_declared_on_session(&self, session: &Session) -> bool {
-        self.is_declared_on_session_inner(&session.0)
-    }
-
-    pub(crate) fn is_declared_on_session_inner(&self, session: &SessionInner) -> bool {
-        let inner = self.session.as_ref();
-        std::ptr::eq(inner, session)
     }
 }
 
@@ -522,9 +510,7 @@ impl<'a> KeyExpr<'a> {
     pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
         self.declaration()
             .as_ref()
-            .map(|d| {
-                d.is_declared_on_session(session) && d.prefix_len as usize == self.key_expr().len()
-            })
+            .map(|d| d.session == *session && d.prefix_len as usize == self.key_expr().len())
             .unwrap_or(false)
     }
 
@@ -532,7 +518,7 @@ impl<'a> KeyExpr<'a> {
         self.declaration()
             .as_ref()
             .map(|d| {
-                d.is_declared_on_session(session)
+                d.session == *session
                     && self
                         .key_expr()
                         .get_nonwild_prefix()
@@ -542,27 +528,35 @@ impl<'a> KeyExpr<'a> {
             .unwrap_or(false)
     }
 
-    pub(crate) fn to_wire(&'a self, session: &SessionInner) -> WireExpr<'a> {
+    fn to_wire_inner(&'a self, session: &Session, mapping: Mapping) -> WireExpr<'a> {
         match self.declaration() {
-            Some(d) if d.is_declared_on_session_inner(session) => WireExpr {
+            Some(d) if d.session == *session => WireExpr {
                 scope: d.expr_id,
                 suffix: std::borrow::Cow::Borrowed(
-                    &self.key_expr().as_str()[((d.prefix_len) as usize)..],
+                    &self.key_expr().as_str()[(d.prefix_len as usize)..],
                 ),
-                mapping: d.mapping,
+                mapping,
             },
             _ => WireExpr {
                 scope: 0,
                 suffix: std::borrow::Cow::Borrowed(self.key_expr().as_str()),
-                mapping: Mapping::Sender,
+                mapping,
             },
         }
+    }
+
+    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
+        self.to_wire_inner(session, Mapping::Sender)
+    }
+
+    pub(crate) fn to_wire_local(&'a self, session: &Session) -> WireExpr<'a> {
+        self.to_wire_inner(session, Mapping::Receiver)
     }
 
     fn undeclare_with_session_check(&mut self, parent_session: Option<&Session>) -> ZResult<()> {
         match self.declaration_mut().take() {
             Some(mut d) if self.key_expr().len() == d.prefix_len as usize => {
-                if parent_session.map(|s| d.is_declared_on_session(s)).unwrap_or(true) {
+                if parent_session.is_some_and(|s| d.session == *s) {
                     Arc::get_mut(&mut d).map(|d| d.undeclare()).unwrap_or(Ok(()))
                 } else {
                     let expr_id = self.declaration_mut().insert(d).expr_id;

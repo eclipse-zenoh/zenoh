@@ -285,7 +285,7 @@ impl<'a, 'b, KeySpace, Handler, const BACKGROUND: bool>
         Handler: IntoHandler<Sample>,
         Handler::Handler: Send,
     {
-        let session = self.session.clone();
+        let session = self.session.downgrade();
         let key_expr = self.key_expr?.into_owned();
         let key_space = self.key_space.clone().into();
         let query_selector = match self.query_selector {

@@ -1113,3 +1113,34 @@ async fn test_advanced_retransmission_heartbeat() {
     )
     .await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn advanced_subscriber_is_closed_with_the_session() {
+    use std::time::Duration;
+
+    use zenoh::internal::ztimeout;
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
+    let mut conf = zenoh::Config::default();
+    conf.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session = ztimeout!(zenoh::open(conf)).unwrap();
+    let subscriber = ztimeout!(session.declare_subscriber("test").advanced()).unwrap();
+    ztimeout!(session.close()).unwrap();
+    assert!(ztimeout!(subscriber.recv_async()).is_err());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn advanced_subscriber_does_not_prevent_session_to_be_closed_when_dropped() {
+    use std::time::Duration;
+
+    use zenoh::internal::ztimeout;
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
+    let mut conf = zenoh::Config::default();
+    conf.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session = ztimeout!(zenoh::open(conf)).unwrap();
+    let subscriber = ztimeout!(session.declare_subscriber("test").advanced()).unwrap();
+    drop(session);
+    // Session is closed so the subscriber should be closed too
+    assert!(ztimeout!(subscriber.recv_async()).is_err());
+}

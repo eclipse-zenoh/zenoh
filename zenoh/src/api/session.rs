@@ -14,7 +14,8 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::TryInto,
-    fmt, mem,
+    fmt,
+    mem::{self, ManuallyDrop},
     ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -24,8 +25,8 @@ use std::{
 };
 
 use async_trait::async_trait;
+use itertools::Itertools;
 use once_cell::sync::OnceCell;
-use ref_cast::{ref_cast_custom, RefCastCustom};
 use tracing::{error, info, span::EnteredSpan, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
@@ -38,7 +39,7 @@ use zenoh_config::{
 #[cfg(feature = "unstable")]
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::keyexpr_tree::KeBoxTree;
+use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -104,7 +105,7 @@ use crate::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
             Reply,
         },
-        queryable::{Query, QueryInner, QueryableState},
+        queryable::{Query, QueryInner, QueryableState, ReplyPrimitives},
         sample::{Locality, QoS, Sample, SampleKind},
         selector::Selector,
         subscriber::{SubscriberKind, SubscriberState},
@@ -587,16 +588,18 @@ impl<T, S> Undeclarable<S> for T where T: UndeclarableSealed<S> {}
 pub(crate) struct SessionInner {
     /// See [`WeakSession`] doc
     strong_counter: AtomicUsize,
-    pub(crate) runtime: GenericRuntime,
-    pub(crate) state: RwLock<SessionState>,
-    pub(crate) id: EntityId,
+    runtime: GenericRuntime,
+    state: RwLock<SessionState>,
+    id: EntityId,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
 }
 
 impl fmt::Debug for SessionInner {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Session").field("id", &self.zid()).finish()
+        f.debug_struct("Session")
+            .field("id", &self.runtime.zid())
+            .finish()
     }
 }
 
@@ -646,23 +649,23 @@ impl fmt::Debug for SessionInner {
 /// session.put("key/expression", "value").await.unwrap();
 /// # }
 /// ```
-#[derive(RefCastCustom)]
+#[derive(Debug)]
 #[repr(transparent)]
-pub struct Session(pub(crate) Arc<SessionInner>);
+pub struct Session(Arc<SessionInner>);
 
 impl Session {
+    #[cfg(not(feature = "internal"))]
     pub(crate) fn downgrade(&self) -> WeakSession {
-        WeakSession::new(&self.0)
+        WeakSession {
+            inner: ManuallyDrop::new(Session(self.0.clone())),
+        }
     }
 
-    #[doc(hidden)]
-    #[ref_cast_custom]
-    pub(crate) const fn ref_cast(from: &Arc<SessionInner>) -> &Self;
-}
-
-impl fmt::Debug for Session {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
+    #[zenoh_macros::internal]
+    pub fn downgrade(&self) -> WeakSession {
+        WeakSession {
+            inner: ManuallyDrop::new(Session(self.0.clone())),
+        }
     }
 }
 
@@ -683,39 +686,51 @@ impl Drop for Session {
     }
 }
 
-/// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
-/// It provides weak-like semantics to the arc-like session, without using [`Weak`].
-/// Notably, it allows establishing reference cycles inside the session for the primitive
-/// implementation.
-/// When all `Session` instances are dropped, [`Session::close`] is called and cleans
-/// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
-///
-/// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
-/// closing, because the primitive implementation seemed to be used in the closing operation.)
-#[derive(Clone)]
-pub(crate) struct WeakSession(Arc<SessionInner>);
+/// A weak reference to the session.
+// `WeakSession` provides a weak-like semantic to the arc-like session, without using [`Weak`].
+// Notably, it allows establishing reference cycles inside the session for the primitive
+// implementation.
+// When all `Session` instances are dropped, [`Session::close`] is called and cleans
+// the reference cycles, allowing the underlying `Arc` to be properly reclaimed.
+//
+// (Although it was planned to be used initially, `Weak` was in fact causing errors in the session
+// closing, because the primitive implementation seemed to be used in the closing operation.)
+#[derive(Debug)]
+pub struct WeakSession {
+    inner: ManuallyDrop<Session>,
+}
 
-impl WeakSession {
-    fn new(session: &Arc<SessionInner>) -> Self {
-        Self(session.clone())
-    }
-
-    pub(crate) fn session(&self) -> &Session {
-        Session::ref_cast(&self.0)
+impl Clone for WeakSession {
+    fn clone(&self) -> Self {
+        self.inner.downgrade()
     }
 }
 
-impl fmt::Debug for WeakSession {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
+impl Drop for WeakSession {
+    fn drop(&mut self) {
+        // SAFETY: Rust does not call drop on ManuallyDrop and all Session-allocated resources
+        // except Arc<SessionInner>, will be released once last "strong" Session is dropped.
+        unsafe { std::ptr::drop_in_place(&mut self.inner.0 as *mut _) };
+    }
+}
+
+impl PartialEq for Session {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl PartialEq<Session> for WeakSession {
+    fn eq(&self, other: &Session) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl Deref for WeakSession {
-    type Target = Arc<SessionInner>;
+    type Target = Session;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
@@ -779,7 +794,7 @@ impl Session {
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
     pub fn zid(&self) -> ZenohId {
-        self.info().zid().wait()
+        self.0.runtime.zid()
     }
 
     /// Returns the [`EntityGlobalId`] of this Session.
@@ -919,7 +934,7 @@ impl Session {
                 // Called when the runtime is not initialized with an HLC.
                 // UNIX_EPOCH returns a Timespec::zero(); unwrap should be permissible here.
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-                Timestamp::new(now, self.0.zid().into())
+                Timestamp::new(now, self.zid().into())
             }
         }
     }
@@ -1120,8 +1135,6 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        let timeout =
-            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         QuerierBuilder {
             session: self,
@@ -1130,7 +1143,7 @@ impl Session {
             destination: Locality::default(),
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            timeout,
+            timeout: self.queries_default_timeout(),
             #[cfg(feature = "unstable")]
             accept_replies: ReplyKeyExpr::default(),
         }
@@ -1300,8 +1313,6 @@ impl Session {
         <TryIntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
-        let timeout =
-            { Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms()) };
         let qos: QoS = request::ext::QoSType::REQUEST.into();
         SessionGetBuilder {
             session: self,
@@ -1310,7 +1321,7 @@ impl Session {
             consolidation: QueryConsolidation::DEFAULT,
             qos: qos.into(),
             destination: Locality::default(),
-            timeout,
+            timeout: self.queries_default_timeout(),
             value: None,
             attachment: None,
             handler: DefaultHandler::default(),
@@ -1350,11 +1361,13 @@ impl Session {
             Ok(session)
         })
     }
-}
 
-impl SessionInner {
-    pub fn zid(&self) -> ZenohId {
-        self.runtime.zid()
+    pub(crate) fn runtime(&self) -> &GenericRuntime {
+        &self.0.runtime
+    }
+
+    pub(crate) fn queries_default_timeout(&self) -> Duration {
+        Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms())
     }
 
     pub(crate) fn declare_prefix<'a>(
@@ -1364,7 +1377,7 @@ impl SessionInner {
     ) -> impl Resolve<ZResult<Option<ExprId>>> + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
-            let mut state = zwrite!(self.state);
+            let mut state = zwrite!(self.0.state);
             let primitives = state.primitives()?;
             match state
                 .local_resources
@@ -1414,7 +1427,7 @@ impl SessionInner {
                             },
                         }),
                     });
-                    let mut state = zwrite!(self.state);
+                    let mut state = zwrite!(self.0.state);
                     if let Some(res) = state.local_resources.get_mut(&expr_id) {
                         res.declared = true;
                     }
@@ -1426,7 +1439,7 @@ impl SessionInner {
 
     pub(crate) fn undeclare_prefix(&self, expr_id: ExprId) -> ZResult<()> {
         trace!("undedeclare_prefix({expr_id})");
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         let primitives = state.primitives()?;
         if let Some(entry) = state.local_resources.get_mut(&expr_id) {
             entry.count -= 1;
@@ -1452,9 +1465,9 @@ impl SessionInner {
         key_expr: KeyExpr,
         destination: Locality,
     ) -> ZResult<EntityId> {
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_publisher({:?})", key_expr);
-        let id = self.runtime.next_id();
+        let id = self.0.runtime.next_id();
 
         let mut pub_state = PublisherState {
             id,
@@ -1514,7 +1527,7 @@ impl SessionInner {
     }
 
     pub(crate) fn undeclare_publisher_inner(&self, pid: Id) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
         };
@@ -1552,8 +1565,8 @@ impl SessionInner {
         destination: Locality,
     ) -> ZResult<EntityId> {
         tracing::trace!("declare_querier({:?})", key_expr);
-        let mut state = zwrite!(self.state);
-        let id = self.runtime.next_id();
+        let mut state = zwrite!(self.0.state);
+        let id = self.0.runtime.next_id();
         let declared_querier = state.register_querier(id, &key_expr, destination);
         if let Some(res) = declared_querier {
             let primitives = state.primitives()?;
@@ -1572,7 +1585,7 @@ impl SessionInner {
     }
 
     pub(crate) fn undeclare_querier_inner(&self, pid: Id) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
         };
@@ -1604,14 +1617,14 @@ impl SessionInner {
     }
 
     pub(crate) fn declare_subscriber_inner(
-        self: &Arc<Self>,
+        &self,
         key_expr: &KeyExpr,
         origin: Locality,
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
-        let id = self.runtime.next_id();
+        let id = self.0.runtime.next_id();
         let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
@@ -1625,7 +1638,7 @@ impl SessionInner {
                 ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber { id, wire_expr }),
             });
-            let state = zread!(self.state);
+            let state = zread!(self.0.state);
             self.update_matching_status(&state, &key_expr, MatchingStatusType::Subscribers, true)
         } else if origin == Locality::SessionLocal {
             self.update_matching_status(&state, key_expr, MatchingStatusType::Subscribers, true)
@@ -1634,12 +1647,8 @@ impl SessionInner {
         Ok(sub_state)
     }
 
-    pub(crate) fn undeclare_subscriber_inner(
-        self: &Arc<Self>,
-        sid: Id,
-        kind: SubscriberKind,
-    ) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
+    pub(crate) fn undeclare_subscriber_inner(&self, sid: Id, kind: SubscriberKind) -> ZResult<()> {
+        let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
         };
@@ -1683,7 +1692,7 @@ impl SessionInner {
                                     },
                                 }),
                             });
-                            let state = zread!(self.state);
+                            let state = zread!(self.0.state);
                             self.update_matching_status(
                                 &state,
                                 &sub_state.key_expr,
@@ -1696,7 +1705,7 @@ impl SessionInner {
                         }
                     } else {
                         drop(state);
-                        let state = zread!(self.state);
+                        let state = zread!(self.0.state);
                         self.update_matching_status(
                             &state,
                             &sub_state.key_expr,
@@ -1734,15 +1743,15 @@ impl SessionInner {
     }
 
     pub(crate) fn declare_queryable_inner(
-        self: &Arc<Self>,
+        &self,
         key_expr: &KeyExpr,
         complete: bool,
         origin: Locality,
         callback: Callback<Query>,
     ) -> ZResult<Arc<QueryableState>> {
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_queryable({:?})", key_expr);
-        let id = self.runtime.next_id();
+        let id = self.0.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1775,7 +1784,7 @@ impl SessionInner {
             drop(state);
         }
 
-        let state = zread!(self.state);
+        let state = zread!(self.0.state);
         self.update_matching_status(
             &state,
             key_expr,
@@ -1786,8 +1795,8 @@ impl SessionInner {
         Ok(qable_state)
     }
 
-    pub(crate) fn close_queryable(self: &Arc<Self>, qid: Id) -> ZResult<()> {
-        let mut state = zwrite!(self.state);
+    pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
+        let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
         };
@@ -1810,7 +1819,7 @@ impl SessionInner {
             } else {
                 drop(state);
             }
-            let state = zread!(self.state);
+            let state = zread!(self.0.state);
             self.update_matching_status(
                 &state,
                 &qable_state.key_expr,
@@ -1830,8 +1839,8 @@ impl SessionInner {
 
     pub(crate) fn declare_liveliness_inner(&self, key_expr: &KeyExpr) -> ZResult<Id> {
         tracing::trace!("declare_liveliness({:?})", key_expr);
-        let id = self.runtime.next_id();
-        let primitives = zread!(self.state).primitives()?;
+        let id = self.0.runtime.next_id();
+        let primitives = zread!(self.0.state).primitives()?;
         primitives.send_declare(&mut Declare {
             interest_id: None,
             ext_qos: declare::ext::QoSType::DECLARE,
@@ -1852,9 +1861,9 @@ impl SessionInner {
         history: bool,
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         trace!("declare_liveliness_subscriber({:?})", key_expr);
-        let id = self.runtime.next_id();
+        let id = self.0.runtime.next_id();
 
         let sub_state = SubscriberState {
             id,
@@ -1908,7 +1917,8 @@ impl SessionInner {
         drop(state);
 
         if !known_tokens.is_empty() {
-            self.task_controller
+            self.0
+                .task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     for token in known_tokens {
                         callback.call(Sample {
@@ -1946,7 +1956,7 @@ impl SessionInner {
     }
 
     pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
-        let Ok(primitives) = zread!(self.state).primitives() else {
+        let Ok(primitives) = zread!(self.0.state).primitives() else {
             return Ok(());
         };
         trace!("undeclare_liveliness({:?})", tid);
@@ -1970,8 +1980,8 @@ impl SessionInner {
         match_type: MatchingStatusType,
         callback: Callback<MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
-        let mut state = zwrite!(self.state);
-        let id = self.runtime.next_id();
+        let mut state = zwrite!(self.0.state);
+        let id = self.0.runtime.next_id();
         tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
@@ -2006,7 +2016,7 @@ impl SessionInner {
         key_expr: &KeyExpr,
         matching_type: MatchingStatusType,
     ) -> MatchingStatus {
-        let state = zread!(self.state);
+        let state = zread!(self.0.state);
         let matching = match matching_type {
             MatchingStatusType::Subscribers => state
                 .subscribers(SubscriberKind::Subscriber)
@@ -2030,11 +2040,11 @@ impl SessionInner {
         destination: Locality,
         matching_type: MatchingStatusType,
     ) -> ZResult<MatchingStatus> {
-        Ok(self.runtime.matching_status_remote(
+        Ok(self.0.runtime.matching_status_remote(
             key_expr,
             destination,
             matching_type,
-            *self.face_id.get().unwrap(),
+            *self.0.face_id.get().unwrap(),
         ))
     }
 
@@ -2059,7 +2069,7 @@ impl SessionInner {
     }
 
     pub(crate) fn update_matching_status(
-        self: &Arc<Self>,
+        &self,
         state: &SessionState,
         key_expr: &KeyExpr,
         match_type: MatchingStatusType,
@@ -2069,9 +2079,10 @@ impl SessionInner {
             if msub.is_matching(key_expr, match_type) {
                 // Cannot hold session lock when calling tables (matching_status())
                 // TODO: check which ZRuntime should be used
-                self.task_controller
+                self.0
+                    .task_controller
                     .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                        let session = WeakSession::new(self);
+                        let session = self.downgrade();
                         let msub = msub.clone();
                         async move {
                             match msub.current.lock() {
@@ -2105,7 +2116,7 @@ impl SessionInner {
 
     pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
         let state = {
-            let mut state = zwrite!(self.state);
+            let mut state = zwrite!(self.0.state);
             if state.primitives.is_none() {
                 return Ok(());
             }
@@ -2126,18 +2137,18 @@ impl SessionInner {
         callback: Callback<TransportEvent>,
         history: bool,
     ) -> ZResult<Arc<TransportEventsListenerState>> {
-        let id = self.runtime.next_id();
+        let id = self.runtime().next_id();
         trace!("declare_transport_events_listener_inner() => {id}");
 
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
-        zwrite!(self.state)
+        zwrite!(self.0.state)
             .transport_events_listeners
             .insert(id, listener_state.clone());
 
         // Send history if requested
         if history {
-            for transport in self.runtime.get_transports() {
+            for transport in self.runtime().get_transports() {
                 let event = TransportEvent {
                     kind: SampleKind::Put,
                     transport,
@@ -2152,7 +2163,7 @@ impl SessionInner {
     #[cfg(feature = "unstable")]
     pub(crate) fn undeclare_transport_events_listener_inner(&self, sid: Id) -> ZResult<()> {
         let state = {
-            let mut state = zwrite!(self.state);
+            let mut state = zwrite!(self.0.state);
             if state.primitives.is_none() {
                 return Ok(());
             }
@@ -2178,7 +2189,7 @@ impl SessionInner {
         let event = TransportEvent { kind, transport };
 
         // Call all registered callbacks
-        let listeners = zread!(self.state)
+        let listeners = zread!(self.0.state)
             .transport_events_listeners
             .values()
             .cloned()
@@ -2194,7 +2205,7 @@ impl SessionInner {
         history: bool,
         transport: Option<Transport>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
-        let id = self.runtime.next_id();
+        let id = self.runtime().next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
 
         let listener_state = Arc::new(LinkEventsListenerState {
@@ -2203,13 +2214,13 @@ impl SessionInner {
             transport: transport.clone(),
         });
 
-        zwrite!(self.state)
+        zwrite!(self.0.state)
             .link_events_listeners
             .insert(id, listener_state.clone());
 
         // Send history if requested
         if history {
-            for link in self.runtime.get_links(transport.as_ref()) {
+            for link in self.runtime().get_links(transport.as_ref()) {
                 let event = LinkEvent {
                     kind: SampleKind::Put,
                     link,
@@ -2224,7 +2235,7 @@ impl SessionInner {
     #[cfg(feature = "unstable")]
     pub(crate) fn undeclare_transport_links_listener_inner(&self, sid: Id) -> ZResult<()> {
         let state = {
-            let mut state = zwrite!(self.state);
+            let mut state = zwrite!(self.0.state);
             if state.primitives.is_none() {
                 return Ok(());
             }
@@ -2254,7 +2265,7 @@ impl SessionInner {
         };
 
         // Call all registered callbacks, filtering by transport if specified
-        let listeners = zread!(self.state)
+        let listeners = zread!(self.0.state)
             .link_events_listeners
             .values()
             .cloned()
@@ -2285,7 +2296,7 @@ impl SessionInner {
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
         let mut callbacks = SingleOrVec::default();
-        let state = zread!(self.state);
+        let state = zread!(self.0.state);
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
@@ -2369,8 +2380,8 @@ impl SessionInner {
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
-        let primitives = zread!(self.state).primitives()?;
-        let timestamp = timestamp.or_else(|| self.runtime.new_timestamp());
+        let primitives = zread!(self.0.state).primitives()?;
+        let timestamp = timestamp.or_else(|| self.0.runtime.new_timestamp());
         let wire_expr = key_expr.to_wire(self);
         let ext_qos = push::ext::QoSType::new(priority.into(), congestion_control, is_express);
         let make_body = || match kind {
@@ -2435,12 +2446,12 @@ impl SessionInner {
     #[cfg(feature = "internal")]
     #[allow(dead_code)]
     pub(crate) fn static_runtime(&self) -> Option<&Runtime> {
-        self.runtime.static_runtime()
+        self.0.runtime.static_runtime()
     }
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
-        self: &Arc<Self>,
+        &self,
         key_expr: &KeyExpr<'_>,
         parameters: &Parameters<'_>,
         target: QueryTarget,
@@ -2459,7 +2470,7 @@ impl SessionInner {
             target,
             consolidation
         );
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         let consolidation = match consolidation.mode {
             #[cfg(feature = "unstable")]
             ConsolidationMode::Auto if parameters.time_range().is_some() => ConsolidationMode::None,
@@ -2472,14 +2483,15 @@ impl SessionInner {
             _ => 1,
         };
 
-        let token = self.task_controller.get_cancellation_token();
-        self.task_controller
+        let token = self.0.task_controller.get_cancellation_token();
+        self.0
+            .task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = WeakSession::new(self);
+                let session = self.downgrade();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
-                            let mut state = zwrite!(session.state);
+                            let mut state = zwrite!(session.0.state);
                             if let Some(query) = state.queries.remove(&qid) {
                                 std::mem::drop(state);
                                 tracing::debug!("Timeout on query {}! Send error and close.", qid);
@@ -2548,7 +2560,7 @@ impl SessionInner {
         }
         if destination != Locality::Remote {
             self.handle_query(
-                zread!(self.state),
+                zread!(self.0.state),
                 true,
                 key_expr,
                 parameters.as_str(),
@@ -2570,9 +2582,9 @@ impl SessionInner {
     }
 
     #[cfg(feature = "unstable")]
-    pub(crate) fn cancel_query(self: &Arc<Self>, qid: Id) -> ZResult<()> {
+    pub(crate) fn cancel_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling query: {qid}");
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         match state.queries.remove(&qid) {
             Some(_) => bail!("Unable to find query {qid}"),
             None => Ok(()),
@@ -2580,25 +2592,25 @@ impl SessionInner {
     }
 
     pub(crate) fn liveliness_query(
-        self: &Arc<Self>,
+        &self,
         key_expr: &KeyExpr<'_>,
         timeout: Duration,
         callback: Callback<Reply>,
     ) -> ZResult<Id> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         // Queries must use the same id generator as liveliness subscribers.
         // This is because both query's id and subscriber's id are used as interest id,
         // so both must not overlap.
-        let id = self.runtime.next_id();
-        let token = self.task_controller.get_cancellation_token();
-        self.task_controller
+        let id = self.0.runtime.next_id();
+        let token = self.0.task_controller.get_cancellation_token();
+        self.0.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
-                let session = WeakSession::new(self);
+                let session = self.downgrade();
                 async move {
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
-                            let mut state = zwrite!(session.state);
+                            let mut state = zwrite!(session.0.state);
                             if let Some(query) = state.liveliness_queries.remove(&id) {
                                 std::mem::drop(state);
                                 tracing::debug!("Timeout on liveliness query {}! Send error and close.", id);
@@ -2661,9 +2673,9 @@ impl SessionInner {
     }
 
     #[cfg(feature = "unstable")]
-    pub(crate) fn cancel_liveliness_query(self: &Arc<Self>, qid: Id) -> ZResult<()> {
+    pub(crate) fn cancel_liveliness_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling liveliness query: {qid}");
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         match state.liveliness_queries.remove(&qid) {
             Some(_) => bail!("Unable to find liveliness query {qid}"),
             None => Ok(()),
@@ -2672,7 +2684,7 @@ impl SessionInner {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
-        self: &Arc<Self>,
+        &self,
         state: RwLockReadGuard<'_, SessionState>,
         local: bool,
         key_expr: &KeyExpr<'_>,
@@ -2711,9 +2723,9 @@ impl SessionInner {
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
-                Arc::new(WeakSession::new(self))
+                ReplyPrimitives::new_local(self.downgrade())
             } else {
-                primitives.into_primitives()
+                ReplyPrimitives::new_remote(Some(self.downgrade()), primitives.into_primitives())
             },
         });
         if !queryables.is_empty() {
@@ -2729,6 +2741,31 @@ impl SessionInner {
             }
         }
     }
+
+    pub(crate) fn get_publisher_qos_overwrite(&self, key_expr: &keyexpr) -> PublisherQoSConfig {
+        // get overwritten builder
+        let state = zread!(self.0.state);
+        let mut nodes_including = state
+            .publisher_qos_tree
+            .nodes_including(key_expr)
+            .filter(|n| n.weight().is_some())
+            .peekable();
+        if let Some(node) = nodes_including.next() {
+            if nodes_including.peek().is_some() {
+                tracing::warn!(
+                    "Publisher declared on `{}` which is included by multiple key_exprs in qos config ({}). Using qos config for `{}`",
+                    key_expr,
+                    nodes_including.map(|n| n.keyexpr().to_string()).join(", "),
+                    node.keyexpr(),
+                );
+            }
+            return node
+                .weight()
+                .expect("first node weight should not be None")
+                .clone();
+        }
+        PublisherQoSConfig::default()
+    }
 }
 
 impl Primitives for WeakSession {
@@ -2739,7 +2776,7 @@ impl Primitives for WeakSession {
         match &mut msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
                 trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
-                let state = &mut zwrite!(self.state);
+                let state = &mut zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed
                 }
@@ -2773,7 +2810,7 @@ impl Primitives for WeakSession {
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
                 {
-                    let mut state = zwrite!(self.state);
+                    let mut state = zwrite!(self.0.state);
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
@@ -2801,7 +2838,7 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 trace!("recv UndeclareSubscriber {:?}", m.id);
-                let mut state = zwrite!(self.state);
+                let mut state = zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed
                 }
@@ -2819,7 +2856,7 @@ impl Primitives for WeakSession {
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 trace!("recv DeclareQueryable {} {:?}", m.id, m.wire_expr);
                 {
-                    let mut state = zwrite!(self.state);
+                    let mut state = zwrite!(self.0.state);
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
@@ -2857,7 +2894,7 @@ impl Primitives for WeakSession {
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
-                let mut state = zwrite!(self.state);
+                let mut state = zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed
                 }
@@ -2873,7 +2910,7 @@ impl Primitives for WeakSession {
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
-                let mut state = zwrite!(self.state);
+                let mut state = zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed
                 }
@@ -2933,7 +2970,7 @@ impl Primitives for WeakSession {
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 trace!("recv UndeclareToken {:?}", m.id);
                 {
-                    let mut state = zwrite!(self.state);
+                    let mut state = zwrite!(self.0.state);
                     if state.primitives.is_none() {
                         return; // Session closing or closed
                     }
@@ -2986,7 +3023,7 @@ impl Primitives for WeakSession {
             DeclareBody::DeclareFinal(DeclareFinal) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
                 if let Some(interest_id) = msg.interest_id {
-                    let mut state = zwrite!(self.state);
+                    let mut state = zwrite!(self.0.state);
                     let _ = state.liveliness_queries.remove(&interest_id);
                 }
             }
@@ -3011,7 +3048,7 @@ impl Primitives for WeakSession {
         trace!("recv Request {:?}", msg);
         match &mut msg.payload {
             RequestBody::Query(m) => {
-                let state = zread!(self.state);
+                let state = zread!(self.0.state);
                 match state
                     .wireexpr_to_keyexpr(&msg.wire_expr, false)
                     .map(|k| k.into_owned())
@@ -3043,7 +3080,7 @@ impl Primitives for WeakSession {
         trace!("recv Response {:?}", msg);
         match &mut msg.payload {
             ResponseBody::Err(e) => {
-                let mut state = zwrite!(self.state);
+                let mut state = zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed
                 }
@@ -3072,7 +3109,7 @@ impl Primitives for WeakSession {
                 }
             }
             ResponseBody::Reply(m) => {
-                let mut state = zwrite!(self.state);
+                let mut state = zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed
                 }
@@ -3207,7 +3244,7 @@ impl Primitives for WeakSession {
 
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         trace!("recv ResponseFinal {:?}", msg);
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
@@ -3320,27 +3357,27 @@ where
 }
 
 #[async_trait]
-impl Closee for Arc<SessionInner> {
+impl Closee for WeakSession {
     async fn close_inner(&self) {
-        let Some(primitives) = zwrite!(self.state).primitives.take() else {
+        let Some(primitives) = zwrite!(self.0.state).primitives.take() else {
             return;
         };
 
-        if let Some(r) = self.runtime.static_runtime() {
+        if let Some(r) = self.0.runtime.static_runtime() {
             // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
             info!(zid = %self.zid(), "close session");
-            self.task_controller.terminate_all_async().await;
+            self.0.task_controller.terminate_all_async().await;
             let closee = r.get_closee();
             closee.close_inner().await;
         } else {
-            self.task_controller.terminate_all_async().await;
+            self.0.task_controller.terminate_all_async().await;
             primitives.send_close();
         }
 
         // defer the cleanup of internal data structures by taking them out of the locked state
         // this is needed because callbacks may contain entities which need to acquire the
         // lock to be dropped, so callback must be dropped without the lock held
-        let mut state = zwrite!(self.state);
+        let mut state = zwrite!(self.0.state);
         let _queryables = std::mem::take(&mut state.queryables);
         let _subscribers = std::mem::take(&mut state.subscribers);
         let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
@@ -3355,9 +3392,9 @@ impl Closee for Arc<SessionInner> {
 }
 
 impl Closeable for Session {
-    type TClosee = Arc<SessionInner>;
+    type TClosee = WeakSession;
 
     fn get_closee(&self) -> Self::TClosee {
-        self.0.clone()
+        self.downgrade()
     }
 }

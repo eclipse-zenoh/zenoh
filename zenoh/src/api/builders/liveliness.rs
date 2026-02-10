@@ -50,7 +50,6 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
         let session = self.session;
         let key_expr = self.key_expr?.into_owned();
         session
-            .0
             .declare_liveliness_inner(&key_expr)
             .map(|id| LivelinessToken {
                 session: self.session.downgrade(),
@@ -256,7 +255,6 @@ where
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
         session
-            .0
             .declare_liveliness_subscriber_inner(
                 &key_expr,
                 Locality::default(),
@@ -295,7 +293,7 @@ impl Resolvable for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> 
 
 impl Wait for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.session.0.declare_liveliness_subscriber_inner(
+        self.session.declare_liveliness_subscriber_inner(
             &self.key_expr?,
             Locality::default(),
             self.history,
@@ -525,7 +523,6 @@ where
         };
         #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.session
-            .0
             .liveliness_query(&self.key_expr?, self.timeout, callback)
             .map(|qid| {
                 #[cfg(feature = "unstable")]

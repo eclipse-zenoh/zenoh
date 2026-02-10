@@ -66,7 +66,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn zid(&self) -> ZenohIdBuilder<'_> {
-        ZenohIdBuilder::new(&self.session.runtime)
+        ZenohIdBuilder::new(self.session.runtime())
     }
 
     /// Return the [`ZenohId`](crate::session::ZenohId) of the zenoh routers this process is currently connected to,
@@ -83,7 +83,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn routers_zid(&self) -> RoutersZenohIdBuilder<'_> {
-        RoutersZenohIdBuilder::new(&self.session.runtime)
+        RoutersZenohIdBuilder::new(self.session.runtime())
     }
 
     /// Return the [`ZenohId`](crate::session::ZenohId) of the zenoh peers this process is currently connected to.
@@ -98,7 +98,7 @@ impl SessionInfo {
     /// # }
     /// ```
     pub fn peers_zid(&self) -> PeersZenohIdBuilder<'_> {
-        PeersZenohIdBuilder::new(&self.session.runtime)
+        PeersZenohIdBuilder::new(self.session.runtime())
     }
 
     /// Return the locators on which the current zenoh [`Session`](crate::Session) is listening to.
@@ -115,7 +115,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
-        ResolveClosure::new(|| self.session.runtime.get_locators())
+        ResolveClosure::new(|| self.session.runtime().get_locators())
     }
 
     /// Return information about currently opened transport sessions. Transport session is a connection to another zenoh node.
@@ -133,7 +133,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn transports(&self) -> TransportsBuilder<'_> {
-        TransportsBuilder::new(&self.session.runtime)
+        TransportsBuilder::new(self.session.runtime())
     }
 
     /// Return information about links across all transports.

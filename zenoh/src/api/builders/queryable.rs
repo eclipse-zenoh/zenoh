@@ -228,7 +228,6 @@ where
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
         session
-            .0
             .declare_queryable_inner(&ke, self.complete, self.origin, callback)
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
@@ -264,7 +263,6 @@ impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
         self.session
-            .0
             .declare_queryable_inner(&ke, self.complete, self.origin, self.handler)?;
         Ok(())
     }

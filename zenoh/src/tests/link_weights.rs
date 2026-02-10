@@ -192,7 +192,6 @@ impl Net {
                     .collect::<Vec<_>>();
 
             self.routers[i]
-                .0
                 .static_runtime()
                 .unwrap()
                 .config()
@@ -203,7 +202,6 @@ impl Net {
                 .set_transport_weights(weights)
                 .unwrap();
             self.routers[i]
-                .0
                 .static_runtime()
                 .unwrap()
                 .update_network()
@@ -664,7 +662,7 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16) {
     )
     .await;
 
-    let info = net.routers[0].0.static_runtime().unwrap().get_links_info();
+    let info = net.routers[0].static_runtime().unwrap().get_links_info();
 
     let expected = HashMap::from([
         (
