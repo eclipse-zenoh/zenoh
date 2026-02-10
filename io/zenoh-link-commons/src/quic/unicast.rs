@@ -411,11 +411,11 @@ impl QuicLink {
 
 // Boilerplate to avoid repeating the Fn bound in all generics that require it
 pub trait AcceptorCallback:
-    Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + 'static
+    Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + Sync + 'static
 {
 }
 
-impl<T: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + 'static>
+impl<T: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + Sync + 'static>
     AcceptorCallback for T
 {
 }
@@ -446,7 +446,7 @@ impl<F: AcceptorCallback> IntoFuture for QuicAcceptor<F> {
 
 impl<F: AcceptorCallback> QuicAcceptor<F> {
     async fn accept_task(self) -> ZResult<()> {
-        async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
+        async fn accept_connection(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
             let qc = acceptor
                 .await
                 .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
@@ -460,72 +460,31 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
             Ok(conn)
         }
 
-        let Self {
-            quic_endpoint,
-            tls_close_link_on_expiration,
-            inner:
-                QuicAcceptorParams {
-                    is_streamed,
-                    token,
-                    manager,
-                    throttle_time,
-                    make_link,
-                },
-        } = self;
-        let src_addr = quic_endpoint
+        let src_addr = self
+            .quic_endpoint
             .local_addr()
-            .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
+            .map_err(|e| zerror!("Cannot start QUIC acceptor: {:?}", e))?;
 
         tracing::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
 
         loop {
             tokio::select! {
-                _ = token.cancelled() => break,
+                _ = self.inner.token.cancelled() => break,
 
-                res = accept(quic_endpoint.accept()) => {
+                res = accept_connection(self.quic_endpoint.accept()) => {
                     match res {
                         Ok(quic_conn) => {
-                            let mut streams = None;
-                            if is_streamed {
-                                match QuicStreams::accept(&quic_conn).await {
-                                    Ok(quic_stream) => {
-                                        streams = Some(quic_stream);
-                                    },
-                                    Err(e) => {
-                                        tracing::warn!("QUIC connection has no streams: {:?}", e);
-                                        continue;
-                                    }
-                                }
-                            };
-
-                            // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
-                            let src_addr =  match quic_conn.local_ip()  {
-                                Some(ip) => SocketAddr::new(ip, src_addr.port()),
-                                None => {
-                                    tracing::debug!("Can not accept QUIC connection: empty local IP");
-                                    continue;
-                                }
-                            };
-                            let dst_addr = quic_conn.remote_address();
-
-                            let link = match make_link(QuicLinkMaterial {
-                                quic_conn,
-                                src_addr,
-                                dst_addr,
-                                streams,
-                                tls_close_link_on_expiration,
-                            }) {
+                            let link = match self.handle_accepted_connection(quic_conn, &src_addr).await {
                                 Ok(link) => link,
                                 Err(e) => {
-                                    tracing::error!("Can not accept QUIC connection: {e:?}");
+                                    tracing::error!("Cannot accept QUIC connection: {e:?}");
                                     continue;
-                                },
+                                }
                             };
                             // Communicate the new link to the initial transport manager
-                            if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                            if let Err(e) = self.inner.manager.send_async(LinkUnicast(link)).await {
                                 tracing::error!("{}-{}: {}", file!(), line!(), e)
                             }
-
                         }
                         Err(e) => {
                             tracing::warn!("{} Hint: increase the system open file limit.", e);
@@ -535,13 +494,46 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
                             //       Linux systems this limit can be changed by using the "ulimit" command line
                             //       tool. In case of systemd-based systems, this can be changed by using the
                             //       "sysctl" command line tool.
-                            tokio::time::sleep(throttle_time).await;
+                            tokio::time::sleep(self.inner.throttle_time).await;
                         }
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    /// Handles an accepted [`quinn::Connection`], returning a link made by the provided callback.
+    async fn handle_accepted_connection(
+        &self,
+        quic_conn: quinn::Connection,
+        src_addr: &SocketAddr,
+    ) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+        let streams = if self.inner.is_streamed {
+            Some(
+                QuicStreams::accept(&quic_conn)
+                    .await
+                    .map_err(|e| zerror!("cannot initialize QUIC streams: {:?}", e))?,
+            )
+        } else {
+            None
+        };
+
+        // Get the right source address in case an unsepecified IP (i.e. 0.0.0.0 or [::]) is used
+        let ip = quic_conn.local_ip().ok_or(zerror!("empty local IP"))?;
+        let src_addr = SocketAddr::new(ip, src_addr.port());
+        let dst_addr = quic_conn.remote_address();
+
+        let tls_close_link_on_expiration = self.tls_close_link_on_expiration;
+        let link = (self.inner.make_link)(QuicLinkMaterial {
+            quic_conn,
+            src_addr,
+            dst_addr,
+            streams,
+            tls_close_link_on_expiration,
+        })?;
+
+        Ok(link)
     }
 }
 
