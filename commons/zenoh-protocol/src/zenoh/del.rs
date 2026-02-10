@@ -45,10 +45,14 @@ pub struct Del {
     pub timestamp: Option<Timestamp>,
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_attachment: Option<ext::AttachmentType>,
+    #[cfg(feature = "shared-memory")]
+    pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
 }
 
 pub mod ext {
+    #[cfg(feature = "shared-memory")]
+    use crate::{common::ZExtUnit, zextunit};
     use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
@@ -59,6 +63,13 @@ pub mod ext {
     /// # User attachment
     pub type Attachment = zextzbuf!(0x2, false);
     pub type AttachmentType = crate::zenoh::ext::AttachmentType<{ Attachment::ID }>;
+
+    /// # Shared Memory extension
+    /// Used to carry additional information about the shared-memory layout of data
+    #[cfg(feature = "shared-memory")]
+    pub type Shm = zextunit!(0x3, true);
+    #[cfg(feature = "shared-memory")]
+    pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
 }
 
 impl Del {
@@ -76,6 +87,8 @@ impl Del {
             Timestamp::new(time, id)
         });
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
@@ -89,6 +102,8 @@ impl Del {
             timestamp,
             ext_sinfo,
             ext_attachment,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
         }
     }

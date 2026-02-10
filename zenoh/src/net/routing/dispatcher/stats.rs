@@ -77,9 +77,7 @@ impl ObservableMessage for Request {
     #[cfg(feature = "shared-memory")]
     fn tx_shm(&self) -> bool {
         match &self.payload {
-            RequestBody::Query(query) => {
-                query.ext_body.as_ref().is_some_and(|b| b.ext_shm.is_some())
-            }
+            RequestBody::Query(query) => query.ext_shm.is_some(),
         }
     }
     #[cfg(feature = "shared-memory")]
