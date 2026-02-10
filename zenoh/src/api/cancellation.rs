@@ -238,17 +238,10 @@ impl CancellationToken {
         }
     }
 
-    #[zenoh_macros::internal]
+    #[zenoh_macros::pub_visibility_if_internal]
     /// Register a handler to be called once [`CancellationToken::cancel`] is called.
     /// If cancel is already invoked, will return passed handler as a error, otherwise
     /// an id, which can be used to unregister the handler.
-    pub fn add_on_cancel_handler<F>(&self, on_cancel: F) -> Result<OnCancelHandlerId, F>
-    where
-        F: FnOnce() -> ZResult<()> + Send + Sync + 'static,
-    {
-        self.add_on_cancel_handler_inner(on_cancel)
-    }
-    #[cfg(not(feature = "internal"))]
     pub(crate) fn add_on_cancel_handler<F>(&self, on_cancel: F) -> Result<OnCancelHandlerId, F>
     where
         F: FnOnce() -> ZResult<()> + Send + Sync + 'static,
@@ -256,26 +249,12 @@ impl CancellationToken {
         self.add_on_cancel_handler_inner(on_cancel)
     }
 
-    #[zenoh_macros::internal]
-    pub fn notifier(&self) -> Option<SyncGroupNotifier> {
-        self.sync_group.notifier()
-    }
-    #[cfg(not(feature = "internal"))]
+    #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
         self.sync_group.notifier()
     }
 
-    #[zenoh_macros::internal]
-    pub fn remove_on_cancel_handler(&self, id: OnCancelHandlerId) -> bool {
-        self.on_cancel_handlers
-            .lock()
-            .unwrap()
-            .deref_mut()
-            .as_mut()
-            .map(|h| h.remove(id))
-            .unwrap_or(false)
-    }
-    #[cfg(not(feature = "internal"))]
+    #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn remove_on_cancel_handler(&self, id: OnCancelHandlerId) -> bool {
         self.on_cancel_handlers
             .lock()
