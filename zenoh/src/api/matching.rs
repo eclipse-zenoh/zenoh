@@ -231,7 +231,7 @@ impl<Handler: Send> UndeclarableSealed<()> for MatchingListener<Handler> {
         MatchingListenerUndeclaration {
             listener: self,
             #[cfg(feature = "unstable")]
-            wait_until_callback_execution_ends: false,
+            wait_callbacks: false,
         }
     }
 }
@@ -254,14 +254,14 @@ impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
 pub struct MatchingListenerUndeclaration<Handler> {
     listener: MatchingListener<Handler>,
     #[cfg(feature = "unstable")]
-    wait_until_callback_execution_ends: bool,
+    wait_callbacks: bool,
 }
 
 impl<Handler> MatchingListenerUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of matching listener callbacks (if any) return.
     #[zenoh_macros::unstable]
-    pub fn wait_until_callback_execution_ends(mut self) -> Self {
-        self.wait_until_callback_execution_ends = true;
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
         self
     }
 }
@@ -274,7 +274,7 @@ impl<Handler> Wait for MatchingListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.listener.undeclare_impl()?;
         #[cfg(feature = "unstable")]
-        if self.wait_until_callback_execution_ends {
+        if self.wait_callbacks {
             self.listener.callback_sync_group.wait();
         }
         Ok(())

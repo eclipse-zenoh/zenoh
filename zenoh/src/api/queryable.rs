@@ -613,14 +613,14 @@ pub(crate) struct QueryableInner {
 pub struct QueryableUndeclaration<Handler> {
     queryable: Queryable<Handler>,
     #[cfg(feature = "unstable")]
-    wait_until_callback_execution_ends: bool,
+    wait_callbacks: bool,
 }
 
 impl<Handler> QueryableUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
     #[zenoh_macros::unstable]
-    pub fn wait_until_callback_execution_ends(mut self) -> Self {
-        self.wait_until_callback_execution_ends = true;
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
         self
     }
 }
@@ -633,7 +633,7 @@ impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.queryable.undeclare_impl()?;
         #[cfg(feature = "unstable")]
-        if self.wait_until_callback_execution_ends {
+        if self.wait_callbacks {
             self.queryable.callback_sync_group.wait();
         }
         Ok(())
@@ -849,7 +849,7 @@ impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
         QueryableUndeclaration {
             queryable: self,
             #[cfg(feature = "unstable")]
-            wait_until_callback_execution_ends: false,
+            wait_callbacks: false,
         }
     }
 }

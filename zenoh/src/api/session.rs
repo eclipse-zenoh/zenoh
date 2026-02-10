@@ -3424,7 +3424,7 @@ where
 #[derive(Default)]
 pub(crate) struct SessionCloseArgs {
     #[cfg(feature = "unstable")]
-    pub(crate) wait_until_callback_execution_ends: bool,
+    pub(crate) wait_callbacks: bool,
 }
 
 #[async_trait]
@@ -3464,7 +3464,7 @@ impl Closee for WeakSession {
             drop(state);
         }
         #[cfg(feature = "unstable")]
-        if close_args.wait_until_callback_execution_ends {
+        if close_args.wait_callbacks {
             self.0.callbacks_drop_sync_group.wait_async().await;
         }
     }

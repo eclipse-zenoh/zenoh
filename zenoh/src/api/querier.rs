@@ -286,7 +286,7 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
         QuerierUndeclaration {
             querier: self,
             #[cfg(feature = "unstable")]
-            wait_until_callback_execution_ends: false,
+            wait_callbacks: false,
         }
     }
 }
@@ -307,14 +307,14 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
 pub struct QuerierUndeclaration<'a> {
     querier: Querier<'a>,
     #[cfg(feature = "unstable")]
-    wait_until_callback_execution_ends: bool,
+    wait_callbacks: bool,
 }
 
 impl<'a> QuerierUndeclaration<'a> {
     /// Block in undeclare operation until all currently running instances of reply and matching listeners' callbacks (if any) return.
     #[zenoh_macros::unstable]
-    pub fn wait_until_callback_execution_ends(mut self) -> Self {
-        self.wait_until_callback_execution_ends = true;
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
         self
     }
 }
@@ -327,7 +327,7 @@ impl Wait for QuerierUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.querier.undeclare_impl()?;
         #[cfg(feature = "unstable")]
-        if self.wait_until_callback_execution_ends {
+        if self.wait_callbacks {
             self.querier.callback_sync_group.wait();
         }
         Ok(())

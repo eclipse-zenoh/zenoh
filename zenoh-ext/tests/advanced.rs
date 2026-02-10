@@ -1216,7 +1216,7 @@ async fn test_callback_drop_on_undeclare_advanced_subscriber() {
     ztimeout!(publisher.put("payload")).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(subscriber.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(subscriber.undeclare().wait_callbacks()).unwrap();
     assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 2);
 
     // check background with session.close()
@@ -1234,7 +1234,7 @@ async fn test_callback_drop_on_undeclare_advanced_subscriber() {
     ztimeout!(publisher.put("payload")).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
@@ -1257,7 +1257,7 @@ async fn test_callback_drop_on_undeclare_advanced_subscriber_local() {
     let subscriber = ztimeout!(session.declare_subscriber(ke).advanced().callback(cb)).unwrap();
     put_from_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(subscriber.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(subscriber.undeclare().wait_callbacks()).unwrap();
     assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 2);
 
     // check background with session.close()
@@ -1273,7 +1273,7 @@ async fn test_callback_drop_on_undeclare_advanced_subscriber_local() {
     put_from_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session.close().wait_callbacks()).unwrap();
     assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 2);
 }
 
@@ -1325,10 +1325,7 @@ async fn test_callback_drop_on_undeclare_advanced_sample_miss_listener() {
     ztimeout!(publisher.put("3")).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    ztimeout!(miss_listener
-        .undeclare()
-        .wait_until_callback_execution_ends())
-    .unwrap();
+    ztimeout!(miss_listener.undeclare().wait_callbacks()).unwrap();
     assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 2);
 
     // test background miss_listener
@@ -1351,6 +1348,6 @@ async fn test_callback_drop_on_undeclare_advanced_sample_miss_listener() {
     ztimeout!(publisher.put("6")).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    ztimeout!(subscriber.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(subscriber.undeclare().wait_callbacks()).unwrap();
     assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 2);
 }

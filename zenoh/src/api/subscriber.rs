@@ -78,14 +78,14 @@ pub(crate) struct SubscriberInner {
 pub struct SubscriberUndeclaration<Handler> {
     subscriber: Subscriber<Handler>,
     #[cfg(feature = "unstable")]
-    wait_until_callback_execution_ends: bool,
+    wait_callbacks: bool,
 }
 
 impl<Handler> SubscriberUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of subscriber callbacks (if any) return.
     #[zenoh_macros::unstable]
-    pub fn wait_until_callback_execution_ends(mut self) -> Self {
-        self.wait_until_callback_execution_ends = true;
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
         self
     }
 }
@@ -98,7 +98,7 @@ impl<Handler> Wait for SubscriberUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.subscriber.undeclare_impl()?;
         #[cfg(feature = "unstable")]
-        if self.wait_until_callback_execution_ends {
+        if self.wait_callbacks {
             self.subscriber.callback_sync_group.wait();
         }
         Ok(())
@@ -266,7 +266,7 @@ impl<Handler: Send> UndeclarableSealed<()> for Subscriber<Handler> {
         SubscriberUndeclaration {
             subscriber: self,
             #[cfg(feature = "unstable")]
-            wait_until_callback_execution_ends: false,
+            wait_callbacks: false,
         }
     }
 }

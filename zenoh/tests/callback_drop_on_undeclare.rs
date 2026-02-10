@@ -82,7 +82,7 @@ async fn test_callback_drop_on_undeclare_subscriber() {
     ztimeout!(publisher.put("payload")).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(subscriber.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(subscriber.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check background with session.close()
@@ -95,7 +95,7 @@ async fn test_callback_drop_on_undeclare_subscriber() {
     ztimeout!(publisher.put("payload")).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -117,7 +117,7 @@ async fn test_callback_drop_on_undeclare_subscriber_local() {
     let subscriber = ztimeout!(session.declare_subscriber(ke).callback(cb)).unwrap();
     put_from_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(subscriber.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(subscriber.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check background with session.close()
@@ -128,7 +128,7 @@ async fn test_callback_drop_on_undeclare_subscriber_local() {
     put_from_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -144,7 +144,7 @@ async fn test_callback_drop_on_undeclare_queryable() {
     let _replies = ztimeout!(session2.get(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(queryable.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(queryable.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check background with session.close()
@@ -156,7 +156,7 @@ async fn test_callback_drop_on_undeclare_queryable() {
     let _replies = ztimeout!(session2.get(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -178,7 +178,7 @@ async fn test_callback_drop_on_undeclare_queryable_local() {
     let queryable = ztimeout!(session.declare_queryable(ke).callback(cb)).unwrap();
     get_from_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(queryable.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(queryable.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check background with session.close()
@@ -189,7 +189,7 @@ async fn test_callback_drop_on_undeclare_queryable_local() {
     get_from_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -205,7 +205,7 @@ async fn test_callback_drop_on_undeclare_liveliness_subscriber() {
     let token = ztimeout!(session2.liveliness().declare_token(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(subscriber.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(subscriber.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
     drop(token);
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -224,7 +224,7 @@ async fn test_callback_drop_on_undeclare_liveliness_subscriber() {
     let _token = ztimeout!(session2.liveliness().declare_token(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -243,7 +243,7 @@ async fn test_callback_drop_on_undeclare_querier() {
     ztimeout!(query.reply(ke, "payload")).unwrap();
     drop(query);
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(querier.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(querier.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
     drop(queryable);
 
@@ -256,7 +256,7 @@ async fn test_callback_drop_on_undeclare_querier() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     let _queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(listener.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
     drop(_queryable);
 
@@ -268,7 +268,7 @@ async fn test_callback_drop_on_undeclare_querier() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     let _queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(querier.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(querier.undeclare().wait_callbacks()).unwrap();
 
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
@@ -305,7 +305,7 @@ async fn test_callback_drop_on_undeclare_querier_local() {
     let query = ztimeout!(queryable.recv_async()).unwrap();
     reply_from_another_thread(query, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(querier.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(querier.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
     drop(queryable);
 
@@ -318,7 +318,7 @@ async fn test_callback_drop_on_undeclare_querier_local() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     declare_queryable_in_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(listener.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -329,7 +329,7 @@ async fn test_callback_drop_on_undeclare_querier_local() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     declare_queryable_in_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(querier.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(querier.undeclare().wait_callbacks()).unwrap();
 
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
@@ -347,7 +347,7 @@ async fn test_callback_drop_on_undeclare_publisher() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     let _subscriber = ztimeout!(session2.declare_subscriber(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(listener.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
     drop(_subscriber);
 
@@ -359,7 +359,7 @@ async fn test_callback_drop_on_undeclare_publisher() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     let _subscriber = ztimeout!(session2.declare_subscriber(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(publisher.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(publisher.undeclare().wait_callbacks()).unwrap();
 
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
@@ -387,7 +387,7 @@ async fn test_callback_drop_on_undeclare_publisher_local() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     declare_subscriber_in_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(listener.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -398,7 +398,7 @@ async fn test_callback_drop_on_undeclare_publisher_local() {
     tokio::time::sleep(Duration::from_secs(1)).await;
     declare_subscriber_in_another_thread(&session, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(publisher.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(publisher.undeclare().wait_callbacks()).unwrap();
 
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
@@ -417,7 +417,7 @@ async fn test_callback_drop_on_undeclare_get() {
     ztimeout!(query.reply(ke, "payload")).unwrap();
     drop(query);
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -442,7 +442,7 @@ async fn test_callback_drop_on_undeclare_get_local() {
     let query = ztimeout!(queryable.recv_async()).unwrap();
     reply_from_another_thread(query, ke.to_string());
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(session.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -457,7 +457,7 @@ async fn test_callback_drop_on_undeclare_liveliness_get() {
     let (cb, n) = create_callback::<Reply>();
     ztimeout!(session1.liveliness().get(ke).callback(cb)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -471,7 +471,7 @@ async fn test_callback_drop_on_undeclare_transport_events_listener() {
 
     let session2 = open_session_connect(&locator).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(listener.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     drop(session2);
@@ -486,7 +486,7 @@ async fn test_callback_drop_on_undeclare_transport_events_listener() {
     .unwrap();
     let _session2 = open_session_connect(&locator).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
@@ -500,7 +500,7 @@ async fn test_callback_drop_on_undeclare_link_events_listener() {
 
     let session2 = open_session_connect(&locator).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(listener.undeclare().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     drop(session2);
@@ -515,6 +515,6 @@ async fn test_callback_drop_on_undeclare_link_events_listener() {
     .unwrap();
     let _session2 = open_session_connect(&locator).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    ztimeout!(session1.close().wait_until_callback_execution_ends()).unwrap();
+    ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }

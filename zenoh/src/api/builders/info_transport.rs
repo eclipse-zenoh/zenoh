@@ -212,7 +212,7 @@ impl<Handler: Send> UndeclarableSealed<()> for TransportEventsListener<Handler> 
         TransportEventsListenerUndeclaration {
             listener: self,
             #[cfg(feature = "unstable")]
-            wait_until_callback_execution_ends: false,
+            wait_callbacks: false,
         }
     }
 }
@@ -238,15 +238,15 @@ impl<Handler> std::ops::DerefMut for TransportEventsListener<Handler> {
 pub struct TransportEventsListenerUndeclaration<Handler> {
     listener: TransportEventsListener<Handler>,
     #[cfg(feature = "unstable")]
-    wait_until_callback_execution_ends: bool,
+    wait_callbacks: bool,
 }
 
 #[zenoh_macros::unstable]
 impl<Handler> TransportEventsListenerUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of transport events listener callback (if any) return.
     #[zenoh_macros::unstable]
-    pub fn wait_until_callback_execution_ends(mut self) -> Self {
-        self.wait_until_callback_execution_ends = true;
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
         self
     }
 }
@@ -261,7 +261,7 @@ impl<Handler> Wait for TransportEventsListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.listener.undeclare_impl()?;
         #[cfg(feature = "unstable")]
-        if self.wait_until_callback_execution_ends {
+        if self.wait_callbacks {
             self.listener.callback_sync_group.wait();
         }
         Ok(())

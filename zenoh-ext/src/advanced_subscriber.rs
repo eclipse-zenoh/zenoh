@@ -1617,7 +1617,7 @@ pub struct SampleMissHandlerUndeclaration<Handler> {
 
 impl<Handler> SampleMissHandlerUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of sample miss listener callback (if any) return.
-    pub fn wait_until_callback_execution_ends(self) -> Self {
+    pub fn wait_callbacks(self) -> Self {
         // Note: no particular synchronization is required as of now since miss listener callbacks are always executed
         // under state lock
         self
