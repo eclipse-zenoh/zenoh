@@ -17,6 +17,7 @@ use zenoh::{
     sample::SampleKind,
     Wait,
 };
+use zenoh_config::EndPoints;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
@@ -53,7 +54,7 @@ async fn test_liveliness_querying_subscriber_clique() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -132,7 +133,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -145,7 +146,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -158,7 +159,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -239,7 +240,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -322,7 +323,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -335,7 +336,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -348,7 +349,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));

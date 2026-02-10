@@ -26,6 +26,7 @@ use zenoh::{config::WhatAmI, qos::CongestionControl, Result, Session};
 use zenoh_config::{Config, ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
+use zenoh_protocol::core::EndPoints;
 use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -556,7 +557,7 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -575,7 +576,7 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.listen
             .endpoints
@@ -598,7 +599,7 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![PEER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -653,7 +654,7 @@ async fn gossip_regression_2() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -673,7 +674,7 @@ async fn gossip_regression_2() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -732,7 +733,7 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -753,7 +754,7 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.listen
             .endpoints
@@ -777,7 +778,7 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![PEER_ENDPOINT.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
