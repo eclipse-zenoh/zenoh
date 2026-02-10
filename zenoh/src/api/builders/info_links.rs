@@ -102,7 +102,7 @@ impl Resolvable for LinksBuilder<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LinksBuilder<'_> {
     fn wait(self) -> Self::To {
-        self.session.runtime.get_links(self.transport.as_ref())
+        self.session.runtime().get_links(self.transport.as_ref())
     }
 }
 
@@ -148,7 +148,8 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 ///     .link_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare link events listener");
 ///
 /// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {
@@ -181,7 +182,8 @@ impl<Handler> LinkEventsListener<Handler> {
     /// let listener = session.info()
     ///     .link_events_listener()
     ///     .with(flume::bounded(32))
-    ///     .await;
+    ///     .await
+    ///     .expect("Failed to declare link events listener");
     /// listener.undeclare().await.unwrap();
     /// # }
     /// ```
@@ -300,7 +302,8 @@ impl<Handler> IntoFuture for LinkEventsListenerUndeclaration<Handler> {
 ///     .link_events_listener()
 ///     .history(true)
 ///     .with(flume::bounded(32))
-///     .await;
+///     .await
+///     .expect("Failed to declare link events listener");
 ///
 /// while let Ok(event) = listener.recv_async().await {
 ///     match event.kind() {
@@ -437,7 +440,7 @@ where
     Handler: IntoHandler<LinkEvent> + Send,
     Handler::Handler: Send,
 {
-    type To = LinkEventsListener<Handler::Handler>;
+    type To = ZResult<LinkEventsListener<Handler::Handler>>;
 }
 
 #[zenoh_macros::unstable]
@@ -448,19 +451,20 @@ where
 {
     fn wait(self) -> Self::To {
         let (callback, handler) = self.handler.into_handler();
-        let state = self
-            .session
-            .declare_transport_links_listener_inner(callback, self.history, self.transport)
-            .expect("Failed to declare link events listener");
+        let state = self.session.declare_transport_links_listener_inner(
+            callback,
+            self.history,
+            self.transport,
+        )?;
 
-        LinkEventsListener {
+        Ok(LinkEventsListener {
             inner: LinkEventsListenerInner {
                 session: self.session.clone(),
                 id: state.id,
                 undeclare_on_drop: true,
             },
             handler,
-        }
+        })
     }
 }
 

@@ -60,13 +60,15 @@ async fn main() {
         let transport_events = info
             .transport_events_listener()
             .history(false) // Don't repeat transports we already printed
-            .await;
+            .await
+            .expect("Failed to declare transport events listener");
 
         // Set up link events listener (using default handler)
         let link_events = info
             .link_events_listener()
             .history(false) // Don't repeat links we already printed
-            .await;
+            .await
+            .expect("Failed to declare link events listener");
 
         // Listen for events until CTRL-C
         loop {
