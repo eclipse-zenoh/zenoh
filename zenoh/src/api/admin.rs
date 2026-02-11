@@ -199,7 +199,7 @@ pub(crate) fn init(session: WeakSession) {
         move |event: TransportEvent| {
             let key_expr = ke_prefix(&own_zid) / &ke_transport(&event.transport);
             let key_expr = KeyExpr::from(key_expr);
-            tracing::info!(
+            tracing::trace!(
                 "Publishing transport event: {:?} : {:?} on {}",
                 &event.kind,
                 &event.transport,
@@ -258,7 +258,7 @@ pub(crate) fn init(session: WeakSession) {
                 let key_expr =
                     ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
                 let key_expr = KeyExpr::from(key_expr);
-                tracing::info!(
+                tracing::trace!(
                     "Publishing link event: {:?} : {:?} on {}",
                     &event.kind,
                     &event.link,
