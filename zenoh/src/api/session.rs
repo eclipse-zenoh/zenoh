@@ -2699,6 +2699,7 @@ impl Session {
                 qid,
                 target,
                 consolidation,
+                qos,
                 #[cfg(feature = "unstable")]
                 source,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
@@ -2814,6 +2815,7 @@ impl Session {
         qid: RequestId,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
+        qos: QoS,
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
@@ -2842,6 +2844,7 @@ impl Session {
             parameters: parameters.to_owned().into(),
             qid,
             zid: zid.into(),
+            qos,
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
@@ -3183,6 +3186,7 @@ impl Primitives for WeakSession {
                             msg.id,
                             msg.ext_target,
                             m.consolidation,
+                            msg.ext_qos.into(),
                             #[cfg(feature = "unstable")]
                             m.ext_sinfo.map(Into::into),
                             mem::take(&mut m.ext_body),
