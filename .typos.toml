@@ -1,0 +1,14 @@
+# typos configuration to whitelist known libc identifiers that appear in the codebase
+# This avoids false positives from the crate-ci/typos action
+
+[extend_identifiers]
+words = [
+  "controllen",
+  "msg_controllen",
+]
+
+[extend_words]
+words = [
+  "controllen",
+  "msg_controllen",
+]
