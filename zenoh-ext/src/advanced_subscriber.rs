@@ -18,14 +18,13 @@ use zenoh::{
     handlers::{Callback, CallbackDrop, CallbackParameter, IntoHandler},
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
-    pubsub::SubscriberBuilder,
+    pubsub::{SubscriberBuilder, SubscriberUndeclaration},
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
     sample::{Locality, Sample, SampleKind},
     session::{EntityGlobalId, EntityId, WeakSession},
-    Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
-    KE_SUB,
+    Resolvable, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR, KE_SUB,
 };
 use zenoh_util::{Timed, TimedEvent, Timer};
 #[zenoh_macros::unstable]
@@ -1330,7 +1329,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     /// Undeclares this AdvancedSubscriber
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
+    pub fn undeclare(self) -> SubscriberUndeclaration<()> {
         tracing::debug!(
             "AdvancedSubscriber{{key_expr: {}}}: Undeclare",
             self.key_expr()
@@ -1559,8 +1558,7 @@ impl<Handler> SampleMissListener<Handler> {
     where
         Handler: Send,
     {
-        // self.undeclare_inner(())
-        SampleMissHandlerUndeclaration(self)
+        SampleMissHandlerUndeclaration { listener: self }
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
@@ -1613,7 +1611,18 @@ impl<Handler> std::ops::DerefMut for SampleMissListener<Handler> {
 
 /// A [`Resolvable`] returned by [`SampleMissListener::undeclare`]
 #[zenoh_macros::unstable]
-pub struct SampleMissHandlerUndeclaration<Handler>(SampleMissListener<Handler>);
+pub struct SampleMissHandlerUndeclaration<Handler> {
+    listener: SampleMissListener<Handler>,
+}
+
+impl<Handler> SampleMissHandlerUndeclaration<Handler> {
+    /// Block in undeclare operation until all currently running instances of sample miss listener callback (if any) return.
+    pub fn wait_callbacks(self) -> Self {
+        // Note: no particular synchronization is required as of now since miss listener callbacks are always executed
+        // under state lock
+        self
+    }
+}
 
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for SampleMissHandlerUndeclaration<Handler> {
@@ -1623,7 +1632,7 @@ impl<Handler> Resolvable for SampleMissHandlerUndeclaration<Handler> {
 #[zenoh_macros::unstable]
 impl<Handler> Wait for SampleMissHandlerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.listener.undeclare_impl()
     }
 }
 

@@ -374,51 +374,31 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
-        let (mut callback, receiver) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
-        let cancellation_token = if let Some(ct) = self.cancellation_token {
-            if let Some(notifier) = ct.notifier() {
-                callback.set_on_drop_notifier(notifier);
-                Some(ct)
-            } else {
-                return Ok(receiver);
-            }
-        } else {
-            None
-        };
+        let (callback, receiver) = self.handler.into_handler();
         let Selector {
             key_expr,
             parameters,
         } = self.selector?;
-        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
-        self.session
-            .query(
-                &key_expr,
-                &parameters,
-                self.target,
-                self.consolidation,
-                self.qos.into(),
-                self.destination,
-                self.timeout,
-                self.value,
-                self.attachment,
-                #[cfg(feature = "unstable")]
-                self.source_info,
-                callback,
-            )
-            .map(|qid| {
-                #[cfg(feature = "unstable")]
-                if let Some(cancellation_token) = cancellation_token {
-                    let weak_session = self.session.downgrade();
-                    let on_cancel = move || {
-                        let _ = weak_session.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
-                        Ok(())
-                    };
-                    cancellation_token.add_on_cancel_handler(Box::new(on_cancel));
-                }
-                receiver
-            })
+        self.session.query(
+            &key_expr,
+            &parameters,
+            self.target,
+            self.consolidation,
+            self.qos.into(),
+            self.destination,
+            self.timeout,
+            self.value,
+            self.attachment,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+            None,
+            #[cfg(feature = "unstable")]
+            None,
+        )?;
+        Ok(receiver)
     }
 }
 
