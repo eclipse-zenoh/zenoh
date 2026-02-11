@@ -552,6 +552,7 @@ pub(crate) fn route_send_response(
             drop(queries_lock);
 
             msg.rid = query.src_qid;
+            msg.ext_qos = query.src_qos;
             if query.src_face.primitives.send_response(msg) {
                 #[cfg(feature = "stats")]
                 payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
