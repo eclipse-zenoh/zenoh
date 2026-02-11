@@ -2460,17 +2460,13 @@ impl Session {
                 reliability,
             );
         }
+        // ext_unknown is not touched by routing/callbacks, so it must be empty
+        // we let the compiler knows it so it can optimize its drop out
+        // (`Vec<ZExtUnknown>::drop` was visible in flamegraph before this change)
         match push.payload {
-            PushBody::Put(Put { ext_unknown, .. }) => {
-                if !ext_unknown.is_empty() {
-                    unsafe { hint::unreachable_unchecked() }
-                }
-            }
-            PushBody::Del(Del { ext_unknown, .. }) => {
-                if !ext_unknown.is_empty() {
-                    unsafe { hint::unreachable_unchecked() }
-                }
-            }
+            PushBody::Put(Put { ext_unknown, .. }) | PushBody::Del(Del { ext_unknown, .. })
+                if ext_unknown.is_empty() => {}
+            _ => unsafe { hint::unreachable_unchecked() },
         }
         Ok(())
     }
