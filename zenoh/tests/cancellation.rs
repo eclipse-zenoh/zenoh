@@ -49,7 +49,7 @@ async fn create_peer_client_pair(locator: &str) -> (Session, Session) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50001"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:40001"));
     let queryable = ztimeout!(session1.declare_queryable("test/query_cancellation")).unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -112,7 +112,7 @@ async fn test_cancellation_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_liveliness_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50002"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:40002"));
     let _token = ztimeout!(session1
         .liveliness()
         .declare_token("test/liveliness_query_cancellation"))
@@ -159,7 +159,7 @@ async fn test_cancellation_liveliness_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_querier_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50003"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:40003"));
     let queryable = ztimeout!(session1.declare_queryable("test/querier_cancellation")).unwrap();
 
     let querier = ztimeout!(session2.declare_querier("test/querier_cancellation")).unwrap();
@@ -221,7 +221,7 @@ async fn test_cancellation_querier_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_does_not_prevent_session_from_close() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50004"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:40004"));
     let cancellation_token = zenoh::cancellation::CancellationToken::default();
 
     let ke = "test/query_cancellation_does_not_prevent_session_from_close";
