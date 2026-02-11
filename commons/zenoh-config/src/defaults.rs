@@ -153,9 +153,6 @@ pub const queries_default_timeout: u64 = 10000;
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
 pub mod routing {
-    pub mod router {
-        pub const peers_failover_brokering: bool = true;
-    }
     pub mod peer {
         pub const mode: &str = "peer_to_peer";
     }

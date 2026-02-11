@@ -158,8 +158,6 @@ impl HatBaseTrait for Hat {
             AutoConnect::disabled()
         };
         let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
-        let router_peers_failover_brokering =
-            unwrap_or_default!(config.routing().router().peers_failover_brokering());
         drop(config_guard);
 
         if gossip {
@@ -167,7 +165,6 @@ impl HatBaseTrait for Hat {
                 "[Gossip]".to_string(),
                 tables.zid,
                 runtime,
-                router_peers_failover_brokering,
                 gossip,
                 gossip_multihop,
                 gossip_target,

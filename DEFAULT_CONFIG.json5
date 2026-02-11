@@ -219,12 +219,6 @@
   routing: {
     /// The routing strategy to use in routers and it's configuration.
     router: {
-      /// When set to true a router will forward data between two peers
-      /// directly connected to it if it detects that those peers are not
-      /// connected to each other.
-      /// The failover brokering only works if gossip discovery is enabled
-      /// and peers are configured with gossip target "router".
-      peers_failover_brokering: true,
       /// Linkstate mode configuration.
       linkstate: {
         /// Weights of the outgoing transports in linkstate mode.

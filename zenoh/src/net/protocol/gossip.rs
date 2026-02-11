@@ -49,7 +49,6 @@ impl Gossip {
         name: String,
         zid: ZenohIdProto,
         runtime: Runtime,
-        router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
@@ -75,7 +74,6 @@ impl Gossip {
                 name,
                 zid,
                 runtime,
-                router_peers_failover_brokering,
                 gossip,
                 gossip_target,
                 autoconnect,
@@ -176,7 +174,6 @@ impl Link {
 
 pub(crate) struct GossipNet {
     name: String,
-    router_peers_failover_brokering: bool,
     gossip: bool,
     gossip_target: WhatAmIMatcher,
     autoconnect: AutoConnect,
@@ -193,7 +190,6 @@ impl GossipNet {
         name: String,
         zid: ZenohIdProto,
         runtime: Runtime,
-        router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
@@ -209,7 +205,6 @@ impl GossipNet {
         });
         GossipNet {
             name,
-            router_peers_failover_brokering,
             gossip,
             gossip_target,
             autoconnect,
@@ -504,70 +499,6 @@ impl GossipNet {
         };
         self.links.insert(free_index, Link::new(transport.clone()));
 
-        let zid = transport.get_zid().unwrap();
-        let whatami = transport.get_whatami().unwrap();
-
-        if self.router_peers_failover_brokering {
-            let (idx, new) = match self.get_idx(&zid) {
-                Some(idx) => (idx, false),
-                None => {
-                    tracing::debug!("{} Add node (link) {}", self.name, zid);
-                    (
-                        self.add_node(Node {
-                            zid,
-                            whatami: Some(whatami),
-                            locators: None,
-                            sn: 0,
-                        }),
-                        true,
-                    )
-                }
-            };
-            self.graph[self.idx].sn += 1;
-
-            // Send updated self linkstate on all existing links except new one
-            self.links
-                .values()
-                .filter(|link| {
-                    link.zid != zid
-                        && link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router
-                })
-                .for_each(|link| {
-                    self.send_on_link(
-                        if new {
-                            vec![
-                                (
-                                    idx,
-                                    Details {
-                                        zid: true,
-                                        locators: false,
-                                        links: false,
-                                    },
-                                ),
-                                (
-                                    self.idx,
-                                    Details {
-                                        zid: false,
-                                        locators: true,
-                                        links: true,
-                                    },
-                                ),
-                            ]
-                        } else {
-                            vec![(
-                                self.idx,
-                                Details {
-                                    zid: false,
-                                    locators: true,
-                                    links: true,
-                                },
-                            )]
-                        },
-                        &link.transport,
-                    )
-                });
-        }
-
         // Send all nodes linkstate on new link
         let idxs = self
             .graph
@@ -578,9 +509,7 @@ impl GossipNet {
                     Details {
                         zid: true,
                         locators: true,
-                        links: (self.router_peers_failover_brokering
-                            && idx == self.idx
-                            && whatami == WhatAmI::Router),
+                        links: false,
                     },
                 )
             })
@@ -596,22 +525,7 @@ impl GossipNet {
         if let Some(idx) = self.get_idx(zid) {
             self.graph.remove_node(idx);
         }
-        if self.router_peers_failover_brokering {
-            self.send_on_links(
-                vec![(
-                    self.idx,
-                    Details {
-                        zid: false,
-                        locators: self.gossip,
-                        links: true,
-                    },
-                )],
-                |link| {
-                    link.zid != *zid
-                        && link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router
-                },
-            );
-        }
+
         vec![]
     }
 }
