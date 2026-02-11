@@ -86,6 +86,7 @@ ignored = [
   "serde_with",
   "serde_with_macros",
   "static_init",
+  "tempfile",
   "thread-priority",
   "time",
   "tinystr",
