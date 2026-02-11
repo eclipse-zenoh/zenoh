@@ -2593,7 +2593,7 @@ impl Session {
             qid,
             QueryState {
                 nb_final,
-                key_expr: key_expr.clone().into_owned(),
+                key_expr: key_expr.key_expr().into(),
                 parameters: parameters.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
@@ -3191,10 +3191,11 @@ impl Primitives for WeakSession {
                             zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
                         if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
-                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}`: dropping Reply.",
+                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}?{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
-                                query.selector()
+                                query.key_expr,
+                                query.parameters
                             );
                             return;
                         }

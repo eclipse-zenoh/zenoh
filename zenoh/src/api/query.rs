@@ -44,9 +44,7 @@ use crate::api::{
     bytes::ZBytes,
     encoding::Encoding,
     handlers::{Callback, CallbackParameter},
-    key_expr::KeyExpr,
     sample::Sample,
-    selector::Selector,
     Id,
 };
 
@@ -223,18 +221,12 @@ pub(crate) struct LivelinessQueryState {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
-    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) key_expr: OwnedKeyExpr,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<Reply>,
     pub(crate) querier_id: Option<Id>,
-}
-
-impl QueryState {
-    pub(crate) fn selector(&self) -> Selector<'_> {
-        Selector::borrowed(&self.key_expr, &self.parameters)
-    }
 }
 /// The kinds of accepted query replies.
 ///
