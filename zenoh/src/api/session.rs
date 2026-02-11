@@ -14,7 +14,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::TryInto,
-    fmt,
+    fmt, hint,
     mem::{self, ManuallyDrop},
     ops::Deref,
     sync::{
@@ -443,6 +443,58 @@ impl SessionState {
 
         (sub_state, declared_sub)
     }
+
+    #[inline(always)]
+    fn subscriber_callbacks(
+        &self,
+        local: bool,
+        kind: SubscriberKind,
+        wire_expr: &WireExpr,
+        historical: bool,
+    ) -> SubscriberCallbacks {
+        let mut callbacks = SingleOrVec::empty();
+        if wire_expr.suffix.is_empty() {
+            match self.get_res(&wire_expr.scope, wire_expr.mapping, local) {
+                Some(Resource::Node(res)) => {
+                    for sub in res.subscribers(kind).iter() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (!historical || sub.history)
+                        {
+                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
+                        }
+                    }
+                }
+                Some(Resource::Prefix { prefix }) => {
+                    error!("Received Data for `{prefix}`, which isn't a key expression");
+                    return SubscriberCallbacks::default();
+                }
+                None => {
+                    error!("Received Data for unknown expr_id: {}", wire_expr.scope);
+                    return SubscriberCallbacks::default();
+                }
+            }
+        } else {
+            match self.wireexpr_to_keyexpr(wire_expr, local) {
+                Ok(key_expr) => {
+                    for sub in self.subscribers(kind).values() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (!historical || sub.history)
+                            && key_expr.intersects(&sub.key_expr)
+                        {
+                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!("Received Data for unknown key_expr: {err}");
+                    return SubscriberCallbacks::default();
+                }
+            }
+        }
+        SubscriberCallbacks(callbacks)
+    }
 }
 
 impl fmt::Debug for SessionState {
@@ -453,6 +505,44 @@ impl fmt::Debug for SessionState {
             self.subscribers.len(),
             self.liveliness_subscribers.len()
         )
+    }
+}
+
+#[derive(Default)]
+struct SubscriberCallbacks(SingleOrVec<(Callback<Sample>, KeyExpr<'static>)>);
+
+impl SubscriberCallbacks {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline(always)]
+    fn call(
+        self,
+        consume: bool,
+        qos: push::ext::QoSType,
+        msg: &mut PushBody,
+        #[cfg(feature = "unstable")] reliability: Reliability,
+    ) {
+        let zenoh_collections::single_or_vec::IntoIter { drain, last } = self.0.into_iter();
+        for (cb, key_expr) in drain {
+            #[cfg(feature = "unstable")]
+            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
+            #[cfg(not(feature = "unstable"))]
+            cb.call_with_message((key_expr, qos, &mut msg.clone()));
+        }
+        if let Some((cb, key_expr)) = last {
+            let mut msg = &mut *msg;
+            let mut msg_clone;
+            if !consume {
+                msg_clone = msg.clone();
+                msg = &mut msg_clone;
+            }
+            #[cfg(feature = "unstable")]
+            cb.call_with_message((key_expr, qos, msg, reliability));
+            #[cfg(not(feature = "unstable"))]
+            cb.call_with_message((key_expr, qos, msg));
+        }
     }
 }
 
@@ -2256,82 +2346,29 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
-    pub(crate) fn execute_subscriber_callbacks<'a>(
+    pub(crate) fn execute_subscriber_callbacks(
         &self,
         local: bool,
         kind: SubscriberKind,
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
-        msg: impl FnOnce() -> &'a mut PushBody,
+        msg: &mut PushBody,
         historical: bool,
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
-        let mut callbacks = SingleOrVec::default();
         let state = zread!(self.0.state);
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
-        if wire_expr.suffix.is_empty() {
-            match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
-                Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind).iter() {
-                        if (sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal)))
-                            && (sub.history || (!historical))
-                        {
-                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
-                        }
-                    }
-                }
-                Some(Resource::Prefix { prefix }) => {
-                    tracing::error!(
-                        "Received Data for `{}`, which isn't a key expression",
-                        prefix
-                    );
-                    return;
-                }
-                None => {
-                    tracing::error!("Received Data for unknown expr_id: {}", wire_expr.scope);
-                    return;
-                }
-            }
-        } else {
-            match state.wireexpr_to_keyexpr(wire_expr, local) {
-                Ok(key_expr) => {
-                    for sub in state.subscribers(kind).values() {
-                        if (sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal)))
-                            && (sub.history || (!historical))
-                            && key_expr.intersects(&sub.key_expr)
-                        {
-                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
-                        }
-                    }
-                }
-                Err(err) => {
-                    tracing::error!("Received Data for unknown key_expr: {}", err);
-                    return;
-                }
-            }
-        };
+        let callbacks = state.subscriber_callbacks(local, kind, wire_expr, historical);
         drop(state);
-        if callbacks.is_empty() {
-            return;
-        }
-        let msg = msg();
-        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
-        for (cb, key_expr) in drain {
+        callbacks.call(
+            true,
+            qos,
+            msg,
             #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
-            #[cfg(not(feature = "unstable"))]
-            cb.call_with_message((key_expr, qos, &mut msg.clone()));
-        }
-        if let Some((cb, key_expr)) = last {
-            #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, msg, reliability));
-            #[cfg(not(feature = "unstable"))]
-            cb.call_with_message((key_expr, qos, msg));
-        }
+            reliability,
+        );
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
@@ -2351,65 +2388,85 @@ impl Session {
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
-        let primitives = zread!(self.0.state).primitives()?;
-        let timestamp = timestamp.or_else(|| self.0.runtime.new_timestamp());
+        let state = zread!(self.0.state);
+        let primitives = state.primitives()?;
         let wire_expr = key_expr.to_wire(self);
+        let mut callbacks = SubscriberCallbacks::default();
+        if destination != Locality::Remote {
+            callbacks =
+                state.subscriber_callbacks(true, SubscriberKind::Subscriber, &wire_expr, false);
+        }
+        drop(state);
+        let timestamp = timestamp.or_else(|| self.0.runtime.new_timestamp());
         let ext_qos = push::ext::QoSType::new(priority.into(), congestion_control, is_express);
-        let make_body = || match kind {
-            SampleKind::Put => PushBody::Put(Put {
-                timestamp,
-                encoding: encoding.clone().into(),
-                #[cfg(feature = "unstable")]
-                ext_sinfo: source_info.clone().map(Into::into),
-                #[cfg(not(feature = "unstable"))]
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: attachment.clone().map(Into::into),
-                ext_unknown: vec![],
-                payload: payload.clone().into(),
-            }),
-            SampleKind::Delete => PushBody::Del(Del {
-                timestamp,
-                #[cfg(feature = "unstable")]
-                ext_sinfo: source_info.clone().map(Into::into),
-                #[cfg(not(feature = "unstable"))]
-                ext_sinfo: None,
-                ext_attachment: attachment.clone().map(Into::into),
-                ext_unknown: vec![],
-            }),
-        };
         let mut push = Push {
             wire_expr: wire_expr.to_owned(),
             ext_qos,
-            ..Push::from(make_body())
+            ..Push::from(match kind {
+                SampleKind::Put => PushBody::Put(Put {
+                    timestamp,
+                    encoding: encoding.into(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.map(Into::into),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_attachment: attachment.map(Into::into),
+                    ext_unknown: vec![],
+                    payload: payload.into(),
+                }),
+                SampleKind::Delete => PushBody::Del(Del {
+                    timestamp,
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.map(Into::into),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    ext_attachment: attachment.map(Into::into),
+                    ext_unknown: vec![],
+                }),
+            })
         };
+        let has_local_callbacks = !callbacks.is_empty();
         if destination != Locality::SessionLocal {
-            primitives.send_push(
+            primitives.send_push_consume(
                 &mut push,
                 #[cfg(feature = "unstable")]
                 reliability,
                 #[cfg(not(feature = "unstable"))]
                 Reliability::DEFAULT,
+                !has_local_callbacks,
             );
         }
-        if destination != Locality::Remote {
-            self.execute_subscriber_callbacks(
-                true,
-                SubscriberKind::Subscriber,
-                &wire_expr,
-                ext_qos,
-                || {
-                    // check if the message has been consumed, and rebuild the payload in this case
-                    if push.wire_expr == WireExpr::empty() {
-                        push.payload = make_body();
-                    }
-                    &mut push.payload
-                },
-                false,
+        if has_local_callbacks {
+            #[cold]
+            fn call_local(
+                callbacks: SubscriberCallbacks,
+                push: &mut Push,
+                #[cfg(feature = "unstable")] reliability: Reliability,
+            ) {
+                callbacks.call(
+                    true,
+                    push.ext_qos,
+                    &mut push.payload,
+                    #[cfg(feature = "unstable")]
+                    reliability,
+                );
+            }
+            call_local(
+                callbacks,
+                &mut push,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
+        }
+        // ext_unknown is not touched by routing/callbacks, so it must be empty
+        // we let the compiler knows it so it can optimize its drop out
+        // (`Vec<ZExtUnknown>::drop` was visible in flamegraph before this change)
+        match push.payload {
+            PushBody::Put(Put { ext_unknown, .. }) | PushBody::Del(Del { ext_unknown, .. })
+                if ext_unknown.is_empty() => {}
+            _ => unsafe { hint::unreachable_unchecked() },
         }
         Ok(())
     }
@@ -2894,13 +2951,12 @@ impl Primitives for WeakSession {
                             e.insert(key_expr.clone());
                             drop(state);
 
-                            let mut body = None;
                             self.execute_subscriber_callbacks(
                                 false,
                                 SubscriberKind::LivelinessSubscriber,
                                 &m.wire_expr,
                                 Default::default(),
-                                || body.insert(Put::default().into()),
+                                &mut Put::default().into(),
                                 // interest_id is set if the Token is an Interest::Current.
                                 // This is used to decide if subs with history=false should be called or not
                                 msg.interest_id.is_some(),
@@ -2927,13 +2983,12 @@ impl Primitives for WeakSession {
                     let interest_current = msg.interest_id.is_some();
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
-                        let mut body = None;
                         self.execute_subscriber_callbacks(
                             false,
                             SubscriberKind::LivelinessSubscriber,
                             &key_expr.to_wire(self),
                             Default::default(),
-                            || body.insert(Del::default().into()),
+                            &mut Del::default().into(),
                             interest_current,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
@@ -2945,13 +3000,12 @@ impl Primitives for WeakSession {
                         {
                             Ok(key_expr) => {
                                 drop(state);
-                                let mut body = None;
                                 self.execute_subscriber_callbacks(
                                     false,
                                     SubscriberKind::LivelinessSubscriber,
                                     &key_expr.to_wire(self),
                                     Default::default(),
-                                    || body.insert(Del::default().into()),
+                                    &mut Del::default().into(),
                                     interest_current,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
@@ -2977,15 +3031,17 @@ impl Primitives for WeakSession {
         }
     }
 
-    fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
+    #[inline(always)]
+    fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, consume: bool) {
         trace!("recv Push {:?}", msg);
-        self.execute_subscriber_callbacks(
-            false,
-            SubscriberKind::Subscriber,
-            &msg.wire_expr,
+        let state = zread!(self.0.state);
+        let callbacks =
+            state.subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false);
+        drop(state);
+        callbacks.call(
+            consume,
             msg.ext_qos,
-            || &mut msg.payload,
-            false,
+            &mut msg.payload,
             #[cfg(feature = "unstable")]
             _reliability,
         );
