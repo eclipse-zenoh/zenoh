@@ -114,6 +114,12 @@ pub struct FaceState {
     pub(crate) local_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
+    /// Pending queries sent to this face.
+    ///
+    /// # Safety
+    /// Access to this field is synchronized across all faces with
+    /// [`super::tables::TablesLock::queries_lock`]; it is unsound to read/write this field without
+    /// acquiring the lock.
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
