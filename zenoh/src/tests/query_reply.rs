@@ -40,6 +40,8 @@ impl Primitives for ReplyTestPrimitives {
 
     fn send_push(&self, _msg: &mut Push, _reliability: Reliability) {}
 
+    fn send_push_consume(&self, _msg: &mut Push, _reliability: Reliability, _consume: bool) {}
+
     fn send_request(&self, _msg: &mut Request) {}
 
     fn send_response(&self, msg: &mut Response) {

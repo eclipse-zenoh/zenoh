@@ -16,8 +16,6 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroupNotifier;
 use crate::api::handlers::IntoHandler;
 
 /// A function that can transform an [`FnMut`]`(T)` into
@@ -47,13 +45,35 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
     }
 }
 
+#[cfg(feature = "unstable")]
+struct Dropper<F>
+where
+    F: FnOnce() + Send + Sync,
+{
+    drop: Option<F>,
+}
+#[cfg(feature = "unstable")]
+impl<F> Drop for Dropper<F>
+where
+    F: FnOnce() + Send + Sync,
+{
+    fn drop(&mut self) {
+        if let Some(d) = self.drop.take() {
+            (d)()
+        }
+    }
+}
+#[cfg(feature = "unstable")]
+trait DropperTrait {}
+#[cfg(feature = "unstable")]
+impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 /// Callback type used by zenoh entities.
 ///
 /// This type stores the callback function passed to zenoh entities.
 pub struct Callback<T: CallbackParameter> {
     callable: Arc<dyn CallbackImpl<T>>,
     #[cfg(feature = "unstable")]
-    on_drop_notifier: Option<SyncGroupNotifier>,
+    drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
 }
 
 impl<T: CallbackParameter> Clone for Callback<T> {
@@ -61,7 +81,7 @@ impl<T: CallbackParameter> Clone for Callback<T> {
         Self {
             callable: self.callable.clone(),
             #[cfg(feature = "unstable")]
-            on_drop_notifier: self.on_drop_notifier.clone(),
+            drop: self.drop.clone(),
         }
     }
 }
@@ -83,9 +103,10 @@ impl<T: CallbackParameter> Callback<T> {
         self.callable.call_with_message(msg)
     }
 
+    #[zenoh_macros::pub_visibility_if_internal]
     #[cfg(feature = "unstable")]
-    pub(crate) fn set_on_drop_notifier(&mut self, notifier: SyncGroupNotifier) {
-        self.on_drop_notifier = Some(notifier);
+    pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
+        self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
     }
 }
 
@@ -94,7 +115,7 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync + 'static> From<F> for Callbac
         Self {
             callable: Arc::new(value),
             #[cfg(feature = "unstable")]
-            on_drop_notifier: None,
+            drop: None,
         }
     }
 }
