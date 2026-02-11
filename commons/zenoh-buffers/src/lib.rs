@@ -135,6 +135,7 @@ pub mod writer {
         fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
             self.write_exact(core::slice::from_ref(&byte))
         }
+        #[inline(always)]
         fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
             self.write_exact(slice.as_slice())
         }
@@ -209,7 +210,7 @@ pub mod writer {
 pub mod reader {
     use core::num::NonZeroUsize;
 
-    use crate::ZSlice;
+    use crate::{ZBuf, ZSlice};
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
@@ -218,6 +219,12 @@ pub mod reader {
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead>;
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
         fn remaining(&self) -> usize;
+
+        fn read_zbuf(&mut self, len: usize) -> Result<ZBuf, DidntRead> {
+            let mut buf = ZBuf::empty();
+            self.read_zslices(len, |s| buf.push_zslice(s))?;
+            Ok(buf)
+        }
 
         /// Returns an iterator of `ZSlices` such that the sum of their length is _exactly_ `len`.
         fn read_zslices<F: FnMut(ZSlice)>(
@@ -245,15 +252,23 @@ pub mod reader {
     }
 
     impl<R: Reader + ?Sized> Reader for &mut R {
+        #[inline(always)]
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
             (**self).read(into)
         }
+        #[inline(always)]
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
             (**self).read_exact(into)
         }
+        #[inline(always)]
         fn remaining(&self) -> usize {
             (**self).remaining()
         }
+        #[inline(always)]
+        fn read_zbuf(&mut self, len: usize) -> Result<ZBuf, DidntRead> {
+            (**self).read_zbuf(len)
+        }
+        #[inline(always)]
         fn read_zslices<F: FnMut(ZSlice)>(
             &mut self,
             len: usize,
@@ -261,12 +276,15 @@ pub mod reader {
         ) -> Result<(), DidntRead> {
             (**self).read_zslices(len, for_each_slice)
         }
+        #[inline(always)]
         fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
             (**self).read_zslice(len)
         }
+        #[inline(always)]
         fn read_u8(&mut self) -> Result<u8, DidntRead> {
             (**self).read_u8()
         }
+        #[inline(always)]
         fn can_read(&self) -> bool {
             (**self).can_read()
         }
