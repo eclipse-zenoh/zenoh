@@ -16,15 +16,17 @@
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
+use tokio::net::TcpListener;
 use zenoh::{handlers::CallbackDrop, Session};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
-use zenoh_protocol::core::locator;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-fn allocate_dynamic_tcp_endpoint() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind local ephemeral port");
+async fn allocate_dynamic_tcp_endpoint() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("Failed to bind local ephemeral port");
     let addr = listener
         .local_addr()
         .expect("Failed to read local ephemeral address");
@@ -32,7 +34,7 @@ fn allocate_dynamic_tcp_endpoint() -> String {
 }
 
 async fn create_peer_client_pair() -> (Session, Session) {
-    let locator = allocate_dynamic_tcp_endpoint();
+    let locator = allocate_dynamic_tcp_endpoint().await;
     let config1 = {
         let mut config = zenoh::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -59,7 +61,7 @@ async fn create_peer_client_pair() -> (Session, Session) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair()).await;
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let queryable = ztimeout!(session1.declare_queryable("test/query_cancellation")).unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -122,7 +124,7 @@ async fn test_cancellation_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_liveliness_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair()).await;
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let _token = ztimeout!(session1
         .liveliness()
         .declare_token("test/liveliness_query_cancellation"))
@@ -169,7 +171,7 @@ async fn test_cancellation_liveliness_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_querier_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair()).await;
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let queryable = ztimeout!(session1.declare_queryable("test/querier_cancellation")).unwrap();
 
     let querier = ztimeout!(session2.declare_querier("test/querier_cancellation")).unwrap();
@@ -231,7 +233,7 @@ async fn test_cancellation_querier_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_does_not_prevent_session_from_close() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair()).await;
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let cancellation_token = zenoh::cancellation::CancellationToken::default();
 
     let ke = "test/query_cancellation_does_not_prevent_session_from_close";
