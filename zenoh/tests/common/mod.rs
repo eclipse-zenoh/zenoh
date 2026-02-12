@@ -14,6 +14,7 @@
 use std::time::Duration;
 
 use zenoh::Session;
+use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -56,6 +57,37 @@ pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = open_session_connect(endpoints).await;
     (peer01, peer02)
+}
+
+pub async fn open_session_unicast_dynamic_client() -> (Session, Session) {
+    let mut config1 = zenoh_config::Config::default();
+    config1
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
+        .unwrap();
+    config1.scouting.multicast.set_enabled(Some(false)).unwrap();
+
+    let session1 = ztimeout!(zenoh::open(config1)).unwrap();
+    let locator = session1
+        .info()
+        .locators()
+        .await
+        .into_iter()
+        .find(|l| l.protocol().as_str() == "tcp")
+        .expect("Expected at least one TCP locator")
+        .to_string();
+
+    let mut config2 = zenoh_config::Config::default();
+    config2.set_mode(Some(WhatAmI::Client)).unwrap();
+    config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config2
+        .connect
+        .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
+        .unwrap();
+
+    let session2 = ztimeout!(zenoh::open(config2)).unwrap();
+    (session1, session2)
 }
 
 #[allow(dead_code)]
