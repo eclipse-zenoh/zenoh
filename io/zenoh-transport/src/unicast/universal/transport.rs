@@ -45,6 +45,35 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 
+pub(crate) struct ClosableCallback {
+    callback: OnceLock<Arc<dyn TransportPeerEventHandler>>,
+    closed: AtomicBool,
+}
+
+impl ClosableCallback {
+    pub(crate) fn new() -> Self {
+        ClosableCallback {
+            callback: OnceLock::new(),
+            closed: AtomicBool::new(false),
+        }
+    }
+
+    pub(crate) fn set(&self, cb: Arc<dyn TransportPeerEventHandler>) {
+        let _ = self.callback.set(cb);
+    }
+
+    pub(crate) fn get(&self) -> Option<&Arc<dyn TransportPeerEventHandler>> {
+        self.callback
+            .get()
+            .filter(|_| !self.closed.load(Ordering::Relaxed))
+    }
+
+    pub(crate) fn close(&self) -> Option<&Arc<dyn TransportPeerEventHandler>> {
+        self.closed.store(true, Ordering::Relaxed);
+        self.callback.get()
+    }
+}
+
 /*************************************/
 /*        UNIVERSAL TRANSPORT        */
 /*************************************/
@@ -63,8 +92,7 @@ pub(crate) struct TransportUnicastUniversal {
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
     // The callback
-    pub(super) callback: Arc<OnceLock<Arc<dyn TransportPeerEventHandler>>>,
-    pub(super) closed: Arc<AtomicBool>,
+    pub(super) callback: Arc<ClosableCallback>,
     // Lock used to ensure no race in add_link method
     add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
@@ -111,8 +139,7 @@ impl TransportUnicastUniversal {
             priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             add_link_lock: Arc::new(AsyncMutex::new(())),
-            callback: Arc::new(OnceLock::new()),
-            closed: Arc::new(AtomicBool::new(false)),
+            callback: Arc::new(ClosableCallback::new()),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
@@ -137,8 +164,7 @@ impl TransportUnicastUniversal {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
         *a_guard = false;
-        self.closed.store(true, Ordering::Relaxed);
-        let callback = self.callback.get();
+        let callback = self.callback.close();
 
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
@@ -322,7 +348,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*            ACCESSORS              */
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
-        let _ = self.callback.set(callback);
+        self.callback.set(callback)
     }
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
