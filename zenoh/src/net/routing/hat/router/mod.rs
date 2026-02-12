@@ -62,7 +62,7 @@ use crate::net::{
             queries::merge_qabl_infos,
             region::RegionMap,
         },
-        hat::{BaseContext, Remote, TREES_COMPUTATION_DELAY_MS},
+        hat::{DispatcherContext, Remote, TREES_COMPUTATION_DELAY_MS},
         router::DEFAULT_NODE_ID,
     },
     runtime::Runtime,
@@ -251,7 +251,7 @@ impl Hat {
     #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn send_point_to_point(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         dst_node_id: NodeId,
         mut send_message: impl FnMut(&Arc<FaceState>),
     ) {
@@ -268,7 +268,7 @@ impl Hat {
     #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn send_declare_point_to_point(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         dst_node_id: NodeId,
         mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
     ) {
@@ -366,14 +366,18 @@ impl HatBaseTrait for Hat {
         self.get_router(face, nid).map(|zid| Remote(Box::new(zid)))
     }
 
-    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+    fn new_local_face(
+        &mut self,
+        _ctx: DispatcherContext,
+        _tables_ref: &Arc<TablesLock>,
+    ) -> ZResult<()> {
         bail!("Local sessions should not be bound to router hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         transport: &TransportUnicast,
         _other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
@@ -387,7 +391,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    fn close_face(&mut self, ctx: BaseContext) {
+    fn close_face(&mut self, ctx: DispatcherContext) {
         debug_assert!(self.owns(ctx.src_face));
 
         self.schedule_compute_trees(ctx.tables_lock.clone());
@@ -396,7 +400,7 @@ impl HatBaseTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
-        mut ctx: BaseContext,
+        mut ctx: DispatcherContext,
         oam: &mut Oam,
         zid: &ZenohIdProto,
         whatami: WhatAmI,
@@ -429,9 +433,9 @@ impl HatBaseTrait for Hat {
                     .link_states(list.link_states, *zid)
                     .removed_nodes;
 
-                let removed_subscriptions = removed_nodes
+                let removed_subscribers = removed_nodes
                     .iter()
-                    .flat_map(|(_, node)| self.unregister_node_subscriptions(node))
+                    .flat_map(|(_, node)| self.unregister_node_subscribers(node))
                     .collect::<HashSet<_>>();
 
                 let removed_queryables = removed_nodes
@@ -453,22 +457,22 @@ impl HatBaseTrait for Hat {
                     .chain(iter::once((self.region, self as &mut dyn HatTrait)))
                     .collect::<RegionMap<_>>();
 
-                for mut res in removed_subscriptions {
+                for mut res in removed_subscribers {
                     dispatcher::pubsub::disable_matches_data_routes(ctx.tables, &mut res);
 
                     let mut remaining = hats
                         .values_mut()
-                        .filter(|hat| hat.remote_subscriptions_of(&res).is_some())
+                        .filter(|hat| hat.remote_subscribers_of(&res).is_some())
                         .collect_vec();
 
                     if remaining.is_empty() {
                         for hat in hats.values_mut() {
-                            hat.unpropagate_subscription(ctx.reborrow(), res.clone());
+                            hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
                         }
                         Resource::clean(&mut res);
                     } else if let [last_owner] = &mut *remaining {
                         last_owner
-                            .unpropagate_last_non_owned_subscription(ctx.reborrow(), res.clone())
+                            .unpropagate_last_non_owned_subscriber(ctx.reborrow(), res.clone())
                     }
                 }
 

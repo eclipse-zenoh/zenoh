@@ -27,12 +27,17 @@ use zenoh_protocol::{
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
     dispatcher::face::Face,
-    hat::{BaseContext, SendDeclare},
-    router::Resource,
+    hat::{DispatcherContext, SendDeclare},
+    router::{node_id_as_source, Resource},
 };
 
 impl Face {
-    #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, tables, send_declare),
+        fields(expr = %expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
     pub(crate) fn declare_token(
         &self,
         tables: &TablesLock,
@@ -93,7 +98,7 @@ impl Face {
                 let hats = &mut tables.hats;
                 let region = self.state.region;
 
-                let mut ctx = BaseContext {
+                let mut ctx = DispatcherContext {
                     tables_lock: &self.tables,
                     tables: &mut tables.data,
                     src_face: &mut self.state.clone(),
@@ -136,6 +141,12 @@ impl Face {
         }
     }
 
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, tables, send_declare),
+        fields(expr = %expr.wire_expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
     pub(crate) fn undeclare_token(
         &self,
         tables: &TablesLock,
@@ -192,19 +203,12 @@ impl Face {
             }
         };
 
-        let _span = tracing::debug_span!(
-            "undeclare_token",
-            id,
-            expr = res.as_ref().map(|res| res.expr())
-        )
-        .entered();
-
         let tables = &mut *wtables;
 
         let hats = &mut tables.hats;
         let region = self.state.region;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),

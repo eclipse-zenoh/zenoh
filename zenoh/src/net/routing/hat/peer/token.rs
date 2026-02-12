@@ -27,7 +27,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{face::FaceState, region::RegionMap, tables::TablesData},
-    hat::{BaseContext, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare, Sources},
+    hat::{DispatcherContext, HatBaseTrait, HatTokenTrait, HatTrait, SendDeclare, Sources},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -35,7 +35,11 @@ use crate::net::routing::{
 use crate::zenoh_core::polyfill::*;
 
 impl Hat {
-    pub(super) fn tokens_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+    pub(super) fn tokens_new_face(
+        &self,
+        ctx: DispatcherContext,
+        other_hats: &RegionMap<&dyn HatTrait>,
+    ) {
         if ctx.src_face.region.bound().is_south() {
             tracing::trace!(face = %ctx.src_face, "New south-bound peer remote; not propagating tokens");
             return;
@@ -151,10 +155,22 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        let mut tokens = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for token in self.face_hat(face).remote_tokens.values() {
+                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
+                srcs.peers.push(face.zid);
+            }
+        }
+        Vec::from_iter(tokens)
+    }
+
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn register_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         mut res: Arc<Resource>,
         _nid: NodeId,
@@ -187,7 +203,7 @@ impl HatTokenTrait for Hat {
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         _res: Option<Arc<Resource>>,
         _nid: NodeId,
@@ -217,8 +233,8 @@ impl HatTokenTrait for Hat {
         Some(res)
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;
@@ -236,8 +252,8 @@ impl HatTokenTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool) {
         if !other_tokens {
             debug_assert!(self.owns(ctx.src_face));
             return;
@@ -248,8 +264,8 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             return;
         }
@@ -276,17 +292,5 @@ impl HatTokenTrait for Hat {
             .filter(|token| res.is_none_or(|res| res.matches(token)))
             .cloned()
             .collect()
-    }
-
-    #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        let mut tokens = HashMap::new();
-        for face in self.owned_faces(tables) {
-            for token in self.face_hat(face).remote_tokens.values() {
-                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
-                srcs.peers.push(face.zid);
-            }
-        }
-        Vec::from_iter(tokens)
     }
 }

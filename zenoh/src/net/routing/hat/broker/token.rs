@@ -27,7 +27,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::TablesData},
-    hat::{BaseContext, HatBaseTrait, HatTokenTrait, SendDeclare, Sources},
+    hat::{DispatcherContext, HatBaseTrait, HatTokenTrait, SendDeclare, Sources},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -55,7 +55,6 @@ impl Hat {
             let id = self.face_hat(dst).next_id.fetch_add(1, Ordering::SeqCst);
             self.face_hat_mut(dst).local_tokens.insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst);
-            tracing::trace!(%dst);
             send_declare(
                 &dst.primitives,
                 RoutingContext::with_expr(
@@ -82,7 +81,6 @@ impl Hat {
         send_declare: &mut SendDeclare,
     ) {
         if let Some(id) = self.face_hat_mut(dst).local_tokens.remove(res) {
-            tracing::trace!(%dst);
             send_declare(
                 &dst.primitives,
                 RoutingContext::with_expr(
@@ -107,7 +105,6 @@ impl Hat {
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
-            tracing::trace!(%dst);
             send_declare(
                 &dst.primitives,
                 RoutingContext::with_expr(
@@ -131,10 +128,22 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        let mut tokens = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for token in self.face_hat(face).remote_tokens.values() {
+                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
+                srcs.clients.push(face.zid);
+            }
+        }
+        Vec::from_iter(tokens)
+    }
+
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn register_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         mut res: Arc<Resource>,
         nid: NodeId,
@@ -167,7 +176,7 @@ impl HatTokenTrait for Hat {
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         _res: Option<Arc<Resource>>,
         _nid: NodeId,
@@ -197,8 +206,8 @@ impl HatTokenTrait for Hat {
         Some(res)
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;
@@ -216,8 +225,8 @@ impl HatTokenTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool) {
         debug_assert_implies!(!other_tokens, self.owns(ctx.src_face));
 
         // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
@@ -227,8 +236,8 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
         // session-local tokens in liveliness queries/subscribers.
         for mut face in self.owned_faces(ctx.tables).cloned() {
@@ -236,8 +245,8 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_last_non_owned_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         debug_assert!(self.remote_tokens_of(&res));
 
         if let Ok(face) = self
@@ -268,17 +277,5 @@ impl HatTokenTrait for Hat {
             .filter(|token| res.is_none_or(|res| res.matches(token)))
             .cloned()
             .collect()
-    }
-
-    #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        let mut tokens = HashMap::new();
-        for face in self.owned_faces(tables) {
-            for token in self.face_hat(face).remote_tokens.values() {
-                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
-                srcs.clients.push(face.zid);
-            }
-        }
-        Vec::from_iter(tokens)
     }
 }

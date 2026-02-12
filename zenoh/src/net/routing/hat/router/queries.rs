@@ -42,7 +42,7 @@ use crate::net::{
             resource::{NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatQueriesTrait, Sources, UnregisterResult},
+        hat::{DispatcherContext, HatBaseTrait, HatQueriesTrait, Sources, UnregisterResult},
         router::Direction,
         RoutingContext,
     },
@@ -281,7 +281,7 @@ impl Hat {
 }
 
 impl HatQueriesTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    #[tracing::instrument(level = "debug", skip(_tables), ret)]
     fn sourced_queryables(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         self.router_qabls
@@ -299,18 +299,18 @@ impl HatQueriesTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    #[tracing::instrument(level = "debug", skip(_tables), ret)]
     fn sourced_queriers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables), fields(%src_face) ret)]
+    #[tracing::instrument(level = "debug", skip(tables, src_face), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        nid: NodeId,
+        node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
         lazy_static::lazy_static! {
             static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
@@ -382,7 +382,7 @@ impl HatQueriesTrait for Hat {
             let net = self.routers_net.as_ref().unwrap();
             // FIXME(regions): remove this
             let router_source = match src_face.whatami {
-                WhatAmI::Router => nid,
+                WhatAmI::Router => node_id,
                 _ => net.idx.index() as NodeId,
             };
             insert_target_for_qabls(
@@ -401,19 +401,19 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx, _id))]
+    #[tracing::instrument(level = "debug", skip(ctx, _id, info), ret)]
     fn register_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _id: QueryableId,
         mut res: Arc<Resource>,
-        nid: NodeId,
+        node_id: NodeId,
         info: &QueryableInfoType,
     ) {
         debug_assert!(self.owns(ctx.src_face));
 
-        let Some(router) = self.get_router(ctx.src_face, nid) else {
-            tracing::error!(%nid, "Queryable from unknown router");
+        let Some(router) = self.get_router(ctx.src_face, node_id) else {
+            tracing::error!(%node_id, "Queryable from unknown router");
             return;
         };
 
@@ -430,49 +430,66 @@ impl HatQueriesTrait for Hat {
     #[tracing::instrument(level = "debug", skip(ctx, _id), ret)]
     fn unregister_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _id: QueryableId,
         res: Option<Arc<Resource>>,
-        nid: NodeId,
+        node_id: NodeId,
     ) -> UnregisterResult {
+        use UnregisterResult::*;
+
         debug_assert!(self.owns(ctx.src_face));
 
-        let Some(router) = self.get_router(ctx.src_face, nid) else {
-            tracing::error!(%nid, "Queryable from unknown router");
-            return UnregisterResult::Noop;
+        let Some(router) = self.get_router(ctx.src_face, node_id) else {
+            tracing::error!(%node_id, "Queryable from unknown router");
+            return Noop;
         };
 
         debug_assert_ne!(router, ctx.tables.zid);
 
         let Some(mut res) = res else {
             tracing::error!("Queryable undeclaration in router region with no resource");
-            return UnregisterResult::Noop;
+            return Noop;
+        };
+
+        let Some(old_info) = self.remote_queryables_of(&res) else {
+            tracing::error!("Queryable undeclaration in router region with no info");
+            return Noop;
         };
 
         self.res_hat_mut(&mut res).router_qabls.remove(&router);
 
-        if self.res_hat(&res).router_qabls.is_empty() {
+        let new_info = self.remote_queryables_of(&res);
+
+        if new_info.is_none() {
             self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
         }
 
         self.propagate_forget_sourced_queryable(ctx.tables, &res, Some(ctx.src_face), &router);
 
-        // FIXME(regions): handle the InfoUpdate
-        UnregisterResult::LastUnregistered { res }
+        match new_info {
+            Some(new_info) => {
+                if new_info == old_info {
+                    Noop
+                } else {
+                    InfoUpdate { res }
+                }
+            }
+            None => LastUnregistered { res },
+        }
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_queryables(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         self.unregister_node_queryables(&ctx.src_face.zid)
     }
 
     #[allow(clippy::incompatible_msrv)]
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         mut res: Arc<Resource>,
         other_info: Option<QueryableInfoType>,
     ) {
@@ -497,8 +514,8 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unpropagate_queryable(&mut self, ctx: BaseContext, mut res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_queryable(&mut self, ctx: DispatcherContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_queryable
             return;

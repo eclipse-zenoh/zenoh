@@ -29,7 +29,7 @@ use crate::net::{
     protocol::network::Network,
     routing::{
         dispatcher::{face::FaceState, tables::TablesData},
-        hat::{BaseContext, HatBaseTrait, HatTokenTrait, Sources},
+        hat::{DispatcherContext, HatBaseTrait, HatTokenTrait, Sources},
         router::{NodeId, Resource},
         RoutingContext,
     },
@@ -274,18 +274,35 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(_tables), ret)]
+    fn sourced_tokens(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        self.router_tokens
+            .iter()
+            .map(|token| {
+                (
+                    token.clone(),
+                    Sources {
+                        routers: Vec::from_iter(self.res_hat(token).router_tokens.iter().cloned()),
+                        peers: Vec::default(),
+                        clients: Vec::default(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _id), ret)]
     fn register_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _id: TokenId,
         mut res: Arc<Resource>,
-        nid: NodeId,
+        node_id: NodeId,
     ) {
         debug_assert!(self.owns(ctx.src_face));
 
-        let Some(router) = self.get_router(ctx.src_face, nid) else {
-            tracing::error!(%nid, "Token from unknown router");
+        let Some(router) = self.get_router(ctx.src_face, node_id) else {
+            tracing::error!(%node_id, "Token from unknown router");
             return;
         };
 
@@ -297,18 +314,18 @@ impl HatTokenTrait for Hat {
         self.propagate_sourced_token(ctx.tables, &res, Some(ctx.src_face), &router);
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, _id), ret)]
     fn unregister_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _id: TokenId,
         res: Option<Arc<Resource>>,
-        nid: NodeId,
+        node_id: NodeId,
     ) -> Option<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
-        let Some(router) = self.get_router(ctx.src_face, nid) else {
-            tracing::error!(%nid, "Token from unknown router");
+        let Some(router) = self.get_router(ctx.src_face, node_id) else {
+            tracing::error!(%node_id, "Token from unknown router");
             return None;
         };
 
@@ -330,13 +347,18 @@ impl HatTokenTrait for Hat {
         Some(res)
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         self.unregister_node_tokens(&ctx.src_face.zid)
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn propagate_token(&mut self, ctx: BaseContext, mut res: Arc<Resource>, other_tokens: bool) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_token(
+        &mut self,
+        ctx: DispatcherContext,
+        mut res: Arc<Resource>,
+        other_tokens: bool,
+    ) {
         if !other_tokens {
             // NOTE(regions): see Hat::register_token
             debug_assert!(self.owns(ctx.src_face));
@@ -353,8 +375,8 @@ impl HatTokenTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unpropagate_token(&mut self, ctx: BaseContext, mut res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_token(&mut self, ctx: DispatcherContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_token
             return;
@@ -402,23 +424,6 @@ impl HatTokenTrait for Hat {
                     && res.is_none_or(|res| res.matches(token))
             })
             .cloned()
-            .collect()
-    }
-
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_tokens(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        self.router_tokens
-            .iter()
-            .map(|token| {
-                (
-                    token.clone(),
-                    Sources {
-                        routers: Vec::from_iter(self.res_hat(token).router_tokens.iter().cloned()),
-                        peers: Vec::default(),
-                        clients: Vec::default(),
-                    },
-                )
-            })
             .collect()
     }
 }

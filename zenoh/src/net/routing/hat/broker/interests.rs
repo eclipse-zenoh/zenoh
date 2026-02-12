@@ -35,7 +35,7 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{BaseContext, HatBaseTrait, HatInterestTrait, Remote},
+    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote},
     router::SubscriberInfo,
     RoutingContext,
 };
@@ -43,49 +43,48 @@ use crate::net::routing::{
 impl HatInterestTrait for Hat {
     fn route_interest(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
         _remote: &Remote,
     ) -> Option<CurrentInterest> {
-        // The broker hat is never the north hat, thus it doesn't route interests
-        unreachable!()
+        bug!("North-bound broker hat");
+        None
     }
 
     fn route_interest_final(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
         _remote_interest: &RemoteInterest,
     ) {
-        // The broker hat is never the north hat, thus it doesn't route interests
-        unreachable!()
+        bug!("North-bound broker hat");
     }
 
     fn route_declare_final(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _interest_id: InterestId,
     ) -> Option<CurrentInterest> {
-        // The broker hat is never the north hat, thus it doesn't route current declarations
-        unreachable!()
+        bug!("North-bound broker hat");
+        None
     }
 
     fn route_current_token(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _interest_id: InterestId,
         _res: Arc<Resource>,
     ) -> Option<CurrentInterest> {
-        // The broker hat is never the north hat, thus it doesn't route current declarations
-        unreachable!()
+        bug!("North-bound broker hat");
+        None
     }
 
     #[allow(clippy::incompatible_msrv)]
-    #[tracing::instrument(level = "trace", skip(ctx, msg))]
-    fn send_current_subscriptions(
+    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
+    fn send_current_subscribers(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         mut other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
@@ -194,10 +193,10 @@ impl HatInterestTrait for Hat {
     }
 
     #[allow(clippy::incompatible_msrv)]
-    #[tracing::instrument(level = "trace", skip(ctx, msg))]
+    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
     fn send_current_queryables(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
@@ -312,10 +311,10 @@ impl HatInterestTrait for Hat {
     }
 
     #[allow(clippy::incompatible_msrv)]
-    #[tracing::instrument(level = "trace", skip(ctx, msg), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
     fn send_current_tokens(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         mut other_matches: HashSet<Arc<Resource>>,
@@ -361,7 +360,6 @@ impl HatInterestTrait for Hat {
             };
 
             let wire_expr = Resource::decl_key(&token, ctx.src_face);
-            tracing::trace!(res = ?token);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -384,7 +382,7 @@ impl HatInterestTrait for Hat {
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_current_token(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         res: Arc<Resource>,
         interest: CurrentInterest,
     ) {
@@ -414,7 +412,6 @@ impl HatInterestTrait for Hat {
         };
 
         let wire_expr = Resource::decl_key(&res, &mut dst);
-        tracing::trace!(?dst);
         (ctx.send_declare)(
             &dst.primitives,
             RoutingContext::with_expr(
@@ -430,8 +427,8 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx, dst))]
-    fn send_declare_final(&mut self, ctx: BaseContext, id: InterestId, dst: &Remote) {
+    #[tracing::instrument(level = "debug", skip(ctx, dst), ret)]
+    fn send_declare_final(&mut self, ctx: DispatcherContext, id: InterestId, dst: &Remote) {
         let dst_face = self.hat_remote(dst);
 
         (ctx.send_declare)(
@@ -447,7 +444,12 @@ impl HatInterestTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
-    fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>) {
+    fn register_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+    ) {
         if self
             .face_hat_mut(ctx.src_face)
             .remote_interests
@@ -467,8 +469,12 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx, msg), ret)]
-    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest> {
+    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
+    fn unregister_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        msg: &Interest,
+    ) -> Option<RemoteInterest> {
         debug_assert!(self.region().bound().is_south());
         debug_assert!(self.owns(ctx.src_face));
 

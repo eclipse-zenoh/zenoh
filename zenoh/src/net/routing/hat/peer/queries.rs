@@ -39,14 +39,18 @@ use crate::net::routing::{
     },
     hat::{
         peer::{initial_interest, INITIAL_INTEREST_ID},
-        BaseContext, HatBaseTrait, HatQueriesTrait, HatTrait, SendDeclare, Sources,
+        DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, SendDeclare, Sources,
         UnregisterResult,
     },
     RoutingContext,
 };
 
 impl Hat {
-    pub(super) fn queries_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+    pub(super) fn queries_new_face(
+        &self,
+        ctx: DispatcherContext,
+        other_hats: &RegionMap<&dyn HatTrait>,
+    ) {
         if ctx.src_face.region.bound().is_south() {
             tracing::trace!(face = %ctx.src_face, "New south-bound peer remote; not propagating queryables");
             return;
@@ -192,7 +196,7 @@ impl Hat {
 }
 
 impl HatQueriesTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
     fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
@@ -207,7 +211,7 @@ impl HatQueriesTrait for Hat {
         Vec::from_iter(qabls)
     }
 
-    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
     fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         let mut result = HashMap::new();
         for face in self.owned_faces(tables) {
@@ -233,13 +237,13 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, _nid), fields(%src_face) ret)]
+    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        _nid: NodeId,
+        _node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
         lazy_static::lazy_static! {
             static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
@@ -313,13 +317,13 @@ impl HatQueriesTrait for Hat {
         Arc::new(route)
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx, _nid))]
+    #[tracing::instrument(level = "debug", skip(ctx, id, _node_id, info), ret)]
     fn register_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: QueryableId,
         mut res: Arc<Resource>,
-        _nid: NodeId,
+        _node_id: NodeId,
         info: &QueryableInfoType,
     ) {
         debug_assert!(self.owns(ctx.src_face));
@@ -352,19 +356,21 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx, _nid), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, id, _res, _node_id), ret)]
     fn unregister_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: QueryableId,
         _res: Option<Arc<Resource>>,
-        _nid: NodeId,
+        _node_id: NodeId,
     ) -> UnregisterResult {
+        use UnregisterResult::*;
+
         debug_assert!(self.owns(ctx.src_face));
 
         let Some((mut res, info)) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) else {
             tracing::error!(id, "Unknown id");
-            return UnregisterResult::Noop;
+            return Noop;
         };
 
         if self
@@ -374,8 +380,8 @@ impl HatQueriesTrait for Hat {
            // REVIEW(regions): use Arc::ptr_eq?
             .any(|(r, i)| r == &res && i == &info)
         {
-            tracing::debug!("Duplicated queryable");
-            return UnregisterResult::Noop;
+            tracing::debug!("Duplicate");
+            return Noop;
         };
 
         let new_face_info = self
@@ -394,7 +400,7 @@ impl HatQueriesTrait for Hat {
         };
 
         let Some(old_face_info) = face_ctx.qabl else {
-            bug!("Undefined queryable info");
+            bug!("Undefined info");
             return UnregisterResult::Noop;
         };
 
@@ -422,17 +428,17 @@ impl HatQueriesTrait for Hat {
         match new_info {
             Some(new_info) => {
                 if new_info == old_info {
-                    UnregisterResult::Noop
+                    Noop
                 } else {
-                    UnregisterResult::InfoUpdate { res }
+                    InfoUpdate { res }
                 }
             }
-            None => UnregisterResult::LastUnregistered { res },
+            None => LastUnregistered { res },
         }
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_queryables(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;
@@ -450,10 +456,10 @@ impl HatQueriesTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         res: Arc<Resource>,
         other_info: Option<QueryableInfoType>,
     ) {
@@ -467,8 +473,8 @@ impl HatQueriesTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx))]
+    fn unpropagate_queryable(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             return;
         }

@@ -47,7 +47,7 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, queries::LocalQueryables, region::RegionMap},
-        hat::{BaseContext, Remote},
+        hat::{DispatcherContext, Remote},
         router::{FaceContext, LocalSubscribers},
     },
     runtime::Runtime,
@@ -137,7 +137,11 @@ impl HatBaseTrait for Hat {
         Some(Remote(Box::new(face.clone())))
     }
 
-    fn new_local_face(&mut self, ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+    fn new_local_face(
+        &mut self,
+        ctx: DispatcherContext,
+        _tables_ref: &Arc<TablesLock>,
+    ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
 
@@ -153,7 +157,7 @@ impl HatBaseTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _transport: &TransportUnicast,
         _other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
@@ -169,7 +173,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    fn close_face(&mut self, ctx: BaseContext) {
+    fn close_face(&mut self, ctx: DispatcherContext) {
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
         let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
@@ -188,7 +192,7 @@ impl HatBaseTrait for Hat {
 
     fn handle_oam(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _oam: &mut Oam,
         _zid: &ZenohIdProto,
         _whatami: WhatAmI,

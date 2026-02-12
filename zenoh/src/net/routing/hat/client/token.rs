@@ -28,7 +28,7 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{region::RegionMap, tables::TablesData},
-    hat::{BaseContext, HatBaseTrait, HatTokenTrait, HatTrait, Sources},
+    hat::{DispatcherContext, HatBaseTrait, HatTokenTrait, HatTrait, Sources},
     router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
@@ -36,7 +36,11 @@ use crate::net::routing::{
 use crate::zenoh_core::polyfill::*;
 
 impl Hat {
-    pub(super) fn tokens_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+    pub(super) fn tokens_new_face(
+        &self,
+        ctx: DispatcherContext,
+        other_hats: &RegionMap<&dyn HatTrait>,
+    ) {
         for res in other_hats
             .values()
             .flat_map(|hat| hat.remote_tokens(ctx.tables).into_iter())
@@ -74,13 +78,29 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+        let mut tokens = HashMap::new();
+        for face in self.owned_faces(tables) {
+            for token in self.face_hat(face).remote_tokens.values() {
+                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
+                match face.whatami {
+                    WhatAmI::Router => srcs.routers.push(face.zid),
+                    WhatAmI::Peer => srcs.peers.push(face.zid),
+                    WhatAmI::Client => srcs.clients.push(face.zid),
+                }
+            }
+        }
+        Vec::from_iter(tokens)
+    }
+
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn register_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         mut res: Arc<Resource>,
-        nid: NodeId,
+        _node_id: NodeId,
     ) {
         debug_assert!(self.owns(ctx.src_face));
 
@@ -110,10 +130,10 @@ impl HatTokenTrait for Hat {
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unregister_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
-        nid: NodeId,
+        _node_id: NodeId,
     ) -> Option<Arc<Resource>> {
         let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_tokens.remove(&id) else {
             tracing::error!(id, "Unknown token");
@@ -140,8 +160,8 @@ impl HatTokenTrait for Hat {
         Some(res)
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;
@@ -159,8 +179,8 @@ impl HatTokenTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool) {
         if !other_tokens {
             debug_assert!(self.owns(ctx.src_face));
             return;
@@ -201,8 +221,8 @@ impl HatTokenTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
-    fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
             tracing::debug!("Client region is empty; won't unpropagate token upstream");
             return;
@@ -245,21 +265,5 @@ impl HatTokenTrait for Hat {
             .filter(|token| res.is_none_or(|res| res.matches(token)))
             .cloned()
             .collect()
-    }
-
-    #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        let mut tokens = HashMap::new();
-        for face in self.owned_faces(tables) {
-            for token in self.face_hat(face).remote_tokens.values() {
-                let srcs = tokens.entry(token.clone()).or_insert_with(Sources::empty);
-                match face.whatami {
-                    WhatAmI::Router => srcs.routers.push(face.zid),
-                    WhatAmI::Peer => srcs.peers.push(face.zid),
-                    WhatAmI::Client => srcs.clients.push(face.zid),
-                }
-            }
-        }
-        Vec::from_iter(tokens)
     }
 }

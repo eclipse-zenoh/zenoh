@@ -43,7 +43,7 @@ use crate::net::{
             face::{FaceState, FaceStateBuilder},
             tables::{self, Tables},
         },
-        hat::{BaseContext, HatTrait},
+        hat::{DispatcherContext, HatTrait},
     },
 };
 
@@ -211,7 +211,7 @@ impl Router {
         tables.hats[face.state.region]
             // FIXME(regions): what if face.local is false?
             .new_local_face(
-                BaseContext {
+                DispatcherContext {
                     tables_lock: &face.tables,
                     tables: &mut tables.data,
                     src_face: &mut face.state,
@@ -317,7 +317,7 @@ impl Router {
 
         let mut declares = vec![];
         let (owner_hat, other_hats) = tables.hats.partition_mut(&region);
-        let ctx = BaseContext {
+        let ctx = DispatcherContext {
             tables_lock: &face.tables,
             tables: &mut tables.data,
             src_face: &mut face.state,

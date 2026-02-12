@@ -38,16 +38,20 @@ use crate::net::routing::{
         resource::{FaceContext, NodeId, Resource},
         tables::{Route, RoutingExpr, TablesData},
     },
-    hat::{BaseContext, HatBaseTrait, HatPubSubTrait, HatTrait, Sources},
+    hat::{DispatcherContext, HatBaseTrait, HatPubSubTrait, HatTrait, Sources},
     router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
     RoutingContext,
 };
 
 impl Hat {
-    pub(super) fn pubsub_new_face(&self, ctx: BaseContext, other_hats: &RegionMap<&dyn HatTrait>) {
+    pub(super) fn pubsub_new_face(
+        &self,
+        ctx: DispatcherContext,
+        other_hats: &RegionMap<&dyn HatTrait>,
+    ) {
         for res in other_hats
             .values()
-            .flat_map(|hat| hat.remote_subscriptions(ctx.tables).into_keys())
+            .flat_map(|hat| hat.remote_subscribers(ctx.tables).into_keys())
         {
             if self.face_hat(ctx.src_face).local_subs.contains_key(&res) {
                 continue;
@@ -82,7 +86,7 @@ impl Hat {
 }
 
 impl HatPubSubTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
     fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         // Compute the list of known subscribers (keys)
         let mut subs = HashMap::new();
@@ -101,18 +105,18 @@ impl HatPubSubTrait for Hat {
         Vec::from_iter(subs)
     }
 
-    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    #[tracing::instrument(level = "debug", skip(_tables), ret)]
     fn sourced_publishers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, _nid), fields(%src_face) ret)]
+    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
         src_face: &FaceState,
         expr: &RoutingExpr,
-        _nid: NodeId,
+        _node_id: NodeId,
     ) -> Arc<Route> {
         let mut route = RouteBuilder::<Direction>::new();
         let Some(key_expr) = expr.key_expr() else {
@@ -171,13 +175,13 @@ impl HatPubSubTrait for Hat {
         Arc::new(route.build())
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx, _nid))]
-    fn register_subscription(
+    #[tracing::instrument(level = "debug", skip(ctx, id, _node_id, info), ret)]
+    fn register_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: SubscriberId,
         mut res: Arc<Resource>,
-        _nid: NodeId,
+        _node_id: NodeId,
         info: &SubscriberInfo,
     ) {
         debug_assert!(self.owns(ctx.src_face));
@@ -205,16 +209,16 @@ impl HatPubSubTrait for Hat {
             .insert(id, res.clone());
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx, _nid), ret)]
-    fn unregister_subscription(
+    #[tracing::instrument(level = "debug", skip(ctx, id, _node_id), ret)]
+    fn unregister_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: SubscriberId,
         _res: Option<Arc<Resource>>,
-        _nid: NodeId,
+        _node_id: NodeId,
     ) -> Option<Arc<Resource>> {
         let Some(mut res) = self.face_hat_mut(ctx.src_face).remote_subs.remove(&id) else {
-            tracing::error!(id, "Unknown subscription");
+            tracing::error!(id, "Unknown subscriber");
             return None;
         };
 
@@ -224,7 +228,7 @@ impl HatPubSubTrait for Hat {
             .values()
             .contains(&res)
         {
-            tracing::debug!(id, ?res, "Duplicated subscription");
+            tracing::debug!(id, ?res, "Duplicated subscriber");
             return None;
         };
 
@@ -239,7 +243,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;
@@ -257,10 +261,10 @@ impl HatPubSubTrait for Hat {
             .collect()
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn propagate_subscription(
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         res: Arc<Resource>,
         other_info: Option<SubscriberInfo>,
     ) {
@@ -270,7 +274,7 @@ impl HatPubSubTrait for Hat {
         };
 
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
-            tracing::debug!("Client region is empty; won't unpropagate subscription upstream");
+            tracing::debug!("Client region is empty; won't unpropagate subscriber upstream");
             return;
         };
 
@@ -304,10 +308,10 @@ impl HatPubSubTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx))]
-    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_subscriber(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() else {
-            tracing::debug!("Client region is empty; won't unpropagate subscription upstream");
+            tracing::debug!("Client region is empty; won't unpropagate subscriber upstream");
             return;
         };
 
@@ -332,7 +336,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+    fn remote_subscribers_of(&self, res: &Resource) -> Option<SubscriberInfo> {
         self.owned_face_contexts(res)
             .filter_map(|ctx| ctx.subs)
             .reduce(|_, _| SubscriberInfo)
@@ -340,7 +344,7 @@ impl HatPubSubTrait for Hat {
 
     #[allow(clippy::incompatible_msrv)]
     #[tracing::instrument(level = "trace", skip(tables), ret)]
-    fn remote_subscriptions_matching(
+    fn remote_subscribers_matching(
         &self,
         tables: &TablesData,
         res: Option<&Resource>,

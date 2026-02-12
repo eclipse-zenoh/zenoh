@@ -55,7 +55,7 @@ use crate::net::{
             face::InterestState, interests::RemoteInterest, queries::LocalQueryables,
             region::RegionMap,
         },
-        hat::{BaseContext, Remote},
+        hat::{DispatcherContext, Remote},
         router::{FaceContext, LocalSubscribers},
         RoutingContext,
     },
@@ -188,14 +188,18 @@ impl HatBaseTrait for Hat {
         Some(Remote(Box::new(face.clone())))
     }
 
-    fn new_local_face(&mut self, _ctx: BaseContext, _tables_ref: &Arc<TablesLock>) -> ZResult<()> {
+    fn new_local_face(
+        &mut self,
+        _ctx: DispatcherContext,
+        _tables_ref: &Arc<TablesLock>,
+    ) -> ZResult<()> {
         bail!("Local sessions should not be bound to peer hats");
     }
 
     #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
         &mut self,
-        mut ctx: BaseContext,
+        mut ctx: DispatcherContext,
         transport: &TransportUnicast,
         other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
@@ -243,7 +247,7 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
-    fn close_face(&mut self, ctx: BaseContext) {
+    fn close_face(&mut self, ctx: DispatcherContext) {
         debug_assert!(self.owns(ctx.src_face));
 
         let mut face_clone = ctx.src_face.clone();
@@ -269,7 +273,7 @@ impl HatBaseTrait for Hat {
     #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         oam: &mut Oam,
         zid: &ZenohIdProto,
         whatami: WhatAmI,

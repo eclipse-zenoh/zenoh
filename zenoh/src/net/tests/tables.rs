@@ -70,7 +70,7 @@ fn base_test() {
 
     let sub_info = SubscriberInfo;
 
-    face.declare_subscription(
+    face.declare_subscriber(
         0,
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
@@ -181,7 +181,7 @@ fn multisub_test() {
 
     // --------------
     let sub_info = SubscriberInfo;
-    face0.declare_subscription(
+    face0.declare_subscriber(
         0,
         &"sub".into(),
         &sub_info,
@@ -198,7 +198,7 @@ fn multisub_test() {
     let res = optres.unwrap();
     assert!(res.upgrade().is_some());
 
-    face0.declare_subscription(
+    face0.declare_subscriber(
         1,
         &"sub".into(),
         &sub_info,
@@ -211,14 +211,14 @@ fn multisub_test() {
     );
     assert!(res.upgrade().is_some());
 
-    face0.undeclare_subscription(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+    face0.undeclare_subscriber(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
         m.with_mut(|m| {
             p.send_declare(m);
         })
     });
     assert!(res.upgrade().is_some());
 
-    face0.undeclare_subscription(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+    face0.undeclare_subscriber(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
         m.with_mut(|m| {
             p.send_declare(m);
         })
@@ -289,7 +289,7 @@ async fn clean_test() {
 
     let sub_info = SubscriberInfo;
 
-    face0.declare_subscription(
+    face0.declare_subscriber(
         0,
         &"todrop1/todrop11".into(),
         &sub_info,
@@ -307,7 +307,7 @@ async fn clean_test() {
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    face0.declare_subscription(
+    face0.declare_subscriber(
         1,
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
@@ -326,7 +326,7 @@ async fn clean_test() {
     println!("COUNT: {}", res3.strong_count());
     assert!(res3.upgrade().is_some());
 
-    face0.undeclare_subscription(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+    face0.undeclare_subscriber(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
         m.with_mut(|m| {
             p.send_declare(m);
         })
@@ -338,7 +338,7 @@ async fn clean_test() {
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_none());
 
-    face0.undeclare_subscription(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+    face0.undeclare_subscriber(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
         m.with_mut(|m| {
             p.send_declare(m);
         })
@@ -354,7 +354,7 @@ async fn clean_test() {
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 2, &"todrop3".into());
-    face0.declare_subscription(
+    face0.declare_subscriber(
         2,
         &"todrop3".into(),
         &sub_info,
@@ -371,7 +371,7 @@ async fn clean_test() {
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    face0.undeclare_subscription(2, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+    face0.undeclare_subscriber(2, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
         m.with_mut(|m| {
             p.send_declare(m);
         })
@@ -385,7 +385,7 @@ async fn clean_test() {
     register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
     register_expr(&tables, &mut face0.state.clone(), 5, &"todrop6".into());
-    face0.declare_subscription(
+    face0.declare_subscriber(
         3,
         &WireExpr::from(4),
         &sub_info,
@@ -396,7 +396,7 @@ async fn clean_test() {
             })
         },
     );
-    face0.declare_subscription(
+    face0.declare_subscriber(
         4,
         &"todrop7".into(),
         &sub_info,
@@ -783,7 +783,7 @@ fn client_test() {
             }),
         },
     );
-    face0.declare_subscription(
+    face0.declare_subscriber(
         0,
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
@@ -830,7 +830,7 @@ fn client_test() {
             }),
         },
     );
-    face1.declare_subscription(
+    face1.declare_subscriber(
         0,
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
@@ -877,7 +877,7 @@ fn client_test() {
             }),
         },
     );
-    face2.declare_subscription(
+    face2.declare_subscriber(
         0,
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,

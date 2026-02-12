@@ -47,7 +47,7 @@ use crate::net::{
             },
             region::RegionMap,
         },
-        hat::BaseContext,
+        hat::DispatcherContext,
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -399,13 +399,13 @@ impl Primitives for Face {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
-            self.declare_interest(&self.tables, msg, &mut |p, m| declares.push((p.clone(), m)));
+            self.interest(&self.tables, msg, &mut |p, m| declares.push((p.clone(), m)));
             drop(ctrl_lock);
             for (p, m) in declares {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            self.undeclare_interest(&self.tables, msg);
+            self.interest_final(&self.tables, msg);
         }
     }
 
@@ -420,7 +420,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 let mut declares = vec![];
-                self.declare_subscription(
+                self.declare_subscriber(
                     m.id,
                     &m.wire_expr,
                     &SubscriberInfo,
@@ -434,7 +434,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 let mut declares = vec![];
-                self.undeclare_subscription(
+                self.undeclare_subscriber(
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -529,7 +529,7 @@ impl Primitives for Face {
         route_data(&self.tables, &self.state, msg, reliability, consume);
     }
 
-    #[tracing::instrument(level = "debug", skip(msg), ret)]
+    #[tracing::instrument(level = "debug", skip(msg), fields(id = msg.id, expr = %msg.wire_expr), ret)]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
@@ -538,19 +538,18 @@ impl Primitives for Face {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(msg), ret)]
+    #[tracing::instrument(level = "debug", skip(msg), fields(rid = msg.rid, expr = %msg.wire_expr), ret)]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
-    #[tracing::instrument(level = "debug", skip(msg), ret)]
+    #[tracing::instrument(level = "debug", skip(msg), fields(rid = msg.rid), ret)]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
     #[tracing::instrument(level = "debug", ret)]
     fn send_close(&self) {
-        tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
         finalize_pending_queries(&self.tables, &mut state);
@@ -562,7 +561,7 @@ impl Primitives for Face {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut state,
@@ -573,22 +572,22 @@ impl Primitives for Face {
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
 
-        for mut res in hats[region].unregister_face_subscriptions(ctx.reborrow()) {
+        for mut res in hats[region].unregister_face_subscriber(ctx.reborrow()) {
             disable_matches_data_routes(ctx.tables, &mut res);
 
             let mut remaining = hats
                 .values_mut()
-                .filter(|hat| hat.remote_subscriptions_of(&res).is_some())
+                .filter(|hat| hat.remote_subscribers_of(&res).is_some())
                 .collect_vec();
 
             if remaining.is_empty() {
                 for hat in hats.values_mut() {
-                    hat.unpropagate_subscription(ctx.reborrow(), res.clone());
+                    hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
                 }
                 get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
                 Resource::clean(&mut res);
             } else if let [last_owner] = &mut *remaining {
-                last_owner.unpropagate_last_non_owned_subscription(ctx.reborrow(), res.clone())
+                last_owner.unpropagate_last_non_owned_subscriber(ctx.reborrow(), res.clone())
             }
         }
 

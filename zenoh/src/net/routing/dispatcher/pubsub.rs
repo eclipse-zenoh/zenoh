@@ -34,15 +34,21 @@ use crate::net::routing::{
         local_resources::{LocalResourceInfoTrait, LocalResources},
         tables::TablesData,
     },
-    hat::{BaseContext, SendDeclare},
-    router::{get_or_set_route, Direction, RouteBuilder},
+    hat::{DispatcherContext, SendDeclare},
+    router::{get_or_set_route, node_id_as_source, Direction, RouteBuilder},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) struct SubscriberInfo;
 
 impl Face {
-    pub(crate) fn declare_subscription(
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, send_declare, sub_info),
+        fields(expr = %expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
+    pub(crate) fn declare_subscriber(
         &self,
         id: SubscriberId,
         expr: &WireExpr,
@@ -57,13 +63,6 @@ impl Face {
             .cloned()
         {
             Some(mut prefix) => {
-                let _span = tracing::debug_span!(
-                    "declare_subscriber",
-                    id,
-                    expr = [prefix.expr(), expr.suffix.as_ref()].concat()
-                )
-                .entered();
-
                 let res = Resource::get_resource(&prefix, &expr.suffix);
                 let (mut res, mut wtables) =
                     if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
@@ -91,14 +90,14 @@ impl Face {
                 let hats = &mut tables.hats;
                 let region = self.state.region;
 
-                let mut ctx = BaseContext {
+                let mut ctx = DispatcherContext {
                     tables_lock: &self.tables,
                     tables: &mut tables.data,
                     src_face: &mut self.state.clone(),
                     send_declare,
                 };
 
-                hats[region].register_subscription(
+                hats[region].register_subscriber(
                     ctx.reborrow(),
                     id,
                     res.clone(),
@@ -110,10 +109,10 @@ impl Face {
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
-                        .flat_map(|hat| hat.remote_subscriptions_of(&res))
+                        .flat_map(|hat| hat.remote_subscribers_of(&res))
                         .reduce(|_, _| SubscriberInfo);
 
-                    hats[region].propagate_subscription(ctx.reborrow(), res.clone(), other_info);
+                    hats[region].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
 
                     disable_matches_data_routes(ctx.tables, &mut res);
                 }
@@ -129,7 +128,13 @@ impl Face {
         }
     }
 
-    pub(crate) fn undeclare_subscription(
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, send_declare),
+        fields(expr = %expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
+    pub(crate) fn undeclare_subscriber(
         &self,
         id: SubscriberId,
         expr: &WireExpr,
@@ -144,18 +149,22 @@ impl Face {
                 .data
                 .get_mapping(&self.state, &expr.scope, expr.mapping)
             {
-                Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-                    Some(res) => Some(res),
-                    None => {
-                        tracing::error!(
-                            "{} Undeclare unknown subscriber {}{}!",
-                            self.state,
-                            prefix.expr(),
-                            expr.suffix
-                        );
-                        return;
+                Some(prefix) => {
+                    tracing::debug!(keyexpr = [prefix.expr(), expr.suffix.as_ref()].concat());
+
+                    match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+                        Some(res) => Some(res),
+                        None => {
+                            tracing::error!(
+                                "{} Undeclare unknown subscriber {}{}!",
+                                self.state,
+                                prefix.expr(),
+                                expr.suffix
+                            );
+                            return;
+                        }
                     }
-                },
+                }
                 None => {
                     tracing::error!(
                         "{} Undeclare subscriber with unknown scope {}",
@@ -167,20 +176,13 @@ impl Face {
             }
         };
 
-        let _span = tracing::debug_span!(
-            "undeclare_subscriber",
-            id,
-            expr = res.as_ref().map(|res| res.expr())
-        )
-        .entered();
-
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
         let hats = &mut tables.hats;
         let region = self.state.region;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
@@ -188,23 +190,23 @@ impl Face {
         };
 
         if let Some(mut res) =
-            hats[region].unregister_subscription(ctx.reborrow(), id, res.clone(), node_id)
+            hats[region].unregister_subscriber(ctx.reborrow(), id, res.clone(), node_id)
         {
             disable_matches_data_routes(ctx.tables, &mut res);
 
             let mut remaining = tables
                 .hats
                 .values_mut()
-                .filter(|hat| hat.remote_subscriptions_of(&res).is_some())
+                .filter(|hat| hat.remote_subscribers_of(&res).is_some())
                 .collect_vec();
 
             if (*remaining).is_empty() {
                 for hat in tables.hats.values_mut() {
-                    hat.unpropagate_subscription(ctx.reborrow(), res.clone());
+                    hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
                 }
                 Resource::clean(&mut res);
             } else if let [last_owner] = &mut *remaining {
-                last_owner.unpropagate_last_non_owned_subscription(ctx, res.clone())
+                last_owner.unpropagate_last_non_owned_subscriber(ctx, res.clone())
             }
         }
     }

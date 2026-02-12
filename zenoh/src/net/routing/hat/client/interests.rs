@@ -34,14 +34,14 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{BaseContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
+    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
     router::SubscriberInfo,
     RoutingContext,
 };
 impl Hat {
     pub(super) fn interests_new_face(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
     ) {
         for RemoteInterest { res, options, .. } in other_hats
@@ -81,10 +81,10 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "trace", skip(ctx, msg, src), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
     fn route_interest(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
@@ -171,10 +171,10 @@ impl HatInterestTrait for Hat {
         None
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx, _msg), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
     fn route_interest_final(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _msg: &Interest,
         remote_interest: &RemoteInterest,
     ) {
@@ -213,10 +213,10 @@ impl HatInterestTrait for Hat {
         }
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn route_declare_final(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         interest_id: InterestId,
     ) -> Option<CurrentInterest> {
         debug_assert!(self.region().bound().is_north());
@@ -257,10 +257,10 @@ impl HatInterestTrait for Hat {
         Arc::into_inner(interest)
     }
 
-    #[tracing::instrument(level = "trace", skip(ctx), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn route_current_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         interest_id: InterestId,
         _res: Arc<Resource>,
     ) -> Option<CurrentInterest> {
@@ -282,9 +282,9 @@ impl HatInterestTrait for Hat {
         Some(pending_interest.interest.as_ref().clone())
     }
 
-    fn send_current_subscriptions(
+    fn send_current_subscribers(
         &self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
         _other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
@@ -294,7 +294,7 @@ impl HatInterestTrait for Hat {
 
     fn send_current_queryables(
         &self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
         _other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
@@ -304,7 +304,7 @@ impl HatInterestTrait for Hat {
 
     fn send_current_tokens(
         &self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
         _other_matches: HashSet<Arc<Resource>>,
@@ -314,20 +314,20 @@ impl HatInterestTrait for Hat {
 
     fn propagate_current_token(
         &self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _res: Arc<Resource>,
         _interest: CurrentInterest,
     ) {
         bug!("South-bound client hat")
     }
 
-    fn send_declare_final(&mut self, _ctx: BaseContext, _id: InterestId, _src: &Remote) {
+    fn send_declare_final(&mut self, _ctx: DispatcherContext, _id: InterestId, _src: &Remote) {
         bug!("South-bound client hat")
     }
 
     fn register_interest(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
     ) {
@@ -336,7 +336,7 @@ impl HatInterestTrait for Hat {
 
     fn unregister_interest(
         &mut self,
-        _ctx: BaseContext,
+        _ctx: DispatcherContext,
         _msg: &Interest,
     ) -> Option<RemoteInterest> {
         bug!("South-bound client hat");

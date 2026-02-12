@@ -36,7 +36,7 @@ use zenoh_util::Timed;
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::Tables},
-    hat::{BaseContext, Remote, SendDeclare},
+    hat::{DispatcherContext, Remote, SendDeclare},
     router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
     RoutingContext,
 };
@@ -188,7 +188,18 @@ impl Timed for CurrentInterestCleanup {
 }
 
 impl Face {
-    pub(crate) fn declare_interest(
+    #[tracing::instrument(
+        level = "debug", 
+        skip(tables_lock, send_declare),
+        fields(
+            id = msg.id,
+            mode = ?msg.mode,
+            opts = %msg.options,
+            expr = ?msg.wire_expr
+        ),
+        ret
+    )]
+    pub(crate) fn interest(
         &self,
         tables_lock: &Arc<TablesLock>,
         msg: &mut Interest,
@@ -281,19 +292,9 @@ impl Face {
             (None, zwrite!(tables_lock.tables))
         };
 
-        // TODO(regions): this should cover the whole function
-        let _span = tracing::debug_span!(
-            "interest",
-            id,
-            mode = ?msg.mode,
-            opts = %msg.options,
-            expr = res.as_ref().map(|res| res.expr())
-        )
-        .entered();
-
         let tables = &mut *wtables;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
@@ -315,12 +316,12 @@ impl Face {
                     .values()
                     .filter(|hat| hat.region() != region)
                     .flat_map(|hat| {
-                        hat.remote_subscriptions_matching(ctx.tables, res.as_deref())
+                        hat.remote_subscribers_matching(ctx.tables, res.as_deref())
                             .into_iter()
                     })
                     .collect::<HashMap<_, _>>();
 
-                hats[region].send_current_subscriptions(
+                hats[region].send_current_subscribers(
                     ctx.reborrow(),
                     msg,
                     res.clone(),
@@ -379,20 +380,25 @@ impl Face {
         }
     }
 
-    pub(crate) fn undeclare_interest(&self, tables: &TablesLock, msg: &Interest) {
-        let _span = tracing::debug_span!(
-            "interest",
+    #[tracing::instrument(
+        level = "debug",
+        name = "interest",
+        skip(tables_lock),
+        fields(
             id = msg.id,
             mode = ?InterestMode::Final,
-        )
-        .entered();
-
-        unregister_expr_interest(tables, &mut self.state.clone(), msg.id);
+            opts = %msg.options,
+            expr = ?msg.wire_expr
+        ),
+        ret
+    )]
+    pub(crate) fn interest_final(&self, tables_lock: &TablesLock, msg: &Interest) {
+        unregister_expr_interest(tables_lock, &mut self.state.clone(), msg.id);
 
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
@@ -410,6 +416,7 @@ impl Face {
         hats[Region::North].route_interest_final(ctx, msg, &remote_interest);
     }
 
+    #[tracing::instrument(level = "debug", skip(wtables, _node_id, send_declare), ret)]
     pub(crate) fn declare_final(
         &self,
         wtables: &mut Tables,
@@ -421,7 +428,7 @@ impl Face {
 
         let tables = &mut *wtables;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),

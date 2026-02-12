@@ -56,6 +56,18 @@ pub(crate) type NodeId = u16;
 /// [`NodeId`] value of [`network::ext::NodeIdType::DEFAULT`].
 pub(crate) const DEFAULT_NODE_ID: NodeId = network::ext::NodeIdType::<0>::DEFAULT.node_id;
 
+/// Returns `Some(node_id)` if it represents a router region source, `None` if default.
+///
+/// Useful for tracing instrumentation to omit default/uninteresting [`NodeId`]s from spans.
+#[inline]
+pub(crate) const fn node_id_as_source(node_id: NodeId) -> Option<NodeId> {
+    if node_id != DEFAULT_NODE_ID {
+        Some(node_id)
+    } else {
+        None
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Direction {
     pub(crate) dst_face: Arc<FaceState>,

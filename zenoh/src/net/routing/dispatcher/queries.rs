@@ -45,8 +45,8 @@ use crate::net::routing::{
         local_resources::{LocalResourceInfoTrait, LocalResources},
         tables::{Tables, TablesData},
     },
-    hat::{BaseContext, SendDeclare, UnregisterResult},
-    router::{get_or_set_route, QueryDirection, RouteBuilder},
+    hat::{DispatcherContext, SendDeclare, UnregisterResult},
+    router::{get_or_set_route, node_id_as_source, QueryDirection, RouteBuilder},
 };
 
 pub(crate) struct Query {
@@ -55,6 +55,17 @@ pub(crate) struct Query {
 }
 
 impl Face {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, tables, send_declare, qabl_info),
+        fields(
+            expr = %expr,
+            node_id = node_id_as_source(node_id),
+            complete = qabl_info.complete,
+            distance = qabl_info.distance,
+        ),
+        ret
+    )]
     pub(crate) fn declare_queryable(
         &self,
         tables: &TablesLock,
@@ -71,16 +82,8 @@ impl Face {
             .cloned()
         {
             Some(mut prefix) => {
-                let _span = tracing::debug_span!(
-                    "declare_queryable",
-                    id,
-                    expr = [prefix.expr(), expr.suffix.as_ref()].concat(),
-                    complete = qabl_info.complete,
-                    distance = qabl_info.distance
-                )
-                .entered();
-
                 let res = Resource::get_resource(&prefix, &expr.suffix);
+
                 let (mut res, mut wtables) =
                     if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                         drop(rtables);
@@ -107,7 +110,7 @@ impl Face {
                 let hats = &mut tables.hats;
                 let region = self.state.region;
 
-                let mut ctx = BaseContext {
+                let mut ctx = DispatcherContext {
                     tables_lock: &self.tables,
                     tables: &mut tables.data,
                     src_face: &mut self.state.clone(),
@@ -145,6 +148,12 @@ impl Face {
         }
     }
 
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, tables, send_declare),
+        fields(expr = %expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
     pub(crate) fn undeclare_queryable(
         &self,
         tables: &TablesLock,
@@ -186,21 +195,13 @@ impl Face {
             }
         };
 
-        // FIXME(regions): these spans duplicate fields in the hat spans
-        let _span = tracing::debug_span!(
-            "undeclare_queryable",
-            id,
-            expr = res.as_ref().map(|res| res.expr())
-        )
-        .entered();
-
         let mut wtables = zwrite!(tables.tables);
         let tables = &mut *wtables;
 
         let hats = &mut tables.hats;
         let region = self.state.region;
 
-        let mut ctx = BaseContext {
+        let mut ctx = DispatcherContext {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),

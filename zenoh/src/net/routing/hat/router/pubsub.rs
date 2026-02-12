@@ -37,7 +37,7 @@ use crate::net::{
             resource::{NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
-        hat::{BaseContext, HatBaseTrait, HatPubSubTrait, Sources},
+        hat::{DispatcherContext, HatBaseTrait, HatPubSubTrait, Sources},
         router::{Direction, RouteBuilder},
         RoutingContext,
     },
@@ -66,7 +66,7 @@ impl Hat {
                         for sub in subs {
                             if *sub == tree_id {
                                 let sub_info = SubscriberInfo;
-                                self.send_sourced_subscription_to_net_children(
+                                self.send_sourced_subscriber_to_net_children(
                                     tables,
                                     net,
                                     tree_children,
@@ -84,7 +84,7 @@ impl Hat {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn send_sourced_subscription_to_net_children(
+    fn send_sourced_subscriber_to_net_children(
         &self,
         tables: &TablesData,
         net: &Network, // TODO(regions): remove this
@@ -113,7 +113,7 @@ impl Hat {
                                         node_id: routing_context,
                                     },
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id: SubscriberId::default(), // Sourced subscriptions do not use ids
+                                        id: SubscriberId::default(), // Sourced subscribers do not use ids
                                         wire_expr: key_expr,
                                     }),
                                 },
@@ -129,7 +129,7 @@ impl Hat {
         }
     }
 
-    fn propagate_sourced_subscription(
+    fn propagate_sourced_subscriber(
         &self,
         tables: &TablesData,
         res: &Arc<Resource>,
@@ -141,7 +141,7 @@ impl Hat {
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
-                    self.send_sourced_subscription_to_net_children(
+                    self.send_sourced_subscriber_to_net_children(
                         tables,
                         net,
                         &net.trees[tree_sid.index()].children,
@@ -168,7 +168,7 @@ impl Hat {
     }
 
     #[inline]
-    fn send_forget_sourced_subscription_to_net_children(
+    fn send_forget_sourced_subscriber_to_net_children(
         &self,
         tables: &TablesData,
         net: &Network,
@@ -196,7 +196,7 @@ impl Hat {
                                         node_id: routing_context.unwrap_or(0),
                                     },
                                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                        id: SubscriberId::default(), // Sourced subscriptions do not use ids
+                                        id: SubscriberId::default(), // Sourced subscribers do not use ids
                                         ext_wire_expr: WireExprType { wire_expr },
                                     }),
                                 },
@@ -212,7 +212,7 @@ impl Hat {
         }
     }
 
-    fn propagate_forget_sourced_subscription(
+    fn propagate_forget_sourced_subscriber(
         &self,
         tables: &TablesData,
         res: &Arc<Resource>,
@@ -223,7 +223,7 @@ impl Hat {
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
-                    self.send_forget_sourced_subscription_to_net_children(
+                    self.send_forget_sourced_subscriber_to_net_children(
                         tables,
                         net,
                         &net.trees[tree_sid.index()].children,
@@ -248,7 +248,7 @@ impl Hat {
         }
     }
 
-    pub(super) fn unregister_node_subscriptions(
+    pub(super) fn unregister_node_subscribers(
         &mut self,
         zid: &ZenohIdProto,
     ) -> HashSet<Arc<Resource>> {
@@ -279,7 +279,6 @@ impl Hat {
 impl HatPubSubTrait for Hat {
     #[tracing::instrument(level = "debug", skip(_tables), ret)]
     fn sourced_subscribers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        // Compute the list of known subscriptions (keys)
         self.router_subs
             .iter()
             .map(|sub| {
@@ -300,7 +299,7 @@ impl HatPubSubTrait for Hat {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(zid = %tables.zid.short(), rgn = %self.region), ret)]
+    #[tracing::instrument(level = "debug", skip(tables, src_face), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
@@ -388,19 +387,19 @@ impl HatPubSubTrait for Hat {
         Arc::new(route.build())
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn register_subscription(
+    #[tracing::instrument(level = "debug", skip(ctx, _id, node_id, info), ret)]
+    fn register_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _id: SubscriberId,
         mut res: Arc<Resource>,
-        nid: NodeId,
+        node_id: NodeId,
         info: &SubscriberInfo,
     ) {
         debug_assert!(self.owns(ctx.src_face));
 
-        let Some(router) = self.get_router(ctx.src_face, nid) else {
-            tracing::error!(%nid, "Subscriber from unknown router");
+        let Some(router) = self.get_router(ctx.src_face, node_id) else {
+            tracing::error!(%node_id, "Subscriber from unknown router");
             return;
         };
 
@@ -409,21 +408,21 @@ impl HatPubSubTrait for Hat {
         self.res_hat_mut(&mut res).router_subs.insert(router);
         self.router_subs.insert(res.clone());
 
-        self.propagate_sourced_subscription(ctx.tables, &res, info, Some(ctx.src_face), &router);
+        self.propagate_sourced_subscriber(ctx.tables, &res, info, Some(ctx.src_face), &router);
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn unregister_subscription(
+    #[tracing::instrument(level = "debug", skip(ctx, _id, node_id), ret)]
+    fn unregister_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         _id: SubscriberId,
         res: Option<Arc<Resource>>,
-        nid: NodeId,
+        node_id: NodeId,
     ) -> Option<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
-        let Some(router) = self.get_router(ctx.src_face, nid) else {
-            tracing::error!(%nid, "Subscriber from unknown router");
+        let Some(router) = self.get_router(ctx.src_face, node_id) else {
+            tracing::error!(%node_id, "Subscriber from unknown router");
             return None;
         };
 
@@ -439,25 +438,25 @@ impl HatPubSubTrait for Hat {
             self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
         }
 
-        self.propagate_forget_sourced_subscription(ctx.tables, &res, Some(ctx.src_face), &router);
+        self.propagate_forget_sourced_subscriber(ctx.tables, &res, Some(ctx.src_face), &router);
 
         Some(res)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>> {
-        self.unregister_node_subscriptions(&ctx.src_face.zid)
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
+        self.unregister_node_subscribers(&ctx.src_face.zid)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn propagate_subscription(
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         mut res: Arc<Resource>,
         other_info: Option<SubscriberInfo>,
     ) {
         let Some(other_info) = other_info else {
-            // NOTE(regions): see Hat::register_subscription
+            // NOTE(regions): see Hat::register_subscriber
             debug_assert!(self.owns(ctx.src_face));
             return;
         };
@@ -468,20 +467,14 @@ impl HatPubSubTrait for Hat {
                 .insert(ctx.tables.zid);
             self.router_subs.insert(res.clone());
 
-            self.propagate_sourced_subscription(
-                ctx.tables,
-                &res,
-                &other_info,
-                None,
-                &ctx.tables.zid,
-            );
+            self.propagate_sourced_subscriber(ctx.tables, &res, &other_info, None, &ctx.tables.zid);
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region))]
-    fn unpropagate_subscription(&mut self, ctx: BaseContext, mut res: Arc<Resource>) {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unpropagate_subscriber(&mut self, ctx: DispatcherContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
-            // NOTE(regions): see Hat::unregister_subscription
+            // NOTE(regions): see Hat::unregister_subscriber
             return;
         }
 
@@ -497,12 +490,12 @@ impl HatPubSubTrait for Hat {
                 self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
             }
 
-            self.propagate_forget_sourced_subscription(ctx.tables, &res, None, &ctx.tables.zid);
+            self.propagate_forget_sourced_subscriber(ctx.tables, &res, None, &ctx.tables.zid);
         }
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+    #[tracing::instrument(level = "trace", ret)]
+    fn remote_subscribers_of(&self, res: &Resource) -> Option<SubscriberInfo> {
         // FIXME(regions): use TablesData::zid?
         let net = self.net();
         let this_router = &net.graph[net.idx].zid;
@@ -515,8 +508,8 @@ impl HatPubSubTrait for Hat {
     }
 
     #[allow(clippy::incompatible_msrv)]
-    #[tracing::instrument(level = "trace", skip_all, fields(rgn = %self.region), ret)]
-    fn remote_subscriptions_matching(
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    fn remote_subscribers_matching(
         &self,
         tables: &TablesData,
         res: Option<&Resource>,

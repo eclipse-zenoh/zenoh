@@ -94,17 +94,17 @@ pub(crate) trait HatTrait:
 {
 }
 
-pub(crate) struct BaseContext<'ctx> {
+pub(crate) struct DispatcherContext<'ctx> {
     pub(crate) tables_lock: &'ctx Arc<TablesLock>,
     pub(crate) tables: &'ctx mut TablesData,
     pub(crate) src_face: &'ctx mut Arc<FaceState>,
     pub(crate) send_declare: &'ctx mut SendDeclare<'ctx>,
 }
 
-impl BaseContext<'_> {
-    /// Reborrows [`BaseContext`] to avoid moving it.
-    pub(crate) fn reborrow(&mut self) -> BaseContext<'_> {
-        BaseContext {
+impl DispatcherContext<'_> {
+    /// Reborrows [`DispatcherContext`] to avoid moving it.
+    pub(crate) fn reborrow(&mut self) -> DispatcherContext<'_> {
+        DispatcherContext {
             tables_lock: self.tables_lock,
             tables: &mut *self.tables,
             src_face: &mut *self.src_face,
@@ -115,8 +115,8 @@ impl BaseContext<'_> {
 
 /// A party with which a hat exchanges messages.
 ///
-/// This type exists to generalize [`crate:::net::routing::dispatcher::face::Face`] ̦
-/// to nodes that don't have a face but still need to be identified in hat interfaces.
+/// This type exists to generalize [`super::dispatcher::face::Face`] to nodes that don't have a face
+/// but still need to be identified in hat interfaces.
 ///
 /// Named after Git remotes.
 #[derive(Debug)]
@@ -169,18 +169,22 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
 
-    fn new_local_face(&mut self, ctx: BaseContext, tables_ref: &Arc<TablesLock>) -> ZResult<()>;
+    fn new_local_face(
+        &mut self,
+        ctx: DispatcherContext,
+        tables_ref: &Arc<TablesLock>,
+    ) -> ZResult<()>;
 
     fn new_transport_unicast_face(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         transport: &TransportUnicast,
         other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()>;
 
     fn handle_oam(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         oam: &mut Oam,
         zid: &ZenohIdProto,
         whatami: WhatAmI,
@@ -207,7 +211,7 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn info(&self, kind: WhatAmI) -> String; // FIXME(regions*): remove `kind`.
 
-    fn close_face(&mut self, ctx: BaseContext);
+    fn close_face(&mut self, ctx: DispatcherContext);
 
     fn update_from_config(
         &mut self,
@@ -251,6 +255,7 @@ pub(crate) trait HatBaseTrait: Any {
 }
 
 // REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
+// FIXME(regions): update comments below
 
 /// Hat interest protocol interface.
 ///
@@ -283,7 +288,7 @@ pub(crate) trait HatInterestTrait {
     /// [`HatInterestTrait::propagate_declarations`].
     fn route_interest(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
@@ -294,7 +299,7 @@ pub(crate) trait HatInterestTrait {
     /// This method is only called on the north-bound hat.
     fn route_interest_final(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         remote_interest: &RemoteInterest,
     );
@@ -306,13 +311,13 @@ pub(crate) trait HatInterestTrait {
     /// This method is only called on the north hat.
     fn route_declare_final(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         interest_id: InterestId,
     ) -> Option<CurrentInterest>;
 
     fn route_current_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         interest_id: InterestId,
         res: Arc<Resource>,
     ) -> Option<CurrentInterest>;
@@ -321,12 +326,12 @@ pub(crate) trait HatInterestTrait {
     // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
     // should be reworked.
 
-    /// Propagates current subscriptions to the interested subregion.
+    /// Propagates current subscribers to the interested subregion.
     ///
     /// This method is only called on the owner south hat.
-    fn send_current_subscriptions(
+    fn send_current_subscribers(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
@@ -337,7 +342,7 @@ pub(crate) trait HatInterestTrait {
     /// This method is only called on the owner south hat.
     fn send_current_queryables(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
@@ -345,7 +350,7 @@ pub(crate) trait HatInterestTrait {
 
     fn send_current_tokens(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         other_matches: HashSet<Arc<Resource>>,
@@ -353,7 +358,7 @@ pub(crate) trait HatInterestTrait {
 
     fn propagate_current_token(
         &self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         res: Arc<Resource>,
         interest: CurrentInterest,
     );
@@ -363,7 +368,7 @@ pub(crate) trait HatInterestTrait {
     /// This method is only called on south hats.
     fn send_declare_final(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         interest_id: InterestId, // TODO(regions): change to &Interest (?)
         dst: &Remote,
     );
@@ -371,12 +376,21 @@ pub(crate) trait HatInterestTrait {
     /// Register remote interests.
     ///
     /// This method is only called on the owner south hat.
-    fn register_interest(&mut self, ctx: BaseContext, msg: &Interest, res: Option<Arc<Resource>>);
+    fn register_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        msg: &Interest,
+        res: Option<Arc<Resource>>,
+    );
 
     /// Unregister remote interests.
     ///
     /// This method is only called on the owner south hat.
-    fn unregister_interest(&mut self, ctx: BaseContext, msg: &Interest) -> Option<RemoteInterest>;
+    fn unregister_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        msg: &Interest,
+    ) -> Option<RemoteInterest>;
 
     fn remote_interests(&self, tables: &TablesData) -> HashSet<RemoteInterest>;
 }
@@ -396,9 +410,9 @@ pub(crate) trait HatPubSubTrait {
     /// Register a subscriber entity.
     ///
     /// The callee hat assumes that it owns the source face.
-    fn register_subscription(
+    fn register_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: SubscriberId,
         res: Arc<Resource>,
         nid: NodeId,
@@ -408,46 +422,50 @@ pub(crate) trait HatPubSubTrait {
     /// Unregister a subscriber entity.
     ///
     /// The callee hat assumes that it owns the source face.
-    fn unregister_subscription(
+    fn unregister_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: SubscriberId,
         res: Option<Arc<Resource>>,
         nid: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn unregister_face_subscriptions(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
+    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a subscriber entity.
     ///
-    /// The callee hat will only push the subscription if is the north hat.
-    fn propagate_subscription(
+    /// The callee hat will only push the subscriber if is the north hat.
+    fn propagate_subscriber(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         res: Arc<Resource>,
         other_info: Option<SubscriberInfo>,
     );
 
     /// Unpropagate a subscriber entity.
-    fn unpropagate_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>);
+    fn unpropagate_subscriber(&mut self, ctx: DispatcherContext, res: Arc<Resource>);
 
     /// Unpropagate the last remaining subscriber entity which the callee hat doesn't own.
     ///
     /// This implies that the callee hat owns the last remaining subscriber and that the penultimate
     /// subscriber was unregistered.
     #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_subscription(&mut self, ctx: BaseContext, res: Arc<Resource>) {
-        self.unpropagate_subscription(ctx, res);
+    fn unpropagate_last_non_owned_subscriber(
+        &mut self,
+        ctx: DispatcherContext,
+        res: Arc<Resource>,
+    ) {
+        self.unpropagate_subscriber(ctx, res);
     }
 
-    fn remote_subscriptions_of(&self, res: &Resource) -> Option<SubscriberInfo>;
+    fn remote_subscribers_of(&self, res: &Resource) -> Option<SubscriberInfo>;
 
     #[tracing::instrument(level = "trace", skip_all)]
-    fn remote_subscriptions(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
-        self.remote_subscriptions_matching(tables, None)
+    fn remote_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
+        self.remote_subscribers_matching(tables, None)
     }
 
-    fn remote_subscriptions_matching(
+    fn remote_subscribers_matching(
         &self,
         tables: &TablesData,
         res: Option<&Resource>,
@@ -472,7 +490,7 @@ pub(crate) trait HatQueriesTrait {
     /// The callee hat assumes that it owns the source face.
     fn register_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: QueryableId,
         res: Arc<Resource>,
         nid: NodeId,
@@ -484,29 +502,29 @@ pub(crate) trait HatQueriesTrait {
     /// The callee hat assumes that it owns the source face.
     fn unregister_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: QueryableId,
         res: Option<Arc<Resource>>,
         nid: NodeId,
     ) -> UnregisterResult;
 
-    fn unregister_face_queryables(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
+    fn unregister_face_queryables(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a queryable entity.
     ///
-    /// The callee hat will only push the subscription if is the north hat.
+    /// The callee hat will only push the subscriber if is the north hat.
     fn propagate_queryable(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         res: Arc<Resource>,
         other_info: Option<QueryableInfoType>,
     );
 
     /// Unpropagate a queryable entity.
-    fn unpropagate_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>);
+    fn unpropagate_queryable(&mut self, ctx: DispatcherContext, res: Arc<Resource>);
 
     #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_queryable(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    fn unpropagate_last_non_owned_queryable(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         self.unpropagate_queryable(ctx, res);
     }
 
@@ -541,31 +559,37 @@ pub(crate) trait HatTokenTrait {
     /// Register a token entity.
     ///
     /// The callee hat assumes that it owns the source face.
-    fn register_token(&mut self, ctx: BaseContext, id: TokenId, res: Arc<Resource>, nid: NodeId);
+    fn register_token(
+        &mut self,
+        ctx: DispatcherContext,
+        id: TokenId,
+        res: Arc<Resource>,
+        nid: NodeId,
+    );
 
     /// Unregister a token entity.
     ///
     /// The callee hat assumes that it owns the source face.
     fn unregister_token(
         &mut self,
-        ctx: BaseContext,
+        ctx: DispatcherContext,
         id: TokenId,
         res: Option<Arc<Resource>>,
         nid: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn unregister_face_tokens(&mut self, ctx: BaseContext) -> HashSet<Arc<Resource>>;
+    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a token entity.
     ///
-    /// The callee hat will only push the subscription if is the north hat.
-    fn propagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>, other_tokens: bool);
+    /// The callee hat will only push the subscriber if is the north hat.
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool);
 
     /// Unpropagate a queryable entity.
-    fn unpropagate_token(&mut self, ctx: BaseContext, res: Arc<Resource>);
+    fn unpropagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>);
 
     #[tracing::instrument(level = "trace", skip_all)]
-    fn unpropagate_last_non_owned_token(&mut self, ctx: BaseContext, res: Arc<Resource>) {
+    fn unpropagate_last_non_owned_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         self.unpropagate_token(ctx, res);
     }
 
