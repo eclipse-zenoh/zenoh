@@ -288,8 +288,10 @@ impl QueryCleanup {
             qid,
             timeout,
         };
+        let queries_lock = zread!(tables_ref.queries_lock);
         if let Some((_, cancellation_token)) = face.pending_queries.get(&qid) {
             let c_cancellation_token = cancellation_token.clone();
+            drop(queries_lock);
             face.task_controller
                 .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     tokio::select! {
@@ -531,26 +533,30 @@ pub(crate) fn route_send_response(
             #[cfg(feature = "stats")]
             payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
             let queries_lock = zread!(tables_ref.queries_lock);
-            match face.pending_queries.get(&msg.rid) {
-                Some((query, _)) => {
+            match face
+                .pending_queries
+                .get(&msg.rid)
+                .map(|(q, _)| (q.src_qid, q.src_face.clone()))
+            {
+                Some((src_rid, src_face)) => {
                     if let Some(expr) = expr {
-                        msg.wire_expr = expr.get_best_key(query.src_face.id).to_owned();
+                        msg.wire_expr = expr.get_best_key(src_face.id).to_owned();
                     }
                     tracing::trace!(
                         "{}:{} Route reply for query {}:{} ({})",
                         face,
                         msg.rid,
-                        query.src_face,
-                        query.src_qid,
+                        src_face,
+                        src_rid,
                         msg.wire_expr.suffix.as_ref()
                     );
                     drop(tables);
                     drop(queries_lock);
 
-                    msg.rid = query.src_qid;
-                    if query.src_face.primitives.send_response(msg) {
+                    msg.rid = src_rid;
+                    if src_face.primitives.send_response(msg) {
                         #[cfg(feature = "stats")]
-                        payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
+                        payload_observer.observe_payload(zenoh_stats::Tx, &src_face, msg);
                     }
                 }
                 None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
