@@ -20,6 +20,7 @@ use zenoh_core::ztimeout;
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 pub async fn open_session_listen(endpoints: &[&str]) -> Session {
+    println!("[  ][open] Opening listen session: {endpoints:?}");
     let mut config = zenoh_config::Config::default();
     config
         .listen
@@ -36,6 +37,7 @@ pub async fn open_session_listen(endpoints: &[&str]) -> Session {
 }
 
 pub async fn open_session_connect(endpoints: &[&str]) -> Session {
+    println!("[  ][open] Opening connect session: {endpoints:?}");
     let mut config = zenoh_config::Config::default();
     config
         .connect
@@ -52,9 +54,7 @@ pub async fn open_session_connect(endpoints: &[&str]) -> Session {
 }
 
 pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
-    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
     let peer01 = open_session_listen(endpoints).await;
-    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
     let peer02 = open_session_connect(endpoints).await;
     (peer01, peer02)
 }
@@ -92,9 +92,7 @@ pub async fn open_session_unicast_dynamic_client() -> (Session, Session) {
 
 #[allow(dead_code)]
 pub async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
-    println!("[  ][01a] Opening peer01 session: {endpoint01}");
     let peer01 = open_session_listen(&[endpoint01]).await;
-    println!("[  ][02a] Opening peer02 session: {endpoint02}");
     let peer02 = open_session_listen(&[endpoint02]).await;
     (peer01, peer02)
 }
