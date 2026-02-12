@@ -28,7 +28,10 @@ version = { workspace = true }
 compression = []
 quic = [
   "dep:base64",
+  "dep:bytes",
   "dep:quinn",
+  "dep:quinn-proto",
+  "dep:rcgen",
   "dep:rustls-pemfile",
   "dep:rustls-pki-types",
   "dep:secrecy",
@@ -42,9 +45,12 @@ tls = ["dep:rustls", "dep:rustls-webpki"]
 [dependencies]
 async-trait = { workspace = true }
 base64 = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 flume = { workspace = true }
 futures = { workspace = true }
 quinn = { workspace = true, optional = true }
+quinn-proto = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-pemfile = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }

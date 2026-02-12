@@ -22,6 +22,7 @@ use std::{
 
 use quinn::TransportConfig;
 use rustls::{
+    crypto::CryptoProvider,
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
     server::WebPkiClientVerifier,
     version::TLS13,
@@ -39,7 +40,7 @@ use zenoh_protocol::core::{
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
 use crate::{
-    quic::unicast::MultiStreamConfig,
+    quic::{plaintext::SkipServerVerification, unicast::MultiStreamConfig},
     tls::{config::*, WebPkiVerifierAnyServerName},
     ConfigurationInspector, LinkAuthId,
 };
@@ -176,18 +177,42 @@ pub struct TlsServerConfig {
 }
 
 impl TlsServerConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<Self> {
-        let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
-            Some(s) => s
-                .parse()
-                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
-            None => TLS_ENABLE_MTLS_DEFAULT,
-        };
+    pub async fn new(config: &Config<'_>, secure: bool) -> ZResult<Self> {
         let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
             Some(s) => s
                 .parse()
                 .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
             None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
+        };
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
+
+        let sc = if secure {
+            Self::new_secure_tls(config).await?
+        } else {
+            Self::new_unsecure_tls()?
+        };
+
+        Ok(Self {
+            server_config: sc,
+            tls_close_link_on_expiration,
+        })
+    }
+
+    async fn new_secure_tls(config: &Config<'_>) -> ZResult<ServerConfig> {
+        let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
+            None => TLS_ENABLE_MTLS_DEFAULT,
         };
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
@@ -221,16 +246,6 @@ impl TlsServerConfig {
             bail!("No private key found for TLS server.");
         }
 
-        // Install ring based rustls CryptoProvider.
-        rustls::crypto::ring::default_provider()
-            // This can be called successfully at most once in any process execution.
-            // Call this early in your process to configure which provider is used for the provider.
-            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
-            .install_default()
-            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
-            // when there are multiple quic links, and all but the first execution will fail.
-            .ok();
-
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
                 || Err(zerror!("Missing root certificates while mTLS is enabled.")),
@@ -247,10 +262,25 @@ impl TlsServerConfig {
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         };
-        Ok(TlsServerConfig {
-            server_config: sc,
-            tls_close_link_on_expiration,
-        })
+        Ok(sc)
+    }
+
+    fn new_unsecure_tls() -> ZResult<ServerConfig> {
+        // Does not support client authentication, and uses self-signed certificate
+        let (key, certs) = {
+            // TODO: replace with a lazy static
+            let cert = rcgen::generate_simple_self_signed(vec![])?;
+            (
+                Into::<rustls::pki_types::PrivateKeyDer>::into(
+                    rustls::pki_types::PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()),
+                ),
+                vec![CertificateDer::from(cert.cert)],
+            )
+        };
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| zerror!(e).into())
     }
 
     async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
@@ -280,7 +310,37 @@ pub struct TlsClientConfig {
 }
 
 impl TlsClientConfig {
-    pub async fn new(config: &Config<'_>) -> ZResult<Self> {
+    pub async fn new(config: &Config<'_>, secure: bool) -> ZResult<Self> {
+        let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
+            None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
+        };
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
+
+        let cc = if secure {
+            Self::new_secure_tls(config).await?
+        } else {
+            Self::new_unsecure_tls()?
+        };
+
+        Ok(TlsClientConfig {
+            client_config: cc,
+            tls_close_link_on_expiration,
+        })
+    }
+
+    async fn new_secure_tls(config: &Config<'_>) -> ZResult<ClientConfig> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -298,13 +358,6 @@ impl TlsClientConfig {
             tracing::warn!("Skipping name verification of QUIC server");
         }
 
-        let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
-            Some(s) => s
-                .parse()
-                .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
-            None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
-        };
-
         // Allows mixed user-generated CA and webPKI CA
         tracing::debug!("Loading default Web PKI certificates.");
         let mut root_cert_store = RootCertStore {
@@ -315,16 +368,6 @@ impl TlsClientConfig {
             tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
         }
-
-        // Install ring based rustls CryptoProvider.
-        rustls::crypto::ring::default_provider()
-            // This can be called successfully at most once in any process execution.
-            // Call this early in your process to configure which provider is used for the provider.
-            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
-            .install_default()
-            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
-            // when there are multiple quic links, and all but the first execution will fail.
-            .ok();
 
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");
@@ -391,10 +434,17 @@ impl TlsClientConfig {
                     .with_no_client_auth()
             }
         };
-        Ok(TlsClientConfig {
-            client_config: cc,
-            tls_close_link_on_expiration,
-        })
+        Ok(cc)
+    }
+
+    fn new_unsecure_tls() -> ZResult<ClientConfig> {
+        let provider = CryptoProvider::get_default().expect("default cypto provider should be set");
+        // No server verification, trusts any certificate
+        Ok(ClientConfig::builder_with_provider(provider.clone())
+            .with_protocol_versions(&[&TLS13])?
+            .dangerous()
+            .with_custom_certificate_verifier(SkipServerVerification::new(provider.clone()))
+            .with_no_client_auth())
     }
 
     async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {

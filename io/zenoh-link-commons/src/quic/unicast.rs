@@ -202,7 +202,7 @@ impl<F: AcceptorCallback> QuicServer<F> {
         let host = get_quic_host(&epaddr)?;
 
         // Server config
-        let mut server_crypto = TlsServerConfig::new(&epconf)
+        let mut server_crypto = TlsServerConfig::new(&epconf, true)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
@@ -288,7 +288,7 @@ impl QuicClient {
         let dst_addr = get_quic_addr(&epaddr).await?;
 
         // Initialize the QUIC connection
-        let mut client_crypto = TlsClientConfig::new(&epconf)
+        let mut client_crypto = TlsClientConfig::new(&epconf, true)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
