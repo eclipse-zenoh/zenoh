@@ -34,6 +34,7 @@ use zenoh_runtime::ZRuntime;
 pub struct CloseBuilder<TCloseable: Closeable> {
     closee: TCloseable::TClosee,
     timeout: Duration,
+    close_args: <TCloseable::TClosee as Closee>::CloseArgs,
 }
 
 // NOTE: `Closeable` is only pub(crate) because it is a zenoh-internal trait, so we don't
@@ -44,6 +45,7 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
         Self {
             closee: closeable.get_closee(),
             timeout: Duration::from_secs(10),
+            close_args: <TCloseable::TClosee as Closee>::CloseArgs::default(),
         }
     }
 
@@ -115,7 +117,7 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
-                if tokio::time::timeout(self.timeout, self.closee.close_inner())
+                if tokio::time::timeout(self.timeout, self.closee.close_inner(self.close_args))
                     .await
                     .is_err()
                 {
@@ -220,10 +222,20 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
 
 #[async_trait]
 pub(crate) trait Closee: Send + Sync + 'static {
-    async fn close_inner(&self);
+    type CloseArgs: Default + Send + Sync;
+    async fn close_inner(&self, close_arg: Self::CloseArgs);
 }
 
 pub(crate) trait Closeable {
     type TClosee: Closee;
     fn get_closee(&self) -> Self::TClosee;
+}
+
+impl CloseBuilder<crate::Session> {
+    /// Block in undeclare operation until all currently running zenoh entities' callbacks (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_callbacks(mut self) -> Self {
+        self.close_args.wait_callbacks = true;
+        self
+    }
 }

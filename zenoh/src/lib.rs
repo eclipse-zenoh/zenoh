@@ -1123,6 +1123,8 @@ pub mod shm {
 #[zenoh_macros::unstable]
 pub mod cancellation {
     pub use crate::api::cancellation::CancellationToken;
+    #[cfg(feature = "internal")]
+    pub use crate::api::cancellation::{SyncGroup, SyncGroupNotifier};
 }
 #[cfg(test)]
 mod tests;

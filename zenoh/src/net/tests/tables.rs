@@ -534,7 +534,12 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push_consume(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+        _consume: bool,
+    ) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
@@ -897,6 +902,7 @@ fn client_test() {
                 ..Put::default().into()
             },
             Reliability::Reliable,
+            true,
         );
     };
 

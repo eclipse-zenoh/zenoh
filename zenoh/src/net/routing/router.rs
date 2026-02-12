@@ -16,7 +16,7 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex, RwLock},
 };
 
-use arc_swap::ArcSwap;
+use arc_swap::ArcSwapOption;
 use uhlc::HLC;
 use zenoh_config::{
     gateway::{GatewayPresetConf, GatewaySouthConf},
@@ -263,7 +263,7 @@ impl Router {
         tables.data.face_counter += 1;
         let zid = transport.get_zid()?;
 
-        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let ingress = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
 
         let newface = tables
@@ -401,7 +401,7 @@ impl Router {
 
         let fid = tables.data.face_counter;
         tables.data.face_counter += 1;
-        let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let interceptor = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
 
         #[cfg(feature = "stats")]
         let stats = transport.get_stats().ok();

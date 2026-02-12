@@ -307,6 +307,7 @@ pub fn route_data(
     face: &FaceState,
     msg: &mut Push,
     reliability: Reliability,
+    consume: bool,
 ) {
     let rtables = zread!(tables_ref.tables);
     let Some(prefix) = rtables
@@ -387,6 +388,12 @@ pub fn route_data(
             );
         }
 
+        let mut msg_clone;
+        let mut msg = &mut *msg;
+        if !consume {
+            msg_clone = msg.clone();
+            msg = &mut msg_clone;
+        }
         send_push(&dir.dst_face, msg, reliability);
     }
 }

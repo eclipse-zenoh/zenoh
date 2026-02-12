@@ -15,12 +15,11 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt::{self, Debug},
-    ops::Not,
     sync::{Arc, Weak},
     time::Duration,
 };
 
-use arc_swap::ArcSwap;
+use arc_swap::ArcSwapOption;
 use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
@@ -123,7 +122,7 @@ pub struct FaceState {
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
-    pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+    pub(crate) in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
     /// Downcasts to `HatFace`.
     pub(crate) hats: RegionMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
@@ -175,7 +174,7 @@ impl FaceStateBuilder {
 
     pub(crate) fn ingress_interceptors(
         mut self,
-        in_interceptors: Arc<ArcSwap<InterceptorsChain>>,
+        in_interceptors: Arc<ArcSwapOption<InterceptorsChain>>,
     ) -> Self {
         self.0.in_interceptors = Some(in_interceptors);
         self
@@ -236,16 +235,17 @@ impl FaceState {
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Some(interceptor) = self
-            .in_interceptors
-            .as_ref()
-            .map(|itor| itor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
-        {
-            if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
-                    .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+        if let Some(interceptor) = self.in_interceptors.as_ref().map(|itor| itor.load()) {
+            if let Some(interceptor) = interceptor.as_ref() {
+                {
+                    if let Some(expr) = res.keyexpr() {
+                        let cache = interceptor.compute_keyexpr_cache(expr);
+                        get_mut_unchecked(
+                            get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
+                        )
+                        .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                    }
+                }
             }
         }
 
@@ -254,12 +254,15 @@ impl FaceState {
             .as_any()
             .downcast_ref::<Mux>()
             .map(|mux| mux.interceptor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
+            if let Some(interceptor) = interceptor.as_ref() {
+                if let Some(expr) = res.keyexpr() {
+                    let cache = interceptor.compute_keyexpr_cache(expr);
+                    get_mut_unchecked(
+                        get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
+                    )
                     .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                }
             }
         }
 
@@ -268,12 +271,15 @@ impl FaceState {
             .as_any()
             .downcast_ref::<McastMux>()
             .map(|mux| mux.interceptor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
+            if let Some(interceptor) = interceptor.as_ref() {
+                if let Some(expr) = res.keyexpr() {
+                    let cache = interceptor.compute_keyexpr_cache(expr);
+                    get_mut_unchecked(
+                        get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
+                    )
                     .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                }
             }
         }
     }
@@ -292,7 +298,8 @@ impl FaceState {
                 InterceptorsChain::new(ingress.into_iter().flatten().collect::<Vec<_>>(), version),
                 InterceptorsChain::new(egress.into_iter().flatten().collect::<Vec<_>>(), version),
             );
-            mux.interceptor.store(egress.into());
+            mux.interceptor
+                .store((!egress.is_empty()).then(|| egress.into()));
             self.in_interceptors
                 .as_ref()
                 .expect("face in_interceptors should not be None when primitives are Mux")
@@ -305,7 +312,7 @@ impl FaceState {
                     .collect::<Vec<EgressInterceptor>>(),
                 version,
             );
-            mux.interceptor.store(Arc::new(interceptor));
+            mux.interceptor.store(interceptor.into());
             debug_assert!(self.in_interceptors.is_none());
         } else if let Some(transport) = &self.mcast_group {
             let interceptor = InterceptorsChain::new(
@@ -516,9 +523,10 @@ impl Primitives for Face {
         }
     }
 
+    #[inline]
     #[tracing::instrument(level = "debug", skip(msg), ret)]
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        route_data(&self.tables, &self.state, msg, reliability);
+    fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool) {
+        route_data(&self.tables, &self.state, msg, reliability, consume);
     }
 
     #[tracing::instrument(level = "debug", skip(msg), ret)]
