@@ -29,15 +29,23 @@ use quinn::{
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use zenoh_config::{EndPoint, Locator};
-use zenoh_core::{bail, zerror};
+use zenoh_core::zerror;
 use zenoh_protocol::core::{Metadata, Priority};
 use zenoh_result::ZResult;
 
 use crate::{
     quic::{
-        get_quic_addr, get_quic_host, socket::QuicSocketConfig, QuicMtuConfig,
-        QuicTransportConfigurator, TlsClientConfig, TlsServerConfig, PROTOCOL_LEGACY,
-        PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
+        get_quic_addr,
+        get_quic_host,
+        plaintext::{PlainTextClientConfig, PlainTextServerConfig},
+        socket::QuicSocketConfig,
+        QuicMtuConfig,
+        QuicTransportConfigurator,
+        TlsClientConfig,
+        TlsServerConfig,
+        PROTOCOL_LEGACY,
+        PROTOCOL_MULTI_STREAM,
+        PROTOCOL_SINGLE_STREAM, // TODO: remove this alias
     },
     LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -190,19 +198,18 @@ pub struct QuicServer<F: AcceptorCallback> {
 }
 
 impl<F: AcceptorCallback> QuicServer<F> {
-    pub async fn new(endpoint: &EndPoint, acceptor_params: QuicAcceptorParams<F>) -> ZResult<Self> {
+    pub async fn new(
+        endpoint: &EndPoint,
+        secure: bool,
+        acceptor_params: QuicAcceptorParams<F>,
+    ) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let epconf = endpoint.config();
-
-        if epconf.is_empty() {
-            bail!("No QUIC configuration provided");
-        };
-
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
 
         // Server config
-        let mut server_crypto = TlsServerConfig::new(&epconf, true)
+        let mut server_crypto = TlsServerConfig::new(&epconf, secure)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
@@ -222,7 +229,13 @@ impl<F: AcceptorCallback> QuicServer<F> {
             .try_into()
             .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
 
-        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
+        let mut server_config = quinn::ServerConfig::with_crypto({
+            if secure {
+                Arc::new(quic_config)
+            } else {
+                Arc::new(PlainTextServerConfig::new(quic_config.into()))
+            }
+        });
         {
             let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
             QuicTransportConfigurator(transport_config)
@@ -281,14 +294,14 @@ pub struct QuicClient {
 }
 
 impl QuicClient {
-    pub async fn new(endpoint: &EndPoint, is_streamed: bool) -> ZResult<Self> {
+    pub async fn new(endpoint: &EndPoint, is_streamed: bool, secure: bool) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
         let dst_addr = get_quic_addr(&epaddr).await?;
 
         // Initialize the QUIC connection
-        let mut client_crypto = TlsClientConfig::new(&epconf, true)
+        let mut client_crypto = TlsClientConfig::new(&epconf, secure)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
@@ -327,7 +340,13 @@ impl QuicClient {
             .try_into()
             .map_err(|e| zerror!("Can not get QUIC config {host}: {e}"))?;
         quic_endpoint.set_default_client_config({
-            let mut client_config = quinn::ClientConfig::new(Arc::new(quic_config));
+            let mut client_config = quinn::ClientConfig::new({
+                if secure {
+                    Arc::new(quic_config)
+                } else {
+                    Arc::new(PlainTextClientConfig::new(quic_config.into()))
+                }
+            });
             let mut transport_config = quinn::TransportConfig::default();
             QuicTransportConfigurator(&mut transport_config)
                 .configure_max_concurrent_streams(multistream.as_ref())

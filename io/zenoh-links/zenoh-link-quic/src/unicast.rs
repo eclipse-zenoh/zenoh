@@ -236,7 +236,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration,
-        } = QuicClient::new(&endpoint, true).await?;
+        } = QuicClient::new(&endpoint, true, true).await?;
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
@@ -281,7 +281,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             quic_acceptor,
             locator,
             local_addr,
-        } = QuicServer::new(&endpoint, acceptor_params).await?;
+        } = QuicServer::new(&endpoint, true, acceptor_params).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(

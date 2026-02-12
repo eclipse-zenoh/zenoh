@@ -225,7 +225,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration,
-        } = QuicClient::new(&endpoint, false).await?;
+        } = QuicClient::new(&endpoint, false, true).await?;
 
         debug_assert!(
             streams.is_none(),
@@ -274,7 +274,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             quic_acceptor,
             locator,
             local_addr,
-        } = QuicServer::new(&endpoint, acceptor_params).await?;
+        } = QuicServer::new(&endpoint, true, acceptor_params).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(
