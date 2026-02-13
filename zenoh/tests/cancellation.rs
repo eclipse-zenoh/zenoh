@@ -16,7 +16,6 @@
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
-use tokio::net::TcpListener;
 use zenoh::{handlers::CallbackDrop, Session};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
