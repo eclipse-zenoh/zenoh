@@ -23,28 +23,31 @@ use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-async fn allocate_dynamic_tcp_endpoint() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("Failed to bind local ephemeral port");
-    let addr = listener
-        .local_addr()
-        .expect("Failed to read local ephemeral address");
-    format!("tcp/{addr}")
-}
-
 async fn create_peer_client_pair() -> (Session, Session) {
-    let locator = allocate_dynamic_tcp_endpoint().await;
+    // Create a session that listens on an auto assigned TCP port
     let config1 = {
         let mut config = zenoh::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .listen
             .endpoints
-            .set(vec![locator.parse().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
             .unwrap();
         config
     };
+    let session1 = zenoh::open(config1).await.unwrap();
+
+    // Extract the actual TCP endpoint that session1 is listening on
+    let locator = session1
+        .info()
+        .locators()
+        .await
+        .into_iter()
+        .find(|l| l.protocol().as_str() == "tcp")
+        .expect("Expected at least one TCP locator")
+        .to_string();
+
+    // Create a session that connects to the first session
     let mut config2 = zenoh::Config::default();
     config2.set_mode(Some(WhatAmI::Client)).unwrap();
     config2.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -53,7 +56,6 @@ async fn create_peer_client_pair() -> (Session, Session) {
         .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
         .unwrap();
 
-    let session1 = zenoh::open(config1).await.unwrap();
     let session2 = zenoh::open(config2).await.unwrap();
     (session1, session2)
 }
