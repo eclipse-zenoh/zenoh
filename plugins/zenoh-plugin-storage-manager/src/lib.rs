@@ -227,7 +227,7 @@ impl StorageRuntimeInner {
             volume_id,
             backend_name
         );
-        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(backend_name) {
+        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
             declared
         } else if let Some(paths) = config.paths() {
             self.plugins_manager.declare_dynamic_plugin_by_paths(

@@ -28,6 +28,7 @@ use crate::api::handlers::locked;
 use crate::api::info::{Transport, TransportEvent};
 #[zenoh_macros::unstable]
 use crate::{
+    api::cancellation::SyncGroup,
     api::session::{UndeclarableSealed, WeakSession},
     api::Id,
     handlers::{Callback, DefaultHandler, IntoHandler},
@@ -134,6 +135,8 @@ impl std::fmt::Debug for TransportEventsListenerInner {
 pub struct TransportEventsListener<Handler> {
     pub(crate) inner: TransportEventsListenerInner,
     pub(crate) handler: Handler,
+    #[cfg(feature = "unstable")]
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 #[zenoh_macros::unstable]
@@ -206,7 +209,11 @@ impl<Handler: Send> UndeclarableSealed<()> for TransportEventsListener<Handler> 
     type Undeclaration = TransportEventsListenerUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        TransportEventsListenerUndeclaration(self)
+        TransportEventsListenerUndeclaration {
+            listener: self,
+            #[cfg(feature = "unstable")]
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -228,7 +235,21 @@ impl<Handler> std::ops::DerefMut for TransportEventsListener<Handler> {
 
 /// A [`Resolvable`] returned by [`TransportEventsListener::undeclare`]
 #[zenoh_macros::unstable]
-pub struct TransportEventsListenerUndeclaration<Handler>(TransportEventsListener<Handler>);
+pub struct TransportEventsListenerUndeclaration<Handler> {
+    listener: TransportEventsListener<Handler>,
+    #[cfg(feature = "unstable")]
+    wait_callbacks: bool,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> TransportEventsListenerUndeclaration<Handler> {
+    /// Block in undeclare operation until all currently running instances of transport events listener callback (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for TransportEventsListenerUndeclaration<Handler> {
@@ -238,7 +259,12 @@ impl<Handler> Resolvable for TransportEventsListenerUndeclaration<Handler> {
 #[zenoh_macros::unstable]
 impl<Handler> Wait for TransportEventsListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.listener.undeclare_impl()?;
+        #[cfg(feature = "unstable")]
+        if self.wait_callbacks {
+            self.listener.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -391,10 +417,14 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> Self::To {
+        #[cfg(feature = "unstable")]
+        let callback_sync_group = SyncGroup::default();
         let (callback, handler) = self.handler.into_handler();
-        let state = self
-            .session
-            .declare_transport_events_listener_inner(callback, self.history)?;
+        let state = self.session.declare_transport_events_listener_inner(
+            callback,
+            self.history,
+            callback_sync_group.notifier(),
+        )?;
 
         Ok(TransportEventsListener {
             inner: TransportEventsListenerInner {
@@ -403,6 +433,7 @@ where
                 undeclare_on_drop: true,
             },
             handler,
+            callback_sync_group,
         })
     }
 }
@@ -428,9 +459,12 @@ impl Resolvable for TransportEventsListenerBuilder<'_, Callback<TransportEvent>,
 #[zenoh_macros::unstable]
 impl Wait for TransportEventsListenerBuilder<'_, Callback<TransportEvent>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
-        let state = self
-            .session
-            .declare_transport_events_listener_inner(self.handler, self.history)?;
+        let state = self.session.declare_transport_events_listener_inner(
+            self.handler,
+            self.history,
+            #[cfg(feature = "unstable")]
+            None,
+        )?;
         // Set the listener to not undeclare on drop (background mode)
         // Note: We can't access the listener to set background flag, so we just don't keep a reference
         // The listener will live until explicitly undeclared or session closes

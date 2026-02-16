@@ -388,6 +388,8 @@ pub mod session {
 
     #[zenoh_macros::internal]
     pub use crate::api::builders::session::{init, InitBuilder};
+    #[zenoh_macros::internal]
+    pub use crate::api::session::WeakSession;
     #[zenoh_macros::unstable]
     pub use crate::api::{
         builders::info_links::{
@@ -1122,7 +1124,7 @@ pub mod shm {
 pub mod cancellation {
     pub use crate::api::cancellation::CancellationToken;
     #[cfg(feature = "internal")]
-    pub use crate::api::cancellation::SyncGroupNotifier;
+    pub use crate::api::cancellation::{SyncGroup, SyncGroupNotifier};
 }
 #[cfg(test)]
 mod tests;
