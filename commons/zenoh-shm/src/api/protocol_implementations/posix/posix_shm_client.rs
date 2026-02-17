@@ -26,7 +26,7 @@ use crate::api::{
     protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID,
 };
 
-/// Client factory implementation for particular shared memory protocol
+/// Client factory implementation for POSIX Shared Memory protocol
 #[zenoh_macros::unstable_doc]
 #[derive(Debug)]
 pub struct PosixShmClient;
