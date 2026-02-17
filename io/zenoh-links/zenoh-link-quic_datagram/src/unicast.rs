@@ -20,7 +20,7 @@ use zenoh_link_commons::{
     get_ip_interface_names,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
-        unicast::{QuicAcceptorParams, QuicLink, QuicLinkMaterial},
+        unicast::{QuicAcceptorParams, QuicClient, QuicLinkMaterial, QuicServer},
     },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
@@ -219,8 +219,13 @@ impl LinkManagerUnicastQuicDatagram {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let (quic_conn, streams, src_addr, dst_addr, tls_close_link_on_expiration) =
-            QuicLink::connect(&endpoint, false).await?;
+        let QuicClient {
+            quic_conn,
+            streams,
+            src_addr,
+            dst_addr,
+            tls_close_link_on_expiration,
+        } = QuicClient::new(&endpoint, false).await?;
 
         debug_assert!(
             streams.is_none(),
@@ -265,8 +270,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             make_link: acceptor_callback,
         };
 
-        let (quic_acceptor, locator, local_addr) =
-            QuicLink::listen(&endpoint, acceptor_params).await?;
+        let QuicServer {
+            quic_acceptor,
+            locator,
+            local_addr,
+        } = QuicServer::new(&endpoint, acceptor_params).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(

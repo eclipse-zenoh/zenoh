@@ -190,13 +190,14 @@ impl RecvStream {
     }
 }
 
-pub struct QuicLink {}
+pub struct QuicServer<F: AcceptorCallback> {
+    pub quic_acceptor: QuicAcceptor<F>,
+    pub locator: Locator,
+    pub local_addr: SocketAddr,
+}
 
-impl QuicLink {
-    pub async fn listen<F: AcceptorCallback>(
-        endpoint: &EndPoint,
-        acceptor_params: QuicAcceptorParams<F>,
-    ) -> ZResult<(QuicAcceptor<F>, Locator, SocketAddr)> {
+impl<F: AcceptorCallback> QuicServer<F> {
+    pub async fn new(endpoint: &EndPoint, acceptor_params: QuicAcceptorParams<F>) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let epconf = endpoint.config();
 
@@ -279,27 +280,28 @@ impl QuicLink {
             endpoint.metadata(),
         )?;
 
-        Ok((
-            QuicAcceptor {
+        Ok(Self {
+            quic_acceptor: QuicAcceptor {
                 quic_endpoint,
                 tls_close_link_on_expiration: server_crypto.tls_close_link_on_expiration,
                 inner: acceptor_params,
             },
             locator,
             local_addr,
-        ))
+        })
     }
+}
 
-    pub async fn connect(
-        endpoint: &EndPoint,
-        is_streamed: bool,
-    ) -> ZResult<(
-        quinn::Connection,
-        Option<QuicStreams>,
-        SocketAddr,
-        SocketAddr,
-        bool,
-    )> {
+pub struct QuicClient {
+    pub quic_conn: quinn::Connection,
+    pub streams: Option<QuicStreams>,
+    pub src_addr: SocketAddr,
+    pub dst_addr: SocketAddr,
+    pub tls_close_link_on_expiration: bool,
+}
+
+impl QuicClient {
+    pub async fn new(endpoint: &EndPoint, is_streamed: bool) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
@@ -378,7 +380,7 @@ impl QuicLink {
             .local_addr()
             .map_err(|e| zerror!("Can not get QUIC local_addr bound to {}: {}", host, e))?;
 
-        let connection = quic_endpoint
+        let quic_conn = quic_endpoint
             .connect(dst_addr, host)
             .map_err(|e| {
                 zerror!(
@@ -393,19 +395,19 @@ impl QuicLink {
 
         let mut streams = None;
         if is_streamed {
-            let quic_streams = QuicStreams::open(&connection)
+            let quic_streams = QuicStreams::open(&quic_conn)
                 .await
                 .map_err(|e| zerror!("Can not open QUIC bi-directional channel {}: {}", host, e))?;
             streams = Some(quic_streams);
         }
 
-        Ok((
-            connection,
+        Ok(Self {
+            quic_conn,
             streams,
             src_addr,
             dst_addr,
-            client_crypto.tls_close_link_on_expiration,
-        ))
+            tls_close_link_on_expiration: client_crypto.tls_close_link_on_expiration,
+        })
     }
 }
 
