@@ -157,6 +157,8 @@ pub trait IRuntime: Send + Sync {
 
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
 
+    fn get_transports_blocking(&self) -> Vec<Transport>;
+
     fn get_links(
         &self,
         transport: Option<&Transport>,
@@ -261,6 +263,22 @@ impl IRuntime for RuntimeState {
             .map(|ref peer| Transport::new(peer, true));
 
         Box::new(unicast_transports.chain(multicast_transports))
+    }
+
+    fn get_transports_blocking(&self) -> Vec<Transport> {
+        self.manager
+            .get_transports_unicast_blocking()
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .map(|peer| Transport::new(&peer, false))
+            .chain(
+                self.manager
+                    .get_transports_multicast_blocking()
+                    .into_iter()
+                    .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+                    .map(|peer| Transport::new(&peer, true)),
+            )
+            .collect()
     }
 
     fn get_links(

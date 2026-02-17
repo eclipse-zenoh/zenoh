@@ -470,15 +470,18 @@ impl TransportManager {
 
         // complete establish procedure
         let c_link = ack.link();
-        let c_t = transport.clone();
-        ack.send_open_ack()
-            .await
-            .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
+        ack.send_open_ack().await.map_err(|e| {
+            InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
+        })?;
 
         start_tx();
 
         // notify transport's callback interface that there is a new link
-        Self::notify_new_link_unicast(&transport, c_link);
+        Self::notify_new_link_unicast(&transport, c_link)
+            .await
+            .map_err(|e| {
+                InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
+            })?;
 
         start_rx();
 
@@ -487,10 +490,18 @@ impl TransportManager {
         Ok(transport)
     }
 
-    fn notify_new_link_unicast(transport: &Arc<dyn TransportUnicastTrait>, link: Link) {
-        if let Some(callback) = &transport.get_callback() {
-            callback.new_link(link);
+    async fn notify_new_link_unicast(
+        transport: &Arc<dyn TransportUnicastTrait>,
+        link: Link,
+    ) -> ZResult<()> {
+        if let Some(callback) = transport.get_callback() {
+            tokio::task::spawn_blocking(move || {
+                callback.new_link(link);
+            })
+            .await?;
         }
+
+        Ok(())
     }
 
     fn notify_new_transport_unicast(
@@ -667,7 +678,10 @@ impl TransportManager {
         );
 
         // Notify transport's callback interface that there is a new link
-        Self::notify_new_link_unicast(&t, c_link);
+        transport_error!(
+            Self::notify_new_link_unicast(&t, c_link).await,
+            close::reason::GENERIC
+        );
 
         start_rx();
 
@@ -809,6 +823,16 @@ impl TransportManager {
 
     pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
+            .values()
+            .map(|t| TransportUnicast(Arc::downgrade(t)))
+            .collect()
+    }
+
+    pub fn get_transports_unicast_blocking(&self) -> Vec<TransportUnicast> {
+        self.state
+            .unicast
+            .transports
+            .blocking_lock()
             .values()
             .map(|t| TransportUnicast(Arc::downgrade(t)))
             .collect()

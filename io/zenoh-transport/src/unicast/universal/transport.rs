@@ -196,7 +196,10 @@ impl TransportUnicastUniversal {
         // Notify the callback
         let cb = zread!(self.callback).clone();
         if let Some(callback) = cb {
-            callback.del_link(link);
+            tokio::task::spawn_blocking(move || {
+                callback.del_link(link);
+            })
+            .await?;
         }
 
         match target {
