@@ -256,6 +256,14 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(link) => link.supports_priorities(),
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => false,
+        }
+    }
+
+    #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Udp
     }

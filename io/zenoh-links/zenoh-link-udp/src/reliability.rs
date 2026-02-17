@@ -147,6 +147,10 @@ impl LinkUnicastQuicUnsecure {
         self.connection.close(quinn::VarInt::from_u32(0), &[0])
     }
 
+    pub(crate) fn supports_priorities(&self) -> bool {
+        self.streams.is_multistream
+    }
+
     fn make_link(quic_link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> {
         let quic_link = Self {
             connection: quic_link_material.quic_conn,
