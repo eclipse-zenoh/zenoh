@@ -451,11 +451,9 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
                 .await
                 .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
 
-            let conn = qc.await.map_err(|e| {
-                let e = zerror!("QUIC acceptor failed: {:?}", e);
-                tracing::warn!("{}", e);
-                e
-            })?;
+            let conn = qc
+                .await
+                .map_err(|e| zerror!("QUIC acceptor failed: {:?}", e))?;
 
             Ok(conn)
         }
