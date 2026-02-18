@@ -39,6 +39,15 @@ impl Node {
         let mut c = zenoh::Config::default();
         c.insert_json5("mode", &format!("\"{mode}\"")).unwrap();
         c.insert_json5("id", &format!("\"{id}\"")).unwrap();
+        match mode {
+            WhatAmI::Router => c
+                .insert_json5("listen/endpoints", "[\"tcp/0.0.0.0:7447\"]")
+                .unwrap(),
+            WhatAmI::Peer => c
+                .insert_json5("listen/endpoints", "[\"tcp/0.0.0.0:0\"]")
+                .unwrap(),
+            _ => (),
+        }
         c.insert_json5("scouting/multicast/enabled", "false")
             .unwrap();
         c.insert_json5("adminspace/enabled", "true").unwrap();
