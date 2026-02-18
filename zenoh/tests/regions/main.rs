@@ -177,3 +177,62 @@ impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
             .count()
     }
 }
+
+pub mod predicates_ext {
+    use std::fmt::Display;
+
+    use predicates::{
+        ord::eq, prelude::PredicateBooleanExt, reflection::PredicateReflection, Predicate,
+    };
+    use tracing_capture::{
+        predicates::{ancestor, field, name, IntoFieldPredicate},
+        Captured,
+    };
+    use tracing_tunnel::TracedValue;
+
+    pub fn register_subscriber<'a, C>(zid: &'static str, keyexpr: &'static str) -> impl Predicate<C>
+    where
+        C: Captured<'a>,
+    {
+        ancestor(
+            name(eq("register_subscriber"))
+                & field("self", dbg_obj_eq("north"))
+                & field("res", dbg_obj_eq(keyexpr)),
+        )
+        .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
+    }
+
+    pub fn dbg_obj_eq(matcher: &'static str) -> DebugObjectEqPredicate {
+        DebugObjectEqPredicate { matcher }
+    }
+
+    #[derive(Debug)]
+    pub struct DebugObjectEqPredicate {
+        matcher: &'static str,
+    }
+
+    impl IntoFieldPredicate for DebugObjectEqPredicate {
+        type Predicate = DebugObjectEqPredicate;
+
+        fn into_predicate(self) -> Self::Predicate {
+            self
+        }
+    }
+
+    impl Display for DebugObjectEqPredicate {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{self:?}")
+        }
+    }
+
+    impl PredicateReflection for DebugObjectEqPredicate {}
+
+    impl Predicate<TracedValue> for DebugObjectEqPredicate {
+        fn eval(&self, variable: &TracedValue) -> bool {
+            match variable {
+                TracedValue::Object(obj) => obj.as_ref() == self.matcher,
+                _ => false,
+            }
+        }
+    }
+}

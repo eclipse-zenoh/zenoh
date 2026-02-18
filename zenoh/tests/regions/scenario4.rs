@@ -12,16 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-// Scenario 3
+// Scenario 4
 //   R      R      R
 // C C C  C C C  C C C
 
 use std::time::Duration;
 
+use predicates::Predicate;
 use zenoh_config::WhatAmI::{Client, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
-use crate::{count, loc, skip_fmt, Node, SubUtils};
+use crate::{loc, predicates_ext, skip_fmt, Node, SubUtils};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -107,16 +108,11 @@ async fn test_regions_scenario4_order1_putsub() {
             _z9330.put("test/9330", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -125,12 +121,14 @@ async fn test_regions_scenario4_order1_putsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "41aa9110", "41aa9120", "41aa9130", "41aa9210", "41aa9220", "41aa9230", "41aa9310",
         "41aa9320", "41aa9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             0
         );
     }
@@ -215,16 +213,11 @@ async fn test_regions_scenario4_order1_pubsub() {
             p9330.put("9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -233,12 +226,14 @@ async fn test_regions_scenario4_order1_pubsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "41ab9110", "41ab9120", "41ab9130", "41ab9210", "41ab9220", "41ab9230", "41ab9310",
         "41ab9320", "41ab9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             1
         );
     }
@@ -317,16 +312,11 @@ async fn test_regions_scenario4_order2_putsub() {
             _z9330.put("test/9330", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -335,12 +325,14 @@ async fn test_regions_scenario4_order2_putsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "42aa9110", "42aa9120", "42aa9130", "42aa9210", "42aa9220", "42aa9230", "42aa9310",
         "42aa9320", "42aa9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             0
         );
     }
@@ -430,16 +422,11 @@ async fn test_regions_scenario4_order2_pubsub() {
             p9330.put("9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -448,12 +435,14 @@ async fn test_regions_scenario4_order2_pubsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "42ab9110", "42ab9120", "42ab9130", "42ab9210", "42ab9220", "42ab9230", "42ab9310",
         "42ab9320", "42ab9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             1
         );
     }

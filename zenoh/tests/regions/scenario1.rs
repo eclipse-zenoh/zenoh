@@ -19,10 +19,11 @@
 
 use std::time::Duration;
 
+use predicates::Predicate;
 use zenoh_config::WhatAmI::{Client, Peer, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
-use crate::{count, json, loc, skip_fmt, Node, SubUtils};
+use crate::{json, loc, predicates_ext, skip_fmt, Node, SubUtils};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -43,9 +44,7 @@ fn init_tracing_subscriber() {
 async fn test_regions_scenario1_order1_putsub() {
     init_tracing_subscriber();
 
-    let _z9000 = ztimeout!(Node::new(Router, "11aa9000")
-        .listen("tcp/[::]:11111")
-        .open());
+    let _z9000 = ztimeout!(Node::new(Router, "11aa9000").listen("tcp/[::]:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "11aa9100")
         .endpoints("tcp/[::]:0", &[loc!(_z9000)])
@@ -118,16 +117,11 @@ async fn test_regions_scenario1_order1_putsub() {
             _z9330.put("test/9330", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -136,12 +130,14 @@ async fn test_regions_scenario1_order1_putsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "11aa9110", "11aa9120", "11aa9130", "11aa9210", "11aa9220", "11aa9230", "11aa9310",
         "11aa9320", "11aa9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             2
         );
     }
@@ -234,16 +230,11 @@ async fn test_regions_scenario1_order1_pubsub() {
             p9330.put("9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -252,12 +243,14 @@ async fn test_regions_scenario1_order1_pubsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "11ab9110", "11ab9120", "11ab9130", "11ab9210", "11ab9220", "11ab9230", "11ab9310",
         "11ab9320", "11ab9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             3
         );
     }
@@ -340,16 +333,11 @@ async fn test_regions_scenario1_order2_putsub() {
             _z9330.put("test/9330", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -358,12 +346,14 @@ async fn test_regions_scenario1_order2_putsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "12aa9110", "12aa9120", "12aa9130", "12aa9210", "12aa9220", "12aa9230", "12aa9310",
         "12aa9320", "12aa9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             2
         );
     }
@@ -456,16 +446,11 @@ async fn test_regions_scenario1_order2_pubsub() {
             p9330.put("9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if true
-                && s9110.count_keys() == 9
-                && s9120.count_keys() == 9
-                && s9130.count_keys() == 9
-                && s9210.count_keys() == 9
-                && s9220.count_keys() == 9
-                && s9230.count_keys() == 9
-                && s9310.count_keys() == 9
-                && s9320.count_keys() == 9
-                && s9330.count_keys() == 9
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
             {
                 break;
             }
@@ -474,12 +459,14 @@ async fn test_regions_scenario1_order2_pubsub() {
 
     let s = STORAGE.lock();
 
-    for i in [
+    for zid in [
         "12ab9110", "12ab9120", "12ab9130", "12ab9210", "12ab9220", "12ab9230", "12ab9310",
         "12ab9320", "12ab9330",
     ] {
         assert_eq!(
-            count!(s, demux{zid=i src="north..."}:declare_subscriber{expr="test/**"}: "()"),
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
             3
         );
     }
