@@ -19,7 +19,10 @@ use zenoh_link_commons::{
     get_ip_interface_names,
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
-        unicast::{QuicAcceptorParams, QuicClient, QuicLinkMaterial, QuicServer, QuicStreams},
+        unicast::{
+            QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicLinkMaterial, QuicServer,
+            QuicServerBuilder, QuicStreams,
+        },
     },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
@@ -236,7 +239,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration,
-        } = QuicClient::new(&endpoint, true, true).await?;
+        } = QuicClientBuilder::new(&endpoint).await?;
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
@@ -270,7 +273,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let token = self.listeners.token.child_token();
         let acceptor_params = QuicAcceptorParams {
-            is_streamed: true,
             token: token.clone(),
             manager: self.manager.clone(),
             throttle_time: Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME),
@@ -281,7 +283,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             quic_acceptor,
             locator,
             local_addr,
-        } = QuicServer::new(&endpoint, true, acceptor_params).await?;
+        } = QuicServerBuilder::new(&endpoint, acceptor_params).await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(

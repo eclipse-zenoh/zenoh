@@ -15,7 +15,10 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use zenoh_core::zerror;
 use zenoh_link_commons::{
-    quic::unicast::{QuicAcceptorParams, QuicClient, QuicLinkMaterial, QuicServer, QuicStreams},
+    quic::unicast::{
+        QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicLinkMaterial, QuicServer,
+        QuicServerBuilder, QuicStreams,
+    },
     LinkUnicastTrait,
 };
 use zenoh_protocol::{
@@ -43,7 +46,7 @@ impl LinkUnicastQuicUnsecure {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration: _,
-        } = QuicClient::new(&endpoint, true, false).await?;
+        } = QuicClientBuilder::new(&endpoint).security(false).await?;
         let streams = streams.expect("QUIC streams should be initialized");
         Ok((
             Self {
@@ -61,7 +64,6 @@ impl LinkUnicastQuicUnsecure {
     ) -> ZResult<Locator> {
         let token = manager.listeners.token.child_token();
         let acceptor_params = QuicAcceptorParams {
-            is_streamed: true,
             token: token.clone(),
             manager: manager.manager.clone(),
             throttle_time: Duration::from_micros(*UDP_ACCEPT_THROTTLE_TIME),
@@ -72,7 +74,9 @@ impl LinkUnicastQuicUnsecure {
             quic_acceptor,
             locator,
             local_addr,
-        } = QuicServer::new(&endpoint, false, acceptor_params).await?;
+        } = QuicServerBuilder::new(&endpoint, acceptor_params)
+            .security(false)
+            .await?;
 
         // Update the endpoint locator address
         let endpoint = EndPoint::new(
