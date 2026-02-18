@@ -677,7 +677,7 @@ async fn transport_unicast_udp_only() {
 async fn transport_unicast_udp_reliable() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locator
-    let mut endpoint: EndPoint = format!("udp/localhost:{}?rel=1", 16105).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/localhost:{}?rel=1", 16105).parse().unwrap();
 
     // Define the reliability and congestion control
     let channel = [
