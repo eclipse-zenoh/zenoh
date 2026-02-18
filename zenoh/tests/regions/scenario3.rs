@@ -44,15 +44,15 @@ async fn test_regions_scenario3_order1_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "31aa9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.1.1:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "31aa9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.1.1:9200")
         .open());
     let _z9300 = ztimeout!(Node::new(Router, "31aa9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.1.1:9300")
         .open());
 
@@ -142,15 +142,15 @@ async fn test_regions_scenario3_order1_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "31ab9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.1.2:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "31ab9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.1.2:9200")
         .open());
     let _z9300 = ztimeout!(Node::new(Router, "31ab9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.1.2:9300")
         .open());
 
@@ -292,15 +292,15 @@ async fn test_regions_scenario3_order2_putsub() {
     }
 
     let _z9100 = ztimeout!(Node::new(Router, "32aa9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.2.1:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "32aa9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.2.1:9200")
         .open());
     let _z9300 = ztimeout!(Node::new(Router, "32aa9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.2.1:9300")
         .open());
 
@@ -400,15 +400,15 @@ async fn test_regions_scenario3_order2_pubsub() {
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
     let _z9100 = ztimeout!(Node::new(Router, "32ab9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.2.2:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "32ab9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.2.2:9200")
         .open());
     let _z9300 = ztimeout!(Node::new(Router, "32ab9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.2.2:9300")
         .open());
 
@@ -456,11 +456,11 @@ async fn test_regions_scenario3_order3_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "33aa9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.3.1:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "33aa9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.3.1:9200")
         .open());
 
@@ -507,7 +507,7 @@ async fn test_regions_scenario3_order3_putsub() {
     }
 
     let _z9300 = ztimeout!(Node::new(Router, "33aa9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.3.1:9300")
         .open());
 
@@ -555,11 +555,11 @@ async fn test_regions_scenario3_order3_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "33ab9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.3.2:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "33ab9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.3.2:9200")
         .open());
 
@@ -616,7 +616,7 @@ async fn test_regions_scenario3_order3_pubsub() {
     let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Router, "33ab9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.3.2:9300")
         .open());
 
@@ -664,11 +664,11 @@ async fn test_regions_scenario3_order4_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "34aa9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.4.1:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "34aa9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.4.1:9200")
         .open());
 
@@ -702,7 +702,7 @@ async fn test_regions_scenario3_order4_putsub() {
     }
 
     let _z9300 = ztimeout!(Node::new(Router, "34aa9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.4.1:9300")
         .open());
 
@@ -766,11 +766,11 @@ async fn test_regions_scenario3_order4_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "34ab9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.3.4.2:9100")
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "34ab9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .multicast("224.3.4.2:9200")
         .open());
 
@@ -811,7 +811,7 @@ async fn test_regions_scenario3_order4_pubsub() {
     let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Router, "34ab9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .multicast("224.3.4.2:9300")
         .open());
 

@@ -44,13 +44,13 @@ async fn test_regions_scenario4_order1_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "41aa9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "41aa9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .open());
     let _z9300 = ztimeout!(Node::new(Router, "41aa9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .open());
 
     let _z9110 = ztimeout!(Node::new(Client, "41aa9110")
@@ -139,13 +139,13 @@ async fn test_regions_scenario4_order1_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "41ab9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "41ab9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .open());
     let _z9300 = ztimeout!(Node::new(Router, "41ab9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .open());
 
     let _z9110 = ztimeout!(Node::new(Client, "41ab9110")
@@ -244,10 +244,10 @@ async fn test_regions_scenario4_order2_putsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "42aa9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "42aa9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .open());
 
     let _z9110 = ztimeout!(Node::new(Client, "42aa9110")
@@ -280,7 +280,7 @@ async fn test_regions_scenario4_order2_putsub() {
     }
 
     let _z9300 = ztimeout!(Node::new(Router, "42aa9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .open());
 
     let _z9310 = ztimeout!(Node::new(Client, "42aa9310")
@@ -343,10 +343,10 @@ async fn test_regions_scenario4_order2_pubsub() {
     init_tracing_subscriber();
 
     let _z9100 = ztimeout!(Node::new(Router, "42ab9100")
-        .endpoints("tcp/[::]:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let _z9200 = ztimeout!(Node::new(Router, "42ab9200")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
         .open());
 
     let _z9110 = ztimeout!(Node::new(Client, "42ab9110")
@@ -386,7 +386,7 @@ async fn test_regions_scenario4_order2_pubsub() {
     let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Router, "42ab9300")
-        .endpoints("tcp/[::]:0", &[loc!(_z9100), loc!(_z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
         .open());
 
     let _z9310 = ztimeout!(Node::new(Client, "42ab9310")
