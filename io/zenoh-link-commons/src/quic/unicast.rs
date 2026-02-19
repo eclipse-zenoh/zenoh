@@ -330,7 +330,8 @@ impl QuicClient {
             let mut client_config = quinn::ClientConfig::new(Arc::new(quic_config));
             let mut transport_config = quinn::TransportConfig::default();
             QuicTransportConfigurator(&mut transport_config)
-                .configure_max_concurrent_streams(multistream.as_ref());
+                .configure_max_concurrent_streams(multistream.as_ref())
+                .configure_mtu(&QuicMtuConfig::try_from(&epconf)?);
             client_config.transport_config(transport_config.into());
             client_config
         });
