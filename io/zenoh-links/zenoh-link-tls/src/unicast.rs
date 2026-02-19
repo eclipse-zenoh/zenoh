@@ -505,7 +505,13 @@ async fn accept_task(
                                 continue;
                             }
                         };
-                        let auth_identifier = get_client_cert_common_name(tls_conn)?;
+                        let auth_identifier = match get_client_cert_common_name(tls_conn) {
+                            Ok(auth_id) => auth_id,
+                            Err(e) => {
+                                tracing::warn!("Error getting client cert common name: {e}");
+                                continue;
+                            }
+                        };
 
                         // Get certificate chain expiration
                         let mut maybe_expiration_time = None;
@@ -567,8 +573,8 @@ async fn accept_task(
 }
 
 fn get_client_cert_common_name(tls_conn: &rustls::CommonState) -> ZResult<TlsAuthId> {
-    if let Some(serv_certs) = tls_conn.peer_certificates() {
-        let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
+    if let Some(client_certs) = tls_conn.peer_certificates() {
+        let (_, cert) = X509Certificate::from_der(client_certs[0].as_ref())?;
         let subject_name = &cert
             .subject
             .iter_common_name()
