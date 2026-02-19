@@ -39,7 +39,7 @@ use crate::{
         QuicTransportConfigurator, TlsClientConfig, TlsServerConfig, PROTOCOL_LEGACY,
         PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
     },
-    LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 
 /// Quic endpoint `multistream` config
