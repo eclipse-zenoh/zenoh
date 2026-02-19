@@ -357,7 +357,7 @@ impl QuicClient {
         if is_streamed {
             let quic_streams = QuicStreams::open(&quic_conn)
                 .await
-                .map_err(|e| zerror!("Can not open QUIC bi-directional channel {}: {}", host, e))?;
+                .map_err(|e| zerror!("Cannot initialize QUIC streams {}: {}", host, e))?;
             streams = Some(quic_streams);
         }
 
