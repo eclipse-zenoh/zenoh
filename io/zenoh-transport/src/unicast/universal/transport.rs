@@ -174,7 +174,7 @@ impl TransportUnicastUniversal {
                 let mut links = guard.to_vec();
                 let stl = links.remove(index);
                 *guard = links.into_boxed_slice();
-                (guard.len() == 0, stl)
+                (guard.is_empty(), stl)
             } else {
                 bail!(
                     "Can not delete Link {} with peer: {}",
