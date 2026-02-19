@@ -189,11 +189,13 @@ impl TransportUnicastUniversal {
         if let Some(callback) = cb {
             callback.del_link(link);
         }
-        stl.close().await?;
         if is_last {
+            let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
             self.delete().await?;
+            r
+        } else {
+            stl.close().await
         }
-        Ok(())
     }
 
     async fn sync(&self, initial_sn_rx: TransportSn) -> ZResult<()> {
