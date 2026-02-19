@@ -22,7 +22,16 @@ use quinn_proto::{
     },
     transport_parameters, ConnectionId, Side, TransportError,
 };
+use rcgen::{CertifiedKey, KeyPair};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use zenoh_core::lazy_static;
+use zenoh_result::ZResult;
+
+lazy_static! {
+    /// Unsecure QUIC clients trust any certified key-pair, we generate a single one per Zenoh process
+    pub(crate) static ref SELF_SIGNED_CERT: ZResult<CertifiedKey<KeyPair>> =
+        rcgen::generate_simple_self_signed(vec![]).map_err(Into::into);
+}
 
 struct PlainTextSession(Box<dyn crypto::Session>);
 

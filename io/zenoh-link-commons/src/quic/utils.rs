@@ -40,7 +40,10 @@ use zenoh_protocol::core::{
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
 use crate::{
-    quic::{plaintext::SkipServerVerification, unicast::MultiStreamConfig},
+    quic::{
+        plaintext::{SkipServerVerification, SELF_SIGNED_CERT},
+        unicast::MultiStreamConfig,
+    },
     tls::{config::*, WebPkiVerifierAnyServerName},
     ConfigurationInspector, LinkAuthId,
 };
@@ -268,13 +271,14 @@ impl TlsServerConfig {
     fn new_unsecure_tls() -> ZResult<ServerConfig> {
         // Does not support client authentication, and uses self-signed certificate
         let (key, certs) = {
-            // TODO: replace with a lazy static
-            let cert = rcgen::generate_simple_self_signed(vec![])?;
+            let cert = (*SELF_SIGNED_CERT)
+                .as_ref()
+                .map_err(|e| zerror!("Failed to generate static self-signed certificate: {e}"))?;
             (
                 Into::<rustls::pki_types::PrivateKeyDer>::into(
                     rustls::pki_types::PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()),
                 ),
-                vec![CertificateDer::from(cert.cert)],
+                vec![CertificateDer::from(cert.cert.clone())],
             )
         };
         ServerConfig::builder()
