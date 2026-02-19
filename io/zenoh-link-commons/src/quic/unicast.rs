@@ -217,16 +217,6 @@ impl<F: AcceptorCallback> QuicServer<F> {
             .map(|m| m.alpn_protocols())
             .unwrap_or(vec![PROTOCOL_LEGACY.into()]);
 
-        // Install ring based rustls CryptoProvider.
-        rustls::crypto::ring::default_provider()
-            // This can be called successfully at most once in any process execution.
-            // Call this early in your process to configure which provider is used for the provider.
-            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
-            .install_default()
-            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
-            // when there are multiple quic links, and all but the first execution will fail.
-            .ok();
-
         let quic_config: QuicServerConfig = server_crypto
             .server_config
             .try_into()
@@ -296,15 +286,6 @@ impl QuicClient {
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
         let dst_addr = get_quic_addr(&epaddr).await?;
-
-        // if both `iface`, and `bind` are present, return error
-        if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
-            bail!(
-                "Using Config options `iface` and `bind` in conjunction is unsupported at this time {} {:?}",
-                BIND_INTERFACE,
-                BIND_SOCKET
-            )
-        }
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf)
