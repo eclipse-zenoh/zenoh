@@ -11,13 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::num::NonZeroUsize;
+use std::{
+    cmp::min,
+    num::NonZeroUsize,
+    ops::{Bound, RangeBounds},
+};
 
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
-    writer::{DidntWrite, HasWriter, Writer},
-    BBuf, ZBufReader, ZSlice, ZSliceBuffer,
+    writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
+    BBuf, ZBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
 use zenoh_codec::{
     transport::{
@@ -87,6 +91,7 @@ pub struct BatchConfig {
     pub is_streamed: bool,
     #[cfg(feature = "transport_compression")]
     pub is_compression: bool,
+    pub is_vectored: bool,
 }
 
 impl Default for BatchConfig {
@@ -96,6 +101,7 @@ impl Default for BatchConfig {
             is_streamed: false,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            is_vectored: false,
         }
     }
 }
@@ -198,6 +204,8 @@ pub enum Finalize {
 pub struct WBatch {
     // The buffer to perform the batching on
     pub buffer: BBuf,
+    // A fragmented message, used for write_vectored
+    pub fragbuf: ZBuf,
     // The batch codec
     pub codec: Zenoh080Batch,
     // It contains 1 byte as additional header, e.g. to signal the batch is compressed
@@ -214,6 +222,7 @@ impl WBatch {
     pub fn new(config: BatchConfig) -> Self {
         let mut batch = Self {
             buffer: BBuf::with_capacity(config.mtu as usize),
+            fragbuf: ZBuf::empty(),
             codec: Zenoh080Batch::new(),
             config,
             ephemeral: false,
@@ -255,6 +264,7 @@ impl WBatch {
     #[inline(always)]
     pub fn clear(&mut self) {
         self.buffer.clear();
+        self.fragbuf.clear();
         self.codec.clear();
         #[cfg(feature = "stats")]
         {
@@ -317,7 +327,9 @@ impl WBatch {
                     .as_mut_slice(),
             };
             let (length, header, payload) = Self::split_mut(buff, &self.config);
-            let len: BatchSize = (header.len() as BatchSize) + (payload.len() as BatchSize);
+            let len: BatchSize = (header.len() as BatchSize)
+                + (payload.len() as BatchSize)
+                + (self.fragbuf.len() as BatchSize);
             length.copy_from_slice(&len.to_le_bytes());
         }
 
@@ -407,8 +419,22 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
     type Output = Result<NonZeroUsize, DidntWrite>;
 
     fn encode(self, x: (&mut ZBufReader<'_>, &mut FragmentHeader)) -> Self::Output {
-        let mut writer = self.buffer.writer();
-        let res = self.codec.write(&mut writer, x);
+        #[cfg_attr(not(feature = "transport_compression"), allow(unused_mut))]
+        let mut is_vectored = self.config.is_vectored;
+        #[cfg(feature = "transport_compression")]
+        {
+            is_vectored &= !self.config.is_compression;
+        }
+        let res = if is_vectored {
+            let mut writer = FragWriter {
+                buffer: &mut self.buffer,
+                fragbuf: &mut self.fragbuf,
+            };
+            self.codec.write(&mut writer, x)
+        } else {
+            let mut writer = self.buffer.writer();
+            self.codec.write(&mut writer, x)
+        };
         #[cfg(feature = "stats")]
         {
             if res.is_ok() {
@@ -416,6 +442,76 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
             }
         }
         res
+    }
+}
+
+struct FragWriter<'a> {
+    buffer: &'a mut BBuf,
+    fragbuf: &'a mut ZBuf,
+}
+
+impl Writer for FragWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
+        if !self.fragbuf.is_empty() {
+            return Err(DidntWrite);
+        }
+        Writer::write(&mut self.buffer, bytes)
+    }
+
+    fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
+        if !self.fragbuf.is_empty() {
+            return Err(DidntWrite);
+        }
+        (&mut self.buffer).write_exact(bytes)
+    }
+
+    fn remaining(&self) -> usize {
+        self.buffer.capacity() - self.buffer.len() - self.fragbuf.len()
+    }
+
+    unsafe fn write_zslice_subslice(
+        &mut self,
+        slice: &ZSlice,
+        range: impl RangeBounds<usize>,
+    ) -> Result<NonZeroUsize, DidntWrite> {
+        // SAFETY: function contract
+        let (start, end) = (range.start_bound().cloned(), range.end_bound().cloned());
+        let slice_ref = unsafe { slice.as_slice().get_unchecked((start, end)) };
+        let len = NonZeroUsize::new(min(slice_ref.len(), self.remaining())).ok_or(DidntWrite)?;
+        let start = match start {
+            Bound::Unbounded => 0,
+            Bound::Included(start) => start,
+            Bound::Excluded(start) => start + 1,
+        };
+        let end = len.get() + start;
+        self.fragbuf
+            .push_zslice(slice.subslice(start..end).unwrap());
+        Ok(len)
+    }
+
+    unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
+    where
+        F: FnOnce(&mut [u8]) -> usize,
+    {
+        if !self.fragbuf.is_empty() {
+            return Err(DidntWrite);
+        }
+        // SAFETY: function contract
+        unsafe { (&mut self.buffer).with_slot(len, write) }
+    }
+}
+
+impl<'a> BacktrackableWriter for FragWriter<'a> {
+    type Mark = <&'a mut BBuf as BacktrackableWriter>::Mark;
+
+    fn mark(&mut self) -> Self::Mark {
+        assert!(self.fragbuf.is_empty());
+        (&mut self.buffer).mark()
+    }
+
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        assert!(self.fragbuf.is_empty());
+        (&mut self.buffer).rewind(mark)
     }
 }
 
@@ -571,6 +667,7 @@ mod tests {
                     is_streamed: rng.gen_bool(0.5),
                     #[cfg(feature = "transport_compression")]
                     is_compression: rng.gen_bool(0.5),
+                    is_vectored: rng.gen_bool(0.5),
                 };
                 let mut wbatch = WBatch::new(config);
                 wbatch.encode(&msg_in).unwrap();
@@ -612,6 +709,7 @@ mod tests {
             is_streamed: false,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
+            is_vectored: false,
         };
         let mut batch = WBatch::new(config);
 

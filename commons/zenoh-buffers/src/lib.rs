@@ -121,6 +121,7 @@ pub mod buffer {
 
 pub mod writer {
     use core::num::NonZeroUsize;
+    use std::ops::RangeBounds;
 
     use crate::ZSlice;
 
@@ -138,6 +139,16 @@ pub mod writer {
         #[inline(always)]
         fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
             self.write_exact(slice.as_slice())
+        }
+        // SAFETY: the range must be valid for the slice
+        unsafe fn write_zslice_subslice(
+            &mut self,
+            slice: &ZSlice,
+            range: impl RangeBounds<usize>,
+        ) -> Result<NonZeroUsize, DidntWrite> {
+            let range = (range.start_bound().cloned(), range.end_bound().cloned());
+            // SAFETY: function contract
+            self.write(unsafe { slice.as_slice().get_unchecked(range) })
         }
         fn can_write(&self) -> bool {
             self.remaining() != 0

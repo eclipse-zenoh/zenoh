@@ -166,18 +166,11 @@ impl LinkUnicastTrait for LinkUnicastUdp {
         }
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        match &self.variant {
-            LinkUnicastUdpVariant::Connected(link) => link.write(buffer).await,
-            LinkUnicastUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
-        }
-    }
-
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut written: usize = 0;
-        while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
-        }
+        match &self.variant {
+            LinkUnicastUdpVariant::Connected(link) => link.write(buffer).await?,
+            LinkUnicastUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await?,
+        };
         Ok(())
     }
 

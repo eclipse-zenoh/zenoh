@@ -71,6 +71,7 @@ impl TransportLinkUnicastUniversal {
                 is_streamed: link.link.is_streamed(),
                 #[cfg(feature = "transport_compression")]
                 is_compression: link.config.batch.is_compression,
+                is_vectored: link.link.is_write_vectored(),
             },
             queue_size: transport.manager.config.queue_size,
             wait_before_drop: transport.manager.config.wait_before_drop,
