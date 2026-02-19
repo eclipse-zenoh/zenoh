@@ -102,7 +102,9 @@ pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s st
     match get(s, k) {
         Some(v) => v.split(VALUE_SEPARATOR),
         None => {
+            // Create an empty iterator of the same type as the `Some` case to make the compiler happy.
             let mut i = "".split(VALUE_SEPARATOR);
+            // Need to skip the first element, as splitting `""` by `"|"` returns `vec![""]`.
             i.next();
             i
         }
@@ -214,9 +216,11 @@ pub fn rand(into: &mut String) {
     }
 }
 
-/// A map of key/value (String,String) parameters.
-/// It can be parsed from a String, using `;` or `<newline>` as separator between each parameters
-/// and `=` as separator between a key and its value. Keys and values are trimmed.
+/// A map of key/value `(String, Vec<String>)` parameters.
+///
+/// It can be parsed from a `String`, using `;` as separator between each parameter and `=` as separator between a key and its value.
+///
+/// Keys can have multiple values, using `|` as a separator between them. An iterator for these can be obtained with [`Parameters::values`].
 ///
 /// Example:
 /// ```
@@ -294,7 +298,7 @@ impl<'s> Parameters<'s> {
     }
 
     /// Inserts a key-value pair into the map.
-    /// If the map did not have this key present, [`None`]` is returned.
+    /// If the map did not have this key present, [`None`] is returned.
     /// If the map did have this key present, the value is updated, and the old value is returned.
     pub fn insert<K, V>(&mut self, k: K, v: V) -> Option<String>
     where
@@ -342,7 +346,7 @@ impl<'s> Parameters<'s> {
         Parameters(Cow::Owned(self.0.into_owned()))
     }
 
-    /// Returns `true`` if all keys are sorted in alphabetical order.
+    /// Returns `true` if all keys are sorted in alphabetical order.
     pub fn is_ordered(&self) -> bool {
         super::parameters::is_ordered(self.as_str())
     }
@@ -522,5 +526,12 @@ mod tests {
         let mut hm: HashMap<Cow<str>, Cow<str>> = HashMap::new();
         hm.insert(Cow::from("p1"), Cow::from("v1"));
         assert_eq!(Parameters::from(hm), Parameters::from("p1=v1"));
+    }
+
+    #[test]
+    fn values_iterator_for_non_existing_key_is_empty() {
+        let params = Parameters::from("p1=1");
+
+        assert_eq!(params.values("p2").next(), None);
     }
 }
