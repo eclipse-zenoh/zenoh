@@ -35,17 +35,11 @@ use zenoh_result::ZResult;
 
 use crate::{
     quic::{
-        get_quic_addr,
-        get_quic_host,
+        get_quic_addr, get_quic_host,
         plaintext::{PlainTextClientConfig, PlainTextServerConfig},
         socket::QuicSocketConfig,
-        QuicMtuConfig,
-        QuicTransportConfigurator,
-        TlsClientConfig,
-        TlsServerConfig,
-        PROTOCOL_LEGACY,
-        PROTOCOL_MULTI_STREAM,
-        PROTOCOL_SINGLE_STREAM, // TODO: remove this alias
+        QuicMtuConfig, QuicTransportConfigurator, TlsClientConfig, TlsServerConfig,
+        PROTOCOL_LEGACY, PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
     },
     LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
