@@ -2148,7 +2148,7 @@ async fn transport_unicast_multistream_quic_lowlatency() {
     let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
         !is_multistream,
-        "lowltency should not support priority-based multistream"
+        "lowlatency should not support priority-based multistream"
     );
 
     let endpoint_quic = quic_endpoint("quic/localhost:10479?multistream=false");
@@ -2156,7 +2156,7 @@ async fn transport_unicast_multistream_quic_lowlatency() {
     let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
         !is_multistream,
-        "lowltency should not support priority-based multistream"
+        "lowlatency should not support priority-based multistream"
     );
 }
 
@@ -2335,7 +2335,7 @@ async fn transport_unicast_multistream_udp_lowlatency() {
     let is_multistream = run_multistream_test(&endpoint, &endpoint, true).await;
     assert!(
         !is_multistream,
-        "lowltency should not support priority-based multistream"
+        "lowlatency should not support priority-based multistream"
     );
 
     let endpoint = ["udp/localhost:10490?rel=1;multistream=false"
@@ -2344,7 +2344,7 @@ async fn transport_unicast_multistream_udp_lowlatency() {
     let is_multistream = run_multistream_test(&endpoint, &endpoint, true).await;
     assert!(
         !is_multistream,
-        "lowltency should not support priority-based multistream"
+        "lowlatency should not support priority-based multistream"
     );
 }
 
