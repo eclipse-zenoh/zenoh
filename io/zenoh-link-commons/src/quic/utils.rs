@@ -41,7 +41,7 @@ use zenoh_result::{bail, zerror, ZError, ZResult};
 use crate::{
     quic::unicast::MultiStreamConfig,
     tls::{config::*, WebPkiVerifierAnyServerName},
-    ConfigurationInspector, LinkAuthId, BIND_INTERFACE,
+    ConfigurationInspector, LinkAuthId,
 };
 
 // ALPN protocols
@@ -170,14 +170,13 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
     }
 }
 
-pub struct TlsServerConfig<'a> {
+pub struct TlsServerConfig {
     pub server_config: ServerConfig,
     pub tls_close_link_on_expiration: bool,
-    pub bind_iface: Option<&'a str>,
 }
 
-impl<'a> TlsServerConfig<'a> {
-    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
+impl TlsServerConfig {
+    pub async fn new(config: &Config<'_>) -> ZResult<Self> {
         let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -251,7 +250,6 @@ impl<'a> TlsServerConfig<'a> {
         Ok(TlsServerConfig {
             server_config: sc,
             tls_close_link_on_expiration,
-            bind_iface: config.get(BIND_INTERFACE),
         })
     }
 
@@ -276,14 +274,13 @@ impl<'a> TlsServerConfig<'a> {
     }
 }
 
-pub struct TlsClientConfig<'a> {
+pub struct TlsClientConfig {
     pub client_config: ClientConfig,
     pub tls_close_link_on_expiration: bool,
-    pub bind_iface: Option<&'a str>,
 }
 
-impl<'a> TlsClientConfig<'a> {
-    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
+impl TlsClientConfig {
+    pub async fn new(config: &Config<'_>) -> ZResult<Self> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -397,7 +394,6 @@ impl<'a> TlsClientConfig<'a> {
         Ok(TlsClientConfig {
             client_config: cc,
             tls_close_link_on_expiration,
-            bind_iface: config.get(BIND_INTERFACE),
         })
     }
 

@@ -16,7 +16,7 @@ use std::{
     cell::UnsafeCell,
     collections::HashMap,
     future::{Future, IntoFuture},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::SocketAddr,
     pin::Pin,
     sync::Arc,
 };
@@ -30,23 +30,16 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use zenoh_config::{EndPoint, Locator};
 use zenoh_core::{bail, zerror};
-use zenoh_protocol::core::{Address, Metadata, Priority};
+use zenoh_protocol::core::{Metadata, Priority};
 use zenoh_result::ZResult;
 
 use crate::{
-    parse_dscp,
     quic::{
-        get_quic_addr,
-        get_quic_host,
-        QuicMtuConfig,
-        QuicTransportConfigurator,
-        TlsClientConfig,
-        TlsServerConfig,
-        PROTOCOL_LEGACY,
-        PROTOCOL_MULTI_STREAM,
-        PROTOCOL_SINGLE_STREAM, // TODO: remove this alias
+        get_quic_addr, get_quic_host, socket::QuicSocketConfig, QuicMtuConfig,
+        QuicTransportConfigurator, TlsClientConfig, TlsServerConfig, PROTOCOL_LEGACY,
+        PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
     },
-    set_dscp, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 
 /// Quic endpoint `multistream` config
@@ -247,26 +240,23 @@ impl<F: AcceptorCallback> QuicServer<F> {
                 .configure_mtu(&QuicMtuConfig::try_from(&epconf)?);
         }
         // Initialize the Endpoint
-        let quic_endpoint = if let Some(iface) = server_crypto.bind_iface {
-            async {
-                // Bind the UDP socket
-                let socket = tokio::net::UdpSocket::bind(addr).await?;
-                zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
-
-                // create the Endpoint with this socket
-                let runtime = quinn::default_runtime()
-                    .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
-                ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
-                    EndpointConfig::default(),
-                    Some(server_config),
-                    runtime.wrap_udp_socket(socket.into_std()?)?,
-                    runtime,
-                )?)
-            }
-            .await
-        } else {
-            quinn::Endpoint::server(server_config, addr).map_err(Into::into)
+        let quic_endpoint = async {
+            let socket = QuicSocketConfig::new(&epconf)
+                .await
+                .map_err(|e| zerror!("error parsing socket config: {e}"))?
+                .new_listener(&addr)
+                .await?;
+            // create the Endpoint with the socket
+            let runtime = quinn::default_runtime()
+                .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
+            ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
+                EndpointConfig::default(),
+                Some(server_config),
+                runtime.wrap_udp_socket(socket.into_std()?)?,
+                runtime,
+            )?)
         }
+        .await
         .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         let local_addr = quic_endpoint
@@ -332,26 +322,13 @@ impl QuicClient {
             .map(|m| m.alpn_protocols())
             .unwrap_or(vec![PROTOCOL_LEGACY.into()]);
 
-        let src_addr = if let Some(bind_socket_str) = epconf.get(BIND_SOCKET) {
-            get_quic_addr(&Address::from(bind_socket_str)).await?
-        } else if dst_addr.is_ipv4() {
-            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
-        } else {
-            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-        };
-
-        let socket = tokio::net::UdpSocket::bind(src_addr).await?;
-        if let Some(dscp) = parse_dscp(&epconf)? {
-            set_dscp(&socket, src_addr, dscp)?;
-        }
-
-        // Initialize the Endpoint
-        if let Some(iface) = client_crypto.bind_iface {
-            zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
-        };
-
-        let mut quic_endpoint = {
-            // create the Endpoint with this socket
+        let mut quic_endpoint = async {
+            let socket = QuicSocketConfig::new(&epconf)
+                .await
+                .map_err(|e| zerror!("error parsing socket config: {e}"))?
+                .new_link(&dst_addr)
+                .await?;
+            // create the Endpoint with the socket
             let runtime = quinn::default_runtime()
                 .ok_or_else(|| std::io::Error::other("no async runtime found"))?;
             ZResult::Ok(quinn::Endpoint::new_with_abstract_socket(
@@ -361,6 +338,7 @@ impl QuicClient {
                 runtime,
             )?)
         }
+        .await
         .map_err(|e| zerror!("Can not create a new QUIC link bound to {host}: {e}"))?;
 
         let quic_config: QuicClientConfig = client_crypto
