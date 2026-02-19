@@ -82,7 +82,6 @@ impl crypto::PacketKey for NoOpEncryptionKeys<Box<dyn crypto::PacketKey>> {
     }
 
     fn integrity_limit(&self) -> u64 {
-        // TODO: maybe this can be set to 1 since we don't expect decryption failures?
         self.0.integrity_limit()
     }
 }
