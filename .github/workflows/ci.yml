@@ -74,6 +74,12 @@ jobs:
       - name: Check zenoh with rust 1.75.0
         run: cargo +1.75.0 check --release --manifest-path ci/zenoh-1-75/Cargo.toml
 
+      - name: Check clippy on stable rust without Cargo.lock to ensure compatibility with latest dependencies
+        run: |
+          rm Cargo.lock
+          cargo +stable clippy --release --manifest-path ci/zenoh-1-75/Cargo.toml -- -D warnings
+          git restore Cargo.lock
+
   check:
     needs: determine-runner
     name: Lints and doc tests on ${{ matrix.os }}
