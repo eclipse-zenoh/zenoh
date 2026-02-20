@@ -622,7 +622,7 @@ impl TransportManager {
                     #[cfg(feature = "shared-memory")]
                     shm_context,
                     #[cfg(feature = "stats")]
-                    stats
+                    stats,
                 ),
                 close::reason::INVALID
             )

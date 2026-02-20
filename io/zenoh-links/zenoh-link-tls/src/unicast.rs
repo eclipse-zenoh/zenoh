@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "uring")]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{
     cell::UnsafeCell,
     convert::TryInto,
@@ -258,6 +260,14 @@ impl LinkUnicastTrait for LinkUnicastTls {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+
+    #[cfg(feature = "uring")]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.inner.get() }.get_ref().0.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
     }
 }
 
