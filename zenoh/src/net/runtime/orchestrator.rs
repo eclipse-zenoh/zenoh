@@ -665,7 +665,7 @@ impl Runtime {
                 }
             }
         }
-        tracing::info!("zenohd listening scout messages on {}", sockaddr);
+        tracing::info!("Listening scout messages on {}", sockaddr);
 
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
