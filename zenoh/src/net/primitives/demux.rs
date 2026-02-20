@@ -25,6 +25,7 @@ use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 use super::Primitives;
 use crate::net::routing::{
     dispatcher::face::Face,
+    hat::{DispatcherContext, HatTrait},
     interceptor::{has_interceptor, InterceptorContext, InterceptorTrait, InterceptorsChain},
     router::{InterceptorCacheValueType, Resource},
     RoutingContext,
@@ -60,7 +61,9 @@ impl DeMuxContext<'_> {
     fn prefix(&self, msg: &NetworkMessageMut) -> Option<Arc<Resource>> {
         if let Some(wire_expr) = msg.wire_expr() {
             let wire_expr = wire_expr.to_owned();
-            if let Some(prefix) = zread!(self.demux.face.tables.tables)
+            let rtables = zread!(self.demux.face.tables.tables);
+            if let Some(prefix) = rtables
+                .data
                 .get_mapping(&self.demux.face.state, &wire_expr.scope, wire_expr.mapping)
                 .cloned()
             {
@@ -108,7 +111,7 @@ impl InterceptorContext for DeMuxContext<'_> {
 }
 
 impl TransportPeerEventHandler for DeMux {
-    #[inline]
+    #[tracing::instrument(name = "demux", level = "debug", skip_all, fields(zid = %self.face.tables.zid.short(), src = %self.face))]
     fn handle_message(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         if has_interceptor(&self.interceptor) {
             if let Some(interceptor) = self.interceptor.load().as_ref() {
@@ -170,15 +173,29 @@ impl TransportPeerEventHandler for DeMux {
                 if let Some(transport) = self.transport.as_ref() {
                     let mut declares = vec![];
                     let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
-                    let mut tables = zwrite!(self.face.tables.tables);
-                    self.face.tables.hat_code.handle_oam(
-                        &mut tables,
-                        &self.face.tables,
+                    let mut wtables = zwrite!(self.face.tables.tables);
+                    let tables = &mut *wtables;
+
+                    let ctx = DispatcherContext {
+                        tables_lock: &self.face.tables,
+                        tables: &mut tables.data,
+                        src_face: &mut self.face.state.clone(),
+                        send_declare: &mut |p, m| declares.push((p.clone(), m)),
+                    };
+
+                    let (owner_hat, other_hats) =
+                        tables.hats.partition_mut(&self.face.state.region);
+
+                    owner_hat.handle_oam(
+                        ctx,
                         m,
-                        transport,
-                        &mut |p, m| declares.push((p.clone(), m)),
+                        // TODO(regions): are these every different from the face's?
+                        &transport.get_zid()?,
+                        transport.get_whatami()?,
+                        other_hats.map(|hat| &mut **hat as &mut dyn HatTrait), // FIXME(regions)
                     )?;
-                    drop(tables);
+
+                    drop(wtables);
                     drop(ctrl_lock);
                     for (p, m) in declares {
                         m.with_mut(|m| p.send_declare(m));

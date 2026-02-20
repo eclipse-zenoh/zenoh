@@ -85,7 +85,9 @@ impl MuxContext<'_> {
         if let Some(wire_expr) = msg.wire_expr() {
             let wire_expr = wire_expr.to_owned();
             if let Some(face) = self.mux.face.get().and_then(|f| f.upgrade()) {
-                if let Some(prefix) = zread!(face.tables.tables)
+                let rtables = zread!(face.tables.tables);
+                if let Some(prefix) = rtables
+                    .data
                     .get_sent_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
                     .cloned()
                 {
@@ -270,7 +272,10 @@ impl McastMuxContext<'_> {
         if let Some(wire_expr) = msg.wire_expr() {
             let wire_expr = wire_expr.to_owned();
             if let Some(face) = self.mux.face.get() {
-                if let Some(prefix) = zread!(face.tables.tables)
+                let rtables = zread!(face.tables.tables);
+
+                if let Some(prefix) = rtables
+                    .data
                     .get_sent_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
                     .cloned()
                 {

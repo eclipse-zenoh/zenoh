@@ -272,6 +272,7 @@ impl<'a> KeyExpr<'a> {
 
     /// Will return false and log an error in case of a `TryInto` failure.
     #[inline]
+    #[allow(dead_code)] // REVIEW(regions)
     pub(crate) fn keyexpr_include<'b, L, R>(left: L, right: R) -> bool
     where
         L: TryInto<KeyExpr<'a>>,

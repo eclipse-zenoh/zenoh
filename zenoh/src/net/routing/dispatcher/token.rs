@@ -14,6 +14,7 @@
 
 use std::sync::Arc;
 
+use itertools::Itertools;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::WireExpr,
@@ -23,42 +24,56 @@ use zenoh_protocol::{
     },
 };
 
-use super::{
-    face::FaceState,
-    tables::{NodeId, TablesLock},
-};
+use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
-    hat::{HatTrait, SendDeclare},
-    router::Resource,
+    dispatcher::face::Face,
+    hat::{DispatcherContext, SendDeclare},
+    router::{node_id_as_source, Resource},
 };
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn declare_token(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: TokenId,
-    expr: &WireExpr,
-    node_id: NodeId,
-    interest_id: Option<InterestId>,
-    send_declare: &mut SendDeclare,
-) {
-    let rtables = zread!(tables.tables);
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            tracing::debug!(
-                "{} Declare token {} ({}{})",
-                face,
-                id,
-                prefix.expr(),
-                expr.suffix
+impl Face {
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, tables, send_declare),
+        fields(expr = %expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
+    pub(crate) fn declare_token(
+        &self,
+        tables: &TablesLock,
+        id: TokenId,
+        expr: &WireExpr,
+        node_id: NodeId,
+        interest_id: Option<InterestId>,
+        send_declare: &mut SendDeclare,
+    ) {
+        if interest_id.is_some() && self.state.region.bound().is_south() {
+            tracing::error!(
+                src = %self.state,
+                id = interest_id,
+                "Received token with interest id from south-bound face. \
+                This message should only flow downstream"
             );
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+            return;
+        }
+
+        let rtables = zread!(tables.tables);
+        match rtables
+            .data
+            .get_mapping(&self.state, &expr.scope, expr.mapping)
+            .cloned()
+        {
+            Some(mut prefix) => {
+                let _span = tracing::debug_span!(
+                    "declare_token",
+                    id,
+                    interest_id,
+                    expr = [prefix.expr(), expr.suffix.as_ref()].concat()
+                )
+                .entered();
+
+                let res = Resource::get_resource(&prefix, &expr.suffix);
+                let (res, mut wtables) = if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                     drop(rtables);
                     let wtables = zwrite!(tables.tables);
                     (res.unwrap(), wtables)
@@ -66,102 +81,164 @@ pub(crate) fn declare_token(
                     let mut fullexpr = prefix.expr().to_string();
                     fullexpr.push_str(expr.suffix.as_ref());
                     let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .map(|ke| Resource::get_matches(&rtables.data, ke))
                         .unwrap_or_default();
                     drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res = Resource::make_resource(
-                        hat_code,
-                        &mut wtables,
-                        &mut prefix,
-                        expr.suffix.as_ref(),
-                    );
+                    let mut tables_wguard = zwrite!(tables.tables);
+                    let tables = &mut *tables_wguard;
+                    let mut res =
+                        Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
                     matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
+                    Resource::match_resource(&tables.data, &mut res, matches);
+                    (res, tables_wguard)
                 };
 
-            hat_code.declare_token(
-                &mut wtables,
-                face,
-                id,
-                &mut res,
-                node_id,
-                interest_id,
-                send_declare,
-            );
-            drop(wtables);
-        }
-        None => tracing::error!(
-            "{} Declare token {} for unknown scope {}!",
-            face,
-            id,
-            expr.scope
-        ),
-    }
-}
+                let tables = &mut *wtables;
 
-pub(crate) fn undeclare_token(
-    hat_code: &(dyn HatTrait + Send + Sync),
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: TokenId,
-    expr: &ext::WireExprType,
-    node_id: NodeId,
-    send_declare: &mut SendDeclare,
-) {
-    let (res, mut wtables) = if expr.wire_expr.is_empty() {
-        (None, zwrite!(tables.tables))
-    } else {
-        let rtables = zread!(tables.tables);
-        match rtables
-            .get_mapping(face, &expr.wire_expr.scope, expr.wire_expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                match Resource::get_resource(&prefix, expr.wire_expr.suffix.as_ref()) {
-                    Some(res) => {
-                        drop(rtables);
-                        (Some(res), zwrite!(tables.tables))
-                    }
-                    None => {
-                        // Here we create a Resource that will immediately be removed after treatment
-                        // TODO this could be improved
-                        let mut fullexpr = prefix.expr().to_string();
-                        fullexpr.push_str(expr.wire_expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables, ke))
-                            .unwrap_or_default();
-                        drop(rtables);
-                        let mut wtables = zwrite!(tables.tables);
-                        let mut res = Resource::make_resource(
-                            hat_code,
-                            &mut wtables,
-                            &mut prefix,
-                            expr.wire_expr.suffix.as_ref(),
+                let hats = &mut tables.hats;
+                let region = self.state.region;
+
+                let mut ctx = DispatcherContext {
+                    tables_lock: &self.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut self.state.clone(),
+                    send_declare,
+                };
+
+                if let Some(interest_id) = interest_id {
+                    if let Some(pending_interest) =
+                        hats[region].route_current_token(ctx.reborrow(), interest_id, res.clone())
+                    {
+                        if pending_interest.mode.is_future() {
+                            hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
+                        }
+
+                        hats[pending_interest.src_region].propagate_current_token(
+                            ctx,
+                            res,
+                            pending_interest,
                         );
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&wtables, &mut res, matches);
-                        (Some(res), wtables)
+                    }
+                } else {
+                    hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
+
+                    for region in hats.regions().copied().collect_vec() {
+                        let other_tokens = hats
+                            .values()
+                            .filter(|hat| hat.region() != region)
+                            .any(|hat| hat.remote_tokens_of(&res));
+
+                        hats[region].propagate_token(ctx.reborrow(), res.clone(), other_tokens);
                     }
                 }
             }
-            None => {
-                tracing::error!(
-                    "{} Undeclare liveliness token with unknown scope {}",
-                    face,
-                    expr.wire_expr.scope
-                );
-                return;
+            None => tracing::error!(
+                "{} Declare token {} for unknown scope {}!",
+                &self.state,
+                id,
+                expr.scope
+            ),
+        }
+    }
+
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, tables, send_declare),
+        fields(expr = %expr.wire_expr, node_id = node_id_as_source(node_id)),
+        ret
+    )]
+    pub(crate) fn undeclare_token(
+        &self,
+        tables: &TablesLock,
+        id: TokenId,
+        expr: &ext::WireExprType,
+        node_id: NodeId,
+        send_declare: &mut SendDeclare,
+    ) {
+        let (res, mut wtables) = if expr.wire_expr.is_empty() {
+            (None, zwrite!(tables.tables))
+        } else {
+            let rtables = zread!(tables.tables);
+            match rtables
+                .data
+                .get_mapping(&self.state, &expr.wire_expr.scope, expr.wire_expr.mapping)
+                .cloned()
+            {
+                Some(mut prefix) => {
+                    match Resource::get_resource(&prefix, expr.wire_expr.suffix.as_ref()) {
+                        Some(res) => {
+                            drop(rtables);
+                            (Some(res), zwrite!(tables.tables))
+                        }
+                        None => {
+                            // Here we create a Resource that will immediately be removed after treatment
+                            // TODO this could be improved
+                            let mut fullexpr = prefix.expr().to_string();
+                            fullexpr.push_str(expr.wire_expr.suffix.as_ref());
+                            let mut matches = keyexpr::new(fullexpr.as_str())
+                                .map(|ke| Resource::get_matches(&rtables.data, ke))
+                                .unwrap_or_default();
+                            drop(rtables);
+                            let mut wtables = zwrite!(tables.tables);
+                            let tables = &mut *wtables;
+                            let mut res = Resource::make_resource(
+                                tables,
+                                &mut prefix,
+                                expr.wire_expr.suffix.as_ref(),
+                            );
+                            matches.push(Arc::downgrade(&res));
+                            Resource::match_resource(&tables.data, &mut res, matches);
+                            (Some(res), wtables)
+                        }
+                    }
+                }
+                None => {
+                    tracing::error!(
+                        "{} Undeclare liveliness token with unknown scope {}",
+                        &self.state,
+                        expr.wire_expr.scope
+                    );
+                    return;
+                }
+            }
+        };
+
+        let tables = &mut *wtables;
+
+        let hats = &mut tables.hats;
+        let region = self.state.region;
+
+        let mut ctx = DispatcherContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut self.state.clone(),
+            send_declare,
+        };
+
+        // NOTE(regions): hats[region] might not know about this token, but it still needs to be unpropagated
+        if let Some(mut res) = hats[region]
+            .unregister_token(ctx.reborrow(), id, res.clone(), node_id)
+            .or(res)
+        {
+            let rem = hats
+                .values_mut()
+                .filter_map(|hat| hat.remote_tokens_of(&res).then_some(hat.region()))
+                .collect_vec();
+
+            tracing::trace!(?rem);
+
+            match &*rem {
+                [] => {
+                    for hat in tables.hats.values_mut() {
+                        hat.unpropagate_token(ctx.reborrow(), res.clone());
+                    }
+                    Resource::clean(&mut res);
+                }
+                [last_owner] if last_owner != &region => {
+                    hats[last_owner].unpropagate_last_non_owned_token(ctx, res.clone())
+                }
+                _ => {}
             }
         }
-    };
-
-    if let Some(res) = hat_code.undeclare_token(&mut wtables, face, id, res, node_id, send_declare)
-    {
-        tracing::debug!("{} Undeclare token {} ({})", face, id, res.expr());
-    } else {
-        // NOTE: This is expected behavior if liveliness tokens are denied with ingress ACL interceptor.
-        tracing::debug!("{} Undeclare unknown token {}", face, id);
     }
 }

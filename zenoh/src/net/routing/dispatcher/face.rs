@@ -14,16 +14,17 @@
 use std::{
     any::Any,
     collections::HashMap,
-    fmt,
+    fmt::{self, Debug},
     sync::{Arc, Weak},
     time::Duration,
 };
 
 use arc_swap::ArcSwapOption;
+use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
 use zenoh_protocol::{
-    core::{ExprId, Reliability, WhatAmI, ZenohIdProto},
+    core::{Bound, ExprId, Region, Reliability, WhatAmI, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
         Mapping, Push, Request, RequestId, Response, ResponseFinal,
@@ -34,16 +35,19 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 
-use super::{
-    super::router::*,
-    interests::{declare_final, declare_interest, undeclare_interest, PendingCurrentInterest},
-    resource::*,
-    tables::TablesLock,
-};
+use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
 use crate::net::{
-    primitives::{McastMux, Mux, Primitives},
+    primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
-        dispatcher::interests::{finalize_pending_interests, RemoteInterest},
+        dispatcher::{
+            interests::{finalize_pending_interests, RemoteInterest},
+            queries::{
+                disable_matches_query_routes, finalize_pending_queries, merge_qabl_infos,
+                route_send_response, route_send_response_final, Query,
+            },
+            region::RegionMap,
+        },
+        hat::DispatcherContext,
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -51,6 +55,7 @@ use crate::net::{
     },
 };
 
+#[derive(Debug)]
 pub(crate) struct InterestState {
     face: FaceId,
     pub(crate) options: InterestOptions,
@@ -81,7 +86,7 @@ impl InterestState {
         self.finalized = true;
         if self.options.subscribers() || self.options.queryables() {
             if let Some(res) = self.res.as_mut().map(get_mut_unchecked) {
-                if let Some(ctx) = res.session_ctxs.get_mut(&self.face).map(get_mut_unchecked) {
+                if let Some(ctx) = res.face_ctxs.get_mut(&self.face).map(get_mut_unchecked) {
                     if self.options.subscribers() {
                         ctx.subscriber_interest_finalized = true;
                     }
@@ -106,6 +111,8 @@ pub struct FaceState {
     pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) region: Region,
+    pub(crate) remote_bound: Bound,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
@@ -122,30 +129,32 @@ pub struct FaceState {
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
+    /// Downcasts to `HatFace`.
+    pub(crate) hats: RegionMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<zenoh_stats::TransportStats>,
 }
 
-impl FaceState {
-    #[allow(clippy::too_many_arguments)] // @TODO fix warning
+// FIXME(regions): expose constructor fields as a struct
+pub(crate) struct FaceStateBuilder(FaceState);
+
+impl FaceStateBuilder {
     pub(crate) fn new(
         id: usize,
         zid: ZenohIdProto,
-        whatami: WhatAmI,
-        primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
-        mcast_group: Option<TransportMulticast>,
-        in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
-        hat: Box<dyn Any + Send + Sync>,
-        is_local: bool,
-        #[cfg(feature = "stats")] stats: Option<zenoh_stats::TransportStats>,
-    ) -> Arc<FaceState> {
-        Arc::new(FaceState {
+        region: Region,
+        remote_bound: Bound,
+        primitives: Arc<dyn EPrimitives + Send + Sync>,
+        hats: RegionMap<Box<dyn Any + Send + Sync>>,
+    ) -> Self {
+        FaceStateBuilder(FaceState {
             id,
             zid,
-            whatami,
+            whatami: WhatAmI::default(),
+            region,
+            remote_bound,
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
@@ -154,16 +163,51 @@ impl FaceState {
             remote_mappings: IntHashMap::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
-            mcast_group,
-            in_interceptors,
-            hat,
+            mcast_group: None,
+            in_interceptors: None,
+            hats,
             task_controller: TaskController::default(),
-            is_local,
+            is_local: false,
             #[cfg(feature = "stats")]
-            stats,
+            stats: None,
         })
     }
 
+    pub(crate) fn whatami(mut self, whatami: WhatAmI) -> Self {
+        self.0.whatami = whatami;
+        self
+    }
+
+    pub(crate) fn ingress_interceptors(
+        mut self,
+        in_interceptors: Arc<ArcSwapOption<InterceptorsChain>>,
+    ) -> Self {
+        self.0.in_interceptors = Some(in_interceptors);
+        self
+    }
+
+    pub(crate) fn multicast_group(mut self, mcast_group: TransportMulticast) -> Self {
+        self.0.mcast_group = Some(mcast_group);
+        self
+    }
+
+    pub(crate) fn local(mut self, is_local: bool) -> Self {
+        self.0.is_local = is_local;
+        self
+    }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn stats(mut self, stats: zenoh_stats::TransportStats) -> Self {
+        self.0.stats = Some(stats);
+        self
+    }
+
+    pub(crate) fn build(self) -> FaceState {
+        self.0
+    }
+}
+
+impl FaceState {
     #[inline]
     pub(crate) fn get_mapping(
         &self,
@@ -199,15 +243,14 @@ impl FaceState {
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
         if let Some(interceptor) = self.in_interceptors.as_ref().map(|itor| itor.load()) {
             if let Some(interceptor) = interceptor.as_ref() {
-                if let Some(expr) = res.keyexpr() {
-                    let cache = interceptor.compute_keyexpr_cache(expr);
-                    get_mut_unchecked(
-                        get_mut_unchecked(res)
-                            .session_ctxs
-                            .get_mut(&self.id)
-                            .unwrap(),
-                    )
-                    .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                {
+                    if let Some(expr) = res.keyexpr() {
+                        let cache = interceptor.compute_keyexpr_cache(expr);
+                        get_mut_unchecked(
+                            get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
+                        )
+                        .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                    }
                 }
             }
         }
@@ -222,10 +265,7 @@ impl FaceState {
                 if let Some(expr) = res.keyexpr() {
                     let cache = interceptor.compute_keyexpr_cache(expr);
                     get_mut_unchecked(
-                        get_mut_unchecked(res)
-                            .session_ctxs
-                            .get_mut(&self.id)
-                            .unwrap(),
+                        get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
                     )
                     .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
                 }
@@ -242,10 +282,7 @@ impl FaceState {
                 if let Some(expr) = res.keyexpr() {
                     let cache = interceptor.compute_keyexpr_cache(expr);
                     get_mut_unchecked(
-                        get_mut_unchecked(res)
-                            .session_ctxs
-                            .get_mut(&self.id)
-                            .unwrap(),
+                        get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
                     )
                     .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
                 }
@@ -300,8 +337,18 @@ impl FaceState {
 }
 
 impl fmt::Display for FaceState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Face{{{}, {}}}", self.id, self.zid)
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}:{}", self.region, self.zid.short(), self.id)
+    }
+}
+
+impl fmt::Debug for FaceState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FaceState")
+            .field("id", &self.id)
+            .field("zid", &self.zid)
+            .field("bound", &self.region)
+            .finish()
     }
 }
 
@@ -326,6 +373,18 @@ pub struct Face {
     pub(crate) state: Arc<FaceState>,
 }
 
+impl fmt::Debug for Face {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.state, f)
+    }
+}
+
+impl fmt::Display for Face {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.state, f)
+    }
+}
+
 impl Face {
     pub fn downgrade(&self) -> WeakFace {
         WeakFace {
@@ -346,27 +405,13 @@ impl Primitives for Face {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
-            declare_interest(
-                self.tables.hat_code.as_ref(),
-                &self.tables,
-                &mut self.state.clone(),
-                msg.id,
-                msg.wire_expr.as_ref(),
-                msg.mode,
-                msg.options,
-                &mut |p, m| declares.push((p.clone(), m)),
-            );
+            self.interest(&self.tables, msg, &mut |p, m| declares.push((p.clone(), m)));
             drop(ctrl_lock);
             for (p, m) in declares {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            undeclare_interest(
-                self.tables.hat_code.as_ref(),
-                &self.tables,
-                &mut self.state.clone(),
-                msg.id,
-            );
+            self.interest_final(&self.tables, msg);
         }
     }
 
@@ -381,10 +426,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 let mut declares = vec![];
-                declare_subscription(
-                    self.tables.hat_code.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
+                self.declare_subscriber(
                     m.id,
                     &m.wire_expr,
                     &SubscriberInfo,
@@ -398,10 +440,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 let mut declares = vec![];
-                undeclare_subscription(
-                    self.tables.hat_code.as_ref(),
-                    &self.tables,
-                    &mut self.state.clone(),
+                self.undeclare_subscriber(
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -414,10 +453,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 let mut declares = vec![];
-                declare_queryable(
-                    self.tables.hat_code.as_ref(),
+                self.declare_queryable(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.wire_expr,
                     &m.ext_info,
@@ -431,10 +468,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 let mut declares = vec![];
-                undeclare_queryable(
-                    self.tables.hat_code.as_ref(),
+                self.undeclare_queryable(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -447,10 +482,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut declares = vec![];
-                declare_token(
-                    self.tables.hat_code.as_ref(),
+                self.declare_token(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -464,10 +497,8 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 let mut declares = vec![];
-                undeclare_token(
-                    self.tables.hat_code.as_ref(),
+                self.undeclare_token(
                     &self.tables,
-                    &mut self.state.clone(),
                     m.id,
                     &m.ext_wire_expr,
                     msg.ext_nodeid.node_id,
@@ -480,22 +511,13 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
                 if let Some(id) = msg.interest_id {
-                    get_mut_unchecked(&mut self.state.clone())
-                        .local_interests
-                        .entry(id)
-                        .and_modify(|interest| interest.set_finalized());
-
                     let mut wtables = zwrite!(self.tables.tables);
                     let mut declares = vec![];
-                    declare_final(
-                        self.tables.hat_code.as_ref(),
-                        &mut wtables,
-                        &mut self.state.clone(),
-                        id,
-                        &mut |p, m| declares.push((p.clone(), m)),
-                    );
+                    self.declare_final(&mut wtables, id, msg.ext_nodeid.node_id, &mut |p, m| {
+                        declares.push((p.clone(), m))
+                    });
 
-                    wtables.disable_all_routes();
+                    wtables.data.disable_all_routes();
 
                     drop(wtables);
                     drop(ctrl_lock);
@@ -508,28 +530,32 @@ impl Primitives for Face {
     }
 
     #[inline]
+    #[tracing::instrument(level = "debug", skip(msg), ret)]
     fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool) {
         route_data(&self.tables, &self.state, msg, reliability, consume);
     }
 
+    #[tracing::instrument(level = "debug", skip(msg), fields(id = msg.id, expr = %msg.wire_expr), ret)]
     fn send_request(&self, msg: &mut Request) {
         match msg.payload {
             RequestBody::Query(_) => {
-                route_query(&self.tables, &self.state, msg);
+                self.route_query(msg);
             }
         }
     }
 
+    #[tracing::instrument(level = "debug", skip(msg), fields(rid = msg.rid, expr = %msg.wire_expr), ret)]
     fn send_response(&self, msg: &mut Response) {
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
+    #[tracing::instrument(level = "debug", skip(msg), fields(rid = msg.rid), ret)]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
+    #[tracing::instrument(level = "debug", ret)]
     fn send_close(&self) {
-        tracing::debug!("{} Close", self.state);
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
         finalize_pending_queries(&self.tables, &mut state);
@@ -538,12 +564,111 @@ impl Primitives for Face {
         finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
             declares.push((p.clone(), m))
         });
-        self.tables.hat_code.close_face(
-            &self.tables,
-            &self.tables.clone(),
-            &mut state,
-            &mut |p, m| declares.push((p.clone(), m)),
-        );
+        let mut wtables = zwrite!(self.tables.tables);
+        let tables = &mut *wtables;
+
+        let mut ctx = DispatcherContext {
+            tables_lock: &self.tables,
+            tables: &mut tables.data,
+            src_face: &mut state,
+            send_declare: &mut |p, m| declares.push((p.clone(), m)),
+        };
+
+        let hats = &mut tables.hats;
+        let region = self.state.region;
+        let src_fid = ctx.src_face.id;
+
+        for mut res in hats[region].unregister_face_subscriber(ctx.reborrow()) {
+            disable_matches_data_routes(ctx.tables, &mut res);
+
+            let mut remaining = hats
+                .values_mut()
+                .filter(|hat| hat.remote_subscribers_of(&res).is_some())
+                .collect_vec();
+
+            if remaining.is_empty() {
+                for hat in hats.values_mut() {
+                    hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
+                }
+                get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
+                Resource::clean(&mut res);
+            } else if let [last_owner] = &mut *remaining {
+                last_owner.unpropagate_last_non_owned_subscriber(ctx.reborrow(), res.clone())
+            }
+        }
+
+        for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
+            disable_matches_query_routes(ctx.tables, &mut res);
+
+            let remaining = hats
+                .iter()
+                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (*rgn, info)))
+                .collect_vec();
+
+            match &*remaining {
+                [] => {
+                    for hat in hats.values_mut() {
+                        hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                    }
+                    get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
+                    Resource::clean(&mut res);
+                }
+                [(last_owner, _)] if last_owner != &region => hats[last_owner]
+                    .unpropagate_last_non_owned_queryable(ctx.reborrow(), res.clone()),
+                _ => {
+                    for hat in hats.values_mut() {
+                        let other_info = remaining
+                            .iter()
+                            .filter_map(|(region, info)| (region != &hat.region()).then_some(*info))
+                            .reduce(merge_qabl_infos);
+
+                        hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                    }
+                }
+            }
+        }
+
+        for mut res in hats[region].unregister_face_tokens(ctx.reborrow()) {
+            let mut remaining = hats
+                .values_mut()
+                .filter(|hat| hat.remote_tokens_of(&res))
+                .collect_vec();
+
+            if remaining.is_empty() {
+                for hat in hats.values_mut() {
+                    hat.unpropagate_token(ctx.reborrow(), res.clone());
+                }
+                get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
+                Resource::clean(&mut res);
+            } else if let [last_owner] = &mut *remaining {
+                last_owner.unpropagate_last_non_owned_token(ctx.reborrow(), res.clone())
+            }
+        }
+
+        for res in get_mut_unchecked(ctx.src_face).remote_mappings.values_mut() {
+            get_mut_unchecked(res).face_ctxs.remove(&src_fid);
+            Resource::clean(res);
+        }
+        get_mut_unchecked(ctx.src_face).remote_mappings.clear();
+
+        for res in get_mut_unchecked(ctx.src_face).local_mappings.values_mut() {
+            get_mut_unchecked(res).face_ctxs.remove(&src_fid);
+            Resource::clean(res);
+        }
+        get_mut_unchecked(ctx.src_face).local_mappings.clear();
+
+        for interest in get_mut_unchecked(ctx.src_face).local_interests.values_mut() {
+            if let Some(mut res) = interest.res.take() {
+                Resource::clean(&mut res);
+            }
+        }
+        get_mut_unchecked(ctx.src_face).local_interests.clear();
+
+        hats[region].close_face(ctx);
+
+        tables.data.faces.remove(&src_fid);
+
+        drop(wtables);
         drop(ctrl_lock);
         for (p, m) in declares {
             m.with_mut(|m| p.send_declare(m));
@@ -552,11 +677,5 @@ impl Primitives for Face {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-impl fmt::Display for Face {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.state.fmt(f)
     }
 }

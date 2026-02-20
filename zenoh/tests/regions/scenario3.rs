@@ -1,0 +1,875 @@
+//
+// Copyright (c) 2023 ZettaScale Technology
+//
+// This program and the accompanying materials are made availbble under the
+// terms of the Eclipse Public License 2.0 which is availbble at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is availbble at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+// Scenario 3
+//   R      R      R
+// P P P  P P P  P P P
+
+use std::time::Duration;
+
+use predicates::Predicate;
+use zenoh_config::WhatAmI::{Peer, Router};
+use zenoh_core::{lazy_static, ztimeout};
+
+use crate::{loc, predicates_ext, skip_fmt, Node, SubUtils};
+
+const TIMEOUT: Duration = Duration::from_secs(10);
+
+lazy_static! {
+    static ref STORAGE: tracing_capture::SharedStorage = tracing_capture::SharedStorage::default();
+}
+
+fn init_tracing_subscriber() {
+    use tracing_subscriber::layer::SubscriberExt;
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter("debug,zenoh::net::routing::dispatcher=trace")
+        .finish();
+    let subscriber = subscriber.with(tracing_capture::CaptureLayer::new(&STORAGE));
+    tracing::subscriber::set_global_default(subscriber).ok();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order1_putsub() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "31aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.1.1:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "31aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.1.1:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "31aa9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.1.1:9300")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "31aa9110")
+        .multicast("224.3.1.1:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "31aa9120")
+        .multicast("224.3.1.1:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "31aa9130")
+        .multicast("224.3.1.1:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "31aa9210")
+        .multicast("224.3.1.1:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "31aa9220")
+        .multicast("224.3.1.1:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "31aa9230")
+        .multicast("224.3.1.1:9200")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "31aa9310")
+        .multicast("224.3.1.1:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "31aa9320")
+        .multicast("224.3.1.1:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "31aa9330")
+        .multicast("224.3.1.1:9300")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    ztimeout!(async {
+        loop {
+            _z9110.put("test/9110", "9110").await.unwrap();
+            _z9120.put("test/9120", "9120").await.unwrap();
+            _z9130.put("test/9130", "9130").await.unwrap();
+            _z9210.put("test/9210", "9210").await.unwrap();
+            _z9220.put("test/9220", "9220").await.unwrap();
+            _z9230.put("test/9230", "9230").await.unwrap();
+            _z9310.put("test/9310", "9310").await.unwrap();
+            _z9320.put("test/9320", "9320").await.unwrap();
+            _z9330.put("test/9330", "9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "31aa9110", "31aa9120", "31aa9130", "31aa9210", "31aa9220", "31aa9230", "31aa9310",
+        "31aa9320", "31aa9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order1_pubsub() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "31ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.1.2:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "31ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.1.2:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "31ab9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.1.2:9300")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "31ab9110")
+        .multicast("224.3.1.2:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "31ab9120")
+        .multicast("224.3.1.2:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "31ab9130")
+        .multicast("224.3.1.2:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "31ab9210")
+        .multicast("224.3.1.2:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "31ab9220")
+        .multicast("224.3.1.2:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "31ab9230")
+        .multicast("224.3.1.2:9200")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "31ab9310")
+        .multicast("224.3.1.2:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "31ab9320")
+        .multicast("224.3.1.2:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "31ab9330")
+        .multicast("224.3.1.2:9300")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+
+    ztimeout!(async {
+        loop {
+            p9110.put("9110").await.unwrap();
+            p9120.put("9120").await.unwrap();
+            p9130.put("9130").await.unwrap();
+            p9210.put("9210").await.unwrap();
+            p9220.put("9220").await.unwrap();
+            p9230.put("9230").await.unwrap();
+            p9310.put("9310").await.unwrap();
+            p9320.put("9320").await.unwrap();
+            p9330.put("9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "31ab9110", "31ab9120", "31ab9130", "31ab9210", "31ab9220", "31ab9230", "31ab9310",
+        "31ab9320", "31ab9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order2_putsub() {
+    init_tracing_subscriber();
+
+    let _z9110 = ztimeout!(Node::new(Peer, "32aa9110")
+        .multicast("224.3.2.1:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "32aa9120")
+        .multicast("224.3.2.1:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "32aa9130")
+        .multicast("224.3.2.1:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "32aa9210")
+        .multicast("224.3.2.1:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "32aa9220")
+        .multicast("224.3.2.1:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "32aa9230")
+        .multicast("224.3.2.1:9200")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "32aa9310")
+        .multicast("224.3.2.1:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "32aa9320")
+        .multicast("224.3.2.1:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "32aa9330")
+        .multicast("224.3.2.1:9300")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let _z9100 = ztimeout!(Node::new(Router, "32aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.2.1:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "32aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.2.1:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "32aa9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.2.1:9300")
+        .open());
+
+    ztimeout!(async {
+        loop {
+            _z9110.put("test/9110", "9110").await.unwrap();
+            _z9120.put("test/9120", "9120").await.unwrap();
+            _z9130.put("test/9130", "9130").await.unwrap();
+            _z9210.put("test/9210", "9210").await.unwrap();
+            _z9220.put("test/9220", "9220").await.unwrap();
+            _z9230.put("test/9230", "9230").await.unwrap();
+            _z9310.put("test/9310", "9310").await.unwrap();
+            _z9320.put("test/9320", "9320").await.unwrap();
+            _z9330.put("test/9330", "9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "32aa9110", "32aa9120", "32aa9130", "32aa9210", "32aa9220", "32aa9230", "32aa9310",
+        "32aa9320", "32aa9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order2_pubsub() {
+    init_tracing_subscriber();
+
+    let _z9110 = ztimeout!(Node::new(Peer, "32ab9110")
+        .multicast("224.3.2.2:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "32ab9120")
+        .multicast("224.3.2.2:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "32ab9130")
+        .multicast("224.3.2.2:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "32ab9210")
+        .multicast("224.3.2.2:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "32ab9220")
+        .multicast("224.3.2.2:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "32ab9230")
+        .multicast("224.3.2.2:9200")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "32ab9310")
+        .multicast("224.3.2.2:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "32ab9320")
+        .multicast("224.3.2.2:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "32ab9330")
+        .multicast("224.3.2.2:9300")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+
+    let _z9100 = ztimeout!(Node::new(Router, "32ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.2.2:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "32ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.2.2:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "32ab9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.2.2:9300")
+        .open());
+
+    ztimeout!(async {
+        loop {
+            p9110.put("9110").await.unwrap();
+            p9120.put("9120").await.unwrap();
+            p9130.put("9130").await.unwrap();
+            p9210.put("9210").await.unwrap();
+            p9220.put("9220").await.unwrap();
+            p9230.put("9230").await.unwrap();
+            p9310.put("9310").await.unwrap();
+            p9320.put("9320").await.unwrap();
+            p9330.put("9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "32ab9110", "32ab9120", "32ab9130", "32ab9210", "32ab9220", "32ab9230", "32ab9310",
+        "32ab9320", "32ab9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order3_putsub() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "33aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.3.1:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "33aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.3.1:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "33aa9110")
+        .multicast("224.3.3.1:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "33aa9120")
+        .multicast("224.3.3.1:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "33aa9130")
+        .multicast("224.3.3.1:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "33aa9210")
+        .multicast("224.3.3.1:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "33aa9220")
+        .multicast("224.3.3.1:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "33aa9230")
+        .multicast("224.3.3.1:9200")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "33aa9310")
+        .multicast("224.3.3.1:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "33aa9320")
+        .multicast("224.3.3.1:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "33aa9330")
+        .multicast("224.3.3.1:9300")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let _z9300 = ztimeout!(Node::new(Router, "33aa9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.3.1:9300")
+        .open());
+
+    ztimeout!(async {
+        loop {
+            _z9110.put("test/9110", "9110").await.unwrap();
+            _z9120.put("test/9120", "9120").await.unwrap();
+            _z9130.put("test/9130", "9130").await.unwrap();
+            _z9210.put("test/9210", "9210").await.unwrap();
+            _z9220.put("test/9220", "9220").await.unwrap();
+            _z9230.put("test/9230", "9230").await.unwrap();
+            _z9310.put("test/9310", "9310").await.unwrap();
+            _z9320.put("test/9320", "9320").await.unwrap();
+            _z9330.put("test/9330", "9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "33aa9110", "33aa9120", "33aa9130", "33aa9210", "33aa9220", "33aa9230", "33aa9310",
+        "33aa9320", "33aa9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order3_pubsub() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "33ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.3.2:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "33ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.3.2:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "33ab9110")
+        .multicast("224.3.3.2:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "33ab9120")
+        .multicast("224.3.3.2:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "33ab9130")
+        .multicast("224.3.3.2:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "33ab9210")
+        .multicast("224.3.3.2:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "33ab9220")
+        .multicast("224.3.3.2:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "33ab9230")
+        .multicast("224.3.3.2:9200")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "33ab9310")
+        .multicast("224.3.3.2:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "33ab9320")
+        .multicast("224.3.3.2:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "33ab9330")
+        .multicast("224.3.3.2:9300")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+
+    let _z9300 = ztimeout!(Node::new(Router, "33ab9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.3.2:9300")
+        .open());
+
+    ztimeout!(async {
+        loop {
+            p9110.put("9110").await.unwrap();
+            p9120.put("9120").await.unwrap();
+            p9130.put("9130").await.unwrap();
+            p9210.put("9210").await.unwrap();
+            p9220.put("9220").await.unwrap();
+            p9230.put("9230").await.unwrap();
+            p9310.put("9310").await.unwrap();
+            p9320.put("9320").await.unwrap();
+            p9330.put("9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "33ab9110", "33ab9120", "33ab9130", "33ab9210", "33ab9220", "33ab9230", "33ab9310",
+        "33ab9320", "33ab9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order4_putsub() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "34aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.4.1:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "34aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.4.1:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "34aa9110")
+        .multicast("224.3.4.1:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "34aa9120")
+        .multicast("224.3.4.1:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "34aa9130")
+        .multicast("224.3.4.1:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "34aa9210")
+        .multicast("224.3.4.1:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "34aa9220")
+        .multicast("224.3.4.1:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "34aa9230")
+        .multicast("224.3.4.1:9200")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let _z9300 = ztimeout!(Node::new(Router, "34aa9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.4.1:9300")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "34aa9310")
+        .multicast("224.3.4.1:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "34aa9320")
+        .multicast("224.3.4.1:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "34aa9330")
+        .multicast("224.3.4.1:9300")
+        .open());
+
+    skip_fmt! {
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    ztimeout!(async {
+        loop {
+            _z9110.put("test/9110", "9110").await.unwrap();
+            _z9120.put("test/9120", "9120").await.unwrap();
+            _z9130.put("test/9130", "9130").await.unwrap();
+            _z9210.put("test/9210", "9210").await.unwrap();
+            _z9220.put("test/9220", "9220").await.unwrap();
+            _z9230.put("test/9230", "9230").await.unwrap();
+            _z9310.put("test/9310", "9310").await.unwrap();
+            _z9320.put("test/9320", "9320").await.unwrap();
+            _z9330.put("test/9330", "9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "34aa9110", "34aa9120", "34aa9130", "34aa9210", "34aa9220", "34aa9230", "34aa9310",
+        "34aa9320", "34aa9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order4_pubsub() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "34ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.4.2:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "34ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.4.2:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "34ab9110")
+        .multicast("224.3.4.2:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "34ab9120")
+        .multicast("224.3.4.2:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "34ab9130")
+        .multicast("224.3.4.2:9100")
+        .open());
+
+    let _z9210 = ztimeout!(Node::new(Peer, "34ab9210")
+        .multicast("224.3.4.2:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "34ab9220")
+        .multicast("224.3.4.2:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "34ab9230")
+        .multicast("224.3.4.2:9200")
+        .open());
+
+    skip_fmt! {
+        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
+
+    let _z9300 = ztimeout!(Node::new(Router, "34ab9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.4.2:9300")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "34ab9310")
+        .multicast("224.3.4.2:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "34ab9320")
+        .multicast("224.3.4.2:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "34ab9330")
+        .multicast("224.3.4.2:9300")
+        .open());
+
+    skip_fmt! {
+        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+    }
+
+    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+
+    ztimeout!(async {
+        loop {
+            p9110.put("9110").await.unwrap();
+            p9120.put("9120").await.unwrap();
+            p9130.put("9130").await.unwrap();
+            p9210.put("9210").await.unwrap();
+            p9220.put("9220").await.unwrap();
+            p9230.put("9230").await.unwrap();
+            p9310.put("9310").await.unwrap();
+            p9320.put("9320").await.unwrap();
+            p9330.put("9330").await.unwrap();
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "34ab9110", "34ab9120", "34ab9130", "34ab9210", "34ab9220", "34ab9230", "34ab9310",
+        "34ab9320", "34ab9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .count(),
+            3
+        );
+    }
+}
