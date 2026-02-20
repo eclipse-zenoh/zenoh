@@ -144,13 +144,14 @@ impl TransportUnicastUniversal {
             *l_guard = vec![].into_boxed_slice();
             links
         };
-        for l in links.drain(..) {
-            let _ = l.close().await;
-        }
 
-        // Notify the callback that we have closed the transport
+        // Notify the callback that we have closed the transport prior to closing the links to ensure that routing does not have to wait for link shutdown
         if let Some(cb) = callback.as_ref() {
             cb.closed();
+        }
+
+        for l in links.drain(..) {
+            let _ = l.close().await;
         }
 
         Ok(())
@@ -190,8 +191,8 @@ impl TransportUnicastUniversal {
             callback.del_link(link);
         }
         if is_last {
-            let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
-            self.delete().await?;
+            let r = self.delete().await;
+            stl.close().await?; // close link after notifying transport to ensure that routing does not have to wait for link shutdown
             r
         } else {
             stl.close().await

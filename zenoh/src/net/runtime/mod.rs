@@ -366,7 +366,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -377,7 +377,10 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn_abortable<F, T>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<T, zenoh_task::TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -706,7 +709,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -716,7 +719,10 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn_abortable<F, T>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<T, zenoh_task::TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
