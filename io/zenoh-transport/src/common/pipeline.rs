@@ -643,6 +643,7 @@ impl StageOutRefill {
 struct StageOut {
     s_in: StageOutIn,
     s_ref: StageOutRefill,
+    n_out_r: Waiter,
 }
 
 impl StageOut {
@@ -689,6 +690,7 @@ impl TransmissionPipeline {
     pub(crate) fn make(
         config: TransmissionPipelineConf,
         priority: &[TransportPriorityTx],
+        link_supports_priority: bool,
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
         let status = Arc::new(TransmissionPipelineStatus {
             disabled: AtomicBool::new(false),
@@ -733,6 +735,12 @@ impl TransmissionPipeline {
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
             let (n_ref_w, n_ref_r) = event::new();
+            // If link supports priority, use per priority channel to notify for new batches
+            let (n_out_w, n_out_r) = if link_supports_priority {
+                event::new()
+            } else {
+                (n_out_w.clone(), n_out_r.clone())
+            };
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
@@ -779,6 +787,7 @@ impl TransmissionPipeline {
                     backoff: Backoff::new(config.batching_time_limit, bytes),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
+                n_out_r,
             });
         }
 
@@ -788,7 +797,7 @@ impl TransmissionPipeline {
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
-            n_out_r,
+            n_out_r: (!link_supports_priority).then_some(n_out_r),
             status,
         };
 
@@ -947,30 +956,21 @@ impl TransmissionPipelineProducer {
 pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
-    n_out_r: Waiter,
+    n_out_r: Option<Waiter>,
     status: Arc<TransmissionPipelineStatus>,
 }
 
-impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(BoxedWBatch, Priority)> {
-        while !self.status.is_disabled() {
-            let mut backoff = MicroSeconds::MAX;
-            // Calculate the backoff maximum
-            while let Some(prio) = self.status.get_pending() {
-                let queue = &mut self.stage_out[prio as usize];
-                match queue.try_pull() {
-                    Pull::Some(batch) => {
-                        let prio = Priority::try_from(prio as u8).unwrap();
-                        return Some((batch, prio));
-                    }
-                    Pull::Backoff(deadline) => {
-                        backoff = deadline;
-                        break;
-                    }
-                    Pull::None => {}
-                }
-            }
-
+pub(crate) trait PipelineConsumer {
+    #[allow(private_interfaces)]
+    fn status(&self) -> &TransmissionPipelineStatus;
+    fn stage_pull(&mut self) -> Result<(BoxedWBatch, Priority), Option<MicroSeconds>>;
+    fn n_out_r(&self) -> &Waiter;
+    async fn pull(&mut self) -> Option<(BoxedWBatch, Priority)> {
+        while !self.status().is_disabled() {
+            let backoff = match self.stage_pull() {
+                Ok(res) => return Some(res),
+                Err(b) => b,
+            };
             // In case of writing many small messages, `recv_async()` will most likely return immediately.
             // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
             // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
@@ -978,12 +978,17 @@ impl TransmissionPipelineConsumer {
             tokio::task::yield_now().await;
 
             // Wait for the backoff to expire or for a new message
-            let res = tokio::time::timeout(
-                Duration::from_micros(backoff as u64),
-                self.n_out_r.wait_async(),
-            )
-            .await;
-            match res {
+            let backoff_wait = match backoff {
+                Some(b) => {
+                    tokio::time::timeout(
+                        Duration::from_micros(b as u64),
+                        self.n_out_r().wait_async(),
+                    )
+                    .await
+                }
+                None => Ok(self.n_out_r().wait_async().await),
+            };
+            match backoff_wait {
                 Ok(Ok(())) => {
                     // We have received a notification from the channel that some bytes are available, retry to pull.
                 }
@@ -999,15 +1004,40 @@ impl TransmissionPipelineConsumer {
         }
         None
     }
+    fn refill(&mut self, batch: BoxedWBatch, priority: Priority);
+    fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)>;
+}
 
-    pub(crate) fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
+impl PipelineConsumer for TransmissionPipelineConsumer {
+    #[allow(private_interfaces)]
+    fn status(&self) -> &TransmissionPipelineStatus {
+        &self.status
+    }
+
+    fn stage_pull(&mut self) -> Result<(BoxedWBatch, Priority), Option<MicroSeconds>> {
+        while let Some(prio) = self.status.get_pending() {
+            let queue = &mut self.stage_out[prio as usize];
+            match queue.try_pull() {
+                Pull::Some(batch) => return Ok((batch, prio)),
+                Pull::Backoff(deadline) => return Err(Some(deadline)),
+                Pull::None => {}
+            }
+        }
+        Err(None)
+    }
+
+    fn n_out_r(&self) -> &Waiter {
+        self.n_out_r.as_ref().unwrap()
+    }
+
+    fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
         if !batch.is_ephemeral() {
             self.stage_out[priority as usize].refill(batch);
             self.status.set_congested(priority, false);
         }
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<(BoxedWBatch, usize)> {
+    fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -1023,11 +1053,72 @@ impl TransmissionPipelineConsumer {
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
             let mut bs = s_out.drain(&mut currents[prio]);
             for b in bs.drain(..) {
-                batches.push((b, prio));
+                batches.push((b, Priority::try_from(prio as u8).unwrap()));
             }
         }
 
         batches
+    }
+}
+
+impl TransmissionPipelineConsumer {
+    pub(crate) fn split(self) -> Vec<SplitTransmissionPipelineConsumer> {
+        assert!(self.n_out_r.is_none());
+        self.stage_out
+            .into_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(prio, stage_out)| SplitTransmissionPipelineConsumer {
+                priority: Priority::try_from(prio as u8).unwrap(),
+                stage_out,
+                status: self.status.clone(),
+            })
+            .collect()
+    }
+}
+
+pub(crate) struct SplitTransmissionPipelineConsumer {
+    priority: Priority,
+    stage_out: StageOut,
+    status: Arc<TransmissionPipelineStatus>,
+}
+
+impl SplitTransmissionPipelineConsumer {
+    pub(crate) fn priority(&self) -> Priority {
+        self.priority
+    }
+}
+
+impl PipelineConsumer for SplitTransmissionPipelineConsumer {
+    #[allow(private_interfaces)]
+    fn status(&self) -> &TransmissionPipelineStatus {
+        &self.status
+    }
+
+    fn stage_pull(&mut self) -> Result<(BoxedWBatch, Priority), Option<MicroSeconds>> {
+        match self.stage_out.try_pull() {
+            Pull::Some(batch) => Ok((batch, self.priority)),
+            Pull::Backoff(deadline) => Err(Some(deadline)),
+            Pull::None => Err(None),
+        }
+    }
+
+    fn n_out_r(&self) -> &Waiter {
+        &self.stage_out.n_out_r
+    }
+
+    fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
+        if !batch.is_ephemeral() {
+            debug_assert_eq!(self.priority, priority);
+            self.stage_out.refill(batch);
+            self.status.set_congested(priority, false);
+        }
+    }
+
+    fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
+        let current = self.stage_out.s_in.current.clone();
+        let batches = self.stage_out.drain(&mut current.lock().unwrap());
+        batches.into_iter().map(|b| (b, self.priority)).collect()
     }
 }
 
@@ -1118,7 +1209,7 @@ mod tests {
             }
         }
 
-        async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
+        async fn consume(mut queue: impl PipelineConsumer, num_msg: usize) {
             let mut batches: usize = 0;
             let mut bytes: usize = 0;
             let mut msgs: usize = 0;
@@ -1177,28 +1268,43 @@ mod tests {
         // Payload size of the messages
         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-        for ps in payload_sizes.iter() {
-            if u64::try_from(*ps).is_err() {
-                break;
+        for link_supports_priority in [false, true] {
+            for ps in payload_sizes.iter() {
+                if u64::try_from(*ps).is_err() {
+                    break;
+                }
+
+                // Compute the number of messages to send
+                let num_msg = max_msgs.min(bytes / ps);
+
+                let (producer, consumer) = TransmissionPipeline::make(
+                    CONFIG_NOT_STREAMED,
+                    priorities.as_slice(),
+                    link_supports_priority,
+                );
+
+                let t_c = if link_supports_priority {
+                    consumer
+                        .split()
+                        .into_iter()
+                        .map(|c| task::spawn(consume(c, num_msg)))
+                        .collect()
+                } else {
+                    vec![task::spawn(consume(consumer, num_msg))]
+                };
+
+                let c_ps = *ps;
+                let t_s = task::spawn_blocking(move || {
+                    schedule(producer, num_msg, c_ps);
+                });
+
+                let res = tokio::time::timeout(
+                    TIMEOUT,
+                    futures::future::join_all(std::iter::once(t_s).chain(t_c)),
+                )
+                .await;
+                assert!(res.is_ok());
             }
-
-            // Compute the number of messages to send
-            let num_msg = max_msgs.min(bytes / ps);
-
-            let (producer, consumer) =
-                TransmissionPipeline::make(CONFIG_NOT_STREAMED, priorities.as_slice());
-
-            let t_c = task::spawn(async move {
-                consume(consumer, num_msg).await;
-            });
-
-            let c_ps = *ps;
-            let t_s = task::spawn_blocking(move || {
-                schedule(producer, num_msg, c_ps);
-            });
-
-            let res = tokio::time::timeout(TIMEOUT, futures::future::join_all([t_c, t_s])).await;
-            assert!(res.is_ok());
         }
 
         Ok(())
@@ -1241,53 +1347,82 @@ mod tests {
         // Pipeline
         let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
         let priorities = vec![tct];
-        let (producer, mut consumer) =
-            TransmissionPipeline::make(CONFIG_NOT_STREAMED, priorities.as_slice());
+        for link_supports_priority in [false, true] {
+            let (producer, mut consumer) = TransmissionPipeline::make(
+                CONFIG_NOT_STREAMED,
+                priorities.as_slice(),
+                link_supports_priority,
+            );
 
-        let counter = Arc::new(AtomicUsize::new(0));
+            let counter = Arc::new(AtomicUsize::new(0));
 
-        let c_producer = producer.clone();
-        let c_counter = counter.clone();
-        let h1 = task::spawn_blocking(move || {
-            schedule(c_producer, c_counter, 1);
-        });
+            let c_producer = producer.clone();
+            let c_counter = counter.clone();
+            let h1 = task::spawn_blocking(move || {
+                schedule(c_producer, c_counter, 1);
+            });
 
-        let c_counter = counter.clone();
-        let h2 = task::spawn_blocking(move || {
-            schedule(producer, c_counter, 2);
-        });
+            let c_counter = counter.clone();
+            let h2 = task::spawn_blocking(move || {
+                schedule(producer, c_counter, 2);
+            });
 
-        // Wait to have sent enough messages and to have blocked
-        println!(
-            "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-            CONFIG_STREAMED.queue_size[Priority::MAX as usize]
-        );
-        let check = async {
-            while counter.load(Ordering::Acquire)
-                < CONFIG_STREAMED.queue_size[Priority::MAX as usize]
-            {
-                tokio::time::sleep(SLEEP).await;
-            }
-        };
+            // Wait to have sent enough messages and to have blocked
+            println!(
+                "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
+                CONFIG_STREAMED.queue_size[Priority::MAX as usize]
+            );
+            let check = async {
+                while counter.load(Ordering::Acquire)
+                    < CONFIG_STREAMED.queue_size[Priority::MAX as usize]
+                {
+                    tokio::time::sleep(SLEEP).await;
+                }
+            };
 
-        timeout(TIMEOUT, check).await?;
+            timeout(TIMEOUT, check).await?;
 
-        // Drain the queue (but don't drop it to avoid dropping the messages)
-        let _consumer = timeout(
-            TIMEOUT,
-            task::spawn_blocking(move || {
-                println!("Pipeline Blocking [---]: draining the queue");
-                let _ = consumer.drain();
-                consumer
-            }),
-        )
-        .await??;
+            // Drain the queue (but don't drop it to avoid dropping the messages)
+            let _consumers = if link_supports_priority {
+                let status = consumer.status.clone();
+                let splits = timeout(
+                    TIMEOUT,
+                    futures::future::try_join_all(consumer.split().into_iter().map(|mut c| {
+                        task::spawn_blocking(move || {
+                            println!("Pipeline Blocking [---]: draining the queue");
+                            let _ = c.drain();
+                            c
+                        })
+                    })),
+                )
+                .await??;
+                TransmissionPipelineConsumer {
+                    stage_out: splits
+                        .into_iter()
+                        .map(|s| s.stage_out)
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    n_out_r: None,
+                    status,
+                }
+            } else {
+                timeout(
+                    TIMEOUT,
+                    task::spawn_blocking(move || {
+                        println!("Pipeline Blocking [---]: draining the queue");
+                        let _ = consumer.drain();
+                        consumer
+                    }),
+                )
+                .await??
+            };
 
-        // Make sure that the tasks scheduling have been unblocked
-        println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
-        timeout(TIMEOUT, h1).await??;
-        println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
-        timeout(TIMEOUT, h2).await??;
+            // Make sure that the tasks scheduling have been unblocked
+            println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
+            timeout(TIMEOUT, h1).await??;
+            println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
+            timeout(TIMEOUT, h2).await??;
+        }
 
         Ok(())
     }
@@ -1299,7 +1434,7 @@ mod tests {
         let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
         let priorities = vec![tct];
         let (producer, mut consumer) =
-            TransmissionPipeline::make(CONFIG_STREAMED, priorities.as_slice());
+            TransmissionPipeline::make(CONFIG_STREAMED, priorities.as_slice(), false);
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 
@@ -1362,20 +1497,31 @@ mod tests {
         // Pipeline
         let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
         let priorities = vec![tct];
-        let (producer, consumer) =
-            TransmissionPipeline::make(CONFIG_NOT_STREAMED, priorities.as_slice());
-        // Drop consumer to close the pipeline
-        drop(consumer);
+        for link_supports_priority in [false, true] {
+            let (producer, consumer) = TransmissionPipeline::make(
+                CONFIG_NOT_STREAMED,
+                priorities.as_slice(),
+                link_supports_priority,
+            );
+            // Drop consumer to close the pipeline
+            if link_supports_priority {
+                for split in consumer.split() {
+                    drop(split);
+                }
+            } else {
+                drop(consumer);
+            }
 
-        let message = NetworkMessage::from(Push {
-            wire_expr: "test".into(),
-            ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, true),
-            ..Push::from(vec![42u8])
-        });
-        // First message should not be rejected as the is one batch available in the queue
-        assert!(producer.push_network_message(message.as_ref()).is_ok());
-        // Second message should be rejected
-        assert!(producer.push_network_message(message.as_ref()).is_err());
+            let message = NetworkMessage::from(Push {
+                wire_expr: "test".into(),
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, true),
+                ..Push::from(vec![42u8])
+            });
+            // First message should not be rejected as the is one batch available in the queue
+            assert!(producer.push_network_message(message.as_ref()).is_ok());
+            // Second message should be rejected
+            assert!(producer.push_network_message(message.as_ref()).is_err());
+        }
 
         Ok(())
     }
