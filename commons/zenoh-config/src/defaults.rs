@@ -79,10 +79,10 @@ pub mod scouting {
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
-            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // "router"
-                &crate::WhatAmIMatcher::empty().router();
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
+            pub const client: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
             mode_accessor!(crate::WhatAmIMatcher);
         }
         pub mod autoconnect_strategy {
@@ -116,10 +116,10 @@ pub mod scouting {
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
-            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // ""
-                &crate::WhatAmIMatcher::empty();
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
+            pub const client: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
             mode_accessor!(crate::WhatAmIMatcher);
         }
         pub mod autoconnect_strategy {

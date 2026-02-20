@@ -148,7 +148,7 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router, peer or client mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer", "router" and/or "client".
-      autoconnect: { router: [], peer: ["router", "peer"], client: ["router"] },
+      autoconnect: { router: [], peer: ["router", "peer", "client"], client: ["router", "peer", "client"] },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
       /// Possible options are:
       /// - "always": always attempt to autoconnect, may result in redundant connections.
@@ -184,7 +184,7 @@
       /// Accepts a single value (e.g. autoconnect: ["router", "peer"]) which applies whatever the configured "mode" is,
       /// or different values for router or peer mode (e.g. autoconnect: { router: [], peer: ["router", "peer"] }).
       /// Each value is a list of: "peer" and/or "router".
-      autoconnect: { router: [], peer: ["router", "peer"] },
+      autoconnect: { router: [], peer: ["router", "peer", "client"], client: ["router", "peer", "client"] },
       /// Strategy for autoconnection, mainly to avoid nodes connecting to each other redundantly.
       /// Possible options are:
       /// - "always": always attempt to autoconnect, may result in redundant connections.
