@@ -72,32 +72,13 @@ jobs:
           cache-bin: false
 
       - name: Check zenoh with rust 1.75.0
-        run: cargo +1.75.0 check --release --bins --lib
+        run: cargo +1.75.0 check --release --manifest-path ci/zenoh-1-75/Cargo.toml
 
-  # Test without Cargo.lock to ensure that all restrictions are correctly set in Cargo.toml for build with rust 1.75.0
-  check_rust_without_cargo_lock:
-    needs: determine-runner
-    name: Check zenoh build without Cargo.lock on Rust 1.75
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      - name: Update Rust 1.75.0 toolchain
-        run: rustup update 1.75.0
-
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
-
-      - name: Check zenoh without Cargo.lock
+      - name: Check clippy on stable rust without Cargo.lock to ensure compatibility with latest dependencies
         run: |
-          rm Cargo.lock || true
-          cargo +1.75.0 check --bins --lib
+          rm Cargo.lock
+          cargo +stable clippy --release --manifest-path ci/zenoh-1-75/Cargo.toml -- -D warnings
+          git restore Cargo.lock
 
   check:
     needs: determine-runner
@@ -389,17 +370,6 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      #
-      # Temporary workaround to remmove transitive dependency
-      # of static-init 1.0.3 which fails with nigtly Rust.
-      # This allows Rust to automatically pick a compatible version 1.0.4
-      # where the issue is fixed.
-      #
-      - name: Remove zenoh-pinned-deps-1-75 dependency and Cargo.lock
-        run: |
-          sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
-          rm -f Cargo.lock
-
       # Use a similar command than docs.rs build: rustdoc with nightly toolchain
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
@@ -439,17 +409,6 @@ jobs:
 
       - name: Checkout sources
         uses: actions/checkout@v4
-
-      #
-      # Temporary workaround to remmove transitive dependency
-      # of static-init 1.0.3 which fails with nigtly Rust.
-      # This allows Rust to automatically pick a compatible version 1.0.4
-      # where the issue is fixed.
-      #
-      - name: Remove zenoh-pinned-deps-1-75 dependency and Cargo.lock
-        run: | 
-          sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
-          rm -f Cargo.lock
 
       - name: Install ${{ matrix.rust }} Rust toolchain
         run: |
@@ -503,7 +462,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check_rust_without_cargo_lock, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
+    needs: [check_rust, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass
