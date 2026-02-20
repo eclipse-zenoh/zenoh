@@ -73,7 +73,6 @@ impl Node {
 
     pub fn multicast(self, group: &str) -> Self {
         self.insert("scouting/multicast/enabled", "true")
-            .insert("scouting/multicast/listen", "true")
             .insert("scouting/multicast/address", &format!("\"{group}\""))
     }
 

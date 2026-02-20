@@ -463,7 +463,7 @@ impl Runtime {
 
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
         if listeners.is_empty() {
-            tracing::warn!("Starting with no listener endpoints!");
+            tracing::debug!("Starting with no listener endpoints!");
             return Ok(());
         }
         let timeout = self.get_global_listener_timeout();
@@ -1092,7 +1092,7 @@ impl Runtime {
                         return Loop::Break;
                     }
                 } else {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -1121,7 +1121,7 @@ impl Runtime {
             addr,
             move |hello| async move {
                 if hello.locators.is_empty() {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
                     self.connect_peer(&hello.zid, &hello.locators).await;
                 }

@@ -97,7 +97,7 @@ pub mod scouting {
         pub mod listen {
             pub const router: &bool = &true;
             pub const peer: &bool = &true;
-            pub const client: &bool = &false;
+            pub const client: &bool = &true;
             mode_accessor!(bool);
         }
     }
