@@ -516,7 +516,14 @@ async fn accept_task(
                         // Get certificate chain expiration
                         let mut maybe_expiration_time = None;
                         if tls_close_link_on_expiration {
-                            match get_cert_chain_expiration(&tls_conn.peer_certificates())? {
+                            let exp = match get_cert_chain_expiration(&tls_conn.peer_certificates()) {
+                                Ok(exp) => exp,
+                                Err(e) => {
+                                    tracing::warn!("Error getting client cert expiration: {e}");
+                                    continue;
+                                }
+                            };
+                            match exp {
                                 exp @ Some(_) => maybe_expiration_time = exp,
                                 None => tracing::warn!(
                                     "Cannot monitor expiration for TLS link {:?} => {:?}: client does not have certificates",
