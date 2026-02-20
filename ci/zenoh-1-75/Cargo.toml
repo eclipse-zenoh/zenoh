@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-authors = ["Davide Della Giustina <davide.dellagiustina@zettascale.tech>"]
+authors = ["Olivier Hécart <olivier.hecart@zettascale.tech>"]
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
 edition = "2021"
@@ -24,7 +24,6 @@ version = "0.1.0"
 
 [package.metadata.cargo-machete]
 ignored = ["zenoh", "zenoh-ext", "zenoh-pinned-deps-1-75"]
-
 
 [dependencies]
 zenoh = { path = "../../zenoh/" }
