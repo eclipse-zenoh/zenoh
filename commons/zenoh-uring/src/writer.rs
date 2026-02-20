@@ -85,7 +85,7 @@ struct BufferPool {
 
 impl BufferPool {
     fn new(ring: &IoUring) -> Self {
-        let mut arena = UnsafeCell::new(BatchArena::new(BUF_SIZE, BUF_COUNT));
+        let mut arena = UnsafeCell::new(BatchArena::new(BUF_SIZE, BUF_COUNT, BUF_COUNT).unwrap());
         let write_buffers = arena.get_mut().register_buffers();
         unsafe { ring.submitter().register_buffers(&write_buffers).unwrap() };
 

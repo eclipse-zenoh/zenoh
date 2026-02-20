@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use zenoh_uring::{reader::Reader, BUF_SIZE};
+use zenoh_uring::{BUF_COUNT, BUF_SIZE, reader::Reader};
 
 use crate::common::monotonic_now_ns;
 
@@ -89,7 +89,7 @@ fn writer_main() {
 
     // standard write
     {
-        const SIZE: usize = BUF_SIZE;
+        const SIZE: usize = 22; //BUF_SIZE;
 
         let mut arr = [0u8; SIZE];
         let length = (SIZE - 2) as u16;
@@ -105,7 +105,7 @@ fn writer_main() {
             //iteration = iteration.wrapping_add(1);
 
             //std::thread::yield_now();
-            //std::thread::sleep(Duration::from_micros(100));
+            std::thread::sleep(Duration::from_micros(1));
         }
     }
 
@@ -135,7 +135,7 @@ fn reader_main() {
     let (stream, _addr) = listener.accept().unwrap();
     stream.set_nodelay(true).unwrap();
 
-    let reader = Reader::new(65535, 16);
+    let reader = Reader::new(BUF_SIZE, BUF_COUNT);
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 

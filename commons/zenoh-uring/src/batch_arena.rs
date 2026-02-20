@@ -18,6 +18,8 @@ use io_uring::opcode;
 
 use crate::page_arena::PageArena;
 
+use zenoh_result::ZResult;
+
 #[derive(Debug)]
 pub(crate) struct BatchArena {
     arena: PageArena,
@@ -43,10 +45,42 @@ impl IndexMut<usize> for BatchArena {
 }
 
 impl BatchArena {
-    pub(crate) fn new(batch_size: usize, batch_count: usize) -> Self {
+    pub(crate) fn new(
+        batch_size: usize,
+        batch_count: usize,
+        max_batch_count: usize,
+    ) -> ZResult<Self> {
         let size = batch_size * batch_count;
-        let arena = PageArena::new(size);
-        Self { arena, batch_size }
+        let capacity = batch_size * max_batch_count;
+        let arena = PageArena::new(size, capacity)?;
+        Ok(Self { arena, batch_size })
+    }
+
+    pub(crate) fn allocate_more_batches(
+        &self,
+        additional_batch_count: usize,
+    ) -> ZResult<io_uring::squeue::Entry> {
+        //println!("Add batches");
+
+        let size = self.batch_size * additional_batch_count;
+        let addr = self.arena.add_memory(size)?;
+
+        let bid = unsafe {
+            addr.byte_offset_from(self.arena.memory.load(std::sync::atomic::Ordering::Relaxed))
+        } as usize / self.batch_size;
+
+        Ok(opcode::ProvideBuffers::new(
+            addr,
+            self.batch_size as i32,
+            additional_batch_count.try_into().unwrap(),
+            0,
+            bid as u16,
+        )
+        .build())
+    }
+
+    pub(crate) fn batch_count(&self) -> usize {
+        self.arena.size.load(std::sync::atomic::Ordering::Relaxed) / self.batch_size
     }
 
     pub(crate) unsafe fn index_mut_unchecked(&self, index: usize) -> &'static mut [u8] {
@@ -59,7 +93,7 @@ impl BatchArena {
         opcode::ProvideBuffers::new(
             self.arena.memory.load(std::sync::atomic::Ordering::Relaxed),
             self.batch_size as i32,
-            (self.arena.size / self.batch_size).try_into().unwrap(),
+            self.batch_count().try_into().unwrap(),
             0,
             0,
         )
@@ -67,7 +101,7 @@ impl BatchArena {
     }
 
     pub(crate) fn register_buffers(&self) -> Vec<libc::iovec> {
-        let batch_count = (self.arena.size / self.batch_size).try_into().unwrap();
+        let batch_count = self.batch_count().try_into().unwrap();
 
         let mut batches = Vec::with_capacity(batch_count);
 

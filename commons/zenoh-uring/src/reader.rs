@@ -15,7 +15,7 @@ use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
-    sync::{atomic::AtomicBool, mpsc::Sender, Arc},
+    sync::{Arc, atomic::AtomicBool, mpsc::Sender},
 };
 
 use io_uring::{opcode, squeue::Flags, types, EnterFlags, IoUring, SubmissionQueue};
@@ -26,7 +26,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 
-use crate::{batch_arena::BatchArena, BUF_SIZE};
+use crate::{BUF_COUNT, BUF_SIZE, batch_arena::BatchArena};
 
 #[derive(Debug)]
 struct RxCallback {
@@ -249,7 +249,7 @@ impl Default for RxWindow {
 
 macro_rules! log {
     ($level:expr, $($arg:tt)*) => {
-        //elog!("INFO", "[{}] {}:{} - {}",
+        //eprintln!("[{}] {}:{} - {}",
         //    $level,
         //    file!(),
         //    line!(),
@@ -508,29 +508,51 @@ impl RxBuffer {
 
 impl Drop for RxBuffer {
     fn drop(&mut self) {
-        let provide_buffers = opcode::ProvideBuffers::new(
-            self.data.as_mut_ptr(),
-            BUF_SIZE as i32,
-            1,
-            0,
-            self.buf_id as u16,
-        )
-        .build()
-        .flags(Flags::SKIP_SUCCESS);
-
-        self.arena.submitter.submit_quiet(provide_buffers).unwrap();
+        self.arena.recycle_batch(self.buf_id);
     }
 }
 
-#[derive(Debug)]
 struct ReservableArenaInner {
     arena: BatchArena,
     submitter: SubmissionIface,
+    recycled_batches: atomic_queue::Queue<u16>,
+}
+
+impl std::fmt::Debug for ReservableArenaInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReservableArenaInner").field("arena", &self.arena).field("submitter", &self.submitter).finish()
+    }
 }
 
 impl ReservableArenaInner {
     fn new(arena: BatchArena, submitter: SubmissionIface) -> Self {
-        Self { arena, submitter }
+        let recycled_batches = atomic_queue::Queue::new(u16::MAX as usize);
+        Self { arena, submitter, recycled_batches }
+    }
+
+    fn recycle_batch(&self, buf_id: u16) {
+        assert!(self.recycled_batches.push(buf_id));
+    }
+
+    fn pop_recycled_batch(&self) -> Option<(usize, io_uring::squeue::Entry)> {
+        match self.recycled_batches.pop() {
+        Some(buf_id) => {
+            let data = unsafe{ &mut self.arena.index_mut_unchecked(buf_id as usize)[0..1] };
+            Some((1, opcode::ProvideBuffers::new(
+                data.as_mut_ptr(),
+                BUF_SIZE as i32,
+                1,
+                0,
+                buf_id,
+            )
+            .build()
+            .flags(Flags::SKIP_SUCCESS)))
+        }
+        None => {
+            //None
+            self.arena.allocate_more_batches(BUF_COUNT).ok().map(|val| (BUF_COUNT, val))
+        }
+        }
     }
 }
 
@@ -650,8 +672,8 @@ impl Reader {
                 //.setup_coop_taskrun()
                 .setup_defer_taskrun()
                 .setup_single_issuer()
-                .build((1024).try_into().unwrap()).unwrap();
-            let arena = BatchArena::new(batch_size, batch_count);
+                .build((batch_count*2).try_into().unwrap()).unwrap();
+            let arena = BatchArena::new(batch_size, batch_count, u16::MAX as usize).unwrap();
             {
                 let provide_buffers = arena.provide_root_buffers();
                 unsafe { ring.submission_shared().push(&provide_buffers).unwrap() };
@@ -674,11 +696,27 @@ impl Reader {
 
             unsafe { ring.submission_shared().push(&waker_read).unwrap() };
 
+            fn roll_ring_batches(arena: &ReservableArena, ctr: &mut i32, sq: &mut SubmissionQueue<'_>) {
+                while *ctr < 0 {
+                    match arena.inner.pop_recycled_batch() {
+                        Some((count, batch)) => {
+                            unsafe { sq.push(&batch).unwrap() }
+                            *ctr += count as i32;
+                        },
+                        None => break,
+                    }
+                }
+            }
+
+            let mut batch_ctr = (batch_count/2) as i32;
+
             loop {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
+                    //log!("INFO", "e: {:?}", e);
+                    
                     let mut sq = unsafe { ring.submission_shared() };
 
-                    //log!("INFO", "e: {:?}", e);
+                    // waker trigger check
                     if e.user_data() == 0 {
                         log!("INFO", "Zero-user-data entry: {:?}", e);
                         unsafe { sq.push(&waker_read).unwrap() };
@@ -687,12 +725,9 @@ impl Reader {
 
                     let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
 
-                    let (need_submit, _sock_nonempty) = Reader::read_multi(&e, rx, &arena, &mut sq);
+                    let need_submit = Reader::read_multi(&e, rx, &arena, &mut sq, &mut batch_ctr);
 
-                    while let Ok(val) = receiver.try_recv() {
-                        unsafe { sq.push(&val).unwrap() };
-                        //recv_ctr += 1;
-                    }
+                    roll_ring_batches(&arena, &mut batch_ctr, &mut sq);
 
                     if need_submit {
                         let len = sq.len() as u32;
@@ -708,11 +743,12 @@ impl Reader {
                     }
                 }
 
-                //log!("INFO", "loop_ctr: {loop_ctr}");
-                //log!("INFO", "recv_ctr: {recv_ctr}");
-
-                // receive external submissions
                 let mut sq = unsafe { ring.submission_shared() };
+                
+                // reclaim batches
+                roll_ring_batches(&arena, &mut batch_ctr, &mut sq);
+                
+                // receive external submissions
                 while let Ok(val) = receiver.try_recv() {
                     unsafe { sq.push(&val).unwrap() };
                 }
@@ -724,12 +760,6 @@ impl Reader {
 
                 // this wait can be interrupted by Self::wake_reader_thread
                 ring.submit_and_wait(1).unwrap();
-
-                //unsafe { ring.submitter().enter::<libc::sigset_t>(
-                //            sq.len() as u32,
-                //             0,
-                //              EnterFlags::GETEVENTS.bits(),
-                //               None).unwrap(); }
             }
         });
 
@@ -743,9 +773,9 @@ impl Reader {
         rx: &Rx,
         arena: &ReservableArena,
         sq: &mut SubmissionQueue<'_>,
-    ) -> (bool, bool) {
+        ctr: &mut i32,
+    ) -> bool {
         let mut need_submit = false;
-        let mut sock_nonempty = false;
         if e.result() < 0 {
             match e.result().neg() {
                 libc::ENOBUFS => {
@@ -766,8 +796,8 @@ impl Reader {
                     unsafe { sq.push(&recv).unwrap() };
                     need_submit = true;
                 }
-                unexpected => {
-                    log!("INFO", "Unexpected uring error: {}", unexpected);
+                _unexpected => {
+                    log!("INFO", "Unexpected uring error: {}", _unexpected);
                 }
             }
         } else {
@@ -786,15 +816,11 @@ impl Reader {
 
                     let buf_len = e.result() as usize;
 
-                    assert!(io_uring::cqueue::buffer_more(e.flags()) == false);
-                    assert!(io_uring::cqueue::notif(e.flags()) == false);
-
-                    sock_nonempty |= io_uring::cqueue::sock_nonempty(e.flags());
-
                     //log!("INFO", "buf_id: {buf_id}, buf_len: {buf_len}");
 
                     if buf_len > 0 {
                         let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
+                        *ctr-=1;
                         rx.run_callback(rx_buffer);
                     } else {
                         log!("INFO", "zero buf len");
@@ -811,6 +837,6 @@ impl Reader {
                 }
             };
         }
-        (need_submit, sock_nonempty)
+        need_submit
     }
 }

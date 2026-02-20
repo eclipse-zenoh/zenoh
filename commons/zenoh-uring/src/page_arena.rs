@@ -13,16 +13,20 @@
 //
 
 use std::{
+    ffi::c_void,
     ops::{Deref, DerefMut},
-    sync::atomic::AtomicPtr,
+    sync::atomic::{AtomicPtr, AtomicUsize},
 };
+use zenoh_result::ZResult;
 
-use libc::{mlock, mmap, MAP_ANON, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+use libc::{mlock, mmap, MAP_ANON, MAP_NORESERVE, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+use zenoh_core::bail;
 
 #[derive(Debug)]
 pub(crate) struct PageArena {
     pub(crate) memory: AtomicPtr<u8>,
-    pub(crate) size: usize,
+    pub(crate) size: AtomicUsize,
+    capacity: usize,
 }
 
 impl Deref for PageArena {
@@ -32,7 +36,7 @@ impl Deref for PageArena {
         unsafe {
             std::slice::from_raw_parts(
                 self.memory.load(std::sync::atomic::Ordering::Relaxed),
-                self.size,
+                self.size.load(std::sync::atomic::Ordering::Relaxed),
             )
         }
     }
@@ -43,43 +47,78 @@ impl DerefMut for PageArena {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.memory.load(std::sync::atomic::Ordering::Relaxed),
-                self.size,
+                self.size.load(std::sync::atomic::Ordering::Relaxed),
             )
         }
     }
 }
 
 impl PageArena {
-    pub(crate) fn new(size: usize) -> Self {
-        // mmap page-aligned memory
-        let memory = {
-            unsafe {
-                let memory = mmap(
+    pub(crate) fn new(size: usize, capacity: usize) -> ZResult<Self> {
+        // reserve address space
+        let ptr = {
+            // TODO: attempt to use huge pages
+            let ptr = unsafe {
+                mmap(
                     std::ptr::null_mut(),
-                    size,
+                    capacity,
                     PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANON,
+                    MAP_PRIVATE | MAP_ANON | MAP_NORESERVE,
                     -1,
                     0,
+                )
+            };
+            if ptr == libc::MAP_FAILED {
+                bail!(
+                    "Error reserving address space of {capacity} bytes: mmap returned MAP_FAILED"
                 );
-                assert!(memory != libc::MAP_FAILED);
-
-                let mlock_result = mlock(memory, size);
-                assert!(mlock_result == 0);
-
-                memory as *mut u8
             }
+
+            ptr as *mut u8
         };
-        Self {
-            memory: memory.into(),
-            size,
+
+        let res = Self {
+            memory: ptr.into(),
+            size: AtomicUsize::new(0),
+            capacity,
+        };
+
+        res.add_memory(size)?;
+
+        Ok(res)
+    }
+
+    pub(crate) fn add_memory(&self, additional_size: usize) -> ZResult<*mut u8> {
+        if self.size.load(std::sync::atomic::Ordering::Relaxed) + additional_size > self.capacity {
+            bail!("Error allocating additional {additional_size} bytes: capacity exceeded");
+        }
+
+        unsafe {
+            let addr = self
+                .memory
+                .load(std::sync::atomic::Ordering::Relaxed)
+                .add(self.size.load(std::sync::atomic::Ordering::Relaxed));
+
+            // prefetch and lock piece of memory in consecutive part of mmapped address space
+            // TODO: in future, validate perf with mlock2 + MLOCK_ONFAULT 
+            let mlock_result = mlock(addr as *mut c_void, additional_size);
+            if mlock_result != 0 {
+                bail!(
+                    "Error allocating additional {additional_size} bytes: mlock returned {mlock_result}"
+                );
+            }
+
+            self.size
+                .fetch_add(additional_size, std::sync::atomic::Ordering::SeqCst);
+
+            Ok(addr)
         }
     }
 
     pub(crate) unsafe fn as_slice_mut_unchecked(&self) -> &'static mut [u8] {
         std::slice::from_raw_parts_mut(
             self.memory.load(std::sync::atomic::Ordering::Relaxed),
-            self.size,
+            self.size.load(std::sync::atomic::Ordering::Relaxed),
         )
     }
 }
@@ -89,7 +128,7 @@ impl Drop for PageArena {
         unsafe {
             libc::munmap(
                 self.memory.load(std::sync::atomic::Ordering::Relaxed) as *mut libc::c_void,
-                self.size,
+                self.size.load(std::sync::atomic::Ordering::Relaxed),
             );
         }
     }
