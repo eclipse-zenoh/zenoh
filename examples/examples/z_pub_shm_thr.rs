@@ -48,7 +48,7 @@ async fn main() {
 
     println!("Press CTRL-C to quit...");
     loop {
-        publisher.put(buf.clone()).await.unwrap();
+        publisher.put(&buf).await.unwrap();
     }
 }
 
