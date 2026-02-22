@@ -540,7 +540,19 @@ pub(crate) fn route_send_response(
             {
                 Some((src_rid, src_face)) => {
                     if let Some(expr) = expr {
-                        msg.wire_expr = expr.get_best_key(src_face.id).to_owned();
+                        // TODO: consider to optimize keyexpr for 2.0 ?
+                        // Doing it now will break wire compatibility
+                        // msg.wire_expr = expr.get_best_key(src_face.id).to_owned();
+                        match expr.key_expr() {
+                            Some(key_expr) => {
+                                msg.wire_expr =
+                                    WireExpr::empty().with_suffix(key_expr.as_str()).to_owned();
+                            }
+                            None => {
+                                tracing::error!("{}:{} Route reply: wire expr {} does not map to a valid key expression!", face, msg.rid, msg.wire_expr);
+                                return;
+                            }
+                        }
                     }
                     tracing::trace!(
                         "{}:{} Route reply for query {}:{} ({})",
