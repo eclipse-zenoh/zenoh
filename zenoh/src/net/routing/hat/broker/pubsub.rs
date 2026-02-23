@@ -224,11 +224,11 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
+    #[tracing::instrument(level = "debug", skip(tables, _src_face, _node_id), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        _src_face: &FaceState,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<Route> {
@@ -248,7 +248,7 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for ctx in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && src_face.id != ctx.face.id {
+                if ctx.subs.is_some() {
                     route.insert(ctx.face.id, || {
                         tracing::trace!(dst = %ctx.face, reason = "resource match");
                         let wire_expr = expr.get_best_key(ctx.face.id);

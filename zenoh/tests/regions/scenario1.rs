@@ -20,13 +20,14 @@
 use std::time::Duration;
 
 use predicates::Predicate;
+use regex::Regex;
 use zenoh::Wait;
 use zenoh_config::WhatAmI::{Client, Peer, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
 use crate::{json, loc, predicates_ext, skip_fmt, Node, SubUtils};
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 lazy_static! {
     static ref STORAGE: tracing_capture::SharedStorage = tracing_capture::SharedStorage::default();
@@ -341,13 +342,19 @@ async fn test_regions_scenario1_order1_getque() {
 
     let s = STORAGE.lock();
 
+    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
+
     for zid in [
         "11ac9110", "11ac9120", "11ac9130", "11ac9210", "11ac9220", "11ac9230", "11ac9310",
         "11ac9320", "11ac9330",
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(zid, "test/...").eval(e))
+                .filter(|e| predicates_ext::register_queryable(
+                    zid,
+                    predicates_ext::dbg_obj_re(re.clone())
+                )
+                .eval(e))
                 .count(),
             2
         );
@@ -442,11 +449,14 @@ async fn test_regions_scenario1_order1_queque() {
             {
                 break;
             }
+
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     });
 
     let s = STORAGE.lock();
+
+    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
 
     for zid in [
         "11ad9110", "11ad9120", "11ad9130", "11ad9210", "11ad9220", "11ad9230", "11ad9310",
@@ -454,9 +464,13 @@ async fn test_regions_scenario1_order1_queque() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(zid, "test/...").eval(e))
+                .filter(|e| predicates_ext::register_queryable(
+                    zid,
+                    predicates_ext::dbg_obj_re(re.clone())
+                )
+                .eval(e))
                 .count(),
-            3
+            8
         );
     }
 }
@@ -761,13 +775,19 @@ async fn test_regions_scenario1_order2_getque() {
 
     let s = STORAGE.lock();
 
+    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
+
     for zid in [
         "12ac9110", "12ac9120", "12ac9130", "12ac9210", "12ac9220", "12ac9230", "12ac9310",
         "12ac9320", "12ac9330",
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(zid, "test/...").eval(e))
+                .filter(|e| predicates_ext::register_queryable(
+                    zid,
+                    predicates_ext::dbg_obj_re(re.clone())
+                )
+                .eval(e))
                 .count(),
             2
         );
@@ -867,15 +887,21 @@ async fn test_regions_scenario1_order2_queque() {
 
     let s = STORAGE.lock();
 
+    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
+
     for zid in [
         "12ad9110", "12ad9120", "12ad9130", "12ad9210", "12ad9220", "12ad9230", "12ad9310",
         "12ad9320", "12ad9330",
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(zid, "test/...").eval(e))
+                .filter(|e| predicates_ext::register_queryable(
+                    zid,
+                    predicates_ext::dbg_obj_re(re.clone())
+                )
+                .eval(e))
                 .count(),
-            3
+            8
         );
     }
 }

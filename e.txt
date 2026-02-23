@@ -1,3 +1,0 @@
-    Finished `test` profile [unoptimized] target(s) in 0.30s
-     Running tests/regions/main.rs (target/debug/deps/regions-c36f3b83c92c8b3e)
-error: test failed, to rerun pass `-p zenoh --test regions`

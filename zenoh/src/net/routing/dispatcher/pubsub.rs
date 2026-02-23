@@ -360,6 +360,8 @@ pub fn route_data(
 
     let mut dirs = builder.build().into_iter();
 
+    tracing::trace!(?dirs);
+
     if let Some(dir) = dirs.next() {
         treat_timestamp!(
             &rtables.data.hlc,

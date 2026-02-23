@@ -265,11 +265,11 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
+    #[tracing::instrument(level = "debug", skip(tables, _src_face, _node_id), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        _src_face: &FaceState,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -293,11 +293,9 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for ctx in self.owned_face_contexts(&mres) {
-                if src_face.id != ctx.face.id {
-                    if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
-                        route.push(qabl);
-                    }
+                if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
+                    tracing::trace!(dst = %ctx.face, reason = "resource match");
+                    route.push(qabl);
                 }
             }
         }

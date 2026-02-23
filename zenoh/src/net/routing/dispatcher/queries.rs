@@ -327,9 +327,11 @@ impl Face {
                 drop(queries_lock);
                 drop(rtables);
 
-                let query_dirs = query_dirs.build();
+                let dirs = query_dirs.build();
 
-                if query_dirs.is_empty() {
+                tracing::trace!(?dirs);
+
+                if dirs.is_empty() {
                     tracing::debug!(
                         "{}:{} Send final reply (no matching queryables or not master)",
                         self.state,
@@ -344,7 +346,7 @@ impl Face {
                             ext_tstamp: None,
                         });
                 } else {
-                    for QueryDirection { dir, rid } in query_dirs.into_iter() {
+                    for QueryDirection { dir, rid } in dirs.into_iter() {
                         QueryCleanup::spawn_query_clean_up_task(
                             &dir.dst_face,
                             &self.tables,

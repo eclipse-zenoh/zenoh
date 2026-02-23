@@ -132,6 +132,7 @@ zenoh-util = { workspace = true }
 [dev-dependencies]
 libc = { workspace = true }
 predicates = { workspace = true }
+regex = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
 tracing-capture = { workspace = true }

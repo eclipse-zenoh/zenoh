@@ -206,53 +206,56 @@ pub mod predicates_ext {
         .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
     }
 
-    pub fn register_queryable<'a, C>(zid: &'static str, keyexpr: &'static str) -> impl Predicate<C>
+    pub fn register_queryable<'a, C>(
+        zid: &'static str,
+        keyexpr_pred: impl IntoFieldPredicate,
+    ) -> impl Predicate<C>
     where
         C: Captured<'a>,
     {
         ancestor(
             name(eq("register_queryable"))
                 & field("self", dbg_obj_eq("north"))
-                & field("res", dbg_obj_eq(keyexpr)),
+                & field("res", keyexpr_pred),
         )
         .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
     }
 
-    pub fn dbg_obj_eq(matcher: &'static str) -> DebugObjectEqPredicate {
-        DebugObjectEqPredicate { matcher }
+    pub fn dbg_obj_eq(matcher: &'static str) -> DebugObjectRegexPredicate {
+        DebugObjectRegexPredicate {
+            matcher: regex::Regex::new(&regex::escape(matcher)).unwrap(),
+        }
+    }
+
+    pub fn dbg_obj_re(matcher: regex::Regex) -> DebugObjectRegexPredicate {
+        DebugObjectRegexPredicate { matcher }
     }
 
     #[derive(Debug)]
-    pub struct DebugObjectEqPredicate {
-        matcher: &'static str,
+    pub struct DebugObjectRegexPredicate {
+        matcher: regex::Regex,
     }
 
-    impl IntoFieldPredicate for DebugObjectEqPredicate {
-        type Predicate = DebugObjectEqPredicate;
+    impl IntoFieldPredicate for DebugObjectRegexPredicate {
+        type Predicate = DebugObjectRegexPredicate;
 
         fn into_predicate(self) -> Self::Predicate {
             self
         }
     }
 
-    impl Display for DebugObjectEqPredicate {
+    impl Display for DebugObjectRegexPredicate {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{self:?}")
         }
     }
 
-    impl PredicateReflection for DebugObjectEqPredicate {}
+    impl PredicateReflection for DebugObjectRegexPredicate {}
 
-    impl Predicate<TracedValue> for DebugObjectEqPredicate {
+    impl Predicate<TracedValue> for DebugObjectRegexPredicate {
         fn eval(&self, variable: &TracedValue) -> bool {
             match variable {
-                TracedValue::Object(obj) => {
-                    obj.as_ref() == self.matcher
-                        || (self.matcher.ends_with("...")
-                            && obj
-                                .as_ref()
-                                .starts_with(&self.matcher[0..self.matcher.len() - 3]))
-                }
+                TracedValue::Object(obj) => self.matcher.is_match(obj.as_ref()),
                 _ => false,
             }
         }
