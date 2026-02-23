@@ -2162,19 +2162,6 @@ async fn transport_unicast_multistream_quic_lowlatency() {
 
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn transport_unicast_multistream_udp_default() {
-    zenoh_util::init_log_from_env_or("error");
-
-    let endpoint = ["udp/localhost:10479?rel=1".parse().unwrap()];
-    let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
-    assert!(
-        is_multistream,
-        "default endpoint config (auto) should enable multistream"
-    );
-}
-
-#[cfg(feature = "transport_udp")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_multistream_udp_enabled() {
     zenoh_util::init_log_from_env_or("error");
 
@@ -2345,6 +2332,19 @@ async fn transport_unicast_multistream_udp_lowlatency() {
     assert!(
         !is_multistream,
         "lowlatency should not support priority-based multistream"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_default() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10491?rel=1".parse().unwrap()];
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
+    assert!(
+        is_multistream,
+        "default endpoint config (auto) should enable multistream"
     );
 }
 
