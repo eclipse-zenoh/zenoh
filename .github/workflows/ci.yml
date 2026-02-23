@@ -31,6 +31,10 @@ env:
   # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
   # version on crates.io. Thus this needs to be updated after every release.
   CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.3.0
+  # Nightly toolchain identifier used by cargo invocations
+  # Normally keep it "nightly" to always use the latest nightly, but in case of a regression in the Rust compiler, 
+  #it can be useful to fix it to a specific nightly version that is known to work.
+  NIGHTLY_TOOLCHAIN: "nightly-2026-02-21"
 
 jobs:
   determine-runner:
@@ -119,7 +123,7 @@ jobs:
         uses: taiki-e/install-action@taplo
   
       - name: Code format check
-        run: rustfmt +nightly --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
+        run: rustfmt +${{ env.NIGHTLY_TOOLCHAIN }} --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
       - name: Clippy zenoh no-default-features
         run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
@@ -377,7 +381,7 @@ jobs:
       - name: Run rustdoc using Nightly Rust and Zenoh unstable
         # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
         run: |
-          cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
+          cargo +${{ env.NIGHTLY_TOOLCHAIN }} rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
             -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples \
             --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
 
@@ -410,10 +414,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Install ${{ matrix.rust }} Rust toolchain
+      - name: Install Rust toolchain
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.rust == 'nightly' && env.NIGHTLY_TOOLCHAIN || matrix.rust }}
         run: |
-          rustup override set ${{ matrix.rust }}
-          rustup update ${{ matrix.rust }}
+          rustup update ${{ env.RUSTUP_TOOLCHAIN }}
           rustup component add llvm-tools-preview
 
       - uses: Swatinem/rust-cache@v2
@@ -424,9 +429,12 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate code coverage
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.rust == 'nightly' && env.NIGHTLY_TOOLCHAIN || matrix.rust }}
+          RUST_LOG: None
         run: |
           sudo prlimit --memlock=unlimited --pid=$$
-          cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+          cargo llvm-cov test --features unstable --features test --features shared-memory \
           ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
           --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
           --skip test_default_features \
@@ -438,8 +446,6 @@ jobs:
           --skip metadata_alloc_concurrent \
           --skip metadata_link_concurrent \
           --skip metadata_link_failure_concurrent
-        env:
-          RUST_LOG: None
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
