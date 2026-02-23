@@ -44,7 +44,6 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
 use self::{
-    gossip::Network,
     interests::interests_new_face,
     pubsub::{pubsub_new_face, undeclare_simple_subscription},
     queries::{queries_new_face, undeclare_simple_queryable},
@@ -58,7 +57,7 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::linkstate::LinkStateList,
+    protocol::{gossip::Gossip, linkstate::LinkStateList},
     routing::{
         dispatcher::{
             face::{Face, InterestState},
@@ -70,18 +69,22 @@ use crate::net::{
     runtime::Runtime,
 };
 
-mod gossip;
 mod interests;
 mod pubsub;
 mod queries;
 mod token;
+
+macro_rules! hat {
+    ($t:expr) => {
+        $t.hat.downcast_ref::<HatTables>().unwrap()
+    };
+}
 
 macro_rules! hat_mut {
     ($t:expr) => {
         $t.hat.downcast_mut::<HatTables>().unwrap()
     };
 }
-use hat_mut;
 
 macro_rules! face_hat {
     ($f:expr) => {
@@ -100,7 +103,7 @@ use face_hat_mut;
 use crate::net::common::AutoConnect;
 
 struct HatTables {
-    gossip: Option<Network>,
+    gossip: Option<Gossip>,
 }
 
 impl HatTables {
@@ -133,7 +136,7 @@ impl HatBaseTrait for HatCode {
         drop(config_guard);
 
         if gossip {
-            hat_mut!(tables).gossip = Some(Network::new(
+            hat_mut!(tables).gossip = Some(Gossip::new(
                 "[Gossip]".to_string(),
                 tables.zid,
                 runtime,
@@ -207,7 +210,7 @@ impl HatBaseTrait for HatCode {
                 &face.state.primitives,
                 RoutingContext::new(Declare {
                     interest_id: Some(0),
-                    ext_qos: QoSType::default(),
+                    ext_qos: QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: NodeIdType::default(),
                     body: DeclareBody::DeclareFinal(DeclareFinal),
@@ -301,9 +304,11 @@ impl HatBaseTrait for HatCode {
             }
         }
 
+        let mut tokens = vec![];
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            tokens.push(res);
         }
 
         for mut res in subs_matches {
@@ -316,6 +321,9 @@ impl HatBaseTrait for HatCode {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .disable_query_routes();
+            Resource::clean(&mut res);
+        }
+        for mut res in tokens {
             Resource::clean(&mut res);
         }
         wtables.faces.remove(&face.id);
@@ -388,8 +396,12 @@ impl HatBaseTrait for HatCode {
                 || (src_face.whatami == WhatAmI::Client && src_face.mcast_group.is_none()))
     }
 
-    fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
-        "graph {}".to_string()
+    fn info(&self, tables: &Tables, _kind: WhatAmI) -> String {
+        hat!(tables)
+            .gossip
+            .as_ref()
+            .map(|net| net.dot())
+            .unwrap_or_else(|| "graph {}".to_string())
     }
 }
 

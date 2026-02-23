@@ -15,12 +15,11 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt,
-    ops::Not,
     sync::{Arc, Weak},
     time::Duration,
 };
 
-use arc_swap::ArcSwap;
+use arc_swap::ArcSwapOption;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
 use zenoh_protocol::{
@@ -34,8 +33,6 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 
 use super::{
     super::router::*,
@@ -109,8 +106,6 @@ pub struct FaceState {
     pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
-    #[cfg(feature = "stats")]
-    pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_interests: HashMap<InterestId, InterestState>,
     pub(crate) remote_key_interests: HashMap<InterestId, Option<Arc<Resource>>>,
@@ -118,12 +113,20 @@ pub struct FaceState {
     pub(crate) local_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
+    /// Pending queries sent to this face.
+    ///
+    /// # Safety
+    /// Access to this field is synchronized across all faces with
+    /// [`super::tables::TablesLock::queries_lock`]; it is unsound to read/write this field without
+    /// acquiring the lock.
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
-    pub(crate) in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+    pub(crate) in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
+    #[cfg(feature = "stats")]
+    pub(crate) stats: Option<zenoh_stats::TransportStats>,
 }
 
 impl FaceState {
@@ -132,19 +135,17 @@ impl FaceState {
         id: usize,
         zid: ZenohIdProto,
         whatami: WhatAmI,
-        #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
-        in_interceptors: Option<Arc<ArcSwap<InterceptorsChain>>>,
+        in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
         hat: Box<dyn Any + Send + Sync>,
         is_local: bool,
+        #[cfg(feature = "stats")] stats: Option<zenoh_stats::TransportStats>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
             zid,
             whatami,
-            #[cfg(feature = "stats")]
-            stats,
             primitives,
             local_interests: HashMap::new(),
             remote_key_interests: HashMap::new(),
@@ -158,6 +159,8 @@ impl FaceState {
             hat,
             task_controller: TaskController::default(),
             is_local,
+            #[cfg(feature = "stats")]
+            stats,
         })
     }
 
@@ -194,21 +197,18 @@ impl FaceState {
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
-        if let Some(interceptor) = self
-            .in_interceptors
-            .as_ref()
-            .map(|itor| itor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
-        {
-            if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+        if let Some(interceptor) = self.in_interceptors.as_ref().map(|itor| itor.load()) {
+            if let Some(interceptor) = interceptor.as_ref() {
+                if let Some(expr) = res.keyexpr() {
+                    let cache = interceptor.compute_keyexpr_cache(expr);
+                    get_mut_unchecked(
+                        get_mut_unchecked(res)
+                            .session_ctxs
+                            .get_mut(&self.id)
+                            .unwrap(),
+                    )
+                    .in_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                }
             }
         }
 
@@ -217,17 +217,18 @@ impl FaceState {
             .as_any()
             .downcast_ref::<Mux>()
             .map(|mux| mux.interceptor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+            if let Some(interceptor) = interceptor.as_ref() {
+                if let Some(expr) = res.keyexpr() {
+                    let cache = interceptor.compute_keyexpr_cache(expr);
+                    get_mut_unchecked(
+                        get_mut_unchecked(res)
+                            .session_ctxs
+                            .get_mut(&self.id)
+                            .unwrap(),
+                    )
+                    .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                }
             }
         }
 
@@ -236,17 +237,18 @@ impl FaceState {
             .as_any()
             .downcast_ref::<McastMux>()
             .map(|mux| mux.interceptor.load())
-            .and_then(|is| is.is_empty().not().then_some(is))
         {
-            if let Some(expr) = res.keyexpr() {
-                let cache = interceptor.compute_keyexpr_cache(expr);
-                get_mut_unchecked(
-                    get_mut_unchecked(res)
-                        .session_ctxs
-                        .get_mut(&self.id)
-                        .unwrap(),
-                )
-                .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+            if let Some(interceptor) = interceptor.as_ref() {
+                if let Some(expr) = res.keyexpr() {
+                    let cache = interceptor.compute_keyexpr_cache(expr);
+                    get_mut_unchecked(
+                        get_mut_unchecked(res)
+                            .session_ctxs
+                            .get_mut(&self.id)
+                            .unwrap(),
+                    )
+                    .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
+                }
             }
         }
     }
@@ -265,7 +267,8 @@ impl FaceState {
                 InterceptorsChain::new(ingress.into_iter().flatten().collect::<Vec<_>>(), version),
                 InterceptorsChain::new(egress.into_iter().flatten().collect::<Vec<_>>(), version),
             );
-            mux.interceptor.store(egress.into());
+            mux.interceptor
+                .store((!egress.is_empty()).then(|| egress.into()));
             self.in_interceptors
                 .as_ref()
                 .expect("face in_interceptors should not be None when primitives are Mux")
@@ -278,7 +281,7 @@ impl FaceState {
                     .collect::<Vec<EgressInterceptor>>(),
                 version,
             );
-            mux.interceptor.store(Arc::new(interceptor));
+            mux.interceptor.store(interceptor.into());
             debug_assert!(self.in_interceptors.is_none());
         } else if let Some(transport) = &self.mcast_group {
             let interceptor = InterceptorsChain::new(
@@ -505,8 +508,8 @@ impl Primitives for Face {
     }
 
     #[inline]
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
-        route_data(&self.tables, &self.state, msg, reliability);
+    fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool) {
+        route_data(&self.tables, &self.state, msg, reliability, consume);
     }
 
     fn send_request(&self, msg: &mut Request) {

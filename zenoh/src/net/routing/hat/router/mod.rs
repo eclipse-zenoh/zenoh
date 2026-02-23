@@ -551,9 +551,11 @@ impl HatBaseTrait for HatCode {
             }
         }
 
+        let mut tokens = vec![];
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            tokens.push(res);
         }
 
         for mut res in subs_matches {
@@ -568,6 +570,9 @@ impl HatBaseTrait for HatCode {
                 .disable_query_routes();
             Resource::clean(&mut res);
         }
+        for mut res in tokens {
+            Resource::clean(&mut res);
+        }
         wtables.faces.remove(&face.id);
 
         match face.whatami {
@@ -578,24 +583,9 @@ impl HatBaseTrait for HatCode {
                     .unwrap()
                     .remove_link(&face.zid)
                 {
-                    pubsub_remove_node(
-                        &mut wtables,
-                        &removed_node.zid,
-                        WhatAmI::Router,
-                        send_declare,
-                    );
-                    queries_remove_node(
-                        &mut wtables,
-                        &removed_node.zid,
-                        WhatAmI::Router,
-                        send_declare,
-                    );
-                    token_remove_node(
-                        &mut wtables,
-                        &removed_node.zid,
-                        WhatAmI::Router,
-                        send_declare,
-                    );
+                    pubsub_remove_node(&mut wtables, &removed_node, WhatAmI::Router, send_declare);
+                    queries_remove_node(&mut wtables, &removed_node, WhatAmI::Router, send_declare);
+                    token_remove_node(&mut wtables, &removed_node, WhatAmI::Router, send_declare);
                 }
 
                 if hat!(wtables).full_net(WhatAmI::Peer) {
@@ -617,22 +607,17 @@ impl HatBaseTrait for HatCode {
                     {
                         pubsub_remove_node(
                             &mut wtables,
-                            &removed_node.zid,
+                            &removed_node,
                             WhatAmI::Peer,
                             send_declare,
                         );
                         queries_remove_node(
                             &mut wtables,
-                            &removed_node.zid,
+                            &removed_node,
                             WhatAmI::Peer,
                             send_declare,
                         );
-                        token_remove_node(
-                            &mut wtables,
-                            &removed_node.zid,
-                            WhatAmI::Peer,
-                            send_declare,
-                        );
+                        token_remove_node(&mut wtables, &removed_node, WhatAmI::Peer, send_declare);
                     }
 
                     hat_mut!(wtables).shared_nodes = shared_nodes(
@@ -681,19 +666,19 @@ impl HatBaseTrait for HatCode {
                             {
                                 pubsub_remove_node(
                                     tables,
-                                    &removed_node.zid,
+                                    &removed_node,
                                     WhatAmI::Router,
                                     send_declare,
                                 );
                                 queries_remove_node(
                                     tables,
-                                    &removed_node.zid,
+                                    &removed_node,
                                     WhatAmI::Router,
                                     send_declare,
                                 );
                                 token_remove_node(
                                     tables,
-                                    &removed_node.zid,
+                                    &removed_node,
                                     WhatAmI::Router,
                                     send_declare,
                                 );
@@ -716,19 +701,19 @@ impl HatBaseTrait for HatCode {
                                     for (_, removed_node) in changes.removed_nodes {
                                         pubsub_remove_node(
                                             tables,
-                                            &removed_node.zid,
+                                            &removed_node,
                                             WhatAmI::Peer,
                                             send_declare,
                                         );
                                         queries_remove_node(
                                             tables,
-                                            &removed_node.zid,
+                                            &removed_node,
                                             WhatAmI::Peer,
                                             send_declare,
                                         );
                                         token_remove_node(
                                             tables,
-                                            &removed_node.zid,
+                                            &removed_node,
                                             WhatAmI::Peer,
                                             send_declare,
                                         );

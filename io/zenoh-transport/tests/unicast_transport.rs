@@ -390,7 +390,7 @@ async fn open_transport_unicast(
         .zid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     // Create the listener on the router
@@ -409,7 +409,7 @@ async fn open_transport_unicast(
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient))
+        .build_test(Arc::new(SHClient))
         .unwrap();
 
     // Create an empty transport with the client
@@ -546,18 +546,6 @@ async fn run_single(
         msg_size,
     )
     .await;
-
-    #[cfg(feature = "stats")]
-    {
-        let c_stats = client_transport.get_stats().unwrap().report();
-        println!("\tClient: {c_stats:?}");
-        let r_stats = ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
-            .unwrap()
-            .get_stats()
-            .map(|s| s.report())
-            .unwrap();
-        println!("\tRouter: {r_stats:?}");
-    }
 
     close_transport(
         router_manager,
@@ -1555,7 +1543,7 @@ fn transport_unicast_qos_and_lowlatency_failure() {
                 .lowlatency(true)
                 .qos(true),
         )
-        .build(peer_shm02_handler.clone());
+        .build_test(peer_shm02_handler.clone());
     assert!(failing_manager.is_err());
 
     let good_manager1 = TransportManager::builder()
@@ -1565,7 +1553,7 @@ fn transport_unicast_qos_and_lowlatency_failure() {
                 .lowlatency(false)
                 .qos(true),
         )
-        .build(peer_shm02_handler.clone());
+        .build_test(peer_shm02_handler.clone());
     assert!(good_manager1.is_ok());
 
     let good_manager2 = TransportManager::builder()
@@ -1575,7 +1563,7 @@ fn transport_unicast_qos_and_lowlatency_failure() {
                 .lowlatency(true)
                 .qos(false),
         )
-        .build(peer_shm02_handler.clone());
+        .build_test(peer_shm02_handler.clone());
     assert!(good_manager2.is_ok());
 }
 

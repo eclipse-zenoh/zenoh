@@ -74,7 +74,7 @@ async fn run(endpoints: &[EndPoint]) {
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
         .zid(ZenohIdProto::try_from([1]).unwrap())
-        .build(Arc::new(SH))
+        .build_test(Arc::new(SH))
         .unwrap();
 
     for _ in 0..RUNS {

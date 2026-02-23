@@ -19,7 +19,10 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, ItemImpl, LitStr, TraitItem};
+use syn::{
+    parse_macro_input, parse_quote, spanned::Spanned, Attribute, Error, Item, ItemImpl, LitStr,
+    TraitItem,
+};
 use zenoh_keyexpr::{
     format::{
         macro_support::{self, SegmentBuilder},
@@ -137,6 +140,48 @@ impl AnnotableItem {
     }
 }
 
+/// Adds unstable warning to documentation. Returns Result for proper error handling.
+fn add_unstable_warning(item: &mut AnnotableItem) -> Result<(), Error> {
+    let attrs = item.attributes_mut()?;
+
+    let mut old_attrs = std::mem::take(attrs).into_iter();
+
+    // First loop: copy attrs until first doc attr, add warning after it
+    for attr in old_attrs.by_ref() {
+        attrs.push(attr);
+        if get_doc_str(attrs.last().unwrap()).is_some() {
+            // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
+            let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
+            let note: Attribute = parse_quote!(#[doc = #message]);
+            attrs.push(note);
+            break;
+        }
+    }
+
+    // Second loop: copy attrs until second doc attr, validate that it's blank
+    for attr in old_attrs.by_ref() {
+        if let Some(lit_str) = get_doc_str(&attr) {
+            if !lit_str.value().trim().is_empty() {
+                return Err(Error::new_spanned(
+                    attr,
+                    "documentation for `#[unstable]` items must have a blank doc line after the brief description. \
+                     This blank line is critical for proper formatting: it will separate the unstable warning from the content below and ensures that \
+                     markdown links (like [`Type`](path::to::Type)) are correctly processed by rustdoc. \
+                     Add an empty `///` line after your brief description and before detailed explanations.",
+                ));
+            }
+            attrs.push(attr);
+            break;
+        }
+        attrs.push(attr);
+    }
+
+    // Third loop: copy remaining attrs
+    attrs.extend(old_attrs);
+
+    Ok(())
+}
+
 #[proc_macro_attribute]
 /// Adds only piece of documentation about the item being unstable but no unstable attribute itself.
 /// This is useful when the whole crate is supposed to be used in unstable mode only, it makes sense
@@ -147,26 +192,8 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
         Err(err) => return err.into_compile_error().into(),
     };
 
-    let attrs = match item.attributes_mut() {
-        Ok(attrs) => attrs,
-        Err(err) => return err.into_compile_error().into(),
-    };
-
-    if attrs.iter().any(is_doc_attribute) {
-        let mut pushed = false;
-        let oldattrs = std::mem::take(attrs);
-        for attr in oldattrs {
-            if is_doc_attribute(&attr) && !pushed {
-                attrs.push(attr);
-                // See: https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#adding-a-warning-block
-                let message = "<div class=\"warning\">This API has been marked as <strong>unstable</strong>: it works as advertised, but it may be changed in a future release.</div>";
-                let note: Attribute = parse_quote!(#[doc = #message]);
-                attrs.push(note);
-                pushed = true;
-            } else {
-                attrs.push(attr);
-            }
-        }
+    if let Err(err) = add_unstable_warning(&mut item) {
+        return err.into_compile_error().into();
     }
 
     TokenStream::from(item.to_token_stream())
@@ -174,12 +201,15 @@ pub fn unstable_doc(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 /// Adds a `#[cfg(feature = "unstable")]` attribute to the item and appends piece of documentation about the item being unstable.
-pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let tokens = unstable_doc(attr, tokens);
+pub fn unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let mut item = match parse_annotable_item!(tokens) {
         Ok(item) => item,
         Err(err) => return err.into_compile_error().into(),
     };
+
+    if let Err(err) = add_unstable_warning(&mut item) {
+        return err.into_compile_error().into();
+    }
 
     let attrs = match item.attributes_mut() {
         Ok(attrs) => attrs,
@@ -188,28 +218,6 @@ pub fn unstable(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 
     let feature_gate: Attribute = parse_quote!(#[cfg(feature = "unstable")]);
     attrs.push(feature_gate);
-
-    TokenStream::from(item.to_token_stream())
-}
-
-// FIXME(fuzzypixelz): refactor `unstable` macro to accept arguments
-#[proc_macro_attribute]
-pub fn internal_config(args: TokenStream, tokens: TokenStream) -> TokenStream {
-    let tokens = unstable_doc(args, tokens);
-    let mut item = match parse_annotable_item!(tokens) {
-        Ok(item) => item,
-        Err(err) => return err.into_compile_error().into(),
-    };
-
-    let attrs = match item.attributes_mut() {
-        Ok(attrs) => attrs,
-        Err(err) => return err.into_compile_error().into(),
-    };
-
-    let feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal_config")]);
-    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
-    attrs.push(feature_gate);
-    attrs.push(hide_doc);
 
     TokenStream::from(item.to_token_stream())
 }
@@ -235,11 +243,24 @@ pub fn internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     TokenStream::from(item.to_token_stream())
 }
 
-/// Returns `true` if the attribute is a `#[doc = "..."]` attribute.
-fn is_doc_attribute(attr: &Attribute) -> bool {
-    attr.path()
+/// Extracts the string literal from a `#[doc = "..."]` attribute.
+fn get_doc_str(attr: &Attribute) -> Option<&LitStr> {
+    if attr
+        .path()
         .get_ident()
         .is_some_and(|ident| &ident.to_string() == "doc")
+    {
+        if let syn::Meta::NameValue(nv) = &attr.meta {
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit_str),
+                ..
+            }) = &nv.value
+            {
+                return Some(lit_str);
+            }
+        }
+    }
+    None
 }
 
 fn keformat_support(source: &str) -> proc_macro2::TokenStream {
@@ -643,4 +664,54 @@ pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #struct_methods_output
     })
     .into()
+}
+
+#[proc_macro_attribute]
+pub fn pub_visibility_if_internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut out = TokenStream::new();
+    let mut item_original: syn::Item = syn::parse(tokens).expect("failed to parse input");
+    let item_modified;
+    let not_internal_feature_gate: Attribute = parse_quote!(#[cfg(not(feature = "internal"))]);
+    let internal_feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
+    let allow_dead_code: Attribute = parse_quote!(#[allow(dead_code)]);
+    match &mut item_original {
+        Item::Fn(item_fn) => {
+            let mut item_fn_modified = item_fn.clone();
+            item_fn_modified.vis = syn::Visibility::Public(syn::token::Pub(item_fn.span()));
+            item_fn_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_modified = Item::Fn(item_fn_modified);
+            item_fn.attrs.splice(0..0, vec![not_internal_feature_gate]);
+        }
+        Item::Struct(item_struct) => {
+            let mut item_struct_modified = item_struct.clone();
+            item_struct_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_struct_modified.vis = syn::Visibility::Public(syn::token::Pub(item_struct.span()));
+            item_modified = Item::Struct(item_struct_modified);
+            item_struct
+                .attrs
+                .splice(0..0, vec![not_internal_feature_gate]);
+        }
+        Item::Type(item_type) => {
+            let mut item_type_modified = item_type.clone();
+            item_type_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_type_modified.vis = syn::Visibility::Public(syn::token::Pub(item_type.span()));
+            item_modified = Item::Type(item_type_modified);
+            item_type
+                .attrs
+                .splice(0..0, vec![not_internal_feature_gate]);
+        }
+        _ => panic!("pub_visibility_if_internal only works with struct, type and fn"),
+    }
+    let ts: TokenStream = item_original.into_token_stream().into();
+    out.extend(ts);
+    let ts: TokenStream = item_modified.into_token_stream().into();
+    out.extend(ts);
+    out
 }

@@ -25,7 +25,7 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::CancellationTokenBuilderTrait;
+use crate::api::cancellation::{CancellationTokenBuilderTrait, SyncGroup};
 #[cfg(feature = "unstable")]
 use crate::api::query::ReplyKeyExpr;
 #[cfg(feature = "unstable")]
@@ -154,6 +154,7 @@ impl QuerierBuilder<'_, '_> {
     }
 
     /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this querier accepts such disjoint replies.
     #[zenoh_macros::unstable]
@@ -172,12 +173,9 @@ impl<'b> Resolvable for QuerierBuilder<'_, 'b> {
 impl Wait for QuerierBuilder<'_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
-        if !key_expr.is_fully_optimized(&self.session.0) {
-            key_expr = self.session.declare_keyexpr(key_expr).wait()?;
-        }
+        key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_querier_inner(key_expr.clone(), self.destination)?;
         Ok(Querier {
             session: self.session.downgrade(),
@@ -192,6 +190,8 @@ impl Wait for QuerierBuilder<'_, '_> {
             #[cfg(feature = "unstable")]
             accept_replies: self.accept_replies,
             matching_listeners: Default::default(),
+            #[cfg(feature = "unstable")]
+            callback_sync_group: SyncGroup::default(),
         })
     }
 }
@@ -241,7 +241,7 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
     pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
@@ -292,9 +292,9 @@ impl<Handler> CancellationTokenBuilderTrait for QuerierGetBuilder<'_, '_, Handle
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -474,24 +474,7 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
-        let (mut callback, receiver) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
-        if self
-            .cancellation_token
-            .as_ref()
-            .map(|ct| ct.is_cancelled())
-            .unwrap_or(false)
-        {
-            return Ok(receiver);
-        };
-        #[cfg(feature = "unstable")]
-        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
-            let (notifier, receiver) =
-                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
-            callback.set_on_drop_notifier(notifier);
-            (ct, receiver)
-        });
+        let (callback, receiver) = self.handler.into_handler();
         #[allow(unused_mut)]
         // mut is only needed when building with "unstable" feature, which might add extra internal parameters on top of the user-provided ones
         let mut parameters = self.parameters.clone();
@@ -500,35 +483,26 @@ where
             parameters.set_reply_key_expr_any();
         }
         #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
-        self.querier
-            .session
-            .query(
-                &self.querier.key_expr,
-                &parameters,
-                self.querier.target,
-                self.querier.consolidation,
-                self.querier.qos,
-                self.querier.destination,
-                self.querier.timeout,
-                self.value,
-                self.attachment,
-                #[cfg(feature = "unstable")]
-                self.source_info,
-                callback,
-            )
-            .map(|qid| {
-                #[cfg(feature = "unstable")]
-                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
-                {
-                    let session_clone = self.querier.session.clone();
-                    let on_cancel = move || {
-                        let _ = session_clone.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
-                        Ok(())
-                    };
-                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
-                }
-                receiver
-            })
+        self.querier.session.query(
+            &self.querier.key_expr,
+            &parameters,
+            self.querier.target,
+            self.querier.consolidation,
+            self.querier.qos,
+            self.querier.destination,
+            self.querier.timeout,
+            self.value,
+            self.attachment,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+            Some(self.querier.id),
+            #[cfg(feature = "unstable")]
+            self.querier.callback_sync_group.notifier(),
+        )?;
+        Ok(receiver)
     }
 }
 

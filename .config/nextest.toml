@@ -26,3 +26,10 @@ test(=zenoh_querier_matching_status)
 """
 slow-timeout = { period = "60s", terminate-after = 6 }
 threads-required = 'num-cpus'
+
+[test-groups]
+serial = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(zenoh_querier_matching_status::)'
+test-group = 'serial'

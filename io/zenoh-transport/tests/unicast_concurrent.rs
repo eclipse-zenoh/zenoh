@@ -113,7 +113,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         .whatami(WhatAmI::Peer)
         .zid(peer_id01)
         .unicast(unicast01)
-        .build(peer_sh01.clone())
+        .build_test(peer_sh01.clone())
         .unwrap();
 
     // Create the peer01 transport manager
@@ -123,7 +123,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         .whatami(WhatAmI::Peer)
         .zid(peer_id02)
         .unicast(unicast02)
-        .build(peer_sh02.clone())
+        .build_test(peer_sh02.clone())
         .unwrap();
 
     // Barrier to synchronize the two tasks

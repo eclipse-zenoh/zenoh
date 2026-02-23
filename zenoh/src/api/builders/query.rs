@@ -78,7 +78,7 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
@@ -86,9 +86,9 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -320,8 +320,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](Locality).
+    /// Restrict the matching queryables that will receive the query to the ones that have the given [`Locality`](Locality).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(self, destination: Locality) -> Self {
@@ -338,6 +337,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     }
 
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this get operation accepts such disjoint replies.
     #[zenoh_macros::unstable]
@@ -374,58 +374,31 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
-        let (mut callback, receiver) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
-        if self
-            .cancellation_token
-            .as_ref()
-            .map(|ct| ct.is_cancelled())
-            .unwrap_or(false)
-        {
-            return Ok(receiver);
-        };
-        #[cfg(feature = "unstable")]
-        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
-            let (notifier, receiver) =
-                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
-            callback.set_on_drop_notifier(notifier);
-            (ct, receiver)
-        });
+        let (callback, receiver) = self.handler.into_handler();
         let Selector {
             key_expr,
             parameters,
         } = self.selector?;
-        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
-        self.session
-            .0
-            .query(
-                &key_expr,
-                &parameters,
-                self.target,
-                self.consolidation,
-                self.qos.into(),
-                self.destination,
-                self.timeout,
-                self.value,
-                self.attachment,
-                #[cfg(feature = "unstable")]
-                self.source_info,
-                callback,
-            )
-            .map(|qid| {
-                #[cfg(feature = "unstable")]
-                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
-                {
-                    let session_clone = self.session.clone();
-                    let on_cancel = move || {
-                        let _ = session_clone.0.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
-                        Ok(())
-                    };
-                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
-                }
-                receiver
-            })
+        self.session.query(
+            &key_expr,
+            &parameters,
+            self.target,
+            self.consolidation,
+            self.qos.into(),
+            self.destination,
+            self.timeout,
+            self.value,
+            self.attachment,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+            None,
+            #[cfg(feature = "unstable")]
+            None,
+        )?;
+        Ok(receiver)
     }
 }
 

@@ -30,8 +30,6 @@ use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
@@ -69,7 +67,7 @@ pub(crate) struct TransportUnicastUniversal {
     pub(super) alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::TransportStats,
 }
 
 impl TransportUnicastUniversal {
@@ -77,7 +75,7 @@ impl TransportUnicastUniversal {
         manager: TransportManager,
         config: TransportConfigUnicast,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -159,13 +157,8 @@ impl TransportUnicastUniversal {
     }
 
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
-        enum Target {
-            Transport,
-            Link(Box<TransportLinkUnicastUniversal>),
-        }
-
         // Try to remove the link
-        let target = {
+        let (is_last, stl) = {
             let mut guard = zwrite!(self.links);
 
             if let Some(index) = guard.iter().position(|tl| {
@@ -177,19 +170,11 @@ impl TransportUnicastUniversal {
                 )
                 .eq(&link)
             }) {
-                let is_last = guard.len() == 1;
-                if is_last {
-                    // Close the whole transport
-                    drop(guard);
-                    Target::Transport
-                } else {
-                    // Remove the link
-                    let mut links = guard.to_vec();
-                    let stl = links.remove(index);
-                    *guard = links.into_boxed_slice();
-                    drop(guard);
-                    Target::Link(stl.into())
-                }
+                // Remove the link
+                let mut links = guard.to_vec();
+                let stl = links.remove(index);
+                *guard = links.into_boxed_slice();
+                (guard.is_empty(), stl)
             } else {
                 bail!(
                     "Can not delete Link {} with peer: {}",
@@ -204,10 +189,12 @@ impl TransportUnicastUniversal {
         if let Some(callback) = cb {
             callback.del_link(link);
         }
-
-        match target {
-            Target::Transport => self.delete().await,
-            Target::Link(stl) => stl.close().await,
+        if is_last {
+            let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
+            self.delete().await?;
+            r
+        } else {
+            stl.close().await
         }
     }
 
@@ -352,16 +339,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> Arc<TransportStats> {
+    fn stats(&self) -> zenoh_stats::TransportStats {
         self.stats.clone()
-    }
-
-    #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
-        zread!(self.links)
-            .iter()
-            .map(|l| (l.link.link(), l.stats.clone()))
-            .collect()
     }
 
     /*************************************/
@@ -411,7 +390,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
         self.internal_schedule(msg)
     }
 

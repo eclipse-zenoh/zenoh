@@ -16,7 +16,7 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex, RwLock},
 };
 
-use arc_swap::ArcSwap;
+use arc_swap::ArcSwapOption;
 use uhlc::HLC;
 use zenoh_config::Config;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
@@ -48,12 +48,21 @@ impl Router {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
     ) -> ZResult<Self> {
         let hat_code = hat::new_hat(whatami, config);
         Ok(Router {
             // whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config, hat_code.as_ref())?),
+                tables: RwLock::new(Tables::new(
+                    zid,
+                    whatami,
+                    hlc,
+                    config,
+                    hat_code.as_ref(),
+                    #[cfg(feature = "stats")]
+                    stats,
+                )?),
                 hat_code,
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
@@ -86,13 +95,13 @@ impl Router {
                     fid,
                     zid,
                     WhatAmI::Client,
-                    #[cfg(feature = "stats")]
-                    None,
                     primitives.clone(),
                     None,
                     None,
                     self.tables.hat_code.new_face(),
                     true,
+                    #[cfg(feature = "stats")]
+                    None,
                 )
             })
             .clone();
@@ -125,10 +134,8 @@ impl Router {
         let fid = tables.face_counter;
         tables.face_counter += 1;
         let zid = transport.get_zid()?;
-        #[cfg(feature = "stats")]
-        let stats = transport.get_stats()?;
 
-        let ingress = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let ingress = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
         let newface = tables
             .faces
@@ -138,13 +145,13 @@ impl Router {
                     fid,
                     zid,
                     whatami,
-                    #[cfg(feature = "stats")]
-                    Some(stats),
                     mux.clone(),
                     None,
                     Some(ingress.clone()),
                     self.tables.hat_code.new_face(),
                     false,
+                    #[cfg(feature = "stats")]
+                    transport.get_stats().ok(),
                 )
             })
             .clone();
@@ -184,17 +191,19 @@ impl Router {
         let fid = tables.face_counter;
         tables.face_counter += 1;
         let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
         let face = FaceState::new(
             fid,
             ZenohIdProto::from_str("1").unwrap(),
             WhatAmI::Peer,
-            #[cfg(feature = "stats")]
-            None,
             mux.clone(),
             Some(transport),
             None,
             self.tables.hat_code.new_face(),
             false,
+            #[cfg(feature = "stats")]
+            stats,
         );
         face.set_interceptors_from_factories(
             &tables.interceptors,
@@ -219,18 +228,20 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let interceptor = Arc::new(ArcSwap::new(InterceptorsChain::empty().into()));
+        let interceptor = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
         let face_state = FaceState::new(
             fid,
             peer.zid,
             WhatAmI::Client, // Quick hack
-            #[cfg(feature = "stats")]
-            Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             Some(transport),
             Some(interceptor.clone()),
             self.tables.hat_code.new_face(),
             false,
+            #[cfg(feature = "stats")]
+            stats,
         );
         face_state.set_interceptors_from_factories(
             &tables.interceptors,

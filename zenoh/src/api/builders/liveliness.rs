@@ -50,7 +50,6 @@ impl Wait for LivelinessTokenBuilder<'_, '_> {
         let session = self.session;
         let key_expr = self.key_expr?.into_owned();
         session
-            .0
             .declare_liveliness_inner(&key_expr)
             .map(|id| LivelinessToken {
                 session: self.session.downgrade(),
@@ -223,6 +222,14 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, Callback<Sample>> {
 }
 
 impl<Handler, const BACKGROUND: bool> LivelinessSubscriberBuilder<'_, '_, Handler, BACKGROUND> {
+    /// Sets the `history` option.
+    ///
+    /// When set to `true`, Zenoh queries the network for _currently live tokens_[^1] upon declaring the subscriber.
+    ///
+    /// When set to `false`, Zenoh does not query the network for currently live tokens.
+    /// In this mode, currently live tokens may still be delivered to the subscriber.
+    ///
+    /// [^1]: Currently live tokens comprise the set of samples that would be returned by a liveliness GET.
     #[inline]
     pub fn history(mut self, history: bool) -> Self {
         self.history = history;
@@ -247,13 +254,16 @@ where
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
+        #[cfg(feature = "unstable")]
+        let callback_sync_group = crate::api::cancellation::SyncGroup::default();
         session
-            .0
             .declare_liveliness_subscriber_inner(
                 &key_expr,
                 Locality::default(),
                 self.history,
                 callback,
+                #[cfg(feature = "unstable")]
+                callback_sync_group.notifier(),
             )
             .map(|sub_state| Subscriber {
                 inner: SubscriberInner {
@@ -264,6 +274,8 @@ where
                     undeclare_on_drop: true,
                 },
                 handler,
+                #[cfg(feature = "unstable")]
+                callback_sync_group,
             })
     }
 }
@@ -287,11 +299,13 @@ impl Resolvable for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> 
 
 impl Wait for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.session.0.declare_liveliness_subscriber_inner(
+        self.session.declare_liveliness_subscriber_inner(
             &self.key_expr?,
             Locality::default(),
             self.history,
             self.handler,
+            #[cfg(feature = "unstable")]
+            None,
         )?;
         Ok(())
     }
@@ -502,41 +516,15 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
-        let (mut callback, receiver) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
-        if self
-            .cancellation_token
-            .as_ref()
-            .map(|ct| ct.is_cancelled())
-            .unwrap_or(false)
-        {
-            return Ok(receiver);
-        };
-        #[cfg(feature = "unstable")]
-        let cancellation_token_and_receiver = self.cancellation_token.map(|ct| {
-            let (notifier, receiver) =
-                crate::api::cancellation::create_sync_group_receiver_notifier_pair();
-            callback.set_on_drop_notifier(notifier);
-            (ct, receiver)
-        });
-        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
-        self.session
-            .0
-            .liveliness_query(&self.key_expr?, self.timeout, callback)
-            .map(|qid| {
-                #[cfg(feature = "unstable")]
-                if let Some((cancellation_token, cancel_receiver)) = cancellation_token_and_receiver
-                {
-                    let session_clone = self.session.clone();
-                    let on_cancel = move || {
-                        let _ = session_clone.0.cancel_liveliness_query(qid); // fails only if no associated query exists - likely because it was already finalized
-                        Ok(())
-                    };
-                    cancellation_token.add_on_cancel_handler(cancel_receiver, Box::new(on_cancel));
-                }
-                receiver
-            })
+        let (callback, receiver) = self.handler.into_handler();
+        self.session.liveliness_query(
+            &self.key_expr?,
+            self.timeout,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+        )?;
+        Ok(receiver)
     }
 }
 

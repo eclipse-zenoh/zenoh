@@ -15,36 +15,66 @@ use std::{
     convert::{TryFrom, TryInto},
     future::{IntoFuture, Ready},
     str::FromStr,
+    sync::Arc,
 };
 
-use zenoh_config::wrappers::EntityId;
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{key_expr::canon::Canonize, ExprId, WireExpr},
-    network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
+    network::Mapping,
 };
 use zenoh_result::ZResult;
 
-use crate::api::session::{Session, SessionInner, UndeclarableSealed};
+use crate::api::session::{Session, UndeclarableSealed, WeakSession};
+
+#[derive(Debug)]
+pub(crate) struct KeyExprWireDeclaration {
+    expr_id: ExprId,
+    prefix_len: u32,
+    session: WeakSession,
+    undeclared: bool,
+}
+
+impl KeyExprWireDeclaration {
+    pub(crate) fn new(prefix: &str, session: &Session, force: bool) -> ZResult<Option<Self>> {
+        let prefix_len = prefix.len() as u32;
+        Ok(session
+            .declare_prefix(prefix, force)
+            .wait()?
+            .map(|expr_id| Self {
+                expr_id,
+                prefix_len,
+                session: session.downgrade(),
+                undeclared: false,
+            }))
+    }
+
+    pub(crate) fn undeclare(&mut self) -> ZResult<()> {
+        if self.undeclared {
+            Ok(())
+        } else {
+            self.undeclared = true;
+            self.session.undeclare_prefix(self.expr_id)
+        }
+    }
+}
+
+impl Drop for KeyExprWireDeclaration {
+    fn drop(&mut self) {
+        let _ = self.undeclare();
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
-    Borrowed(&'a keyexpr),
-    BorrowedWire {
+    Borrowed {
         key_expr: &'a keyexpr,
-        expr_id: ExprId,
-        mapping: Mapping,
-        prefix_len: u32,
-        session_id: EntityId,
+        declaration: Option<Arc<KeyExprWireDeclaration>>,
     },
-    Owned(OwnedKeyExpr),
-    Wire {
+    Owned {
         key_expr: OwnedKeyExpr,
-        expr_id: ExprId,
-        mapping: Mapping,
-        prefix_len: u32,
-        session_id: EntityId,
+        declaration: Option<Arc<KeyExprWireDeclaration>>,
     },
 }
 
@@ -56,14 +86,19 @@ pub(crate) enum KeyExprInner<'a> {
 #[serde(from = "OwnedKeyExpr")]
 #[serde(into = "OwnedKeyExpr")]
 pub struct KeyExpr<'a>(pub(crate) KeyExprInner<'a>);
+
+// Implement RefUnwindSafe for compatibility purposes.
+// Given that all key expression public methods are immutable, they
+// do not break any key expression invariants.
+impl<'a> std::panic::RefUnwindSafe for KeyExpr<'a> {}
+impl<'a> std::panic::UnwindSafe for KeyExpr<'a> {}
+
 impl std::ops::Deref for KeyExpr<'_> {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
         match &self.0 {
-            KeyExprInner::Borrowed(s) => s,
-            KeyExprInner::Owned(s) => s,
-            KeyExprInner::Wire { key_expr, .. } => key_expr,
-            KeyExprInner::BorrowedWire { key_expr, .. } => key_expr,
+            KeyExprInner::Borrowed { key_expr, .. } => key_expr,
+            KeyExprInner::Owned { key_expr, .. } => key_expr,
         }
     }
 }
@@ -74,7 +109,10 @@ impl KeyExpr<'static> {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_string_unchecked(s: String) -> Self {
-        Self(KeyExprInner::Owned(OwnedKeyExpr::from_string_unchecked(s)))
+        Self(KeyExprInner::Owned {
+            key_expr: OwnedKeyExpr::from_string_unchecked(s),
+            declaration: None,
+        })
     }
 
     /// Constructs a [`KeyExpr`] without checking [`keyexpr`]'s invariants
@@ -82,9 +120,10 @@ impl KeyExpr<'static> {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_boxed_str_unchecked(s: Box<str>) -> Self {
-        Self(KeyExprInner::Owned(OwnedKeyExpr::from_boxed_str_unchecked(
-            s,
-        )))
+        Self(KeyExprInner::Owned {
+            key_expr: OwnedKeyExpr::from_boxed_str_unchecked(s),
+            declaration: None,
+        })
     }
 }
 
@@ -110,7 +149,10 @@ impl<'a> KeyExpr<'a> {
     /// but may be used in language bindings (zenoh-c)
     #[zenoh_macros::internal]
     pub fn dummy() -> Self {
-        Self(KeyExprInner::Borrowed(KEYEXPR_DUMMY))
+        Self(KeyExprInner::Borrowed {
+            key_expr: KEYEXPR_DUMMY,
+            declaration: None,
+        })
     }
 
     /// Checks if the key expression is the dummy one.
@@ -119,7 +161,7 @@ impl<'a> KeyExpr<'a> {
     #[zenoh_macros::internal]
     pub fn is_dummy(&self) -> bool {
         let Self(inner) = self;
-        let KeyExprInner::Borrowed(key_expr) = inner else {
+        let KeyExprInner::Borrowed { key_expr, .. } = inner else {
             return false;
         };
         std::ptr::eq(*key_expr, KEYEXPR_DUMMY)
@@ -130,33 +172,19 @@ impl<'a> KeyExpr<'a> {
     /// Note that [`KeyExpr`] (as well as [`OwnedKeyExpr`]) use reference counters internally, so you're probably better off using clone.
     pub fn borrowing_clone(&'a self) -> Self {
         let inner = match &self.0 {
-            KeyExprInner::Borrowed(key_expr) => KeyExprInner::Borrowed(key_expr),
-            KeyExprInner::BorrowedWire {
+            KeyExprInner::Borrowed {
                 key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExprInner::BorrowedWire {
+                declaration,
+            } => KeyExprInner::Borrowed {
                 key_expr,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
+                declaration: declaration.clone(),
             },
-            KeyExprInner::Owned(key_expr) => KeyExprInner::Borrowed(key_expr),
-            KeyExprInner::Wire {
+            KeyExprInner::Owned {
                 key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExprInner::BorrowedWire {
+                declaration,
+            } => KeyExprInner::Borrowed {
                 key_expr,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
+                declaration: declaration.clone(),
             },
         };
         Self(inner)
@@ -189,36 +217,23 @@ impl<'a> KeyExpr<'a> {
 
     /// Ensures `self` owns all of its data, and informs rustc that it does.
     pub fn into_owned(self) -> KeyExpr<'static> {
-        match self.0 {
-            KeyExprInner::Borrowed(s) => KeyExpr(KeyExprInner::Owned(s.into())),
-            KeyExprInner::Owned(s) => KeyExpr(KeyExprInner::Owned(s)),
-            KeyExprInner::BorrowedWire {
+        let inner = match self.0 {
+            KeyExprInner::Borrowed {
                 key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExpr(KeyExprInner::Wire {
+                declaration,
+            } => KeyExprInner::Owned {
                 key_expr: key_expr.into(),
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            }),
-            KeyExprInner::Wire {
+                declaration: declaration.clone(),
+            },
+            KeyExprInner::Owned {
                 key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExpr(KeyExprInner::Wire {
+                declaration,
+            } => KeyExprInner::Owned {
                 key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            }),
-        }
+                declaration,
+            },
+        };
+        KeyExpr(inner)
     }
 
     /// Joins both sides, inserting a `/` in between them.
@@ -235,25 +250,10 @@ impl<'a> KeyExpr<'a> {
     /// assert_eq!(join.as_str(), "some/prefix/some/suffix");
     /// ```
     pub fn join<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
-        let r = self.as_keyexpr().join(s)?;
-        if let KeyExprInner::Wire {
-            expr_id,
-            mapping,
-            prefix_len,
-            session_id,
-            ..
-        } = &self.0
-        {
-            Ok(KeyExpr(KeyExprInner::Wire {
-                key_expr: r,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            }))
-        } else {
-            Ok(r.into())
-        }
+        Ok(KeyExpr(KeyExprInner::Owned {
+            key_expr: self.as_keyexpr().join(s)?,
+            declaration: self.declaration().clone(),
+        }))
     }
 
     /// Performs string concatenation and returns the result as a [`KeyExpr`] if possible.
@@ -261,39 +261,13 @@ impl<'a> KeyExpr<'a> {
     /// You should probably prefer [`KeyExpr::join`] as Zenoh may then take advantage of the hierarchical separation it inserts.
     pub fn concat<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let s = s.as_ref();
-        self._concat(s)
-    }
-
-    fn _concat(&self, s: &str) -> ZResult<KeyExpr<'static>> {
         if self.ends_with('*') && s.starts_with('*') {
             bail!("Tried to concatenate {} (ends with *) and {} (starts with *), which would likely have caused bugs. If you're sure you want to do this, concatenate these into a string and then try to convert.", self, s)
         }
-        let r = OwnedKeyExpr::try_from(format!("{self}{s}"))?;
-        if let KeyExprInner::Wire {
-            expr_id,
-            mapping,
-            prefix_len,
-            session_id,
-            ..
-        }
-        | KeyExprInner::BorrowedWire {
-            expr_id,
-            mapping,
-            prefix_len,
-            session_id,
-            ..
-        } = &self.0
-        {
-            Ok(KeyExpr(KeyExprInner::Wire {
-                key_expr: r,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            }))
-        } else {
-            Ok(r.into())
-        }
+        Ok(KeyExpr(KeyExprInner::Owned {
+            key_expr: OwnedKeyExpr::try_from(format!("{self}{s}"))?,
+            declaration: self.declaration().clone(),
+        }))
     }
 
     /// Will return false and log an error in case of a `TryInto` failure.
@@ -325,16 +299,18 @@ impl<'a> KeyExpr<'a> {
 impl FromStr for KeyExpr<'static> {
     type Err = zenoh_result::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(KeyExprInner::Owned(s.parse()?)))
+        Ok(Self(KeyExprInner::Owned {
+            key_expr: s.parse()?,
+            declaration: None,
+        }))
     }
 }
+
 impl<'a> From<KeyExpr<'a>> for OwnedKeyExpr {
     fn from(val: KeyExpr<'a>) -> Self {
         match val.0 {
-            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                key_expr.into()
-            }
-            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr,
+            KeyExprInner::Borrowed { key_expr, .. } => key_expr.into(),
+            KeyExprInner::Owned { key_expr, .. } => key_expr,
         }
     }
 }
@@ -349,61 +325,42 @@ impl AsRef<str> for KeyExpr<'_> {
     }
 }
 impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
-    fn from(ke: &'a keyexpr) -> Self {
-        Self(KeyExprInner::Borrowed(ke))
+    fn from(key_expr: &'a keyexpr) -> Self {
+        Self(KeyExprInner::Borrowed {
+            key_expr,
+            declaration: None,
+        })
     }
 }
 impl From<OwnedKeyExpr> for KeyExpr<'_> {
-    fn from(v: OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Owned(v))
+    fn from(key_expr: OwnedKeyExpr) -> Self {
+        Self(KeyExprInner::Owned {
+            key_expr,
+            declaration: None,
+        })
     }
 }
 impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
-    fn from(v: &'a OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Borrowed(v))
+    fn from(key_expr: &'a OwnedKeyExpr) -> Self {
+        Self(KeyExprInner::Borrowed {
+            key_expr,
+            declaration: None,
+        })
     }
 }
 impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
     fn from(val: &'a KeyExpr<'a>) -> Self {
-        match &val.0 {
-            KeyExprInner::Borrowed(key_expr) => Self(KeyExprInner::Borrowed(key_expr)),
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => Self(KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            }),
-            KeyExprInner::Owned(key_expr) => Self(KeyExprInner::Borrowed(key_expr)),
-            KeyExprInner::Wire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => Self(KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            }),
-        }
+        Self(KeyExprInner::Borrowed {
+            key_expr: val.key_expr(),
+            declaration: val.declaration().clone(),
+        })
     }
 }
 impl From<KeyExpr<'_>> for String {
     fn from(ke: KeyExpr) -> Self {
         match ke.0 {
-            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                key_expr.as_str().to_owned()
-            }
-            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr.into(),
+            KeyExprInner::Borrowed { key_expr, .. } => key_expr.as_str().to_owned(),
+            KeyExprInner::Owned { key_expr, .. } => key_expr.into(),
         }
     }
 }
@@ -411,7 +368,10 @@ impl From<KeyExpr<'_>> for String {
 impl TryFrom<String> for KeyExpr<'_> {
     type Error = zenoh_result::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Ok(Self(KeyExprInner::Owned(value.try_into()?)))
+        Ok(Self(KeyExprInner::Owned {
+            key_expr: value.try_into()?,
+            declaration: None,
+        }))
     }
 }
 impl<'a> TryFrom<&'a String> for KeyExpr<'a> {
@@ -429,13 +389,19 @@ impl<'a> TryFrom<&'a mut String> for KeyExpr<'a> {
 impl<'a> TryFrom<&'a str> for KeyExpr<'a> {
     type Error = zenoh_result::Error;
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
+        Ok(Self(KeyExprInner::Borrowed {
+            key_expr: value.try_into()?,
+            declaration: None,
+        }))
     }
 }
 impl<'a> TryFrom<&'a mut str> for KeyExpr<'a> {
     type Error = zenoh_result::Error;
     fn try_from(value: &'a mut str) -> Result<Self, Self::Error> {
-        Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
+        Ok(Self(KeyExprInner::Borrowed {
+            key_expr: value.try_into()?,
+            declaration: None,
+        }))
     }
 }
 impl std::fmt::Debug for KeyExpr<'_> {
@@ -469,132 +435,138 @@ impl std::ops::Div<&keyexpr> for KeyExpr<'_> {
     type Output = KeyExpr<'static>;
 
     fn div(self, rhs: &keyexpr) -> Self::Output {
-        match self.0 {
-            KeyExprInner::Borrowed(key_expr) => (key_expr / rhs).into(),
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExpr(KeyExprInner::Wire {
-                key_expr: key_expr / rhs,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            }),
-            KeyExprInner::Owned(key_expr) => (key_expr / rhs).into(),
-            KeyExprInner::Wire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExpr(KeyExprInner::Wire {
-                key_expr: key_expr / rhs,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            }),
-        }
+        KeyExpr(KeyExprInner::Owned {
+            key_expr: self.key_expr() / rhs,
+            declaration: self.into_declaration(),
+        })
     }
 }
 impl std::ops::Div<&keyexpr> for &KeyExpr<'_> {
     type Output = KeyExpr<'static>;
 
     fn div(self, rhs: &keyexpr) -> Self::Output {
-        match &self.0 {
-            KeyExprInner::Borrowed(key_expr) => (*key_expr / rhs).into(),
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExpr(KeyExprInner::Wire {
-                key_expr: *key_expr / rhs,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            }),
-            KeyExprInner::Owned(key_expr) => (key_expr / rhs).into(),
-            KeyExprInner::Wire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } => KeyExpr(KeyExprInner::Wire {
-                key_expr: key_expr / rhs,
-                expr_id: *expr_id,
-                mapping: *mapping,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            }),
-        }
+        KeyExpr(KeyExprInner::Owned {
+            key_expr: self.key_expr() / rhs,
+            declaration: self.declaration().clone(),
+        })
     }
 }
 
 impl<'a> KeyExpr<'a> {
-    //pub(crate) fn is_optimized(&self, session: &Session) -> bool {
-    //    matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
-    //}
-    pub(crate) fn is_fully_optimized(&self, session: &SessionInner) -> bool {
+    fn declaration(&self) -> &Option<Arc<KeyExprWireDeclaration>> {
         match &self.0 {
-            KeyExprInner::Wire {
-                key_expr,
-                session_id,
-                prefix_len,
-                ..
-            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                session_id,
-                prefix_len,
-                ..
-            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
-            _ => false,
+            KeyExprInner::Borrowed { declaration, .. } => declaration,
+            KeyExprInner::Owned { declaration, .. } => declaration,
         }
     }
-    pub(crate) fn to_wire(&'a self, session: &SessionInner) -> WireExpr<'a> {
-        match &self.0 {
-            KeyExprInner::Wire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } if session.id == *session_id => WireExpr {
-                scope: *expr_id,
-                suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
-                mapping: *mapping,
-            },
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id,
-                mapping,
-                prefix_len,
-                session_id,
-            } if session.id == *session_id => WireExpr {
-                scope: *expr_id,
-                suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
-                mapping: *mapping,
-            },
-            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
-                mapping: Mapping::Sender,
-            },
-            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                WireExpr {
-                    scope: 0,
-                    suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
-                    mapping: Mapping::Sender,
+
+    fn declaration_mut(&mut self) -> &mut Option<Arc<KeyExprWireDeclaration>> {
+        match &mut self.0 {
+            KeyExprInner::Borrowed { declaration, .. } => declaration,
+            KeyExprInner::Owned { declaration, .. } => declaration,
+        }
+    }
+
+    pub(crate) fn declare(mut self, session: &Session, force: bool) -> ZResult<Self> {
+        if !self.is_fully_optimized(session) {
+            *self.declaration_mut() =
+                KeyExprWireDeclaration::new(self.as_str(), session, force)?.map(Arc::new);
+        }
+        Ok(self)
+    }
+
+    pub(crate) fn declare_nonwild_prefix(
+        mut self,
+        session: &Session,
+        force: bool,
+    ) -> ZResult<Self> {
+        if !self.is_non_wild_prefix_optimized(session) {
+            let ke = self.as_keyexpr();
+            *self.declaration_mut() = match ke.get_nonwild_prefix() {
+                Some(prefix) => {
+                    KeyExprWireDeclaration::new(prefix.as_str(), session, force)?.map(Arc::new)
                 }
+                None => None,
             }
+        }
+        Ok(self)
+    }
+
+    fn into_declaration(self) -> Option<Arc<KeyExprWireDeclaration>> {
+        match self.0 {
+            KeyExprInner::Borrowed { declaration, .. } => declaration,
+            KeyExprInner::Owned { declaration, .. } => declaration,
+        }
+    }
+
+    pub(crate) fn key_expr(&self) -> &keyexpr {
+        match &self.0 {
+            KeyExprInner::Borrowed { key_expr, .. } => key_expr,
+            KeyExprInner::Owned { key_expr, .. } => key_expr,
+        }
+    }
+
+    pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
+        self.declaration()
+            .as_ref()
+            .map(|d| d.session == *session && d.prefix_len as usize == self.key_expr().len())
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn is_non_wild_prefix_optimized(&self, session: &Session) -> bool {
+        self.declaration()
+            .as_ref()
+            .map(|d| {
+                d.session == *session
+                    && self
+                        .key_expr()
+                        .get_nonwild_prefix()
+                        .map(|p| p.len() == d.prefix_len as usize)
+                        .unwrap_or(d.prefix_len == 0)
+            })
+            .unwrap_or(false)
+    }
+
+    fn to_wire_inner(&'a self, session: &Session, mapping: Mapping) -> WireExpr<'a> {
+        match self.declaration() {
+            Some(d) if d.session == *session => WireExpr {
+                scope: d.expr_id,
+                suffix: std::borrow::Cow::Borrowed(
+                    &self.key_expr().as_str()[(d.prefix_len as usize)..],
+                ),
+                mapping,
+            },
+            _ => WireExpr {
+                scope: 0,
+                suffix: std::borrow::Cow::Borrowed(self.key_expr().as_str()),
+                mapping,
+            },
+        }
+    }
+
+    pub(crate) fn to_wire(&'a self, session: &Session) -> WireExpr<'a> {
+        self.to_wire_inner(session, Mapping::Sender)
+    }
+
+    pub(crate) fn to_wire_local(&'a self, session: &Session) -> WireExpr<'a> {
+        self.to_wire_inner(session, Mapping::Receiver)
+    }
+
+    fn undeclare_with_session_check(&mut self, parent_session: Option<&Session>) -> ZResult<()> {
+        match self.declaration_mut().take() {
+            Some(mut d) if self.key_expr().len() == d.prefix_len as usize => {
+                if parent_session.is_some_and(|s| d.session == *s) {
+                    Arc::get_mut(&mut d).map(|d| d.undeclare()).unwrap_or(Ok(()))
+                } else {
+                    let expr_id = self.declaration_mut().insert(d).expr_id;
+                        Err(zerror!(
+                            "Failed to undeclare expr with id {}, as it was declared by another Session",
+                            expr_id
+                        )
+                        .into())
+                }
+            },
+            _ => Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`, and that key_expression was not undeclared previously", self).into()),
         }
     }
 }
@@ -634,51 +606,8 @@ impl Resolvable for KeyExprUndeclaration<'_> {
 
 impl Wait for KeyExprUndeclaration<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        let KeyExprUndeclaration { session, expr } = self;
-        let expr_id = match &expr.0 {
-            KeyExprInner::Wire {
-                key_expr,
-                expr_id,
-                prefix_len,
-                session_id,
-                ..
-            } if *prefix_len as usize == key_expr.len() => {
-                if *session_id == session.0.id {
-                    *expr_id
-                } else {
-                    return Err(zerror!("Failed to undeclare {}, as it was declared by another Session", expr).into())
-                }
-            }
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id,
-                prefix_len,
-                session_id,
-                ..
-            } if *prefix_len as usize == key_expr.len() => {
-                if *session_id == session.0.id {
-                    *expr_id
-                } else {
-                    return Err(zerror!("Failed to undeclare {}, as it was declared by another Session", expr).into())
-                }
-            }
-            _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
-        };
-        tracing::trace!("undeclare_keyexpr({:?})", expr_id);
-        let mut state = zwrite!(session.0.state);
-        state.local_resources.remove(&expr_id);
-
-        let primitives = state.primitives()?;
-        drop(state);
-        primitives.send_declare(&mut zenoh_protocol::network::Declare {
-            interest_id: None,
-            ext_qos: declare::ext::QoSType::DECLARE,
-            ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
-        });
-
-        Ok(())
+        let KeyExprUndeclaration { session, mut expr } = self;
+        expr.undeclare_with_session_check(Some(session))
     }
 }
 

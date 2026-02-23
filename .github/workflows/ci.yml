@@ -72,32 +72,13 @@ jobs:
           cache-bin: false
 
       - name: Check zenoh with rust 1.75.0
-        run: cargo +1.75.0 check --release --bins --lib
+        run: cargo +1.75.0 check --release --manifest-path ci/zenoh-1-75/Cargo.toml
 
-  # Test without Cargo.lock to ensure that all restrictions are correctly set in Cargo.toml for build with rust 1.75.0
-  check_rust_without_cargo_lock:
-    needs: determine-runner
-    name: Check zenoh build without Cargo.lock on Rust 1.75
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      - name: Update Rust 1.75.0 toolchain
-        run: rustup update 1.75.0
-
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
-
-      - name: Check zenoh without Cargo.lock
+      - name: Check clippy on stable rust without Cargo.lock to ensure compatibility with latest dependencies
         run: |
-          rm Cargo.lock || true
-          cargo +1.75.0 check --bins --lib
+          rm Cargo.lock
+          cargo +stable clippy --release --manifest-path ci/zenoh-1-75/Cargo.toml -- -D warnings
+          git restore Cargo.lock
 
   check:
     needs: determine-runner
@@ -145,9 +126,6 @@ jobs:
 
       - name: Clippy zenoh
         run: cargo +stable clippy -p zenoh --all-targets -- --deny warnings
-
-      - name: Clippy zenoh internal_config
-        run: cargo +stable clippy -p zenoh --all-targets --features internal_config -- --deny warnings
 
       - name: Clippy zenoh unstable
         run: cargo +stable clippy -p zenoh --all-targets --features unstable -- --deny warnings
@@ -228,63 +206,115 @@ jobs:
 
       - name: Run tests stable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -p zenoh -F internal_config
+        run: sudo cargo nextest run -p zenoh
 
       - name: Run tests stable
         if: ${{ matrix.os != 'macos-latest' }}
-        run: cargo nextest run -p zenoh -F internal_config
-
-      - name: Run tests with unstable (sudo macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-
-      - name: Run tests with unstable
-        if: ${{ matrix.os != 'macos-latest' }}
-        run: cargo nextest run -F test -F internal_config --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-
-      - name: Rename junit test report (sudo macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
-
-      - name: Rename junit test report
-        if: ${{ matrix.os != 'macos-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
-
-      - name: Run tests with SHM (sudo macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-        env:
-          RUST_BACKTRACE: 1
-
-      - name: Run tests with SHM
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -F internal_config -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-
-      - name: Rename junit test report (sudo macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
-
-      - name: Rename junit test report
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
-
-      - name: Run tests with SHM + unixpipe
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: |
-          sudo prlimit --memlock=unlimited --pid=$$ 
-          cargo nextest run -F test -F shared-memory -F unstable -F internal_config -F transport_unixpipe -E 'not (test(test_default_features))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-
-      - name: Rename junit test report
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm-unixpipe.junit.xml
+        run: cargo nextest run -p zenoh
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo nextest run -p zenohd --no-default-features
 
-      - name: Rename junit test report
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  test_unstable:
+    needs: determine-runner
+    name: Unit tests on ${{ matrix.os }} (unstable)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
+        run: |
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run tests with unstable (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          sudo cargo build -p zenoh-plugin-rest --lib
+          sudo cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Run tests with unstable
+        if: ${{ matrix.os != 'macos-latest' }}
+        run: |
+          cargo build -p zenoh-plugin-rest --lib
+          cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  test_shm:
+    needs: determine-runner
+    name: Unit tests on ${{ matrix.os }} (shared memory)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
+        run: |
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run tests with SHM (sudo macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: sudo cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run tests with SHM
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
+      - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests-feature-leaks.junit.xml
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
@@ -352,77 +382,77 @@ jobs:
             --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
 
   coverage:
-        name: Coverage
-        strategy:
-          fail-fast: false
-          matrix:
-            os: [ubuntu-latest]
-            rust: [nightly]
-        runs-on: ${{ matrix.os }}
-        steps:
-          - name: Free Disk Space (Ubuntu)
-            uses: jlumbroso/free-disk-space@main
-            with:
-              tool-cache: false
-              android: true
-              dotnet: true
-              haskell: true
-              large-packages: true
-              docker-images: true
-              swap-storage: true
+    name: Coverage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        rust: [nightly]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
-          - name: Install build-essential (Ubuntu)
-            if: ${{ matrix.os == 'ubuntu-latest' }}
-            run: |
-              sudo apt-get update
-              sudo apt-get install -y build-essential clang libc6-dev
+      - name: Install build-essential (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libc6-dev
 
-          - name: Checkout sources
-            uses: actions/checkout@v4
+      - name: Checkout sources
+        uses: actions/checkout@v4
 
-          - name: Install ${{ matrix.rust }} Rust toolchain
-            run: |
-              rustup override set ${{ matrix.rust }}
-              rustup update ${{ matrix.rust }}
-              rustup component add llvm-tools-preview
+      - name: Install ${{ matrix.rust }} Rust toolchain
+        run: |
+          rustup override set ${{ matrix.rust }}
+          rustup update ${{ matrix.rust }}
+          rustup component add llvm-tools-preview
 
-          - uses: Swatinem/rust-cache@v2
-            with:
-              cache-bin: false
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
-          - name: Install cargo-llvm-cov
-            uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-          - name: Generate code coverage
-            run: |
-              sudo prlimit --memlock=unlimited --pid=$$
-              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
-              ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
-              --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
-              --skip test_default_features \
-              --skip router_linkstate \
-              --skip three_node_combination  \
-              --skip three_node_combination_multicast \
-              --skip two_node_combination \
-              --skip test_gossip \
-              --skip metadata_alloc_concurrent \
-              --skip metadata_link_concurrent \
-              --skip metadata_link_failure_concurrent
-            env:
-              RUST_LOG: None
+      - name: Generate code coverage
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
+          ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
+          --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
+          --skip test_default_features \
+          --skip router_linkstate \
+          --skip three_node_combination  \
+          --skip three_node_combination_multicast \
+          --skip two_node_combination \
+          --skip test_gossip \
+          --skip metadata_alloc_concurrent \
+          --skip metadata_link_concurrent \
+          --skip metadata_link_failure_concurrent
+        env:
+          RUST_LOG: None
 
-          - name: Upload coverage to Codecov
-            uses: codecov/codecov-action@v5
-            with:
-              token: ${{ secrets.CODECOV_TOKEN }}
-              files: lcov.info
-              fail_ci_if_error: true
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
 
-          # Cleanup profraw files to avoid failing during rust-cache
-          # post run cleanup. It requires enough space on disk left to save the cache
-          - name: Cleanup profraw files
-            run: |
-              find . -name "*.profraw" -type f -delete
+      # Cleanup profraw files to avoid failing during rust-cache
+      # post run cleanup. It requires enough space on disk left to save the cache
+      - name: Cleanup profraw files
+        run: |
+          find . -name "*.profraw" -type f -delete
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
@@ -432,7 +462,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check, test, valgrind, typos, markdown_lint, doc, coverage]
+    needs: [check_rust, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass

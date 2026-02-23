@@ -78,15 +78,15 @@ impl From<Locality> for PublisherLocalityConf {
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
-    pub(crate) source_id: Option<EntityGlobalId>,
-    pub(crate) source_sn: Option<SourceSn>,
+    pub(crate) source_id: EntityGlobalId,
+    pub(crate) source_sn: SourceSn,
 }
 
 #[zenoh_macros::unstable]
 impl SourceInfo {
     #[zenoh_macros::unstable]
     /// Build a new [`SourceInfo`].
-    pub fn new(source_id: Option<EntityGlobalId>, source_sn: Option<SourceSn>) -> Self {
+    pub fn new(source_id: EntityGlobalId, source_sn: SourceSn) -> Self {
         Self {
             source_id,
             source_sn,
@@ -95,72 +95,34 @@ impl SourceInfo {
 
     #[zenoh_macros::unstable]
     /// The [`EntityGlobalId`] of the zenoh entity that published the [`Sample`] in question.
-    pub fn source_id(&self) -> Option<&EntityGlobalId> {
-        self.source_id.as_ref()
+    pub fn source_id(&self) -> &EntityGlobalId {
+        &self.source_id
     }
 
     #[zenoh_macros::unstable]
     /// The sequence number of the [`Sample`] from the source.
-    pub fn source_sn(&self) -> Option<SourceSn> {
+    pub fn source_sn(&self) -> SourceSn {
         self.source_sn
     }
 }
 
-#[test]
-#[cfg(feature = "unstable")]
-fn source_info_stack_size() {
-    use zenoh_protocol::core::ZenohIdProto;
-
-    use crate::api::sample::{SourceInfo, SourceSn};
-
-    assert_eq!(std::mem::size_of::<ZenohIdProto>(), 16);
-    assert_eq!(std::mem::size_of::<Option<ZenohIdProto>>(), 17);
-    assert_eq!(std::mem::size_of::<Option<SourceSn>>(), 8);
-    assert_eq!(std::mem::size_of::<Option<EntityGlobalId>>(), 24);
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 24 + 8);
-}
-
 #[zenoh_macros::unstable]
-impl SourceInfo {
-    pub(crate) fn empty() -> Self {
+impl<const ID: u8> From<zenoh_protocol::zenoh::ext::SourceInfoType<ID>> for SourceInfo {
+    fn from(value: zenoh_protocol::zenoh::ext::SourceInfoType<ID>) -> Self {
         SourceInfo {
-            source_id: None,
-            source_sn: None,
-        }
-    }
-    pub(crate) fn is_empty(&self) -> bool {
-        self.source_id.is_none() && self.source_sn.is_none()
-    }
-}
-
-#[zenoh_macros::unstable]
-impl<const ID: u8> From<Option<zenoh_protocol::zenoh::ext::SourceInfoType<ID>>> for SourceInfo {
-    fn from(value: Option<zenoh_protocol::zenoh::ext::SourceInfoType<ID>>) -> Self {
-        SourceInfo {
-            source_id: value.as_ref().map(|i| i.id.into()),
-            source_sn: value.as_ref().map(|i| i.sn),
+            source_id: value.id.into(),
+            source_sn: value.sn,
         }
     }
 }
 
 #[zenoh_macros::unstable]
-impl<const ID: u8> From<SourceInfo> for Option<zenoh_protocol::zenoh::ext::SourceInfoType<ID>> {
+impl<const ID: u8> From<SourceInfo> for zenoh_protocol::zenoh::ext::SourceInfoType<ID> {
     fn from(value: SourceInfo) -> Self {
-        if value.is_empty() {
-            None
-        } else {
-            Some(zenoh_protocol::zenoh::ext::SourceInfoType {
-                id: value.source_id.unwrap_or_default().into(),
-                sn: value.source_sn.unwrap_or_default(),
-            })
+        zenoh_protocol::zenoh::ext::SourceInfoType {
+            id: value.source_id.into(),
+            sn: value.source_sn,
         }
-    }
-}
-
-#[zenoh_macros::unstable]
-impl Default for SourceInfo {
-    fn default() -> Self {
-        Self::empty()
     }
 }
 
@@ -231,7 +193,7 @@ pub struct SampleFields {
     #[cfg(feature = "unstable")]
     pub reliability: Reliability,
     #[cfg(feature = "unstable")]
-    pub source_info: SourceInfo,
+    pub source_info: Option<SourceInfo>,
     pub attachment: Option<ZBytes>,
 }
 
@@ -271,7 +233,7 @@ pub struct Sample {
     #[cfg(feature = "unstable")]
     pub(crate) reliability: Reliability,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -336,8 +298,8 @@ impl Sample {
     /// Gets info on the source of this Sample.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn source_info(&self) -> &SourceInfo {
-        &self.source_info
+    pub fn source_info(&self) -> Option<&SourceInfo> {
+        self.source_info.as_ref()
     }
 
     /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
@@ -365,7 +327,7 @@ impl Sample {
             #[cfg(feature = "unstable")]
             reliability: Reliability::default(),
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -387,7 +349,7 @@ impl Sample {
                 #[cfg(feature = "unstable")]
                 reliability,
                 #[cfg(feature = "unstable")]
-                source_info: mem::take(&mut put.ext_sinfo).into(),
+                source_info: put.ext_sinfo.map(Into::into),
                 attachment: mem::take(&mut put.ext_attachment).map(Into::into),
             },
             PushBody::Del(del) => Self {
@@ -400,7 +362,7 @@ impl Sample {
                 #[cfg(feature = "unstable")]
                 reliability,
                 #[cfg(feature = "unstable")]
-                source_info: mem::take(&mut del.ext_sinfo).into(),
+                source_info: del.ext_sinfo.map(Into::into),
                 attachment: mem::take(&mut del.ext_attachment).map(Into::into),
             },
         }

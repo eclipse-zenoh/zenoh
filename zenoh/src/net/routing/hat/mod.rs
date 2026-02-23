@@ -307,6 +307,8 @@ pub(crate) trait HatTokenTrait {
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) -> Option<Arc<Resource>>;
+
+    fn get_tokens(&self, tables: &Tables) -> Vec<(Arc<Resource>, Sources)>;
 }
 
 trait CurrentFutureTrait {

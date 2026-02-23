@@ -23,8 +23,13 @@ use zenoh_protocol::{
     core::{
         key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
     },
-    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
-    zenoh::Put,
+    network::{
+        declare::queryable::ext::QueryableInfoType,
+        ext::{self, NodeIdType},
+        request::ext::QueryTarget,
+        Declare, DeclareBody, DeclareKeyExpr, Mapping, Push, Request, Response, UndeclareKeyExpr,
+    },
+    zenoh::{PushBody, Put, RequestBody, ResponseBody},
 };
 
 use crate::{
@@ -43,16 +48,23 @@ use crate::{
     },
 };
 
+fn new_router() -> Router {
+    let zid = ZenohIdProto::try_from([1]).unwrap();
+    let whatami = WhatAmI::Client;
+    Router::new(
+        zid,
+        whatami,
+        Some(Arc::new(HLC::default())),
+        &Config::default(),
+        #[cfg(feature = "stats")]
+        zenoh_stats::StatsRegistry::new(zid, whatami, "test"),
+    )
+    .unwrap()
+}
+
 #[test]
 fn base_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -80,7 +92,11 @@ fn base_test() {
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     Tables::print(&zread!(tables.tables));
@@ -137,17 +153,13 @@ fn match_test() {
         "x/c$*",
         "x/$*d",
         "x/$*e",
+        "@a",
+        "**/@a",
+        "@a/b",
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -179,14 +191,7 @@ fn match_test() {
 
 #[test]
 fn multisub_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -202,7 +207,11 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
@@ -218,7 +227,11 @@ fn multisub_test() {
         &"sub".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     assert!(res.upgrade().is_some());
 
@@ -229,7 +242,11 @@ fn multisub_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     assert!(res.upgrade().is_some());
 
@@ -240,7 +257,11 @@ fn multisub_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     assert!(res.upgrade().is_none());
 
@@ -249,14 +270,7 @@ fn multisub_test() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn clean_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -322,7 +336,11 @@ async fn clean_test() {
         &"todrop1/todrop11".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
@@ -338,7 +356,11 @@ async fn clean_test() {
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
@@ -354,7 +376,11 @@ async fn clean_test() {
         1,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     println!("COUNT2: {}", res3.strong_count());
@@ -370,7 +396,11 @@ async fn clean_test() {
         0,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -391,7 +421,11 @@ async fn clean_test() {
         &"todrop3".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
@@ -406,7 +440,11 @@ async fn clean_test() {
         2,
         &WireExpr::empty(),
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     assert!(res1.upgrade().is_some());
 
@@ -416,25 +454,62 @@ async fn clean_test() {
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
+    register_expr(&tables, &mut face0.state.clone(), 5, &"todrop6".into());
     declare_subscription(
         tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         3,
-        &"todrop5".into(),
+        &WireExpr::from(4),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     declare_subscription(
         tables.hat_code.as_ref(),
         &tables,
         &mut face0.state.clone(),
         4,
-        &"todrop6".into(),
+        &"todrop7".into(),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+    declare_token(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut face0.state.clone(),
+        5,
+        &WireExpr::from(4),
+        NodeId::default(),
+        None,
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+    declare_token(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut face0.state.clone(),
+        4,
+        &"todrop8".into(),
+        NodeId::default(),
+        None,
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
@@ -449,15 +524,27 @@ async fn clean_test() {
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
+    let optres4 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop7")
+        .map(|res| Arc::downgrade(&res));
+    assert!(optres4.is_some());
+    let res4 = optres4.unwrap();
+    let optres5 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop8")
+        .map(|res| Arc::downgrade(&res));
+    assert!(optres5.is_some());
+    let res5 = optres5.unwrap();
 
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
+    assert!(res4.upgrade().is_some());
+    assert!(res5.upgrade().is_some());
 
     face0.send_close();
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
+    assert!(res4.upgrade().is_none());
+    assert!(res5.upgrade().is_none());
 }
 
 pub struct ClientPrimitives {
@@ -527,13 +614,22 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push_consume(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+        _consume: bool,
+    ) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_request(&self, _msg: &mut zenoh_protocol::network::Request) {}
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned())
+    }
 
-    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned())
+    }
 
     fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
 
@@ -545,9 +641,11 @@ impl Primitives for ClientPrimitives {
 }
 
 impl EPrimitives for ClientPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) {}
+    fn send_interest(&self, _ctx: RoutingContext<&mut zenoh_protocol::network::Interest>) -> bool {
+        false
+    }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) {
+    fn send_declare(&self, ctx: RoutingContext<&mut zenoh_protocol::network::Declare>) -> bool {
         match &ctx.msg.body {
             DeclareBody::DeclareKeyExpr(d) => {
                 let name = self.get_name(&d.wire_expr);
@@ -558,21 +656,31 @@ impl EPrimitives for ClientPrimitives {
             }
             _ => (),
         }
+        false
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+    ) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) -> bool {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+        false
     }
 
-    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) -> bool {
+        false
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -580,15 +688,167 @@ impl EPrimitives for ClientPrimitives {
 }
 
 #[test]
+fn test_response_wireexpr() {
+    let router = new_router();
+    let tables = router.tables.clone();
+    let primitives0 = Arc::new(ClientPrimitives::new());
+    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
+
+    let primitives1 = Arc::new(ClientPrimitives::new());
+    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()).state);
+
+    let qinfo = QueryableInfoType {
+        complete: true,
+        distance: 1,
+    };
+    register_expr(
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        11,
+        &"test/queryable/reply".into(),
+    );
+
+    Primitives::send_declare(
+        primitives0.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 11,
+                wire_expr: "test/queryable/reply".into(),
+            }),
+        },
+    );
+
+    register_expr(
+        &tables,
+        &mut face1.upgrade().unwrap(),
+        12,
+        &"test/queryable".into(),
+    );
+
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 12,
+                wire_expr: "test/queryable".into(),
+            }),
+        },
+    );
+
+    declare_queryable(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        0,
+        &WireExpr::from(11).with_suffix("/**"),
+        &qinfo,
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    route_query(
+        &tables,
+        &face1.upgrade().unwrap(),
+        &mut Request {
+            id: 1,
+            wire_expr: "test/queryable/reply/*".into(),
+            payload: RequestBody::Query(zenoh_protocol::zenoh::query::Query::default()),
+            ext_qos: zenoh_protocol::network::request::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            ext_target: QueryTarget::All,
+            ext_budget: None,
+            ext_timeout: None,
+        },
+    );
+
+    route_send_response(
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        &mut Response {
+            rid: 1,
+            wire_expr: WireExpr {
+                scope: 11,
+                suffix: "/1".into(),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh_protocol::zenoh::reply::Reply {
+                consolidation: zenoh_protocol::zenoh::ConsolidationMode::None,
+                ext_unknown: Vec::default(),
+                payload: PushBody::Put(zenoh_protocol::zenoh::put::Put::default()),
+            }),
+            ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_respid: None,
+        },
+    );
+    assert_eq!(
+        primitives1.get_last_name().unwrap(),
+        "test/queryable/reply/1"
+    );
+    let we = primitives1.get_last_key().unwrap();
+    assert_eq!(we.suffix, "/reply/1");
+    assert_eq!(we.scope, 12);
+    assert_eq!(we.mapping, Mapping::Receiver);
+
+    // unregister receiver mapping and validate that we is still correct
+    unregister_expr(&tables, &mut face1.upgrade().unwrap(), 12);
+
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: 12 }),
+        },
+    );
+
+    route_send_response(
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        &mut Response {
+            rid: 1,
+            wire_expr: WireExpr {
+                scope: 11,
+                suffix: "/1".into(),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh_protocol::zenoh::reply::Reply {
+                consolidation: zenoh_protocol::zenoh::ConsolidationMode::None,
+                ext_unknown: Vec::default(),
+                payload: PushBody::Put(zenoh_protocol::zenoh::put::Put::default()),
+            }),
+            ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_respid: None,
+        },
+    );
+    assert_eq!(
+        primitives1.get_last_name().unwrap(),
+        "test/queryable/reply/1"
+    );
+    let we = primitives1.get_last_key().unwrap();
+    assert_eq!(we.suffix, "test/queryable/reply/1");
+    assert_eq!(we.scope, 0);
+}
+
+#[test]
 fn client_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
     let tables = router.tables.clone();
 
     let sub_info = SubscriberInfo;
@@ -622,7 +882,11 @@ fn client_test() {
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     register_expr(
         &tables,
@@ -673,7 +937,11 @@ fn client_test() {
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
     register_expr(
         &tables,
@@ -724,7 +992,11 @@ fn client_test() {
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
         NodeId::default(),
-        &mut |p, m| m.with_mut(|m| p.send_declare(m)),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
     );
 
     primitives0.clear_data();
@@ -740,6 +1012,7 @@ fn client_test() {
                 ..Put::default().into()
             },
             Reliability::Reliable,
+            true,
         );
     };
 
@@ -828,14 +1101,7 @@ fn client_test() {
 
 #[test]
 fn get_best_key_test() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        None,
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
     let face1 = router.new_primitives(primitives.clone());
@@ -881,14 +1147,7 @@ fn get_best_key_test() {
 
 #[test]
 fn big_key_expr() {
-    let config = Config::default();
-    let router = Router::new(
-        ZenohIdProto::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        None,
-        &config,
-    )
-    .unwrap();
+    let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
     let face = router.new_primitives(primitives.clone());
