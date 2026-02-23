@@ -13,3 +13,5 @@ jobs:
     permissions:
       pull-requests: write
     secrets: inherit
+    with:
+      toolchain: "1.93.0"
