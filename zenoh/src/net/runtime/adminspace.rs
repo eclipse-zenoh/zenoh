@@ -54,7 +54,7 @@ use crate::{
     api::{
         bytes::ZBytes,
         key_expr::KeyExpr,
-        queryable::{Query, QueryInner},
+        queryable::{Query, QueryInner, ReplyPrimitives},
     },
     bytes::Encoding,
     net::{
@@ -370,7 +370,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
+    fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, _consume: bool) {
         trace!("recv Push {:?}", msg);
         {
             let conf = &self.context.runtime.state.config.lock().0;
@@ -470,7 +470,7 @@ impl Primitives for AdminSpace {
                         zid: zid.into(),
                         #[cfg(feature = "unstable")]
                         source_info: query.ext_sinfo.map(Into::into),
-                        primitives,
+                        primitives: ReplyPrimitives::new_remote(None, primitives),
                     }),
                     eid: self.queryable_id,
                     value: mem::take(&mut query.ext_body)
