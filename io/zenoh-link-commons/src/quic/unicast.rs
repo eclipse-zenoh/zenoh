@@ -536,7 +536,7 @@ impl QuicStreams {
         send: quinn::SendStream,
         recv: quinn::RecvStream,
     ) -> ZResult<Self> {
-        let uni_streams = UniStreams::try_open(&connection)?;
+        let uni_streams = UniStreams::try_open(connection)?;
         // Initialize the streams with Control bi stream
         let mut send = vec![UnsafeCell::new(Some(send))];
         let mut recv = vec![UnsafeCell::new(Some(RecvStream::Accepted(recv)))];
