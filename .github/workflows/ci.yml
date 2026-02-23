@@ -103,7 +103,7 @@ jobs:
       - name: Make sure necessary tools are installed
         run: |
           rustup component add clippy --toolchain stable
-          rustup component add rustfmt --toolchain nightly
+          rustup component add rustfmt --toolchain ${{ env.NIGHTLY_TOOLCHAIN }}
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
