@@ -199,8 +199,8 @@ impl TransportLinkUnicastUniversal {
 
     pub(super) async fn close(self) -> ZResult<()> {
         tracing::trace!("{}: closing", self.link);
-        self.pipeline.disable();
         self.task_controller.terminate_all_async().await;
+        self.pipeline.disable();
 
         self.link.close(None).await
     }
