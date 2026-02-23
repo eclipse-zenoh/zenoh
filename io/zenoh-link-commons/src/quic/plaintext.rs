@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{sync::Arc, u64};
+use std::sync::Arc;
 
 use bytes::BytesMut;
 use quinn_proto::{
