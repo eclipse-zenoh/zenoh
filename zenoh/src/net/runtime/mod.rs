@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
 pub mod orchestrator;
+mod scouting;
 
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
@@ -31,11 +32,13 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
+    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::Future;
+pub use scouting::Scouting;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -62,6 +65,8 @@ use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
+#[cfg(unix)]
+use zenoh_util::net::update_iface_cache;
 
 use self::orchestrator::StartConditions;
 use super::{
@@ -123,6 +128,7 @@ pub(crate) struct RuntimeState {
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
+    scouting: tokio::sync::Mutex<Option<Scouting>>,
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
@@ -595,6 +601,7 @@ impl RuntimeBuilder {
         // SHM lazy init flag
         #[cfg(feature = "shared-memory")]
         let shm_init_mode = *config.transport.shared_memory.mode();
+        let endpoint_poll_interval = config.listen.endpoint_poll_interval_ms().unwrap_or(10_000);
 
         let namespace = config.namespace().clone();
         let config = Notifier::new(crate::config::Config(config));
@@ -615,6 +622,7 @@ impl RuntimeBuilder {
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
+                scouting: tokio::sync::Mutex::new(None),
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
@@ -637,6 +645,14 @@ impl RuntimeBuilder {
             zenoh_config::ShmInitMode::Init => zenoh_shm::init::init(),
             zenoh_config::ShmInitMode::Lazy => {}
         };
+
+        if endpoint_poll_interval > 0 {
+            let poll_interval = Duration::from_millis(endpoint_poll_interval as u64);
+            runtime.spawn({
+                let runtime2 = runtime.clone();
+                async move { runtime2.monitor_available_addrs(poll_interval).await }
+            });
+        }
 
         Ok(runtime)
     }
@@ -777,6 +793,33 @@ impl Runtime {
     #[cfg(feature = "stats")]
     pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
         &self.state.stats
+    }
+
+    async fn monitor_available_addrs(&self, poll_interval: Duration) {
+        let token = self.get_cancellation_token();
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(poll_interval) => self.update_available_addrs().await,
+                _ = token.cancelled() => return,
+            }
+        }
+    }
+
+    async fn update_available_addrs(&self) {
+        #[cfg(unix)]
+        update_iface_cache();
+
+        if self.update_locators() {
+            let tables_lock = &self.state.router.tables;
+            let _ctrl_lock = zlock!(tables_lock.ctrl_lock);
+            let mut tables = zwrite!(tables_lock.tables);
+            tables_lock.hat_code.update_self_locators(&mut tables);
+        }
+
+        let scouting = self.state.scouting.lock().await;
+        if let Some(scouting) = scouting.as_ref() {
+            scouting.update_addrs_if_needed().await;
+        }
     }
 }
 
@@ -967,6 +1010,7 @@ impl Closee for Arc<RuntimeState> {
         self.manager.close().await;
         // clean up to break cyclic reference of self.state to itself
         self.transport_handlers.write().unwrap().clear();
+        zasynclock!(self.scouting).take();
         // TODO: the call below is needed to prevent intermittent leak
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
