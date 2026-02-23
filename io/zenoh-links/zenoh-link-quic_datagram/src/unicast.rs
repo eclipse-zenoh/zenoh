@@ -227,10 +227,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             tls_close_link_on_expiration,
         } = QuicClient::new(&endpoint, false).await?;
 
-        debug_assert!(
-            streams.is_none(),
-            "Unrealiable QUIC should not open streams"
-        );
+        debug_assert!(streams.is_none(), "Unreliable QUIC should not open streams");
 
         let auth_id = get_cert_common_name(&quic_conn)?;
         let certchain_expiration_time =
@@ -317,10 +314,7 @@ fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUni
         tls_close_link_on_expiration,
     } = link_material;
 
-    debug_assert!(
-        streams.is_none(),
-        "Unrealiable QUIC should not open streams"
-    );
+    debug_assert!(streams.is_none(), "Unreliable QUIC should not open streams");
 
     let dst_locator = Locator::new(QUIC_DATAGRAM_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
     // Get Quic auth identifier
