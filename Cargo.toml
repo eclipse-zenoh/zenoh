@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [workspace]
-exclude = ["ci/nostd-check", "ci/valgrind-check"]
+exclude = ["ci/nostd-check", "ci/valgrind-check", "ci/zenoh-1-75"]
 members = [
   "commons/zenoh-buffers",
   "commons/zenoh-codec",
@@ -22,7 +22,6 @@ members = [
   "commons/zenoh-crypto",
   "commons/zenoh-keyexpr",
   "commons/zenoh-macros",
-  "commons/zenoh-pinned-deps-1-75",
   "commons/zenoh-protocol",
   "commons/zenoh-result",
   "commons/zenoh-runtime",
@@ -90,7 +89,7 @@ async-std = { version = "1.13.2", features = ["tokio1"] }
 async-trait = "0.1.89"
 base64 = "0.22.1"
 bincode = "1.3.3"
-buddy_system_allocator = "=0.10.0" # Fixed at 0.10.0 to be compatible with Rust 1.75
+buddy_system_allocator = "0.10.0"
 bytes = "1.11.0"
 clap = { version = "4.5.47", features = ["derive"] }
 console-subscriber = "0.5.0"
@@ -236,7 +235,6 @@ zenoh-link-unixsock_stream = { version = "=1.7.2", path = "io/zenoh-links/zenoh-
 zenoh-link-vsock = { version = "=1.7.2", path = "io/zenoh-links/zenoh-link-vsock" }
 zenoh-link-ws = { version = "=1.7.2", path = "io/zenoh-links/zenoh-link-ws" }
 zenoh-macros = { version = "=1.7.2", path = "commons/zenoh-macros" }
-zenoh-pinned-deps-1-75 = { version = "=1.7.2", path = "commons/zenoh-pinned-deps-1-75", default-features = false }
 zenoh-plugin-trait = { version = "=1.7.2", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "=1.7.2", path = "commons/zenoh-protocol", default-features = false }
 zenoh-result = { version = "=1.7.2", path = "commons/zenoh-result", default-features = false }
