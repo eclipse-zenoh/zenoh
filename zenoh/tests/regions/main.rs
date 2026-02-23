@@ -206,6 +206,18 @@ pub mod predicates_ext {
         .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
     }
 
+    pub fn register_queryable<'a, C>(zid: &'static str, keyexpr: &'static str) -> impl Predicate<C>
+    where
+        C: Captured<'a>,
+    {
+        ancestor(
+            name(eq("register_queryable"))
+                & field("self", dbg_obj_eq("north"))
+                & field("res", dbg_obj_eq(keyexpr)),
+        )
+        .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
+    }
+
     pub fn dbg_obj_eq(matcher: &'static str) -> DebugObjectEqPredicate {
         DebugObjectEqPredicate { matcher }
     }
@@ -234,7 +246,13 @@ pub mod predicates_ext {
     impl Predicate<TracedValue> for DebugObjectEqPredicate {
         fn eval(&self, variable: &TracedValue) -> bool {
             match variable {
-                TracedValue::Object(obj) => obj.as_ref() == self.matcher,
+                TracedValue::Object(obj) => {
+                    obj.as_ref() == self.matcher
+                        || (self.matcher.ends_with("...")
+                            && obj
+                                .as_ref()
+                                .starts_with(&self.matcher[0..self.matcher.len() - 3]))
+                }
                 _ => false,
             }
         }
