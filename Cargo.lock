@@ -3372,7 +3372,7 @@ dependencies = [
  "pem",
  "ring",
  "rustls-pki-types",
- "time 0.3.41",
+ "time 0.3.47",
  "x509-parser",
  "yasna",
 ]
@@ -5892,7 +5892,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
- "time 0.3.41",
+ "time 0.3.47",
 ]
 
 [[package]]
@@ -6200,23 +6200,14 @@ name = "zenoh-link-quic"
 version = "1.7.2"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
  "quinn",
- "rustls",
- "rustls-pemfile",
  "rustls-webpki",
- "secrecy",
  "time 0.3.47",
- "tokio",
- "tokio-util",
  "tracing",
- "webpki-roots",
- "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
@@ -6225,17 +6216,14 @@ version = "1.7.2"
 dependencies = [
  "async-trait",
  "quinn",
- "rustls",
  "rustls-webpki",
  "time 0.3.47",
- "tokio",
  "tokio-util",
  "tracing",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
