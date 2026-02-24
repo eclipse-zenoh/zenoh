@@ -252,9 +252,11 @@ async fn tx_task(
                 }
             }
         }
-        Ok(())
+        ZResult::Ok(())
     };
-    let _result: ZResult<()> = task_controller.into_abortable(task).await?;
+    if let Ok(result) = task_controller.into_abortable(task).await {
+        result?;
+    }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
