@@ -20,8 +20,10 @@
 use std::time::Duration;
 
 use predicates::Predicate;
-use regex::Regex;
-use zenoh::Wait;
+use zenoh::{
+    query::{ConsolidationMode, QueryTarget},
+    Wait,
+};
 use zenoh_config::WhatAmI::{Client, Peer, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
@@ -95,35 +97,35 @@ async fn test_regions_scenario1_order1_putsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     ztimeout!(async {
         loop {
-            _z9110.put("test/9110", "9110").await.unwrap();
-            _z9120.put("test/9120", "9120").await.unwrap();
-            _z9130.put("test/9130", "9130").await.unwrap();
-            _z9210.put("test/9210", "9210").await.unwrap();
-            _z9220.put("test/9220", "9220").await.unwrap();
-            _z9230.put("test/9230", "9230").await.unwrap();
-            _z9310.put("test/9310", "9310").await.unwrap();
-            _z9320.put("test/9320", "9320").await.unwrap();
-            _z9330.put("test/9330", "9330").await.unwrap();
+            _z9110.put("test", "9110").await.unwrap();
+            _z9120.put("test", "9120").await.unwrap();
+            _z9130.put("test", "9130").await.unwrap();
+            _z9210.put("test", "9210").await.unwrap();
+            _z9220.put("test", "9220").await.unwrap();
+            _z9230.put("test", "9230").await.unwrap();
+            _z9310.put("test", "9310").await.unwrap();
+            _z9320.put("test", "9320").await.unwrap();
+            _z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -138,7 +140,7 @@ async fn test_regions_scenario1_order1_putsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             2
         );
@@ -198,26 +200,26 @@ async fn test_regions_scenario1_order1_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
-    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+    let p9110 = _z9110.declare_publisher("test").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test").await.unwrap();
 
     ztimeout!(async {
         loop {
@@ -236,7 +238,7 @@ async fn test_regions_scenario1_order1_pubsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -251,7 +253,7 @@ async fn test_regions_scenario1_order1_pubsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             3
         );
@@ -311,38 +313,36 @@ async fn test_regions_scenario1_order1_getque() {
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test/9110").callback(|q| Wait::wait(q.reply("test/9110", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test/9120").callback(|q| Wait::wait(q.reply("test/9120", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test/9130").callback(|q| Wait::wait(q.reply("test/9130", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test/9210").callback(|q| Wait::wait(q.reply("test/9210", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test/9220").callback(|q| Wait::wait(q.reply("test/9220", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test/9230").callback(|q| Wait::wait(q.reply("test/9230", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test/9310").callback(|q| Wait::wait(q.reply("test/9310", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test/9320").callback(|q| Wait::wait(q.reply("test/9320", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test/9330").callback(|q| Wait::wait(q.reply("test/9330", "9330")).unwrap()).await.unwrap();
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
-    ztimeout!(async {
+    skip_fmt! {ztimeout!(async {
         loop {
-            if _z9110.get("test/**").await.unwrap().iter().count() == 9
-                && _z9120.get("test/**").await.unwrap().iter().count() == 9
-                && _z9130.get("test/**").await.unwrap().iter().count() == 9
-                && _z9210.get("test/**").await.unwrap().iter().count() == 9
-                && _z9220.get("test/**").await.unwrap().iter().count() == 9
-                && _z9230.get("test/**").await.unwrap().iter().count() == 9
-                && _z9310.get("test/**").await.unwrap().iter().count() == 9
-                && _z9320.get("test/**").await.unwrap().iter().count() == 9
-                && _z9330.get("test/**").await.unwrap().iter().count() == 9
+            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
             {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-    });
+    })};
 
     let s = STORAGE.lock();
-
-    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
 
     for zid in [
         "11ac9110", "11ac9120", "11ac9130", "11ac9210", "11ac9220", "11ac9230", "11ac9310",
@@ -350,11 +350,7 @@ async fn test_regions_scenario1_order1_getque() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(
-                    zid,
-                    predicates_ext::dbg_obj_re(re.clone())
-                )
-                .eval(e))
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
             2
         );
@@ -414,26 +410,26 @@ async fn test_regions_scenario1_order1_queque() {
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test/9110").callback(|q| Wait::wait(q.reply("test/9110", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test/9120").callback(|q| Wait::wait(q.reply("test/9120", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test/9130").callback(|q| Wait::wait(q.reply("test/9130", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test/9210").callback(|q| Wait::wait(q.reply("test/9210", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test/9220").callback(|q| Wait::wait(q.reply("test/9220", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test/9230").callback(|q| Wait::wait(q.reply("test/9230", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test/9310").callback(|q| Wait::wait(q.reply("test/9310", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test/9320").callback(|q| Wait::wait(q.reply("test/9320", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test/9330").callback(|q| Wait::wait(q.reply("test/9330", "9330")).unwrap()).await.unwrap();
-    }
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
 
-    let q9110 = _z9110.declare_querier("test/**").await.unwrap();
-    let q9120 = _z9120.declare_querier("test/**").await.unwrap();
-    let q9130 = _z9130.declare_querier("test/**").await.unwrap();
-    let q9210 = _z9210.declare_querier("test/**").await.unwrap();
-    let q9220 = _z9220.declare_querier("test/**").await.unwrap();
-    let q9230 = _z9230.declare_querier("test/**").await.unwrap();
-    let q9310 = _z9310.declare_querier("test/**").await.unwrap();
-    let q9320 = _z9320.declare_querier("test/**").await.unwrap();
-    let q9330 = _z9330.declare_querier("test/**").await.unwrap();
+        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
 
     ztimeout!(async {
         loop {
@@ -456,21 +452,15 @@ async fn test_regions_scenario1_order1_queque() {
 
     let s = STORAGE.lock();
 
-    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
-
     for zid in [
         "11ad9110", "11ad9120", "11ad9130", "11ad9210", "11ad9220", "11ad9230", "11ad9310",
         "11ad9320", "11ad9330",
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(
-                    zid,
-                    predicates_ext::dbg_obj_re(re.clone())
-                )
-                .eval(e))
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            8
+            3
         );
     }
 }
@@ -510,15 +500,15 @@ async fn test_regions_scenario1_order2_putsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     let _z9000 = ztimeout!(Node::new(Router, "12aa9000").listen("tcp/0.0.0.0:0").open());
@@ -541,22 +531,22 @@ async fn test_regions_scenario1_order2_putsub() {
 
     ztimeout!(async {
         loop {
-            _z9110.put("test/9110", "9110").await.unwrap();
-            _z9120.put("test/9120", "9120").await.unwrap();
-            _z9130.put("test/9130", "9130").await.unwrap();
-            _z9210.put("test/9210", "9210").await.unwrap();
-            _z9220.put("test/9220", "9220").await.unwrap();
-            _z9230.put("test/9230", "9230").await.unwrap();
-            _z9310.put("test/9310", "9310").await.unwrap();
-            _z9320.put("test/9320", "9320").await.unwrap();
-            _z9330.put("test/9330", "9330").await.unwrap();
+            _z9110.put("test", "9110").await.unwrap();
+            _z9120.put("test", "9120").await.unwrap();
+            _z9130.put("test", "9130").await.unwrap();
+            _z9210.put("test", "9210").await.unwrap();
+            _z9220.put("test", "9220").await.unwrap();
+            _z9230.put("test", "9230").await.unwrap();
+            _z9310.put("test", "9310").await.unwrap();
+            _z9320.put("test", "9320").await.unwrap();
+            _z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -571,7 +561,7 @@ async fn test_regions_scenario1_order2_putsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             2
         );
@@ -613,26 +603,26 @@ async fn test_regions_scenario1_order2_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
-    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+    let p9110 = _z9110.declare_publisher("test").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test").await.unwrap();
 
     let _z9000 = ztimeout!(Node::new(Router, "12ab9000").listen("tcp/0.0.0.0:0").open());
 
@@ -669,7 +659,7 @@ async fn test_regions_scenario1_order2_pubsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -684,7 +674,7 @@ async fn test_regions_scenario1_order2_pubsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             3
         );
@@ -726,15 +716,15 @@ async fn test_regions_scenario1_order2_getque() {
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test/9110").callback(|q| Wait::wait(q.reply("test/9110", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test/9120").callback(|q| Wait::wait(q.reply("test/9120", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test/9130").callback(|q| Wait::wait(q.reply("test/9130", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test/9210").callback(|q| Wait::wait(q.reply("test/9210", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test/9220").callback(|q| Wait::wait(q.reply("test/9220", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test/9230").callback(|q| Wait::wait(q.reply("test/9230", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test/9310").callback(|q| Wait::wait(q.reply("test/9310", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test/9320").callback(|q| Wait::wait(q.reply("test/9320", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test/9330").callback(|q| Wait::wait(q.reply("test/9330", "9330")).unwrap()).await.unwrap();
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
     let _z9000 = ztimeout!(Node::new(Router, "12ac9000").listen("tcp/[::]:0").open());
@@ -755,27 +745,25 @@ async fn test_regions_scenario1_order2_getque() {
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
 
-    ztimeout!(async {
+    skip_fmt! {ztimeout!(async {
         loop {
-            if _z9110.get("test/**").await.unwrap().iter().count() == 9
-                && _z9120.get("test/**").await.unwrap().iter().count() == 9
-                && _z9130.get("test/**").await.unwrap().iter().count() == 9
-                && _z9210.get("test/**").await.unwrap().iter().count() == 9
-                && _z9220.get("test/**").await.unwrap().iter().count() == 9
-                && _z9230.get("test/**").await.unwrap().iter().count() == 9
-                && _z9310.get("test/**").await.unwrap().iter().count() == 9
-                && _z9320.get("test/**").await.unwrap().iter().count() == 9
-                && _z9330.get("test/**").await.unwrap().iter().count() == 9
+            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
             {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-    });
+    })};
 
     let s = STORAGE.lock();
-
-    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
 
     for zid in [
         "12ac9110", "12ac9120", "12ac9130", "12ac9210", "12ac9220", "12ac9230", "12ac9310",
@@ -783,11 +771,7 @@ async fn test_regions_scenario1_order2_getque() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(
-                    zid,
-                    predicates_ext::dbg_obj_re(re.clone())
-                )
-                .eval(e))
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
             2
         );
@@ -829,26 +813,26 @@ async fn test_regions_scenario1_order2_queque() {
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test/9110").callback(|q| Wait::wait(q.reply("test/9110", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test/9120").callback(|q| Wait::wait(q.reply("test/9120", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test/9130").callback(|q| Wait::wait(q.reply("test/9130", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test/9210").callback(|q| Wait::wait(q.reply("test/9210", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test/9220").callback(|q| Wait::wait(q.reply("test/9220", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test/9230").callback(|q| Wait::wait(q.reply("test/9230", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test/9310").callback(|q| Wait::wait(q.reply("test/9310", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test/9320").callback(|q| Wait::wait(q.reply("test/9320", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test/9330").callback(|q| Wait::wait(q.reply("test/9330", "9330")).unwrap()).await.unwrap();
-    }
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
 
-    let q9110 = _z9110.declare_querier("test/**").await.unwrap();
-    let q9120 = _z9120.declare_querier("test/**").await.unwrap();
-    let q9130 = _z9130.declare_querier("test/**").await.unwrap();
-    let q9210 = _z9210.declare_querier("test/**").await.unwrap();
-    let q9220 = _z9220.declare_querier("test/**").await.unwrap();
-    let q9230 = _z9230.declare_querier("test/**").await.unwrap();
-    let q9310 = _z9310.declare_querier("test/**").await.unwrap();
-    let q9320 = _z9320.declare_querier("test/**").await.unwrap();
-    let q9330 = _z9330.declare_querier("test/**").await.unwrap();
+        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
 
     let _z9000 = ztimeout!(Node::new(Router, "12ad9000").listen("tcp/[::]:0").open());
 
@@ -887,21 +871,15 @@ async fn test_regions_scenario1_order2_queque() {
 
     let s = STORAGE.lock();
 
-    let re = Regex::new("test/9(1|2|3)(1|2|3)0").unwrap();
-
     for zid in [
         "12ad9110", "12ad9120", "12ad9130", "12ad9210", "12ad9220", "12ad9230", "12ad9310",
         "12ad9320", "12ad9330",
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_queryable(
-                    zid,
-                    predicates_ext::dbg_obj_re(re.clone())
-                )
-                .eval(e))
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            8
+            3
         );
     }
 }

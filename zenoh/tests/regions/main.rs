@@ -169,6 +169,7 @@ macro_rules! skip_fmt {
 
 pub trait SubUtils {
     fn count_keys(&self) -> usize;
+    fn count_vals(&self) -> usize;
 }
 
 impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
@@ -177,6 +178,14 @@ impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
         self.handler()
             .try_iter()
             .map(|s| s.key_expr().clone().into_owned())
+            .unique()
+            .count()
+    }
+    fn count_vals(&self) -> usize {
+        use itertools::Itertools;
+        self.handler()
+            .try_iter()
+            .map(|s| s.payload().try_to_string().unwrap().into_owned())
             .unique()
             .count()
     }
@@ -206,17 +215,14 @@ pub mod predicates_ext {
         .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
     }
 
-    pub fn register_queryable<'a, C>(
-        zid: &'static str,
-        keyexpr_pred: impl IntoFieldPredicate,
-    ) -> impl Predicate<C>
+    pub fn register_queryable<'a, C>(zid: &'static str, keyexpr: &'static str) -> impl Predicate<C>
     where
         C: Captured<'a>,
     {
         ancestor(
             name(eq("register_queryable"))
                 & field("self", dbg_obj_eq("north"))
-                & field("res", keyexpr_pred),
+                & field("res", dbg_obj_eq(keyexpr)),
         )
         .and(ancestor(name(eq("demux")) & field("zid", dbg_obj_eq(zid))))
     }

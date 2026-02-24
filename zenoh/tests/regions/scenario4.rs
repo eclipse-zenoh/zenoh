@@ -84,35 +84,35 @@ async fn test_regions_scenario4_order1_putsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     ztimeout!(async {
         loop {
-            _z9110.put("test/9110", "9110").await.unwrap();
-            _z9120.put("test/9120", "9120").await.unwrap();
-            _z9130.put("test/9130", "9130").await.unwrap();
-            _z9210.put("test/9210", "9210").await.unwrap();
-            _z9220.put("test/9220", "9220").await.unwrap();
-            _z9230.put("test/9230", "9230").await.unwrap();
-            _z9310.put("test/9310", "9310").await.unwrap();
-            _z9320.put("test/9320", "9320").await.unwrap();
-            _z9330.put("test/9330", "9330").await.unwrap();
+            _z9110.put("test", "9110").await.unwrap();
+            _z9120.put("test", "9120").await.unwrap();
+            _z9130.put("test", "9130").await.unwrap();
+            _z9210.put("test", "9210").await.unwrap();
+            _z9220.put("test", "9220").await.unwrap();
+            _z9230.put("test", "9230").await.unwrap();
+            _z9310.put("test", "9310").await.unwrap();
+            _z9320.put("test", "9320").await.unwrap();
+            _z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -127,7 +127,7 @@ async fn test_regions_scenario4_order1_putsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             0
         );
@@ -179,26 +179,26 @@ async fn test_regions_scenario4_order1_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
-    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+    let p9110 = _z9110.declare_publisher("test").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test").await.unwrap();
 
     ztimeout!(async {
         loop {
@@ -217,7 +217,7 @@ async fn test_regions_scenario4_order1_pubsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -232,7 +232,7 @@ async fn test_regions_scenario4_order1_pubsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             1
         );
@@ -271,12 +271,12 @@ async fn test_regions_scenario4_order2_putsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Router, "42aa9300")
@@ -294,29 +294,29 @@ async fn test_regions_scenario4_order2_putsub() {
         .open());
 
     skip_fmt! {
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     ztimeout!(async {
         loop {
-            _z9110.put("test/9110", "9110").await.unwrap();
-            _z9120.put("test/9120", "9120").await.unwrap();
-            _z9130.put("test/9130", "9130").await.unwrap();
-            _z9210.put("test/9210", "9210").await.unwrap();
-            _z9220.put("test/9220", "9220").await.unwrap();
-            _z9230.put("test/9230", "9230").await.unwrap();
-            _z9310.put("test/9310", "9310").await.unwrap();
-            _z9320.put("test/9320", "9320").await.unwrap();
-            _z9330.put("test/9330", "9330").await.unwrap();
+            _z9110.put("test", "9110").await.unwrap();
+            _z9120.put("test", "9120").await.unwrap();
+            _z9130.put("test", "9130").await.unwrap();
+            _z9210.put("test", "9210").await.unwrap();
+            _z9220.put("test", "9220").await.unwrap();
+            _z9230.put("test", "9230").await.unwrap();
+            _z9310.put("test", "9310").await.unwrap();
+            _z9320.put("test", "9320").await.unwrap();
+            _z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -331,7 +331,7 @@ async fn test_regions_scenario4_order2_putsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             0
         );
@@ -370,20 +370,20 @@ async fn test_regions_scenario4_order2_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test/9110").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test/9120").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test/9130").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test/9210").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test/9220").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test/9230").await.unwrap();
+    let p9110 = _z9110.declare_publisher("test").await.unwrap();
+    let p9120 = _z9120.declare_publisher("test").await.unwrap();
+    let p9130 = _z9130.declare_publisher("test").await.unwrap();
+    let p9210 = _z9210.declare_publisher("test").await.unwrap();
+    let p9220 = _z9220.declare_publisher("test").await.unwrap();
+    let p9230 = _z9230.declare_publisher("test").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Router, "42ab9300")
         .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
@@ -400,14 +400,14 @@ async fn test_regions_scenario4_order2_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9310 = _z9310.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test/**").with(flume::unbounded()).await.unwrap();
+        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9310 = _z9310.declare_publisher("test/9310").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test/9320").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test/9330").await.unwrap();
+    let p9310 = _z9310.declare_publisher("test").await.unwrap();
+    let p9320 = _z9320.declare_publisher("test").await.unwrap();
+    let p9330 = _z9330.declare_publisher("test").await.unwrap();
 
     ztimeout!(async {
         loop {
@@ -426,7 +426,7 @@ async fn test_regions_scenario4_order2_pubsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_keys() == 9)
+            .all(|sub| sub.count_vals() == 9)
             {
                 break;
             }
@@ -441,7 +441,7 @@ async fn test_regions_scenario4_order2_pubsub() {
     ] {
         assert_eq!(
             s.all_events()
-                .filter(|e| predicates_ext::register_subscriber(zid, "test/**").eval(e))
+                .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
             1
         );
