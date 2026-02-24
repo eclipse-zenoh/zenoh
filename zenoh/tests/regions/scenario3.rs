@@ -19,6 +19,10 @@
 use std::time::Duration;
 
 use predicates::Predicate;
+use zenoh::{
+    query::{ConsolidationMode, QueryTarget},
+    Wait,
+};
 use zenoh_config::WhatAmI::{Peer, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
@@ -246,6 +250,196 @@ async fn test_regions_scenario3_order1_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order1_getque() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "31ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.1.3:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "31ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.1.3:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "31ac9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.1.3:9300")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "31ac9110")
+        .multicast("224.3.1.3:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "31ac9120")
+        .multicast("224.3.1.3:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "31ac9130")
+        .multicast("224.3.1.3:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "31ac9210")
+        .multicast("224.3.1.3:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "31ac9220")
+        .multicast("224.3.1.3:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "31ac9230")
+        .multicast("224.3.1.3:9200")
+        .open());
+    let _z9310 = ztimeout!(Node::new(Peer, "31ac9310")
+        .multicast("224.3.1.3:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "31ac9320")
+        .multicast("224.3.1.3:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "31ac9330")
+        .multicast("224.3.1.3:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+    }
+
+    skip_fmt! {ztimeout!(async {
+        loop {
+            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })};
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "31ac9110", "31ac9120", "31ac9130", "31ac9210", "31ac9220", "31ac9230", "31ac9310",
+        "31ac9320", "31ac9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order1_queque() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "31ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.1.4:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "31ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.1.4:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "31ad9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.1.4:9300")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "31ad9110")
+        .multicast("224.3.1.4:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "31ad9120")
+        .multicast("224.3.1.4:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "31ad9130")
+        .multicast("224.3.1.4:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "31ad9210")
+        .multicast("224.3.1.4:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "31ad9220")
+        .multicast("224.3.1.4:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "31ad9230")
+        .multicast("224.3.1.4:9200")
+        .open());
+    let _z9310 = ztimeout!(Node::new(Peer, "31ad9310")
+        .multicast("224.3.1.4:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "31ad9320")
+        .multicast("224.3.1.4:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "31ad9330")
+        .multicast("224.3.1.4:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+
+        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    ztimeout!(async {
+        loop {
+            if q9110.get().await.unwrap().iter().count() == 9
+                && q9120.get().await.unwrap().iter().count() == 9
+                && q9130.get().await.unwrap().iter().count() == 9
+                && q9210.get().await.unwrap().iter().count() == 9
+                && q9220.get().await.unwrap().iter().count() == 9
+                && q9230.get().await.unwrap().iter().count() == 9
+                && q9310.get().await.unwrap().iter().count() == 9
+                && q9320.get().await.unwrap().iter().count() == 9
+                && q9330.get().await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "31ad9110", "31ad9120", "31ad9130", "31ad9210", "31ad9220", "31ad9230", "31ad9310",
+        "31ad9320", "31ad9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_regions_scenario3_order2_putsub() {
     init_tracing_subscriber();
 
@@ -445,6 +639,196 @@ async fn test_regions_scenario3_order2_pubsub() {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order2_getque() {
+    init_tracing_subscriber();
+
+    let _z9110 = ztimeout!(Node::new(Peer, "32ac9110")
+        .multicast("224.3.2.3:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "32ac9120")
+        .multicast("224.3.2.3:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "32ac9130")
+        .multicast("224.3.2.3:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "32ac9210")
+        .multicast("224.3.2.3:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "32ac9220")
+        .multicast("224.3.2.3:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "32ac9230")
+        .multicast("224.3.2.3:9200")
+        .open());
+    let _z9310 = ztimeout!(Node::new(Peer, "32ac9310")
+        .multicast("224.3.2.3:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "32ac9320")
+        .multicast("224.3.2.3:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "32ac9330")
+        .multicast("224.3.2.3:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+    }
+
+    let _z9100 = ztimeout!(Node::new(Router, "32ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.2.3:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "32ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.2.3:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "32ac9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.2.3:9300")
+        .open());
+
+    skip_fmt! {ztimeout!(async {
+        loop {
+            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })};
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "32ac9110", "32ac9120", "32ac9130", "32ac9210", "32ac9220", "32ac9230", "32ac9310",
+        "32ac9320", "32ac9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order2_queque() {
+    init_tracing_subscriber();
+
+    let _z9110 = ztimeout!(Node::new(Peer, "32ad9110")
+        .multicast("224.3.2.4:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "32ad9120")
+        .multicast("224.3.2.4:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "32ad9130")
+        .multicast("224.3.2.4:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "32ad9210")
+        .multicast("224.3.2.4:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "32ad9220")
+        .multicast("224.3.2.4:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "32ad9230")
+        .multicast("224.3.2.4:9200")
+        .open());
+    let _z9310 = ztimeout!(Node::new(Peer, "32ad9310")
+        .multicast("224.3.2.4:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "32ad9320")
+        .multicast("224.3.2.4:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "32ad9330")
+        .multicast("224.3.2.4:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+
+        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    let _z9100 = ztimeout!(Node::new(Router, "32ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.2.4:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "32ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.2.4:9200")
+        .open());
+    let _z9300 = ztimeout!(Node::new(Router, "32ad9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.2.4:9300")
+        .open());
+
+    ztimeout!(async {
+        loop {
+            if q9110.get().await.unwrap().iter().count() == 9
+                && q9120.get().await.unwrap().iter().count() == 9
+                && q9130.get().await.unwrap().iter().count() == 9
+                && q9210.get().await.unwrap().iter().count() == 9
+                && q9220.get().await.unwrap().iter().count() == 9
+                && q9230.get().await.unwrap().iter().count() == 9
+                && q9310.get().await.unwrap().iter().count() == 9
+                && q9320.get().await.unwrap().iter().count() == 9
+                && q9330.get().await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "32ad9110", "32ad9120", "32ad9130", "32ad9210", "32ad9220", "32ad9230", "32ad9310",
+        "32ad9320", "32ad9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
             3
         );
@@ -660,6 +1044,198 @@ async fn test_regions_scenario3_order3_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order3_getque() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "33ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.3.3:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "33ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.3.3:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "33ac9110")
+        .multicast("224.3.3.3:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "33ac9120")
+        .multicast("224.3.3.3:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "33ac9130")
+        .multicast("224.3.3.3:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "33ac9210")
+        .multicast("224.3.3.3:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "33ac9220")
+        .multicast("224.3.3.3:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "33ac9230")
+        .multicast("224.3.3.3:9200")
+        .open());
+    let _z9310 = ztimeout!(Node::new(Peer, "33ac9310")
+        .multicast("224.3.3.3:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "33ac9320")
+        .multicast("224.3.3.3:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "33ac9330")
+        .multicast("224.3.3.3:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+    }
+
+    let _z9300 = ztimeout!(Node::new(Router, "33ac9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.3.3:9300")
+        .open());
+
+    skip_fmt! {ztimeout!(async {
+        loop {
+            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })};
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "33ac9110", "33ac9120", "33ac9130", "33ac9210", "33ac9220", "33ac9230", "33ac9310",
+        "33ac9320", "33ac9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order3_queque() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "33ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.3.4:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "33ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.3.4:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "33ad9110")
+        .multicast("224.3.3.4:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "33ad9120")
+        .multicast("224.3.3.4:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "33ad9130")
+        .multicast("224.3.3.4:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "33ad9210")
+        .multicast("224.3.3.4:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "33ad9220")
+        .multicast("224.3.3.4:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "33ad9230")
+        .multicast("224.3.3.4:9200")
+        .open());
+    let _z9310 = ztimeout!(Node::new(Peer, "33ad9310")
+        .multicast("224.3.3.4:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "33ad9320")
+        .multicast("224.3.3.4:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "33ad9330")
+        .multicast("224.3.3.4:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+
+        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    let _z9300 = ztimeout!(Node::new(Router, "33ad9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.3.4:9300")
+        .open());
+
+    ztimeout!(async {
+        loop {
+            if q9110.get().await.unwrap().iter().count() == 9
+                && q9120.get().await.unwrap().iter().count() == 9
+                && q9130.get().await.unwrap().iter().count() == 9
+                && q9210.get().await.unwrap().iter().count() == 9
+                && q9220.get().await.unwrap().iter().count() == 9
+                && q9230.get().await.unwrap().iter().count() == 9
+                && q9310.get().await.unwrap().iter().count() == 9
+                && q9320.get().await.unwrap().iter().count() == 9
+                && q9330.get().await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "33ad9110", "33ad9120", "33ad9130", "33ad9210", "33ad9220", "33ad9230", "33ad9310",
+        "33ad9320", "33ad9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_regions_scenario3_order4_putsub() {
     init_tracing_subscriber();
 
@@ -868,6 +1444,207 @@ async fn test_regions_scenario3_order4_pubsub() {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
+                .count(),
+            3
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order4_getque() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "34ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.4.3:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "34ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.4.3:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "34ac9110")
+        .multicast("224.3.4.3:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "34ac9120")
+        .multicast("224.3.4.3:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "34ac9130")
+        .multicast("224.3.4.3:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "34ac9210")
+        .multicast("224.3.4.3:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "34ac9220")
+        .multicast("224.3.4.3:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "34ac9230")
+        .multicast("224.3.4.3:9200")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+    }
+
+    let _z9300 = ztimeout!(Node::new(Router, "34ac9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.4.3:9300")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "34ac9310")
+        .multicast("224.3.4.3:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "34ac9320")
+        .multicast("224.3.4.3:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "34ac9330")
+        .multicast("224.3.4.3:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+    }
+
+    skip_fmt! {ztimeout!(async {
+        loop {
+            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })};
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "34ac9110", "34ac9120", "34ac9130", "34ac9210", "34ac9220", "34ac9230", "34ac9310",
+        "34ac9320", "34ac9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
+                .count(),
+            2
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario3_order4_queque() {
+    init_tracing_subscriber();
+
+    let _z9100 = ztimeout!(Node::new(Router, "34ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .multicast("224.3.4.4:9100")
+        .open());
+    let _z9200 = ztimeout!(Node::new(Router, "34ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100)])
+        .multicast("224.3.4.4:9200")
+        .open());
+
+    let _z9110 = ztimeout!(Node::new(Peer, "34ad9110")
+        .multicast("224.3.4.4:9100")
+        .open());
+    let _z9120 = ztimeout!(Node::new(Peer, "34ad9120")
+        .multicast("224.3.4.4:9100")
+        .open());
+    let _z9130 = ztimeout!(Node::new(Peer, "34ad9130")
+        .multicast("224.3.4.4:9100")
+        .open());
+    let _z9210 = ztimeout!(Node::new(Peer, "34ad9210")
+        .multicast("224.3.4.4:9200")
+        .open());
+    let _z9220 = ztimeout!(Node::new(Peer, "34ad9220")
+        .multicast("224.3.4.4:9200")
+        .open());
+    let _z9230 = ztimeout!(Node::new(Peer, "34ad9230")
+        .multicast("224.3.4.4:9200")
+        .open());
+
+    skip_fmt! {
+        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+
+        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    let _z9300 = ztimeout!(Node::new(Router, "34ad9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(_z9100), loc!(_z9200)])
+        .multicast("224.3.4.4:9300")
+        .open());
+
+    let _z9310 = ztimeout!(Node::new(Peer, "34ad9310")
+        .multicast("224.3.4.4:9300")
+        .open());
+    let _z9320 = ztimeout!(Node::new(Peer, "34ad9320")
+        .multicast("224.3.4.4:9300")
+        .open());
+    let _z9330 = ztimeout!(Node::new(Peer, "34ad9330")
+        .multicast("224.3.4.4:9300")
+        .open());
+
+    skip_fmt! {
+        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+
+        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    ztimeout!(async {
+        loop {
+            if q9110.get().await.unwrap().iter().count() == 9
+                && q9120.get().await.unwrap().iter().count() == 9
+                && q9130.get().await.unwrap().iter().count() == 9
+                && q9210.get().await.unwrap().iter().count() == 9
+                && q9220.get().await.unwrap().iter().count() == 9
+                && q9230.get().await.unwrap().iter().count() == 9
+                && q9310.get().await.unwrap().iter().count() == 9
+                && q9320.get().await.unwrap().iter().count() == 9
+                && q9330.get().await.unwrap().iter().count() == 9
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    let s = STORAGE.lock();
+
+    for zid in [
+        "34ad9110", "34ad9120", "34ad9130", "34ad9210", "34ad9220", "34ad9230", "34ad9310",
+        "34ad9320", "34ad9330",
+    ] {
+        assert_eq!(
+            s.all_events()
+                .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
             3
         );

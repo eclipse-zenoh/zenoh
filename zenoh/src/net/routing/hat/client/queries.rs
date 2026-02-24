@@ -211,8 +211,6 @@ impl HatQueriesTrait for Hat {
             .filter_map(|(r, i)| (r == &res).then_some(*i))
             .reduce(merge_qabl_infos);
 
-        tracing::debug!(?new_face_info);
-
         let res = get_mut_unchecked(&mut res);
         match res.face_ctxs.get_mut(&ctx.src_face.id) {
             Some(ctx) => {
