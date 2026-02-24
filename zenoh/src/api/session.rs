@@ -14,7 +14,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     convert::TryInto,
-    fmt,
+    fmt, hint,
     mem::{self, ManuallyDrop},
     ops::Deref,
     sync::{
@@ -72,12 +72,20 @@ use super::{
     builders::close::{CloseBuilder, Closeable, Closee},
     connectivity,
 };
-#[cfg(feature = "unstable")]
-use crate::api::{query::ReplyKeyExpr, sample::SourceInfo, selector::ZenohParameters};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use crate::net::runtime::ShmProviderState;
+#[cfg(feature = "unstable")]
+use crate::{
+    api::handlers::CallbackParameter,
+    api::{
+        cancellation::{CancellationToken, SyncGroup, SyncGroupNotifier},
+        query::ReplyKeyExpr,
+        sample::SourceInfo,
+        selector::ZenohParameters,
+    },
+};
 use crate::{
     api::{
         admin,
@@ -443,6 +451,58 @@ impl SessionState {
 
         (sub_state, declared_sub)
     }
+
+    #[inline(always)]
+    fn subscriber_callbacks(
+        &self,
+        local: bool,
+        kind: SubscriberKind,
+        wire_expr: &WireExpr,
+        historical: bool,
+    ) -> SubscriberCallbacks {
+        let mut callbacks = SingleOrVec::empty();
+        if wire_expr.suffix.is_empty() {
+            match self.get_res(&wire_expr.scope, wire_expr.mapping, local) {
+                Some(Resource::Node(res)) => {
+                    for sub in res.subscribers(kind).iter() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (!historical || sub.history)
+                        {
+                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
+                        }
+                    }
+                }
+                Some(Resource::Prefix { prefix }) => {
+                    error!("Received Data for `{prefix}`, which isn't a key expression");
+                    return SubscriberCallbacks::default();
+                }
+                None => {
+                    error!("Received Data for unknown expr_id: {}", wire_expr.scope);
+                    return SubscriberCallbacks::default();
+                }
+            }
+        } else {
+            match self.wireexpr_to_keyexpr(wire_expr, local) {
+                Ok(key_expr) => {
+                    for sub in self.subscribers(kind).values() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && (!historical || sub.history)
+                            && key_expr.intersects(&sub.key_expr)
+                        {
+                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!("Received Data for unknown key_expr: {err}");
+                    return SubscriberCallbacks::default();
+                }
+            }
+        }
+        SubscriberCallbacks(callbacks)
+    }
 }
 
 impl fmt::Debug for SessionState {
@@ -453,6 +513,44 @@ impl fmt::Debug for SessionState {
             self.subscribers.len(),
             self.liveliness_subscribers.len()
         )
+    }
+}
+
+#[derive(Default)]
+struct SubscriberCallbacks(SingleOrVec<(Callback<Sample>, KeyExpr<'static>)>);
+
+impl SubscriberCallbacks {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline(always)]
+    fn call(
+        self,
+        consume: bool,
+        qos: push::ext::QoSType,
+        msg: &mut PushBody,
+        #[cfg(feature = "unstable")] reliability: Reliability,
+    ) {
+        let zenoh_collections::single_or_vec::IntoIter { drain, last } = self.0.into_iter();
+        for (cb, key_expr) in drain {
+            #[cfg(feature = "unstable")]
+            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
+            #[cfg(not(feature = "unstable"))]
+            cb.call_with_message((key_expr, qos, &mut msg.clone()));
+        }
+        if let Some((cb, key_expr)) = last {
+            let mut msg = &mut *msg;
+            let mut msg_clone;
+            if !consume {
+                msg_clone = msg.clone();
+                msg = &mut msg_clone;
+            }
+            #[cfg(feature = "unstable")]
+            cb.call_with_message((key_expr, qos, msg, reliability));
+            #[cfg(not(feature = "unstable"))]
+            cb.call_with_message((key_expr, qos, msg));
+        }
     }
 }
 
@@ -565,6 +663,8 @@ pub(crate) struct SessionInner {
     id: EntityId,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
+    #[cfg(feature = "unstable")]
+    pub(crate) callbacks_drop_sync_group: SyncGroup,
 }
 
 impl fmt::Debug for SessionInner {
@@ -744,6 +844,8 @@ impl Session {
                 id: runtime.next_id(),
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
+                #[cfg(feature = "unstable")]
+                callbacks_drop_sync_group: SyncGroup::default(),
             }));
 
             // Register connectivity handler
@@ -1555,13 +1657,17 @@ impl Session {
         Ok(id)
     }
 
-    pub(crate) fn undeclare_querier_inner(&self, pid: Id) -> ZResult<()> {
+    pub(crate) fn undeclare_querier_inner(&self, querier_id: Id) -> ZResult<()> {
         let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
             return Ok(());
         };
-        if let Some(querier_state) = state.queriers.remove(&pid) {
+        if let Some(querier_state) = state.queriers.remove(&querier_id) {
             trace!("undeclare_querier({:?})", querier_state);
+            // remove all pending queries from this querier
+            state
+                .queries
+                .retain(|_, q| q.querier_id != Some(querier_id));
             if querier_state.destination != Locality::SessionLocal {
                 // Note: there might be several queriers on the same KeyExpr.
                 // Before calling forget_queriers(key_expr), check if this was the last one.
@@ -1587,21 +1693,39 @@ impl Session {
         }
     }
 
+    #[cfg(feature = "unstable")]
+    fn register_callback_drop_notifier<T>(
+        &self,
+        external_notifier: Option<SyncGroupNotifier>,
+        callback: &mut Callback<T>,
+    ) where
+        T: CallbackParameter,
+    {
+        let n = self.0.callbacks_drop_sync_group.notifier();
+        callback.set_on_drop(move || {
+            drop(external_notifier);
+            drop(n);
+        });
+    }
+
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
         origin: Locality,
-        callback: Callback<Sample>,
+        mut callback: Callback<Sample>,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let id = self.0.runtime.next_id();
         let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives()?;
             drop(state);
             let wire_expr = key_expr.to_wire(self).to_owned();
-
             primitives.send_declare(&mut Declare {
                 interest_id: None,
                 ext_qos: declare::ext::QoSType::DECLARE,
@@ -1713,13 +1837,17 @@ impl Session {
         }
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_queryable_inner(
         &self,
         key_expr: &KeyExpr,
         complete: bool,
         origin: Locality,
-        callback: Callback<Query>,
+        mut callback: Callback<Query>,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<QueryableState>> {
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_queryable({:?})", key_expr);
         let id = self.0.runtime.next_id();
@@ -1825,17 +1953,20 @@ impl Session {
         Ok(id)
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_liveliness_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
         origin: Locality,
         history: bool,
-        callback: Callback<Sample>,
+        mut callback: Callback<Sample>,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.0.state);
         trace!("declare_liveliness_subscriber({:?})", key_expr);
         let id = self.0.runtime.next_id();
-
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let sub_state = SubscriberState {
             id,
             remote_id: id,
@@ -1944,13 +2075,17 @@ impl Session {
         Ok(())
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_matches_listener_inner(
         &self,
         key_expr: &KeyExpr,
         destination: Locality,
         match_type: MatchingStatusType,
-        callback: Callback<MatchingStatus>,
+        mut callback: Callback<MatchingStatus>,
+        #[cfg(feature = "unstable")] callback_sync_group_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<MatchingListenerState>> {
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_sync_group_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
         let id = self.0.runtime.next_id();
         tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
@@ -2103,14 +2238,17 @@ impl Session {
         }
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_transport_events_listener_inner(
         &self,
-        callback: Callback<TransportEvent>,
+        mut callback: Callback<TransportEvent>,
         history: bool,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<TransportEventsListenerState>> {
         let id = self.runtime().next_id();
         trace!("declare_transport_events_listener_inner() => {id}");
-
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
         zwrite!(self.0.state)
@@ -2170,15 +2308,18 @@ impl Session {
         }
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn declare_transport_links_listener_inner(
         &self,
-        callback: Callback<LinkEvent>,
+        mut callback: Callback<LinkEvent>,
         history: bool,
         transport: Option<Transport>,
+        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
         let id = self.runtime().next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
-
+        #[cfg(feature = "unstable")]
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(LinkEventsListenerState {
             id,
             callback,
@@ -2256,82 +2397,29 @@ impl Session {
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
-    pub(crate) fn execute_subscriber_callbacks<'a>(
+    pub(crate) fn execute_subscriber_callbacks(
         &self,
         local: bool,
         kind: SubscriberKind,
         wire_expr: &WireExpr,
         qos: push::ext::QoSType,
-        msg: impl FnOnce() -> &'a mut PushBody,
+        msg: &mut PushBody,
         historical: bool,
         #[cfg(feature = "unstable")] reliability: Reliability,
     ) {
-        let mut callbacks = SingleOrVec::default();
         let state = zread!(self.0.state);
         if state.primitives.is_none() {
             return; // Session closing or closed
         }
-        if wire_expr.suffix.is_empty() {
-            match state.get_res(&wire_expr.scope, wire_expr.mapping, local) {
-                Some(Resource::Node(res)) => {
-                    for sub in res.subscribers(kind).iter() {
-                        if (sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal)))
-                            && (sub.history || (!historical))
-                        {
-                            callbacks.push((sub.callback.clone(), res.key_expr.clone().into()));
-                        }
-                    }
-                }
-                Some(Resource::Prefix { prefix }) => {
-                    tracing::error!(
-                        "Received Data for `{}`, which isn't a key expression",
-                        prefix
-                    );
-                    return;
-                }
-                None => {
-                    tracing::error!("Received Data for unknown expr_id: {}", wire_expr.scope);
-                    return;
-                }
-            }
-        } else {
-            match state.wireexpr_to_keyexpr(wire_expr, local) {
-                Ok(key_expr) => {
-                    for sub in state.subscribers(kind).values() {
-                        if (sub.origin == Locality::Any
-                            || (local == (sub.origin == Locality::SessionLocal)))
-                            && (sub.history || (!historical))
-                            && key_expr.intersects(&sub.key_expr)
-                        {
-                            callbacks.push((sub.callback.clone(), key_expr.clone().into_owned()));
-                        }
-                    }
-                }
-                Err(err) => {
-                    tracing::error!("Received Data for unknown key_expr: {}", err);
-                    return;
-                }
-            }
-        };
+        let callbacks = state.subscriber_callbacks(local, kind, wire_expr, historical);
         drop(state);
-        if callbacks.is_empty() {
-            return;
-        }
-        let msg = msg();
-        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
-        for (cb, key_expr) in drain {
+        callbacks.call(
+            true,
+            qos,
+            msg,
             #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
-            #[cfg(not(feature = "unstable"))]
-            cb.call_with_message((key_expr, qos, &mut msg.clone()));
-        }
-        if let Some((cb, key_expr)) = last {
-            #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, msg, reliability));
-            #[cfg(not(feature = "unstable"))]
-            cb.call_with_message((key_expr, qos, msg));
-        }
+            reliability,
+        );
     }
 
     #[allow(clippy::too_many_arguments)] // TODO fixme
@@ -2351,65 +2439,85 @@ impl Session {
         attachment: Option<ZBytes>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
-        let primitives = zread!(self.0.state).primitives()?;
-        let timestamp = timestamp.or_else(|| self.0.runtime.new_timestamp());
+        let state = zread!(self.0.state);
+        let primitives = state.primitives()?;
         let wire_expr = key_expr.to_wire(self);
+        let mut callbacks = SubscriberCallbacks::default();
+        if destination != Locality::Remote {
+            callbacks =
+                state.subscriber_callbacks(true, SubscriberKind::Subscriber, &wire_expr, false);
+        }
+        drop(state);
+        let timestamp = timestamp.or_else(|| self.0.runtime.new_timestamp());
         let ext_qos = push::ext::QoSType::new(priority.into(), congestion_control, is_express);
-        let make_body = || match kind {
-            SampleKind::Put => PushBody::Put(Put {
-                timestamp,
-                encoding: encoding.clone().into(),
-                #[cfg(feature = "unstable")]
-                ext_sinfo: source_info.clone().map(Into::into),
-                #[cfg(not(feature = "unstable"))]
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: attachment.clone().map(Into::into),
-                ext_unknown: vec![],
-                payload: payload.clone().into(),
-            }),
-            SampleKind::Delete => PushBody::Del(Del {
-                timestamp,
-                #[cfg(feature = "unstable")]
-                ext_sinfo: source_info.clone().map(Into::into),
-                #[cfg(not(feature = "unstable"))]
-                ext_sinfo: None,
-                ext_attachment: attachment.clone().map(Into::into),
-                ext_unknown: vec![],
-            }),
-        };
         let mut push = Push {
             wire_expr: wire_expr.to_owned(),
             ext_qos,
-            ..Push::from(make_body())
+            ..Push::from(match kind {
+                SampleKind::Put => PushBody::Put(Put {
+                    timestamp,
+                    encoding: encoding.into(),
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.map(Into::into),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_attachment: attachment.map(Into::into),
+                    ext_unknown: vec![],
+                    payload: payload.into(),
+                }),
+                SampleKind::Delete => PushBody::Del(Del {
+                    timestamp,
+                    #[cfg(feature = "unstable")]
+                    ext_sinfo: source_info.map(Into::into),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_sinfo: None,
+                    ext_attachment: attachment.map(Into::into),
+                    ext_unknown: vec![],
+                }),
+            })
         };
+        let has_local_callbacks = !callbacks.is_empty();
         if destination != Locality::SessionLocal {
-            primitives.send_push(
+            primitives.send_push_consume(
                 &mut push,
                 #[cfg(feature = "unstable")]
                 reliability,
                 #[cfg(not(feature = "unstable"))]
                 Reliability::DEFAULT,
+                !has_local_callbacks,
             );
         }
-        if destination != Locality::Remote {
-            self.execute_subscriber_callbacks(
-                true,
-                SubscriberKind::Subscriber,
-                &wire_expr,
-                ext_qos,
-                || {
-                    // check if the message has been consumed, and rebuild the payload in this case
-                    if push.wire_expr == WireExpr::empty() {
-                        push.payload = make_body();
-                    }
-                    &mut push.payload
-                },
-                false,
+        if has_local_callbacks {
+            #[cold]
+            fn call_local(
+                callbacks: SubscriberCallbacks,
+                push: &mut Push,
+                #[cfg(feature = "unstable")] reliability: Reliability,
+            ) {
+                callbacks.call(
+                    true,
+                    push.ext_qos,
+                    &mut push.payload,
+                    #[cfg(feature = "unstable")]
+                    reliability,
+                );
+            }
+            call_local(
+                callbacks,
+                &mut push,
                 #[cfg(feature = "unstable")]
                 reliability,
             );
+        }
+        // ext_unknown is not touched by routing/callbacks, so it must be empty
+        // we let the compiler knows it so it can optimize its drop out
+        // (`Vec<ZExtUnknown>::drop` was visible in flamegraph before this change)
+        match push.payload {
+            PushBody::Put(Put { ext_unknown, .. }) | PushBody::Del(Del { ext_unknown, .. })
+                if ext_unknown.is_empty() => {}
+            _ => unsafe { hint::unreachable_unchecked() },
         }
         Ok(())
     }
@@ -2420,6 +2528,43 @@ impl Session {
         self.0.runtime.static_runtime()
     }
 
+    // Important: this function should be called while state lock is being held, to ensure that
+    // on_cancel callback will not be fired until query is registered.
+    #[cfg(feature = "unstable")]
+    fn register_query_cancellation<F>(
+        &self,
+        cancellation_token: Option<CancellationToken>,
+        querier_notifier: Option<SyncGroupNotifier>,
+        on_cancel: F,
+        callback: &mut Callback<Reply>,
+    ) -> ZResult<()>
+    where
+        F: FnOnce() -> ZResult<()> + Clone + Send + Sync + 'static,
+    {
+        let session_notifier = self.0.callbacks_drop_sync_group.notifier();
+        if let Some(ct) = cancellation_token {
+            if let Some(ct_notifier) = ct.notifier() {
+                if let Ok(handler_id) = ct.add_on_cancel_handler(on_cancel.clone()) {
+                    callback.set_on_drop(move || {
+                        drop(session_notifier);
+                        ct.remove_on_cancel_handler(handler_id);
+                        drop(ct_notifier);
+                        drop(querier_notifier);
+                    });
+                    return Ok(());
+                }
+            }
+            bail!("Query was cancelled")
+        }
+
+        callback.set_on_drop(move || {
+            drop(session_notifier);
+            drop(querier_notifier);
+        });
+        Ok(())
+    }
+
+    #[allow(unused_mut)] // for callback drop on undeclare
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
@@ -2433,8 +2578,11 @@ impl Session {
         value: Option<(ZBytes, Encoding)>,
         attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] source: Option<SourceInfo>,
-        callback: Callback<Reply>,
-    ) -> ZResult<Id> {
+        mut callback: Callback<Reply>,
+        #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
+        querier_id: Option<EntityId>,
+        #[cfg(feature = "unstable")] querier_notifier: Option<SyncGroupNotifier>,
+    ) -> ZResult<()> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
             Selector::borrowed(key_expr, parameters),
@@ -2449,11 +2597,24 @@ impl Session {
             mode => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
+        #[cfg(feature = "unstable")]
+        self.register_query_cancellation(
+            cancellation_token,
+            querier_notifier,
+            {
+                let s = self.downgrade();
+                move || {
+                    let _ = s.cancel_query(qid);
+                    Ok(())
+                }
+            },
+            &mut callback,
+        )?;
+
         let nb_final = match destination {
             Locality::Any => 2,
             _ => 1,
         };
-
         let token = self.0.task_controller.get_cancellation_token();
         self.0
             .task_controller
@@ -2483,20 +2644,20 @@ impl Session {
                 }
             });
 
+        let primitives = state.primitives()?;
         tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
             QueryState {
                 nb_final,
-                key_expr: key_expr.clone().into_owned(),
+                key_expr: key_expr.key_expr().into(),
                 parameters: parameters.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
+                querier_id,
             },
         );
-
-        let primitives = state.primitives()?;
         drop(state);
 
         if destination != Locality::SessionLocal {
@@ -2549,7 +2710,7 @@ impl Session {
                 attachment,
             );
         }
-        Ok(qid)
+        Ok(())
     }
 
     #[cfg(feature = "unstable")]
@@ -2562,18 +2723,33 @@ impl Session {
         }
     }
 
+    #[allow(unused_mut)] // for callback drop on undeclare
     pub(crate) fn liveliness_query(
         &self,
         key_expr: &KeyExpr<'_>,
         timeout: Duration,
-        callback: Callback<Reply>,
-    ) -> ZResult<Id> {
+        mut callback: Callback<Reply>,
+        #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
+    ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
         let mut state = zwrite!(self.0.state);
         // Queries must use the same id generator as liveliness subscribers.
         // This is because both query's id and subscriber's id are used as interest id,
         // so both must not overlap.
         let id = self.0.runtime.next_id();
+        #[cfg(feature = "unstable")]
+        self.register_query_cancellation(
+            cancellation_token,
+            None,
+            {
+                let s = self.downgrade();
+                move || {
+                    let _ = s.cancel_liveliness_query(id);
+                    Ok(())
+                }
+            },
+            &mut callback,
+        )?;
         let token = self.0.task_controller.get_cancellation_token();
         self.0.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
@@ -2597,13 +2773,12 @@ impl Session {
                 }
             });
 
+        let primitives = state.primitives()?;
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
         state
             .liveliness_queries
             .insert(id, LivelinessQueryState { callback });
-
-        let primitives = state.primitives()?;
         drop(state);
 
         primitives.send_interest(&mut Interest {
@@ -2616,7 +2791,7 @@ impl Session {
             ext_nodeid: request::ext::NodeIdType::DEFAULT,
         });
 
-        Ok(id)
+        Ok(())
     }
 
     #[cfg(feature = "unstable")]
@@ -2894,13 +3069,12 @@ impl Primitives for WeakSession {
                             e.insert(key_expr.clone());
                             drop(state);
 
-                            let mut body = None;
                             self.execute_subscriber_callbacks(
                                 false,
                                 SubscriberKind::LivelinessSubscriber,
                                 &m.wire_expr,
                                 Default::default(),
-                                || body.insert(Put::default().into()),
+                                &mut Put::default().into(),
                                 // interest_id is set if the Token is an Interest::Current.
                                 // This is used to decide if subs with history=false should be called or not
                                 msg.interest_id.is_some(),
@@ -2927,13 +3101,12 @@ impl Primitives for WeakSession {
                     let interest_current = msg.interest_id.is_some();
                     if let Some(key_expr) = state.remote_tokens.remove(&m.id) {
                         drop(state);
-                        let mut body = None;
                         self.execute_subscriber_callbacks(
                             false,
                             SubscriberKind::LivelinessSubscriber,
                             &key_expr.to_wire(self),
                             Default::default(),
-                            || body.insert(Del::default().into()),
+                            &mut Del::default().into(),
                             interest_current,
                             #[cfg(feature = "unstable")]
                             Reliability::Reliable,
@@ -2945,13 +3118,12 @@ impl Primitives for WeakSession {
                         {
                             Ok(key_expr) => {
                                 drop(state);
-                                let mut body = None;
                                 self.execute_subscriber_callbacks(
                                     false,
                                     SubscriberKind::LivelinessSubscriber,
                                     &key_expr.to_wire(self),
                                     Default::default(),
-                                    || body.insert(Del::default().into()),
+                                    &mut Del::default().into(),
                                     interest_current,
                                     #[cfg(feature = "unstable")]
                                     Reliability::Reliable,
@@ -2977,15 +3149,17 @@ impl Primitives for WeakSession {
         }
     }
 
-    fn send_push(&self, msg: &mut Push, _reliability: Reliability) {
+    #[inline(always)]
+    fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, consume: bool) {
         trace!("recv Push {:?}", msg);
-        self.execute_subscriber_callbacks(
-            false,
-            SubscriberKind::Subscriber,
-            &msg.wire_expr,
+        let state = zread!(self.0.state);
+        let callbacks =
+            state.subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false);
+        drop(state);
+        callbacks.call(
+            consume,
             msg.ext_qos,
-            || &mut msg.payload,
-            false,
+            &mut msg.payload,
             #[cfg(feature = "unstable")]
             _reliability,
         );
@@ -3073,10 +3247,11 @@ impl Primitives for WeakSession {
                             zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
                         if c && !query.key_expr.intersects(&key_expr) {
                             tracing::warn!(
-                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}`: dropping Reply.",
+                                "Received Reply for `{}` from `{:?}`, which didn't match query `{}?{}`: dropping Reply.",
                                 key_expr,
                                 msg.ext_respid,
-                                query.selector()
+                                query.key_expr,
+                                query.parameters
                             );
                             return;
                         }
@@ -3303,9 +3478,17 @@ where
     OpenBuilder::new(config)
 }
 
+#[derive(Default)]
+pub(crate) struct SessionCloseArgs {
+    #[cfg(feature = "unstable")]
+    pub(crate) wait_callbacks: bool,
+}
+
 #[async_trait]
 impl Closee for WeakSession {
-    async fn close_inner(&self) {
+    type CloseArgs = SessionCloseArgs;
+    #[allow(unused_variables)] // SessionCloseArgs are only required for wait until callback execution ends under unstable
+    async fn close_inner(&self, close_args: SessionCloseArgs) {
         let Some(primitives) = zwrite!(self.0.state).primitives.take() else {
             return;
         };
@@ -3315,7 +3498,7 @@ impl Closee for WeakSession {
             info!(zid = %self.zid(), "close session");
             self.0.task_controller.terminate_all_async().await;
             let closee = r.get_closee();
-            closee.close_inner().await;
+            closee.close_inner(()).await;
         } else {
             self.0.task_controller.terminate_all_async().await;
             primitives.send_close();
@@ -3324,17 +3507,23 @@ impl Closee for WeakSession {
         // defer the cleanup of internal data structures by taking them out of the locked state
         // this is needed because callbacks may contain entities which need to acquire the
         // lock to be dropped, so callback must be dropped without the lock held
-        let mut state = zwrite!(self.0.state);
-        let _queryables = std::mem::take(&mut state.queryables);
-        let _subscribers = std::mem::take(&mut state.subscribers);
-        let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
-        let _local_resources = std::mem::take(&mut state.local_resources);
-        let _remote_resources = std::mem::take(&mut state.remote_resources);
-        let _queries = std::mem::take(&mut state.queries);
-        let _matching_listeners = std::mem::take(&mut state.matching_listeners);
-        let _transport_event_listeners = std::mem::take(&mut state.transport_events_listeners);
-        let _link_event_listeners = std::mem::take(&mut state.link_events_listeners);
-        drop(state);
+        {
+            let mut state = zwrite!(self.0.state);
+            let _queryables = std::mem::take(&mut state.queryables);
+            let _subscribers = std::mem::take(&mut state.subscribers);
+            let _liveliness_subscribers = std::mem::take(&mut state.liveliness_subscribers);
+            let _local_resources = std::mem::take(&mut state.local_resources);
+            let _remote_resources = std::mem::take(&mut state.remote_resources);
+            let _queries = std::mem::take(&mut state.queries);
+            let _matching_listeners = std::mem::take(&mut state.matching_listeners);
+            let _transport_event_listeners = std::mem::take(&mut state.transport_events_listeners);
+            let _link_event_listeners = std::mem::take(&mut state.link_events_listeners);
+            drop(state);
+        }
+        #[cfg(feature = "unstable")]
+        if close_args.wait_callbacks {
+            self.0.callbacks_drop_sync_group.wait_async().await;
+        }
     }
 }
 

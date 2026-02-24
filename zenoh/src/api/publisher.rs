@@ -35,6 +35,8 @@ use {
     zenoh_protocol::core::Reliability,
 };
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroup;
 use crate::api::{
     builders::{
         matching_listener::MatchingListenerBuilder,
@@ -118,6 +120,8 @@ pub struct Publisher<'a> {
     pub(crate) reliability: Reliability,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
+    #[cfg(feature = "unstable")]
+    pub(crate) sync_group: SyncGroup,
 }
 
 impl<'a> Publisher<'a> {
@@ -354,6 +358,8 @@ impl<'a> Publisher<'a> {
             matching_listeners: &self.matching_listeners,
             matching_status_type: MatchingStatusType::Subscribers,
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            parent_callback_sync_group_notifier: self.sync_group.notifier(),
         }
     }
 
@@ -369,7 +375,7 @@ impl<'a> Publisher<'a> {
     /// publisher.undeclare().await.unwrap();
     /// # }
     /// ```
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> PublisherUndeclaration<'a> {
         UndeclarableSealed::undeclare_inner(self, ())
     }
 
@@ -393,7 +399,11 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
     type Undeclaration = PublisherUndeclaration<'a>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        PublisherUndeclaration(self)
+        PublisherUndeclaration {
+            publisher: self,
+            #[cfg(feature = "unstable")]
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -410,7 +420,20 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct PublisherUndeclaration<'a>(Publisher<'a>);
+pub struct PublisherUndeclaration<'a> {
+    publisher: Publisher<'a>,
+    #[cfg(feature = "unstable")]
+    wait_callbacks: bool,
+}
+
+impl<'a> PublisherUndeclaration<'a> {
+    /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl Resolvable for PublisherUndeclaration<'_> {
     type To = ZResult<()>;
@@ -418,7 +441,12 @@ impl Resolvable for PublisherUndeclaration<'_> {
 
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.publisher.undeclare_impl()?;
+        #[cfg(feature = "unstable")]
+        if self.wait_callbacks {
+            self.publisher.sync_group.wait();
+        }
+        Ok(())
     }
 }
 

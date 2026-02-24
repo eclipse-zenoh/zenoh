@@ -614,7 +614,12 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push_consume(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+        _consume: bool,
+    ) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
@@ -794,9 +799,12 @@ fn test_response_wireexpr() {
         "test/queryable/reply/1"
     );
     let we = primitives1.get_last_key().unwrap();
-    assert_eq!(we.suffix, "/reply/1");
+    // TODO: replace asserts with the ones commented below once optimization of reply wireexpr in route_send_response is enabled
+    assert_eq!(we.suffix, "test/queryable/reply/1");
+    assert_eq!(we.scope, 0);
+    /*assert_eq!(we.suffix, "/reply/1");
     assert_eq!(we.scope, 12);
-    assert_eq!(we.mapping, Mapping::Receiver);
+    assert_eq!(we.mapping, Mapping::Receiver);*/
 
     // unregister receiver mapping and validate that we is still correct
     unregister_expr(&tables, &mut face1.upgrade().unwrap(), 12);
@@ -1007,6 +1015,7 @@ fn client_test() {
                 ..Put::default().into()
             },
             Reliability::Reliable,
+            true,
         );
     };
 

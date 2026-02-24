@@ -172,6 +172,8 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &prefix, &prefix, q)
         }),
+        #[cfg(feature = "unstable")]
+        None,
     );
 
     // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
@@ -185,6 +187,8 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
         }),
+        #[cfg(feature = "unstable")]
+        None,
     );
 
     // Subscribe to transport events and publish them to the adminspace
@@ -195,7 +199,7 @@ pub(crate) fn init(session: WeakSession) {
         move |event: TransportEvent| {
             let key_expr = ke_prefix(&own_zid) / &ke_transport(&event.transport);
             let key_expr = KeyExpr::from(key_expr);
-            tracing::info!(
+            tracing::trace!(
                 "Publishing transport event: {:?} : {:?} on {}",
                 &event.kind,
                 &event.transport,
@@ -228,7 +232,12 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_events_listener_inner(callback, false) {
+    if let Err(e) = session.declare_transport_events_listener_inner(
+        callback,
+        false,
+        #[cfg(feature = "unstable")]
+        None,
+    ) {
         tracing::error!("Unable to subscribe to transport events: {}", e);
     }
 
@@ -249,7 +258,7 @@ pub(crate) fn init(session: WeakSession) {
                 let key_expr =
                     ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
                 let key_expr = KeyExpr::from(key_expr);
-                tracing::info!(
+                tracing::trace!(
                     "Publishing link event: {:?} : {:?} on {}",
                     &event.kind,
                     &event.link,
@@ -284,7 +293,13 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None) {
+    if let Err(e) = session.declare_transport_links_listener_inner(
+        callback,
+        false,
+        None,
+        #[cfg(feature = "unstable")]
+        None,
+    ) {
         tracing::error!("Unable to subscribe to link events: {}", e);
     }
 }

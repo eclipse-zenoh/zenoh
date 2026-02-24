@@ -79,6 +79,7 @@ unstable = [
   "zenoh-config/unstable",
   "zenoh-keyexpr/unstable",
   "zenoh-protocol/unstable",
+  "zenoh-transport/unstable",
 ]
 uring = ["zenoh-transport/uring"]
 
