@@ -23,7 +23,7 @@ mod scenario4;
 
 use std::time::Duration;
 
-use zenoh::{pubsub::Subscriber, Session};
+use zenoh::{pubsub::Subscriber, sample::SampleKind, Session};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 
@@ -168,16 +168,29 @@ macro_rules! skip_fmt {
 }
 
 pub trait SubUtils {
-    fn count_keys(&self) -> usize;
+    fn count_put_keys(&self) -> usize;
+    fn count_del_keys(&self) -> usize;
     fn count_vals(&self) -> usize;
 }
 
 impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
-    fn count_keys(&self) -> usize {
+    fn count_put_keys(&self) -> usize {
         use itertools::Itertools;
         self.handler()
             .try_iter()
-            .map(|s| s.key_expr().clone().into_owned())
+            .filter_map(|s| {
+                (s.kind() == SampleKind::Put).then_some(s.key_expr().clone().into_owned())
+            })
+            .unique()
+            .count()
+    }
+    fn count_del_keys(&self) -> usize {
+        use itertools::Itertools;
+        self.handler()
+            .try_iter()
+            .filter_map(|s| {
+                (s.kind() == SampleKind::Delete).then_some(s.key_expr().clone().into_owned())
+            })
             .unique()
             .count()
     }
