@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use zenoh_uring::{BUF_COUNT, BUF_SIZE, reader::Reader};
+use zenoh_uring::{reader::Reader, BUF_COUNT, BUF_SIZE};
 
 use crate::common::monotonic_now_ns;
 
@@ -89,7 +89,7 @@ fn writer_main() {
 
     // standard write
     {
-        const SIZE: usize = 22; //BUF_SIZE;
+        const SIZE: usize = BUF_SIZE;
 
         let mut arr = [0u8; SIZE];
         let length = (SIZE - 2) as u16;
@@ -97,15 +97,19 @@ fn writer_main() {
         //let mut iteration = 1u8;
         //arr[18..].fill(iteration);
         loop {
-            let time = monotonic_now_ns();
-            arr[2..18].copy_from_slice(&time.to_le_bytes());
-            //arr[18..20].fill(iteration);
-            //arr[BUF_SIZE-10..].fill(iteration);
-            client.write_all(&arr).unwrap();
-            //iteration = iteration.wrapping_add(1);
+            //for _ in 0..100
+            {
+                let time = monotonic_now_ns();
+                arr[2..18].copy_from_slice(&time.to_le_bytes());
+                //arr[18..20].fill(iteration);
+                //arr[BUF_SIZE-10..].fill(iteration);
+                client.write_all(&arr).unwrap();
+                //iteration = iteration.wrapping_add(1);
 
-            //std::thread::yield_now();
-            std::thread::sleep(Duration::from_micros(1));
+                //std::thread::yield_now();
+                //std::thread::sleep(Duration::from_micros(1));
+            }
+            //std::thread::sleep(Duration::from_millis(1));
         }
     }
 

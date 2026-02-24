@@ -15,7 +15,7 @@ use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
-    sync::{Arc, atomic::AtomicBool, mpsc::Sender},
+    sync::{atomic::AtomicBool, mpsc::Sender, Arc},
 };
 
 use io_uring::{opcode, squeue::Flags, types, EnterFlags, IoUring, SubmissionQueue};
@@ -26,7 +26,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 
-use crate::{BUF_COUNT, BUF_SIZE, batch_arena::BatchArena};
+use crate::batch_arena::BatchArena;
 
 #[derive(Debug)]
 struct RxCallback {
@@ -520,38 +520,48 @@ struct ReservableArenaInner {
 
 impl std::fmt::Debug for ReservableArenaInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReservableArenaInner").field("arena", &self.arena).field("submitter", &self.submitter).finish()
+        f.debug_struct("ReservableArenaInner")
+            .field("arena", &self.arena)
+            .field("submitter", &self.submitter)
+            .finish()
     }
 }
 
 impl ReservableArenaInner {
     fn new(arena: BatchArena, submitter: SubmissionIface) -> Self {
         let recycled_batches = atomic_queue::Queue::new(u16::MAX as usize);
-        Self { arena, submitter, recycled_batches }
+        Self {
+            arena,
+            submitter,
+            recycled_batches,
+        }
     }
 
     fn recycle_batch(&self, buf_id: u16) {
         assert!(self.recycled_batches.push(buf_id));
     }
 
-    fn pop_recycled_batch(&self) -> Option<(usize, io_uring::squeue::Entry)> {
+    fn pop_recycled_batch(&self) -> Option<(io_uring::squeue::Entry, usize)> {
         match self.recycled_batches.pop() {
-        Some(buf_id) => {
-            let data = unsafe{ &mut self.arena.index_mut_unchecked(buf_id as usize)[0..1] };
-            Some((1, opcode::ProvideBuffers::new(
-                data.as_mut_ptr(),
-                BUF_SIZE as i32,
-                1,
-                0,
-                buf_id,
-            )
-            .build()
-            .flags(Flags::SKIP_SUCCESS)))
-        }
-        None => {
-            //None
-            self.arena.allocate_more_batches(BUF_COUNT).ok().map(|val| (BUF_COUNT, val))
-        }
+            Some(buf_id) => {
+                let data = unsafe { &mut self.arena.index_mut_unchecked(buf_id as usize)[0..1] };
+                Some((
+                    opcode::ProvideBuffers::new(
+                        data.as_mut_ptr(),
+                        self.arena.batch_size() as i32,
+                        1,
+                        0,
+                        buf_id,
+                    )
+                    .build()
+                    .flags(Flags::SKIP_SUCCESS),
+                    1,
+                ))
+            }
+            None => {
+                //None
+                self.arena.allocate_more_batches()
+            }
         }
     }
 }
@@ -699,7 +709,7 @@ impl Reader {
             fn roll_ring_batches(arena: &ReservableArena, ctr: &mut i32, sq: &mut SubmissionQueue<'_>) {
                 while *ctr < 0 {
                     match arena.inner.pop_recycled_batch() {
-                        Some((count, batch)) => {
+                        Some(( batch,count)) => {
                             unsafe { sq.push(&batch).unwrap() }
                             *ctr += count as i32;
                         },
@@ -713,7 +723,7 @@ impl Reader {
             loop {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
                     //log!("INFO", "e: {:?}", e);
-                    
+
                     let mut sq = unsafe { ring.submission_shared() };
 
                     // waker trigger check
@@ -744,10 +754,10 @@ impl Reader {
                 }
 
                 let mut sq = unsafe { ring.submission_shared() };
-                
+
                 // reclaim batches
                 roll_ring_batches(&arena, &mut batch_ctr, &mut sq);
-                
+
                 // receive external submissions
                 while let Ok(val) = receiver.try_recv() {
                     unsafe { sq.push(&val).unwrap() };
@@ -820,7 +830,7 @@ impl Reader {
 
                     if buf_len > 0 {
                         let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
-                        *ctr-=1;
+                        *ctr -= 1;
                         rx.run_callback(rx_buffer);
                     } else {
                         log!("INFO", "zero buf len");

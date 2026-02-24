@@ -27,4 +27,4 @@ pub const BUF_SIZE: usize = 65537;
 //pub const BUF_COUNT: usize = 1 * 1024 * 1024 / BUF_SIZE;
 
 //const BUF_SIZE: usize = 16;
-pub const BUF_COUNT: usize = 16;
+pub const BUF_COUNT: usize = 4;

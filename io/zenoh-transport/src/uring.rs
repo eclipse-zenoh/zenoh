@@ -12,20 +12,26 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::Arc;
+use std::cmp::max;
 
-use zenoh_uring::{reader::Reader, writer::Writer};
+use zenoh_uring::reader::Reader;
 
 #[derive(Clone)]
 pub struct Uring {
-    pub writer: Arc<Writer>,
+    //pub writer: Arc<Writer>,
     pub reader: Reader,
 }
 
 impl Uring {
-    pub fn new(batch_size: usize, batch_count: usize) -> Self {
-        let writer = Arc::new(Writer::new());
+    pub fn new(batch_size: usize, link_rx_buffer_size: usize) -> Self {
+        // add 2 bytes for size header in case of streamed links
+        let batch_size = batch_size + (u16::BITS / 8) as usize;
+        let batch_count = max(link_rx_buffer_size / batch_size, 2);
+
+        //let writer = Arc::new(Writer::new());
         let reader = Reader::new(batch_size, batch_count);
-        Self { writer, reader }
+        Self {
+            /*writer,*/ reader,
+        }
     }
 }

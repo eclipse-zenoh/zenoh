@@ -15,10 +15,9 @@
 use std::ops::{Index, IndexMut};
 
 use io_uring::opcode;
+use zenoh_result::ZResult;
 
 use crate::page_arena::PageArena;
-
-use zenoh_result::ZResult;
 
 #[derive(Debug)]
 pub(crate) struct BatchArena {
@@ -56,27 +55,33 @@ impl BatchArena {
         Ok(Self { arena, batch_size })
     }
 
-    pub(crate) fn allocate_more_batches(
-        &self,
-        additional_batch_count: usize,
-    ) -> ZResult<io_uring::squeue::Entry> {
-        //println!("Add batches");
+    pub(crate) fn allocate_more_batches(&self) -> Option<(io_uring::squeue::Entry, usize)> {
+        println!("Add batches");
 
-        let size = self.batch_size * additional_batch_count;
-        let addr = self.arena.add_memory(size)?;
+        let (addr, size) = self
+            .arena
+            .add_memory(self.arena.size.load(std::sync::atomic::Ordering::Relaxed))?;
+        let additional_batch_count = size / self.batch_size;
+        if additional_batch_count == 0 {
+            return None;
+        }
 
         let bid = unsafe {
             addr.byte_offset_from(self.arena.memory.load(std::sync::atomic::Ordering::Relaxed))
-        } as usize / self.batch_size;
+        } as usize
+            / self.batch_size;
 
-        Ok(opcode::ProvideBuffers::new(
-            addr,
-            self.batch_size as i32,
-            additional_batch_count.try_into().unwrap(),
-            0,
-            bid as u16,
-        )
-        .build())
+        Some((
+            opcode::ProvideBuffers::new(
+                addr,
+                self.batch_size as i32,
+                additional_batch_count.try_into().unwrap(),
+                0,
+                bid as u16,
+            )
+            .build(),
+            additional_batch_count,
+        ))
     }
 
     pub(crate) fn batch_count(&self) -> usize {
@@ -119,5 +124,9 @@ impl BatchArena {
         }
 
         batches
+    }
+
+    pub(crate) fn batch_size(&self) -> usize {
+        self.batch_size
     }
 }

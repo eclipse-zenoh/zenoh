@@ -13,14 +13,15 @@
 //
 
 use std::{
+    cmp::min,
     ffi::c_void,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicPtr, AtomicUsize},
 };
-use zenoh_result::ZResult;
 
 use libc::{mlock, mmap, MAP_ANON, MAP_NORESERVE, MAP_PRIVATE, PROT_READ, PROT_WRITE};
-use zenoh_core::bail;
+use zenoh_core::{bail, zerror};
+use zenoh_result::ZResult;
 
 #[derive(Debug)]
 pub(crate) struct PageArena {
@@ -55,9 +56,9 @@ impl DerefMut for PageArena {
 
 impl PageArena {
     pub(crate) fn new(size: usize, capacity: usize) -> ZResult<Self> {
-        // reserve address space
+        // reserve contagious address space without allocating phy pages!
         let ptr = {
-            // TODO: attempt to use huge pages
+            // TODO: probe to use 2MB huge pages and fallback to this if unsupported
             let ptr = unsafe {
                 mmap(
                     std::ptr::null_mut(),
@@ -83,35 +84,45 @@ impl PageArena {
             capacity,
         };
 
-        res.add_memory(size)?;
+        res.add_memory(size)
+            .ok_or(zerror!("Unable to reserve initial {size} bytes"))?;
 
         Ok(res)
     }
 
-    pub(crate) fn add_memory(&self, additional_size: usize) -> ZResult<*mut u8> {
-        if self.size.load(std::sync::atomic::Ordering::Relaxed) + additional_size > self.capacity {
-            bail!("Error allocating additional {additional_size} bytes: capacity exceeded");
+    pub(crate) fn add_memory(&self, desired_additional_size: usize) -> Option<(*mut u8, usize)> {
+        let size = self.size.load(std::sync::atomic::Ordering::Relaxed);
+
+        if size == self.capacity {
+            tracing::debug!(
+                "Unable to reserve additional bytes in physical memory: capacity exceeded"
+            );
+            return None;
         }
+
+        let real_new_size = min(size + desired_additional_size, self.capacity);
+        let real_additional_size = real_new_size - size;
 
         unsafe {
             let addr = self
                 .memory
                 .load(std::sync::atomic::Ordering::Relaxed)
-                .add(self.size.load(std::sync::atomic::Ordering::Relaxed));
+                .add(size);
 
             // prefetch and lock piece of memory in consecutive part of mmapped address space
-            // TODO: in future, validate perf with mlock2 + MLOCK_ONFAULT 
-            let mlock_result = mlock(addr as *mut c_void, additional_size);
+            // TODO: in future, validate perf with mlock2 + MLOCK_ONFAULT
+            let mlock_result = mlock(addr as *mut c_void, real_additional_size);
             if mlock_result != 0 {
-                bail!(
-                    "Error allocating additional {additional_size} bytes: mlock returned {mlock_result}"
+                tracing::error!(
+                    "Error reserving additional {real_additional_size} bytes in physical memory: mlock returned {mlock_result}"
                 );
+                return None;
             }
 
             self.size
-                .fetch_add(additional_size, std::sync::atomic::Ordering::SeqCst);
+                .fetch_add(real_additional_size, std::sync::atomic::Ordering::SeqCst);
 
-            Ok(addr)
+            Some((addr, real_additional_size))
         }
     }
 
@@ -128,7 +139,7 @@ impl Drop for PageArena {
         unsafe {
             libc::munmap(
                 self.memory.load(std::sync::atomic::Ordering::Relaxed) as *mut libc::c_void,
-                self.size.load(std::sync::atomic::Ordering::Relaxed),
+                self.capacity,
             );
         }
     }
