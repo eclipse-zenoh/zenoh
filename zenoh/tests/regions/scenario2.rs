@@ -47,77 +47,77 @@ fn init_tracing_subscriber() {
 async fn test_regions_scenario2_order1_putsub() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "21aa9100")
+    let z9100 = ztimeout!(Node::new(Peer, "21aa9100")
         .multicast("224.2.1.1:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "21aa9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "21aa9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.1.1:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21aa9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.1.1:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "21aa9110")
+    let z9110 = ztimeout!(Node::new(Peer, "21aa9110")
         .multicast("224.2.1.1:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "21aa9120")
+    let z9120 = ztimeout!(Node::new(Peer, "21aa9120")
         .multicast("224.2.1.1:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "21aa9130")
+    let z9130 = ztimeout!(Node::new(Peer, "21aa9130")
         .multicast("224.2.1.1:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "21aa9210")
+    let z9210 = ztimeout!(Node::new(Peer, "21aa9210")
         .multicast("224.2.1.1:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "21aa9220")
+    let z9220 = ztimeout!(Node::new(Peer, "21aa9220")
         .multicast("224.2.1.1:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "21aa9230")
+    let z9230 = ztimeout!(Node::new(Peer, "21aa9230")
         .multicast("224.2.1.1:9200")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "21aa9310")
+    let z9310 = ztimeout!(Node::new(Peer, "21aa9310")
         .multicast("224.2.1.1:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "21aa9320")
+    let z9320 = ztimeout!(Node::new(Peer, "21aa9320")
         .multicast("224.2.1.1:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "21aa9330")
+    let z9330 = ztimeout!(Node::new(Peer, "21aa9330")
         .multicast("224.2.1.1:9300")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     ztimeout!(async {
         loop {
-            _z9110.put("test", "9110").await.unwrap();
-            _z9120.put("test", "9120").await.unwrap();
-            _z9130.put("test", "9130").await.unwrap();
-            _z9210.put("test", "9210").await.unwrap();
-            _z9220.put("test", "9220").await.unwrap();
-            _z9230.put("test", "9230").await.unwrap();
-            _z9310.put("test", "9310").await.unwrap();
-            _z9320.put("test", "9320").await.unwrap();
-            _z9330.put("test", "9330").await.unwrap();
+            z9110.put("test", "9110").await.unwrap();
+            z9120.put("test", "9120").await.unwrap();
+            z9130.put("test", "9130").await.unwrap();
+            z9210.put("test", "9210").await.unwrap();
+            z9220.put("test", "9220").await.unwrap();
+            z9230.put("test", "9230").await.unwrap();
+            z9310.put("test", "9310").await.unwrap();
+            z9320.put("test", "9320").await.unwrap();
+            z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
@@ -150,75 +150,75 @@ async fn test_regions_scenario2_order1_putsub() {
 async fn test_regions_scenario2_order1_pubsub() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "21ab9100")
+    let z9100 = ztimeout!(Node::new(Peer, "21ab9100")
         .multicast("224.2.1.2:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "21ab9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "21ab9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.1.2:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21ab9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.1.2:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "21ab9110")
+    let z9110 = ztimeout!(Node::new(Peer, "21ab9110")
         .multicast("224.2.1.2:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "21ab9120")
+    let z9120 = ztimeout!(Node::new(Peer, "21ab9120")
         .multicast("224.2.1.2:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "21ab9130")
+    let z9130 = ztimeout!(Node::new(Peer, "21ab9130")
         .multicast("224.2.1.2:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "21ab9210")
+    let z9210 = ztimeout!(Node::new(Peer, "21ab9210")
         .multicast("224.2.1.2:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "21ab9220")
+    let z9220 = ztimeout!(Node::new(Peer, "21ab9220")
         .multicast("224.2.1.2:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "21ab9230")
+    let z9230 = ztimeout!(Node::new(Peer, "21ab9230")
         .multicast("224.2.1.2:9200")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "21ab9310")
+    let z9310 = ztimeout!(Node::new(Peer, "21ab9310")
         .multicast("224.2.1.2:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "21ab9320")
+    let z9320 = ztimeout!(Node::new(Peer, "21ab9320")
         .multicast("224.2.1.2:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "21ab9330")
+    let z9330 = ztimeout!(Node::new(Peer, "21ab9330")
         .multicast("224.2.1.2:9300")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test").await.unwrap();
-    let p9310 = _z9310.declare_publisher("test").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test").await.unwrap();
+    let p9110 = z9110.declare_publisher("test").await.unwrap();
+    let p9120 = z9120.declare_publisher("test").await.unwrap();
+    let p9130 = z9130.declare_publisher("test").await.unwrap();
+    let p9210 = z9210.declare_publisher("test").await.unwrap();
+    let p9220 = z9220.declare_publisher("test").await.unwrap();
+    let p9230 = z9230.declare_publisher("test").await.unwrap();
+    let p9310 = z9310.declare_publisher("test").await.unwrap();
+    let p9320 = z9320.declare_publisher("test").await.unwrap();
+    let p9330 = z9330.declare_publisher("test").await.unwrap();
 
     ztimeout!(async {
         loop {
@@ -263,75 +263,75 @@ async fn test_regions_scenario2_order1_pubsub() {
 async fn test_regions_scenario2_order1_getque() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "21ac9100")
+    let z9100 = ztimeout!(Node::new(Peer, "21ac9100")
         .multicast("224.2.1.3:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "21ac9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "21ac9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.1.3:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21ac9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.1.3:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "21ac9110")
+    let z9110 = ztimeout!(Node::new(Peer, "21ac9110")
         .multicast("224.2.1.3:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "21ac9120")
+    let z9120 = ztimeout!(Node::new(Peer, "21ac9120")
         .multicast("224.2.1.3:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "21ac9130")
+    let z9130 = ztimeout!(Node::new(Peer, "21ac9130")
         .multicast("224.2.1.3:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "21ac9210")
+    let z9210 = ztimeout!(Node::new(Peer, "21ac9210")
         .multicast("224.2.1.3:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "21ac9220")
+    let z9220 = ztimeout!(Node::new(Peer, "21ac9220")
         .multicast("224.2.1.3:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "21ac9230")
+    let z9230 = ztimeout!(Node::new(Peer, "21ac9230")
         .multicast("224.2.1.3:9200")
         .open());
-    let _z9310 = ztimeout!(Node::new(Peer, "21ac9310")
+    let z9310 = ztimeout!(Node::new(Peer, "21ac9310")
         .multicast("224.2.1.3:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "21ac9320")
+    let z9320 = ztimeout!(Node::new(Peer, "21ac9320")
         .multicast("224.2.1.3:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "21ac9330")
+    let z9330 = ztimeout!(Node::new(Peer, "21ac9330")
         .multicast("224.2.1.3:9300")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
     skip_fmt! {ztimeout!(async {
         loop {
-            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            if z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
             {
                 break;
             }
@@ -358,72 +358,72 @@ async fn test_regions_scenario2_order1_getque() {
 async fn test_regions_scenario2_order1_queque() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "21ad9100")
+    let z9100 = ztimeout!(Node::new(Peer, "21ad9100")
         .multicast("224.2.1.4:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "21ad9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "21ad9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.1.4:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "21ad9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.1.4:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "21ad9110")
+    let z9110 = ztimeout!(Node::new(Peer, "21ad9110")
         .multicast("224.2.1.4:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "21ad9120")
+    let z9120 = ztimeout!(Node::new(Peer, "21ad9120")
         .multicast("224.2.1.4:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "21ad9130")
+    let z9130 = ztimeout!(Node::new(Peer, "21ad9130")
         .multicast("224.2.1.4:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "21ad9210")
+    let z9210 = ztimeout!(Node::new(Peer, "21ad9210")
         .multicast("224.2.1.4:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "21ad9220")
+    let z9220 = ztimeout!(Node::new(Peer, "21ad9220")
         .multicast("224.2.1.4:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "21ad9230")
+    let z9230 = ztimeout!(Node::new(Peer, "21ad9230")
         .multicast("224.2.1.4:9200")
         .open());
-    let _z9310 = ztimeout!(Node::new(Peer, "21ad9310")
+    let z9310 = ztimeout!(Node::new(Peer, "21ad9310")
         .multicast("224.2.1.4:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "21ad9320")
+    let z9320 = ztimeout!(Node::new(Peer, "21ad9320")
         .multicast("224.2.1.4:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "21ad9330")
+    let z9330 = ztimeout!(Node::new(Peer, "21ad9330")
         .multicast("224.2.1.4:9300")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
 
-        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9110 = z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
     ztimeout!(async {
@@ -463,61 +463,61 @@ async fn test_regions_scenario2_order1_queque() {
 async fn test_regions_scenario2_order2_putsub() {
     init_tracing_subscriber();
 
-    let _z9110 = ztimeout!(Node::new(Peer, "22aa9110")
+    let z9110 = ztimeout!(Node::new(Peer, "22aa9110")
         .multicast("224.2.2.1:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "22aa9120")
+    let z9120 = ztimeout!(Node::new(Peer, "22aa9120")
         .multicast("224.2.2.1:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "22aa9130")
+    let z9130 = ztimeout!(Node::new(Peer, "22aa9130")
         .multicast("224.2.2.1:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "22aa9210")
+    let z9210 = ztimeout!(Node::new(Peer, "22aa9210")
         .multicast("224.2.2.1:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "22aa9220")
+    let z9220 = ztimeout!(Node::new(Peer, "22aa9220")
         .multicast("224.2.2.1:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "22aa9230")
+    let z9230 = ztimeout!(Node::new(Peer, "22aa9230")
         .multicast("224.2.2.1:9200")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "22aa9310")
+    let z9310 = ztimeout!(Node::new(Peer, "22aa9310")
         .multicast("224.2.2.1:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "22aa9320")
+    let z9320 = ztimeout!(Node::new(Peer, "22aa9320")
         .multicast("224.2.2.1:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "22aa9330")
+    let z9330 = ztimeout!(Node::new(Peer, "22aa9330")
         .multicast("224.2.2.1:9300")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let _z9100 = ztimeout!(Node::new(Peer, "22aa9100")
+    let z9100 = ztimeout!(Node::new(Peer, "22aa9100")
         .multicast("224.2.2.1:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "22aa9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "22aa9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.2.1:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22aa9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.2.1:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -525,15 +525,15 @@ async fn test_regions_scenario2_order2_putsub() {
 
     ztimeout!(async {
         loop {
-            _z9110.put("test", "9110").await.unwrap();
-            _z9120.put("test", "9120").await.unwrap();
-            _z9130.put("test", "9130").await.unwrap();
-            _z9210.put("test", "9210").await.unwrap();
-            _z9220.put("test", "9220").await.unwrap();
-            _z9230.put("test", "9230").await.unwrap();
-            _z9310.put("test", "9310").await.unwrap();
-            _z9320.put("test", "9320").await.unwrap();
-            _z9330.put("test", "9330").await.unwrap();
+            z9110.put("test", "9110").await.unwrap();
+            z9120.put("test", "9120").await.unwrap();
+            z9130.put("test", "9130").await.unwrap();
+            z9210.put("test", "9210").await.unwrap();
+            z9220.put("test", "9220").await.unwrap();
+            z9230.put("test", "9230").await.unwrap();
+            z9310.put("test", "9310").await.unwrap();
+            z9320.put("test", "9320").await.unwrap();
+            z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
@@ -566,71 +566,71 @@ async fn test_regions_scenario2_order2_putsub() {
 async fn test_regions_scenario2_order2_pubsub() {
     init_tracing_subscriber();
 
-    let _z9110 = ztimeout!(Node::new(Peer, "22ab9110")
+    let z9110 = ztimeout!(Node::new(Peer, "22ab9110")
         .multicast("224.2.2.2:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "22ab9120")
+    let z9120 = ztimeout!(Node::new(Peer, "22ab9120")
         .multicast("224.2.2.2:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "22ab9130")
+    let z9130 = ztimeout!(Node::new(Peer, "22ab9130")
         .multicast("224.2.2.2:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "22ab9210")
+    let z9210 = ztimeout!(Node::new(Peer, "22ab9210")
         .multicast("224.2.2.2:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "22ab9220")
+    let z9220 = ztimeout!(Node::new(Peer, "22ab9220")
         .multicast("224.2.2.2:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "22ab9230")
+    let z9230 = ztimeout!(Node::new(Peer, "22ab9230")
         .multicast("224.2.2.2:9200")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "22ab9310")
+    let z9310 = ztimeout!(Node::new(Peer, "22ab9310")
         .multicast("224.2.2.2:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "22ab9320")
+    let z9320 = ztimeout!(Node::new(Peer, "22ab9320")
         .multicast("224.2.2.2:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "22ab9330")
+    let z9330 = ztimeout!(Node::new(Peer, "22ab9330")
         .multicast("224.2.2.2:9300")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test").await.unwrap();
-    let p9310 = _z9310.declare_publisher("test").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test").await.unwrap();
+    let p9110 = z9110.declare_publisher("test").await.unwrap();
+    let p9120 = z9120.declare_publisher("test").await.unwrap();
+    let p9130 = z9130.declare_publisher("test").await.unwrap();
+    let p9210 = z9210.declare_publisher("test").await.unwrap();
+    let p9220 = z9220.declare_publisher("test").await.unwrap();
+    let p9230 = z9230.declare_publisher("test").await.unwrap();
+    let p9310 = z9310.declare_publisher("test").await.unwrap();
+    let p9320 = z9320.declare_publisher("test").await.unwrap();
+    let p9330 = z9330.declare_publisher("test").await.unwrap();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "22ab9100")
+    let z9100 = ztimeout!(Node::new(Peer, "22ab9100")
         .multicast("224.2.2.2:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "22ab9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "22ab9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.2.2:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22ab9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.2.2:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -679,59 +679,59 @@ async fn test_regions_scenario2_order2_pubsub() {
 async fn test_regions_scenario2_order2_getque() {
     init_tracing_subscriber();
 
-    let _z9110 = ztimeout!(Node::new(Peer, "22ac9110")
+    let z9110 = ztimeout!(Node::new(Peer, "22ac9110")
         .multicast("224.2.2.3:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "22ac9120")
+    let z9120 = ztimeout!(Node::new(Peer, "22ac9120")
         .multicast("224.2.2.3:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "22ac9130")
+    let z9130 = ztimeout!(Node::new(Peer, "22ac9130")
         .multicast("224.2.2.3:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "22ac9210")
+    let z9210 = ztimeout!(Node::new(Peer, "22ac9210")
         .multicast("224.2.2.3:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "22ac9220")
+    let z9220 = ztimeout!(Node::new(Peer, "22ac9220")
         .multicast("224.2.2.3:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "22ac9230")
+    let z9230 = ztimeout!(Node::new(Peer, "22ac9230")
         .multicast("224.2.2.3:9200")
         .open());
-    let _z9310 = ztimeout!(Node::new(Peer, "22ac9310")
+    let z9310 = ztimeout!(Node::new(Peer, "22ac9310")
         .multicast("224.2.2.3:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "22ac9320")
+    let z9320 = ztimeout!(Node::new(Peer, "22ac9320")
         .multicast("224.2.2.3:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "22ac9330")
+    let z9330 = ztimeout!(Node::new(Peer, "22ac9330")
         .multicast("224.2.2.3:9300")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
-    let _z9100 = ztimeout!(Node::new(Peer, "22ac9100")
+    let z9100 = ztimeout!(Node::new(Peer, "22ac9100")
         .multicast("224.2.2.3:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "22ac9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "22ac9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.2.3:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22ac9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.2.3:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -739,15 +739,15 @@ async fn test_regions_scenario2_order2_getque() {
 
     skip_fmt! {ztimeout!(async {
         loop {
-            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            if z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
             {
                 break;
             }
@@ -774,69 +774,69 @@ async fn test_regions_scenario2_order2_getque() {
 async fn test_regions_scenario2_order2_queque() {
     init_tracing_subscriber();
 
-    let _z9110 = ztimeout!(Node::new(Peer, "22ad9110")
+    let z9110 = ztimeout!(Node::new(Peer, "22ad9110")
         .multicast("224.2.2.4:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "22ad9120")
+    let z9120 = ztimeout!(Node::new(Peer, "22ad9120")
         .multicast("224.2.2.4:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "22ad9130")
+    let z9130 = ztimeout!(Node::new(Peer, "22ad9130")
         .multicast("224.2.2.4:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "22ad9210")
+    let z9210 = ztimeout!(Node::new(Peer, "22ad9210")
         .multicast("224.2.2.4:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "22ad9220")
+    let z9220 = ztimeout!(Node::new(Peer, "22ad9220")
         .multicast("224.2.2.4:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "22ad9230")
+    let z9230 = ztimeout!(Node::new(Peer, "22ad9230")
         .multicast("224.2.2.4:9200")
         .open());
-    let _z9310 = ztimeout!(Node::new(Peer, "22ad9310")
+    let z9310 = ztimeout!(Node::new(Peer, "22ad9310")
         .multicast("224.2.2.4:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "22ad9320")
+    let z9320 = ztimeout!(Node::new(Peer, "22ad9320")
         .multicast("224.2.2.4:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "22ad9330")
+    let z9330 = ztimeout!(Node::new(Peer, "22ad9330")
         .multicast("224.2.2.4:9300")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
 
-        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9110 = z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
-    let _z9100 = ztimeout!(Node::new(Peer, "22ad9100")
+    let z9100 = ztimeout!(Node::new(Peer, "22ad9100")
         .multicast("224.2.2.4:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "22ad9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "22ad9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.2.4:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Peer, "22ad9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.2.4:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -879,62 +879,62 @@ async fn test_regions_scenario2_order2_queque() {
 async fn test_regions_scenario2_order3_putsub() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "23aa9100")
+    let z9100 = ztimeout!(Node::new(Peer, "23aa9100")
         .multicast("224.2.3.1:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "23aa9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "23aa9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.3.1:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "23aa9110")
+    let z9110 = ztimeout!(Node::new(Peer, "23aa9110")
         .multicast("224.2.3.1:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "23aa9120")
+    let z9120 = ztimeout!(Node::new(Peer, "23aa9120")
         .multicast("224.2.3.1:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "23aa9130")
+    let z9130 = ztimeout!(Node::new(Peer, "23aa9130")
         .multicast("224.2.3.1:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "23aa9210")
+    let z9210 = ztimeout!(Node::new(Peer, "23aa9210")
         .multicast("224.2.3.1:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "23aa9220")
+    let z9220 = ztimeout!(Node::new(Peer, "23aa9220")
         .multicast("224.2.3.1:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "23aa9230")
+    let z9230 = ztimeout!(Node::new(Peer, "23aa9230")
         .multicast("224.2.3.1:9200")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "23aa9310")
+    let z9310 = ztimeout!(Node::new(Peer, "23aa9310")
         .multicast("224.2.3.1:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "23aa9320")
+    let z9320 = ztimeout!(Node::new(Peer, "23aa9320")
         .multicast("224.2.3.1:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "23aa9330")
+    let z9330 = ztimeout!(Node::new(Peer, "23aa9330")
         .multicast("224.2.3.1:9300")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Peer, "23aa9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.3.1:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -942,15 +942,15 @@ async fn test_regions_scenario2_order3_putsub() {
 
     ztimeout!(async {
         loop {
-            _z9110.put("test", "9110").await.unwrap();
-            _z9120.put("test", "9120").await.unwrap();
-            _z9130.put("test", "9130").await.unwrap();
-            _z9210.put("test", "9210").await.unwrap();
-            _z9220.put("test", "9220").await.unwrap();
-            _z9230.put("test", "9230").await.unwrap();
-            _z9310.put("test", "9310").await.unwrap();
-            _z9320.put("test", "9320").await.unwrap();
-            _z9330.put("test", "9330").await.unwrap();
+            z9110.put("test", "9110").await.unwrap();
+            z9120.put("test", "9120").await.unwrap();
+            z9130.put("test", "9130").await.unwrap();
+            z9210.put("test", "9210").await.unwrap();
+            z9220.put("test", "9220").await.unwrap();
+            z9230.put("test", "9230").await.unwrap();
+            z9310.put("test", "9310").await.unwrap();
+            z9320.put("test", "9320").await.unwrap();
+            z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
@@ -983,72 +983,72 @@ async fn test_regions_scenario2_order3_putsub() {
 async fn test_regions_scenario2_order3_pubsub() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "23ab9100")
+    let z9100 = ztimeout!(Node::new(Peer, "23ab9100")
         .multicast("224.2.3.2:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "23ab9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "23ab9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.3.2:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "23ab9110")
+    let z9110 = ztimeout!(Node::new(Peer, "23ab9110")
         .multicast("224.2.3.2:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "23ab9120")
+    let z9120 = ztimeout!(Node::new(Peer, "23ab9120")
         .multicast("224.2.3.2:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "23ab9130")
+    let z9130 = ztimeout!(Node::new(Peer, "23ab9130")
         .multicast("224.2.3.2:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "23ab9210")
+    let z9210 = ztimeout!(Node::new(Peer, "23ab9210")
         .multicast("224.2.3.2:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "23ab9220")
+    let z9220 = ztimeout!(Node::new(Peer, "23ab9220")
         .multicast("224.2.3.2:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "23ab9230")
+    let z9230 = ztimeout!(Node::new(Peer, "23ab9230")
         .multicast("224.2.3.2:9200")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "23ab9310")
+    let z9310 = ztimeout!(Node::new(Peer, "23ab9310")
         .multicast("224.2.3.2:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "23ab9320")
+    let z9320 = ztimeout!(Node::new(Peer, "23ab9320")
         .multicast("224.2.3.2:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "23ab9330")
+    let z9330 = ztimeout!(Node::new(Peer, "23ab9330")
         .multicast("224.2.3.2:9300")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test").await.unwrap();
-    let p9310 = _z9310.declare_publisher("test").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test").await.unwrap();
+    let p9110 = z9110.declare_publisher("test").await.unwrap();
+    let p9120 = z9120.declare_publisher("test").await.unwrap();
+    let p9130 = z9130.declare_publisher("test").await.unwrap();
+    let p9210 = z9210.declare_publisher("test").await.unwrap();
+    let p9220 = z9220.declare_publisher("test").await.unwrap();
+    let p9230 = z9230.declare_publisher("test").await.unwrap();
+    let p9310 = z9310.declare_publisher("test").await.unwrap();
+    let p9320 = z9320.declare_publisher("test").await.unwrap();
+    let p9330 = z9330.declare_publisher("test").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Peer, "23ab9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.3.2:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1097,60 +1097,60 @@ async fn test_regions_scenario2_order3_pubsub() {
 async fn test_regions_scenario2_order3_getque() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "23ac9100")
+    let z9100 = ztimeout!(Node::new(Peer, "23ac9100")
         .multicast("224.2.3.3:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "23ac9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "23ac9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.3.3:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "23ac9110")
+    let z9110 = ztimeout!(Node::new(Peer, "23ac9110")
         .multicast("224.2.3.3:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "23ac9120")
+    let z9120 = ztimeout!(Node::new(Peer, "23ac9120")
         .multicast("224.2.3.3:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "23ac9130")
+    let z9130 = ztimeout!(Node::new(Peer, "23ac9130")
         .multicast("224.2.3.3:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "23ac9210")
+    let z9210 = ztimeout!(Node::new(Peer, "23ac9210")
         .multicast("224.2.3.3:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "23ac9220")
+    let z9220 = ztimeout!(Node::new(Peer, "23ac9220")
         .multicast("224.2.3.3:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "23ac9230")
+    let z9230 = ztimeout!(Node::new(Peer, "23ac9230")
         .multicast("224.2.3.3:9200")
         .open());
-    let _z9310 = ztimeout!(Node::new(Peer, "23ac9310")
+    let z9310 = ztimeout!(Node::new(Peer, "23ac9310")
         .multicast("224.2.3.3:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "23ac9320")
+    let z9320 = ztimeout!(Node::new(Peer, "23ac9320")
         .multicast("224.2.3.3:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "23ac9330")
+    let z9330 = ztimeout!(Node::new(Peer, "23ac9330")
         .multicast("224.2.3.3:9300")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Peer, "23ac9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.3.3:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1158,15 +1158,15 @@ async fn test_regions_scenario2_order3_getque() {
 
     skip_fmt! {ztimeout!(async {
         loop {
-            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            if z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
             {
                 break;
             }
@@ -1193,70 +1193,70 @@ async fn test_regions_scenario2_order3_getque() {
 async fn test_regions_scenario2_order3_queque() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "23ad9100")
+    let z9100 = ztimeout!(Node::new(Peer, "23ad9100")
         .multicast("224.2.3.4:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "23ad9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "23ad9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.3.4:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "23ad9110")
+    let z9110 = ztimeout!(Node::new(Peer, "23ad9110")
         .multicast("224.2.3.4:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "23ad9120")
+    let z9120 = ztimeout!(Node::new(Peer, "23ad9120")
         .multicast("224.2.3.4:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "23ad9130")
+    let z9130 = ztimeout!(Node::new(Peer, "23ad9130")
         .multicast("224.2.3.4:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "23ad9210")
+    let z9210 = ztimeout!(Node::new(Peer, "23ad9210")
         .multicast("224.2.3.4:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "23ad9220")
+    let z9220 = ztimeout!(Node::new(Peer, "23ad9220")
         .multicast("224.2.3.4:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "23ad9230")
+    let z9230 = ztimeout!(Node::new(Peer, "23ad9230")
         .multicast("224.2.3.4:9200")
         .open());
-    let _z9310 = ztimeout!(Node::new(Peer, "23ad9310")
+    let z9310 = ztimeout!(Node::new(Peer, "23ad9310")
         .multicast("224.2.3.4:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "23ad9320")
+    let z9320 = ztimeout!(Node::new(Peer, "23ad9320")
         .multicast("224.2.3.4:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "23ad9330")
+    let z9330 = ztimeout!(Node::new(Peer, "23ad9330")
         .multicast("224.2.3.4:9300")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
 
-        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9110 = z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Peer, "23ad9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.3.4:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1299,81 +1299,81 @@ async fn test_regions_scenario2_order3_queque() {
 async fn test_regions_scenario2_order4_putsub() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "24aa9100")
+    let z9100 = ztimeout!(Node::new(Peer, "24aa9100")
         .multicast("224.2.4.1:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "24aa9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "24aa9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.4.1:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "24aa9110")
+    let z9110 = ztimeout!(Node::new(Peer, "24aa9110")
         .multicast("224.2.4.1:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "24aa9120")
+    let z9120 = ztimeout!(Node::new(Peer, "24aa9120")
         .multicast("224.2.4.1:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "24aa9130")
+    let z9130 = ztimeout!(Node::new(Peer, "24aa9130")
         .multicast("224.2.4.1:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "24aa9210")
+    let z9210 = ztimeout!(Node::new(Peer, "24aa9210")
         .multicast("224.2.4.1:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "24aa9220")
+    let z9220 = ztimeout!(Node::new(Peer, "24aa9220")
         .multicast("224.2.4.1:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "24aa9230")
+    let z9230 = ztimeout!(Node::new(Peer, "24aa9230")
         .multicast("224.2.4.1:9200")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Peer, "24aa9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.4.1:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "24aa9310")
+    let z9310 = ztimeout!(Node::new(Peer, "24aa9310")
         .multicast("224.2.4.1:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "24aa9320")
+    let z9320 = ztimeout!(Node::new(Peer, "24aa9320")
         .multicast("224.2.4.1:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "24aa9330")
+    let z9330 = ztimeout!(Node::new(Peer, "24aa9330")
         .multicast("224.2.4.1:9300")
         .open());
 
     skip_fmt! {
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
     ztimeout!(async {
         loop {
-            _z9110.put("test", "9110").await.unwrap();
-            _z9120.put("test", "9120").await.unwrap();
-            _z9130.put("test", "9130").await.unwrap();
-            _z9210.put("test", "9210").await.unwrap();
-            _z9220.put("test", "9220").await.unwrap();
-            _z9230.put("test", "9230").await.unwrap();
-            _z9310.put("test", "9310").await.unwrap();
-            _z9320.put("test", "9320").await.unwrap();
-            _z9330.put("test", "9330").await.unwrap();
+            z9110.put("test", "9110").await.unwrap();
+            z9120.put("test", "9120").await.unwrap();
+            z9130.put("test", "9130").await.unwrap();
+            z9210.put("test", "9210").await.unwrap();
+            z9220.put("test", "9220").await.unwrap();
+            z9230.put("test", "9230").await.unwrap();
+            z9310.put("test", "9310").await.unwrap();
+            z9320.put("test", "9320").await.unwrap();
+            z9330.put("test", "9330").await.unwrap();
             tokio::time::sleep(Duration::from_millis(100)).await;
 
             if [
@@ -1406,80 +1406,80 @@ async fn test_regions_scenario2_order4_putsub() {
 async fn test_regions_scenario2_order4_pubsub() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "24ab9100")
+    let z9100 = ztimeout!(Node::new(Peer, "24ab9100")
         .multicast("224.2.4.2:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "24ab9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "24ab9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.4.2:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "24ab9110")
+    let z9110 = ztimeout!(Node::new(Peer, "24ab9110")
         .multicast("224.2.4.2:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "24ab9120")
+    let z9120 = ztimeout!(Node::new(Peer, "24ab9120")
         .multicast("224.2.4.2:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "24ab9130")
+    let z9130 = ztimeout!(Node::new(Peer, "24ab9130")
         .multicast("224.2.4.2:9100")
         .open());
 
-    let _z9210 = ztimeout!(Node::new(Peer, "24ab9210")
+    let z9210 = ztimeout!(Node::new(Peer, "24ab9210")
         .multicast("224.2.4.2:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "24ab9220")
+    let z9220 = ztimeout!(Node::new(Peer, "24ab9220")
         .multicast("224.2.4.2:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "24ab9230")
+    let z9230 = ztimeout!(Node::new(Peer, "24ab9230")
         .multicast("224.2.4.2:9200")
         .open());
 
     skip_fmt! {
-        let s9110 = _z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = _z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = _z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = _z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = _z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = _z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9110 = _z9110.declare_publisher("test").await.unwrap();
-    let p9120 = _z9120.declare_publisher("test").await.unwrap();
-    let p9130 = _z9130.declare_publisher("test").await.unwrap();
-    let p9210 = _z9210.declare_publisher("test").await.unwrap();
-    let p9220 = _z9220.declare_publisher("test").await.unwrap();
-    let p9230 = _z9230.declare_publisher("test").await.unwrap();
+    let p9110 = z9110.declare_publisher("test").await.unwrap();
+    let p9120 = z9120.declare_publisher("test").await.unwrap();
+    let p9130 = z9130.declare_publisher("test").await.unwrap();
+    let p9210 = z9210.declare_publisher("test").await.unwrap();
+    let p9220 = z9220.declare_publisher("test").await.unwrap();
+    let p9230 = z9230.declare_publisher("test").await.unwrap();
 
     let _z9300 = ztimeout!(Node::new(Peer, "24ab9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.4.2:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "24ab9310")
+    let z9310 = ztimeout!(Node::new(Peer, "24ab9310")
         .multicast("224.2.4.2:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "24ab9320")
+    let z9320 = ztimeout!(Node::new(Peer, "24ab9320")
         .multicast("224.2.4.2:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "24ab9330")
+    let z9330 = ztimeout!(Node::new(Peer, "24ab9330")
         .multicast("224.2.4.2:9300")
         .open());
 
     skip_fmt! {
-        let s9310 = _z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = _z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = _z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let p9310 = _z9310.declare_publisher("test").await.unwrap();
-    let p9320 = _z9320.declare_publisher("test").await.unwrap();
-    let p9330 = _z9330.declare_publisher("test").await.unwrap();
+    let p9310 = z9310.declare_publisher("test").await.unwrap();
+    let p9320 = z9320.declare_publisher("test").await.unwrap();
+    let p9330 = z9330.declare_publisher("test").await.unwrap();
 
     ztimeout!(async {
         loop {
@@ -1524,80 +1524,80 @@ async fn test_regions_scenario2_order4_pubsub() {
 async fn test_regions_scenario2_order4_getque() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "24ac9100")
+    let z9100 = ztimeout!(Node::new(Peer, "24ac9100")
         .multicast("224.2.4.3:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "24ac9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "24ac9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.4.3:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "24ac9110")
+    let z9110 = ztimeout!(Node::new(Peer, "24ac9110")
         .multicast("224.2.4.3:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "24ac9120")
+    let z9120 = ztimeout!(Node::new(Peer, "24ac9120")
         .multicast("224.2.4.3:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "24ac9130")
+    let z9130 = ztimeout!(Node::new(Peer, "24ac9130")
         .multicast("224.2.4.3:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "24ac9210")
+    let z9210 = ztimeout!(Node::new(Peer, "24ac9210")
         .multicast("224.2.4.3:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "24ac9220")
+    let z9220 = ztimeout!(Node::new(Peer, "24ac9220")
         .multicast("224.2.4.3:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "24ac9230")
+    let z9230 = ztimeout!(Node::new(Peer, "24ac9230")
         .multicast("224.2.4.3:9200")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Peer, "24ac9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.4.3:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "24ac9310")
+    let z9310 = ztimeout!(Node::new(Peer, "24ac9310")
         .multicast("224.2.4.3:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "24ac9320")
+    let z9320 = ztimeout!(Node::new(Peer, "24ac9320")
         .multicast("224.2.4.3:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "24ac9330")
+    let z9330 = ztimeout!(Node::new(Peer, "24ac9330")
         .multicast("224.2.4.3:9300")
         .open());
 
     skip_fmt! {
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
     skip_fmt! {ztimeout!(async {
         loop {
-            if _z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
-                && _z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+            if z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9120.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9130.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9210.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9220.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9230.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9310.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9320.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
+                && z9330.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
             {
                 break;
             }
@@ -1624,78 +1624,78 @@ async fn test_regions_scenario2_order4_getque() {
 async fn test_regions_scenario2_order4_queque() {
     init_tracing_subscriber();
 
-    let _z9100 = ztimeout!(Node::new(Peer, "24ad9100")
+    let z9100 = ztimeout!(Node::new(Peer, "24ad9100")
         .multicast("224.2.4.4:9100")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9200 = ztimeout!(Node::new(Peer, "24ad9200")
-        .connect(&[loc!(_z9100)])
+    let z9200 = ztimeout!(Node::new(Peer, "24ad9200")
+        .connect(&[loc!(z9100)])
         .multicast("224.2.4.4:9200")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9110 = ztimeout!(Node::new(Peer, "24ad9110")
+    let z9110 = ztimeout!(Node::new(Peer, "24ad9110")
         .multicast("224.2.4.4:9100")
         .open());
-    let _z9120 = ztimeout!(Node::new(Peer, "24ad9120")
+    let z9120 = ztimeout!(Node::new(Peer, "24ad9120")
         .multicast("224.2.4.4:9100")
         .open());
-    let _z9130 = ztimeout!(Node::new(Peer, "24ad9130")
+    let z9130 = ztimeout!(Node::new(Peer, "24ad9130")
         .multicast("224.2.4.4:9100")
         .open());
-    let _z9210 = ztimeout!(Node::new(Peer, "24ad9210")
+    let z9210 = ztimeout!(Node::new(Peer, "24ad9210")
         .multicast("224.2.4.4:9200")
         .open());
-    let _z9220 = ztimeout!(Node::new(Peer, "24ad9220")
+    let z9220 = ztimeout!(Node::new(Peer, "24ad9220")
         .multicast("224.2.4.4:9200")
         .open());
-    let _z9230 = ztimeout!(Node::new(Peer, "24ad9230")
+    let z9230 = ztimeout!(Node::new(Peer, "24ad9230")
         .multicast("224.2.4.4:9200")
         .open());
 
     skip_fmt! {
-        let _q9110 = _z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
-        let _q9120 = _z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
-        let _q9130 = _z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
-        let _q9210 = _z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
-        let _q9220 = _z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
-        let _q9230 = _z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
+        let _q9110 = z9110.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9110")).unwrap()).await.unwrap();
+        let _q9120 = z9120.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9120")).unwrap()).await.unwrap();
+        let _q9130 = z9130.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9130")).unwrap()).await.unwrap();
+        let _q9210 = z9210.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9210")).unwrap()).await.unwrap();
+        let _q9220 = z9220.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9220")).unwrap()).await.unwrap();
+        let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
 
-        let q9110 = _z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9120 = _z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9130 = _z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9210 = _z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9220 = _z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9230 = _z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9110 = z9110.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9120 = z9120.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9130 = z9130.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9210 = z9210.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9220 = z9220.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9230 = z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
     let _z9300 = ztimeout!(Node::new(Peer, "24ad9300")
-        .connect(&[loc!(_z9100), loc!(_z9200)])
+        .connect(&[loc!(z9100), loc!(z9200)])
         .multicast("224.2.4.4:9300")
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let _z9310 = ztimeout!(Node::new(Peer, "24ad9310")
+    let z9310 = ztimeout!(Node::new(Peer, "24ad9310")
         .multicast("224.2.4.4:9300")
         .open());
-    let _z9320 = ztimeout!(Node::new(Peer, "24ad9320")
+    let z9320 = ztimeout!(Node::new(Peer, "24ad9320")
         .multicast("224.2.4.4:9300")
         .open());
-    let _z9330 = ztimeout!(Node::new(Peer, "24ad9330")
+    let z9330 = ztimeout!(Node::new(Peer, "24ad9330")
         .multicast("224.2.4.4:9300")
         .open());
 
     skip_fmt! {
-        let _q9310 = _z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
-        let _q9320 = _z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
-        let _q9330 = _z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+        let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
+        let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
+        let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
 
-        let q9310 = _z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9320 = _z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
-        let q9330 = _z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9310 = z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9320 = z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+        let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
     ztimeout!(async {
