@@ -126,7 +126,7 @@ impl LinkUnicastUdpUnconnected {
 pub(crate) enum LinkUnicastUdpVariant {
     Connected(LinkUnicastUdpConnected),
     Unconnected(Arc<LinkUnicastUdpUnconnected>),
-    Reliable(LinkUnicastQuicUnsecure),
+    Reliable(Box<LinkUnicastQuicUnsecure>),
 }
 
 pub struct LinkUnicastUdp {
@@ -165,7 +165,10 @@ impl LinkUnicastTrait for LinkUnicastUdp {
             LinkUnicastUdpVariant::Unconnected(link) => {
                 link.close(__self.src_addr, __self.dst_addr).await
             }
-            LinkUnicastUdpVariant::Reliable(link) => Ok(link.close()),
+            LinkUnicastUdpVariant::Reliable(link) => {
+                link.close();
+                Ok(())
+            }
         }
     }
 
@@ -524,7 +527,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             let link = LinkUnicastUdp::new(
                 src_addr,
                 dst_addr,
-                LinkUnicastUdpVariant::Reliable(quic_link),
+                LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
             );
             Ok(LinkUnicast(Arc::new(link)))
         } else {

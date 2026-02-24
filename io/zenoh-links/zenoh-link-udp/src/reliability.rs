@@ -46,7 +46,7 @@ impl LinkUnicastQuicUnsecure {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration: _,
-        } = QuicClientBuilder::new(&endpoint).security(false).await?;
+        } = QuicClientBuilder::new(endpoint).security(false).await?;
         let streams = streams.expect("QUIC streams should be initialized");
         Ok((
             Self {
@@ -74,7 +74,7 @@ impl LinkUnicastQuicUnsecure {
             quic_acceptor,
             locator,
             local_addr,
-        } = QuicServerBuilder::new(&endpoint, acceptor_params)
+        } = QuicServerBuilder::new(endpoint, acceptor_params)
             .security(false)
             .await?;
 
@@ -165,7 +165,7 @@ impl LinkUnicastQuicUnsecure {
         let link = LinkUnicastUdp::new(
             quic_link_material.src_addr,
             quic_link_material.dst_addr,
-            LinkUnicastUdpVariant::Reliable(quic_link),
+            LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
         );
         Ok(Arc::new(link))
     }
