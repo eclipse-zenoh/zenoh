@@ -34,7 +34,10 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
+    hat::{
+        DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
+        RouteCurrentEntityResult,
+    },
     router::SubscriberInfo,
     RoutingContext,
 };
@@ -46,7 +49,7 @@ impl Hat {
     ) {
         for RemoteInterest { res, options, .. } in other_hats
             .values()
-            .filter(|hat| hat.region().bound().is_south())
+            .filter(|hat| hat.region().bound().is_south()) // FIXME(regions): this filter should be redundant (?)
             .flat_map(|hat| hat.remote_interests(ctx.tables))
         {
             let id = self
@@ -100,6 +103,8 @@ impl HatInterestTrait for Hat {
         });
 
         let interests_timeout = ctx.tables.interests_timeout;
+
+        tracing::trace!(owned_faces = ?self.owned_faces(ctx.tables).collect::<Vec<_>>());
 
         if let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() {
             let id = self
@@ -263,23 +268,26 @@ impl HatInterestTrait for Hat {
         ctx: DispatcherContext,
         interest_id: InterestId,
         _res: Arc<Resource>,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteCurrentEntityResult {
+        use RouteCurrentEntityResult::*;
+
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        let Some(pending_interest) = ctx.src_face.pending_current_interests.get(&interest_id)
-        else {
-            tracing::error!(
-                id = interest_id,
-                src = %ctx.src_face,
-                "Unknown current interest"
-            );
-            return None;
-        };
+        if !ctx.src_face.local_interests.contains_key(&interest_id) {
+            tracing::error!("Unknown interest");
+            return Noop;
+        }
 
-        tracing::trace!(interest = ?pending_interest.interest);
-
-        Some(pending_interest.interest.as_ref().clone())
+        match ctx
+            .src_face
+            .pending_current_interests
+            .get(&interest_id)
+            .map(|i| i.interest.as_ref().clone())
+        {
+            Some(interest) => Breadcrumb { interest },
+            None => ShouldPropagate,
+        }
     }
 
     fn send_current_subscribers(

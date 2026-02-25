@@ -23,7 +23,7 @@ mod scenario4;
 
 use std::time::Duration;
 
-use zenoh::{pubsub::Subscriber, sample::SampleKind, Session};
+use zenoh::{key_expr::KeyExpr, pubsub::Subscriber, sample::SampleKind, Session};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 
@@ -171,6 +171,8 @@ pub trait SubUtils {
     fn count_put_keys(&self) -> usize;
     fn count_del_keys(&self) -> usize;
     fn count_vals(&self) -> usize;
+    fn take_put_keys(&self) -> Vec<KeyExpr<'static>>;
+    fn take_del_keys(&self) -> Vec<KeyExpr<'static>>;
 }
 
 impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
@@ -184,6 +186,7 @@ impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
             .unique()
             .count()
     }
+
     fn count_del_keys(&self) -> usize {
         use itertools::Itertools;
         self.handler()
@@ -194,6 +197,7 @@ impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
             .unique()
             .count()
     }
+
     fn count_vals(&self) -> usize {
         use itertools::Itertools;
         self.handler()
@@ -201,6 +205,24 @@ impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
             .map(|s| s.payload().try_to_string().unwrap().into_owned())
             .unique()
             .count()
+    }
+
+    fn take_put_keys(&self) -> Vec<KeyExpr<'static>> {
+        self.handler()
+            .try_iter()
+            .filter_map(|s| {
+                (s.kind() == SampleKind::Put).then_some(s.key_expr().clone().into_owned())
+            })
+            .collect()
+    }
+
+    fn take_del_keys(&self) -> Vec<KeyExpr<'static>> {
+        self.handler()
+            .try_iter()
+            .filter_map(|s| {
+                (s.kind() == SampleKind::Delete).then_some(s.key_expr().clone().into_owned())
+            })
+            .collect()
     }
 }
 

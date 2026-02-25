@@ -30,7 +30,10 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
+    hat::{
+        DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
+        RouteCurrentEntityResult,
+    },
     router::SubscriberInfo,
 };
 
@@ -83,11 +86,11 @@ impl HatInterestTrait for Hat {
         ctx: DispatcherContext,
         _interest_id: InterestId,
         _res: Arc<Resource>,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteCurrentEntityResult {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        None
+        RouteCurrentEntityResult::Noop
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]

@@ -39,7 +39,10 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote},
+    hat::{
+        DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
+        RouteCurrentEntityResult,
+    },
     router::SubscriberInfo,
     RoutingContext,
 };
@@ -316,21 +319,26 @@ impl HatInterestTrait for Hat {
         ctx: DispatcherContext,
         interest_id: InterestId,
         _res: Arc<Resource>,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteCurrentEntityResult {
+        use RouteCurrentEntityResult::*;
+
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        let Some(pending_interest) = ctx.src_face.pending_current_interests.get(&interest_id)
-        else {
-            tracing::error!(
-                id = interest_id,
-                src = %ctx.src_face,
-                "Unknown current interest"
-            );
-            return None;
-        };
+        if !ctx.src_face.local_interests.contains_key(&interest_id) {
+            tracing::error!("Unknown interest");
+            return Noop;
+        }
 
-        Some(pending_interest.interest.as_ref().clone())
+        match ctx
+            .src_face
+            .pending_current_interests
+            .get(&interest_id)
+            .map(|i| i.interest.as_ref().clone())
+        {
+            Some(interest) => Breadcrumb { interest },
+            None => ShouldPropagate,
+        }
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
@@ -545,24 +553,13 @@ impl HatInterestTrait for Hat {
         let matches = other_matches.into_iter();
 
         for token in matches {
-            // TODO(regions*): is this necessary?
-            if self
-                .face_hat(ctx.src_face)
-                .local_tokens
-                .contains_key(&token)
-            {
-                continue;
-            }
+            let id = if msg.mode.is_future() {
+                let face_hat = self.face_hat_mut(ctx.src_face);
 
-            let token_id = if msg.mode.is_future() {
-                let id = self
-                    .face_hat(ctx.src_face)
-                    .next_id
-                    .fetch_add(1, Ordering::SeqCst);
-                self.face_hat_mut(ctx.src_face)
+                *face_hat
                     .local_tokens
-                    .insert(token.clone(), id);
-                id
+                    .entry(token.clone())
+                    .or_insert_with(|| face_hat.next_id.fetch_add(1, Ordering::SeqCst))
             } else {
                 TokenId::default()
             };
@@ -576,10 +573,7 @@ impl HatInterestTrait for Hat {
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareToken(DeclareToken {
-                            id: token_id,
-                            wire_expr,
-                        }),
+                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                     },
                     token.expr().to_string(),
                 ),
@@ -600,20 +594,13 @@ impl HatInterestTrait for Hat {
 
         debug_assert!(dst.region.bound().is_south());
 
-        // TODO(regions*): is this necessary?
-        if self.face_hat(&dst).local_tokens.contains_key(&res) {
-            return;
-        }
-
         let id = if interest.mode.is_future() {
-            let id = self
-                .face_hat(ctx.src_face)
-                .next_id
-                .fetch_add(1, Ordering::SeqCst);
-            self.face_hat_mut(&mut dst)
+            let face_hat = self.face_hat_mut(&mut dst);
+
+            *face_hat
                 .local_tokens
-                .insert(res.clone(), id);
-            id
+                .entry(res.clone())
+                .or_insert_with(|| face_hat.next_id.fetch_add(1, Ordering::SeqCst))
         } else {
             TokenId::default()
         };

@@ -42,7 +42,7 @@ use crate::{
         },
         hat::{
             DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, SendDeclare, Sources,
-            UnregisterResult,
+            UnregisterEntityResult,
         },
         router::{FaceContext, QueryTargetQabl},
         RoutingContext,
@@ -345,8 +345,8 @@ impl HatQueriesTrait for Hat {
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-    ) -> UnregisterResult {
-        use UnregisterResult::*;
+    ) -> UnregisterEntityResult {
+        use UnregisterEntityResult::*;
 
         debug_assert!(self.owns(ctx.src_face));
 

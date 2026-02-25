@@ -45,7 +45,7 @@ use crate::net::routing::{
         local_resources::{LocalResourceInfoTrait, LocalResources},
         tables::{Tables, TablesData},
     },
-    hat::{DispatcherContext, SendDeclare, UnregisterResult},
+    hat::{DispatcherContext, SendDeclare, UnregisterEntityResult},
     router::{get_or_set_route, node_id_as_source, QueryDirection, RouteBuilder},
 };
 
@@ -209,8 +209,8 @@ impl Face {
         };
 
         match hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id) {
-            UnregisterResult::Noop => {} // ¯\_(ツ)_/¯
-            UnregisterResult::InfoUpdate { mut res } => {
+            UnregisterEntityResult::Noop => {} // ¯\_(ツ)_/¯
+            UnregisterEntityResult::InfoUpdate { mut res } => {
                 disable_matches_query_routes(ctx.tables, &mut res);
 
                 for region in hats.regions().copied().collect_vec() {
@@ -223,7 +223,7 @@ impl Face {
                     hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
                 }
             }
-            UnregisterResult::LastUnregistered { mut res } => {
+            UnregisterEntityResult::LastUnregistered { mut res } => {
                 let remainder = hats
                     .values()
                     .filter_map(|hat| {

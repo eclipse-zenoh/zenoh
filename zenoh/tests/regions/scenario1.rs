@@ -17,10 +17,11 @@
 //   C      C      C
 // P P P  P P P  P P P
 
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use predicates::Predicate;
 use zenoh::{
+    key_expr::KeyExpr,
     query::{ConsolidationMode, QueryTarget},
     Wait,
 };
@@ -38,7 +39,7 @@ lazy_static! {
 fn init_tracing_subscriber() {
     use tracing_subscriber::layer::SubscriberExt;
     let subscriber = tracing_subscriber::fmt()
-        .with_env_filter("debug,zenoh::net::routing::dispatcher=trace")
+        .with_env_filter("debug,zenoh::net::routing=trace")
         .finish();
     let subscriber = subscriber.with(tracing_capture::CaptureLayer::new(&STORAGE));
     tracing::subscriber::set_global_default(subscriber).ok();
@@ -539,20 +540,28 @@ async fn test_regions_scenario1_order1_toksub() {
     let t9320 = z9320.liveliness().declare_token("test/9320").await.unwrap();
     let t9330 = z9330.liveliness().declare_token("test/9330").await.unwrap();
 
-    ztimeout!(async {
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+    let subs = [
+        &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+    ];
 
-            if [
-                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
-            ]
-            .iter()
-            .all(|sub| sub.count_put_keys() == 9)
-            {
-                break;
+    {
+        let mut seen_tokens: Vec<HashSet<KeyExpr<'static>>> = vec![HashSet::default(); subs.len()];
+        ztimeout!(async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                for (sub, seen) in subs.iter().zip(seen_tokens.iter_mut()) {
+                    seen.extend(sub.take_put_keys());
+                }
+
+                eprintln!("seen_tokens={seen_tokens:?}");
+
+                if seen_tokens.iter().all(|keys| keys.len() == 9) {
+                    break;
+                }
             }
-        }
-    });
+        });
+    }
 
     t9110.undeclare().await.unwrap();
     t9120.undeclare().await.unwrap();
@@ -564,20 +573,23 @@ async fn test_regions_scenario1_order1_toksub() {
     t9320.undeclare().await.unwrap();
     t9330.undeclare().await.unwrap();
 
-    ztimeout!(async {
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+    {
+        let mut unseen_tokens: Vec<HashSet<KeyExpr<'static>>> =
+            vec![Default::default(); subs.len()];
+        ztimeout!(async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if [
-                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
-            ]
-            .iter()
-            .all(|sub| sub.count_del_keys() == 9)
-            {
-                break;
+                for (sub, unseen) in subs.iter().zip(unseen_tokens.iter_mut()) {
+                    unseen.extend(sub.take_del_keys());
+                }
+
+                if unseen_tokens.iter().all(|keys| keys.len() == 9) {
+                    break;
+                }
             }
-        }
-    });
+        });
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -1073,20 +1085,26 @@ async fn test_regions_scenario1_order2_toksub() {
     let t9320 = z9320.liveliness().declare_token("test/9320").await.unwrap();
     let t9330 = z9330.liveliness().declare_token("test/9330").await.unwrap();
 
-    ztimeout!(async {
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+    let subs = [
+        &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+    ];
 
-            if [
-                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
-            ]
-            .iter()
-            .all(|sub| sub.count_put_keys() == 9)
-            {
-                break;
+    {
+        let mut seen_tokens: Vec<HashSet<KeyExpr<'static>>> = vec![HashSet::default(); subs.len()];
+        ztimeout!(async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                for (sub, seen) in subs.iter().zip(seen_tokens.iter_mut()) {
+                    seen.extend(sub.take_put_keys());
+                }
+
+                if seen_tokens.iter().all(|keys| keys.len() == 9) {
+                    break;
+                }
             }
-        }
-    });
+        });
+    }
 
     t9110.undeclare().await.unwrap();
     t9120.undeclare().await.unwrap();
@@ -1098,18 +1116,21 @@ async fn test_regions_scenario1_order2_toksub() {
     t9320.undeclare().await.unwrap();
     t9330.undeclare().await.unwrap();
 
-    ztimeout!(async {
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+    {
+        let mut unseen_tokens: Vec<HashSet<KeyExpr<'static>>> =
+            vec![Default::default(); subs.len()];
+        ztimeout!(async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if [
-                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
-            ]
-            .iter()
-            .all(|sub| sub.count_del_keys() == 9)
-            {
-                break;
+                for (sub, unseen) in subs.iter().zip(unseen_tokens.iter_mut()) {
+                    unseen.extend(sub.take_del_keys());
+                }
+
+                if unseen_tokens.iter().all(|keys| keys.len() == 9) {
+                    break;
+                }
             }
-        }
-    });
+        });
+    }
 }

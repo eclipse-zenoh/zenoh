@@ -142,7 +142,7 @@ impl HatBaseTrait for Hat {
         bail!("Local sessions should not be bound to client hats");
     }
 
-    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
+    #[tracing::instrument(level = "debug", skip(ctx, _transport, other_hats), fields(src = %ctx.src_face), ret)]
     fn new_transport_unicast_face(
         &mut self,
         mut ctx: DispatcherContext,

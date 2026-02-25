@@ -40,7 +40,7 @@ use crate::net::routing::{
     hat::{
         peer::{initial_interest, INITIAL_INTEREST_ID},
         DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, SendDeclare, Sources,
-        UnregisterResult,
+        UnregisterEntityResult,
     },
     RoutingContext,
 };
@@ -363,8 +363,8 @@ impl HatQueriesTrait for Hat {
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-    ) -> UnregisterResult {
-        use UnregisterResult::*;
+    ) -> UnregisterEntityResult {
+        use UnregisterEntityResult::*;
 
         debug_assert!(self.owns(ctx.src_face));
 
@@ -396,16 +396,16 @@ impl HatQueriesTrait for Hat {
             .get_mut(&ctx.src_face.id)
         else {
             bug!("Undefined face context");
-            return UnregisterResult::Noop;
+            return UnregisterEntityResult::Noop;
         };
 
         let Some(old_face_info) = face_ctx.qabl else {
             bug!("Undefined info");
-            return UnregisterResult::Noop;
+            return UnregisterEntityResult::Noop;
         };
 
         if new_face_info == Some(old_face_info) {
-            return UnregisterResult::Noop;
+            return UnregisterEntityResult::Noop;
         } else {
             get_mut_unchecked(face_ctx).qabl = new_face_info;
         }

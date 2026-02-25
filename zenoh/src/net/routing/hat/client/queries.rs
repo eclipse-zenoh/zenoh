@@ -41,7 +41,9 @@ use crate::net::routing::{
         resource::{FaceContext, NodeId, Resource},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
     },
-    hat::{DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources, UnregisterResult},
+    hat::{
+        DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources, UnregisterEntityResult,
+    },
     router::{Direction, DEFAULT_NODE_ID},
     RoutingContext,
 };
@@ -233,8 +235,8 @@ impl HatQueriesTrait for Hat {
         id: QueryableId,
         _res: Option<Arc<Resource>>,
         _node_id: NodeId,
-    ) -> UnregisterResult {
-        use UnregisterResult::*;
+    ) -> UnregisterEntityResult {
+        use UnregisterEntityResult::*;
 
         let Some(qabl) = self.face_hat_mut(ctx.src_face).remote_qabls.remove(&id) else {
             tracing::error!("Unknown id");

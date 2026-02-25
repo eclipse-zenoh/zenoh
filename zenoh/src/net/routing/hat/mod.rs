@@ -254,6 +254,17 @@ pub(crate) trait HatBaseTrait: Any {
     }
 }
 
+/// Return value of current entity routing methods.
+#[derive(Debug)]
+pub(crate) enum RouteCurrentEntityResult {
+    /// Indicates that the operation failed or had no effect (e.g. the interest id is unknown).
+    Noop,
+    /// The breadcrumb corresponding to a pending current interest for this entity.
+    Breadcrumb { interest: CurrentInterest },
+    /// Indicates that the entity should be propagated to matching downstream interests—there is no breadcrumb.
+    ShouldPropagate,
+}
+
 // REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
 // FIXME(regions): update comments below
 
@@ -320,7 +331,7 @@ pub(crate) trait HatInterestTrait {
         ctx: DispatcherContext,
         interest_id: InterestId,
         res: Arc<Resource>,
-    ) -> Option<CurrentInterest>;
+    ) -> RouteCurrentEntityResult;
 
     // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
     // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
@@ -396,8 +407,10 @@ pub(crate) trait HatInterestTrait {
 }
 
 /// Return value of entity unregistration methods.
+///
+/// This type is currently only used for queryables, i.e. the only entity with non-trivial info.
 #[derive(Debug)]
-pub(crate) enum UnregisterResult {
+pub(crate) enum UnregisterEntityResult {
     /// Indicates that the unregisration was a no-op (e.g. the entity has duplicates).
     Noop,
     /// Indicates that the entity info changed (e.g. an update to queryable completeness).
@@ -506,7 +519,7 @@ pub(crate) trait HatQueriesTrait {
         id: QueryableId,
         res: Option<Arc<Resource>>,
         nid: NodeId,
-    ) -> UnregisterResult;
+    ) -> UnregisterEntityResult;
 
     fn unregister_face_queryables(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 

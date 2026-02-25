@@ -35,7 +35,7 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote},
+    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentEntityResult},
     router::SubscriberInfo,
     RoutingContext,
 };
@@ -75,9 +75,9 @@ impl HatInterestTrait for Hat {
         _ctx: DispatcherContext,
         _interest_id: InterestId,
         _res: Arc<Resource>,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteCurrentEntityResult {
         bug!("North-bound broker hat");
-        None
+        RouteCurrentEntityResult::Noop
     }
 
     #[allow(clippy::incompatible_msrv)]
@@ -337,26 +337,15 @@ impl HatInterestTrait for Hat {
         };
 
         for token in matches {
-            // TODO(regions*): apply this everywhere else
-            if self
-                .face_hat(ctx.src_face)
-                .local_tokens
-                .contains_key(&token)
-            {
-                continue;
-            }
+            let id = if msg.mode.is_future() {
+                let face_hat = self.face_hat_mut(ctx.src_face);
 
-            let token_id = if msg.mode.is_future() {
-                let id = self
-                    .face_hat(ctx.src_face)
-                    .next_id
-                    .fetch_add(1, Ordering::SeqCst);
-                self.face_hat_mut(ctx.src_face)
+                *face_hat
                     .local_tokens
-                    .insert(token.clone(), id);
-                id
+                    .entry(token.clone())
+                    .or_insert_with(|| face_hat.next_id.fetch_add(1, Ordering::SeqCst))
             } else {
-                SubscriberId::default()
+                TokenId::default()
             };
 
             let wire_expr = Resource::decl_key(&token, ctx.src_face);
@@ -368,10 +357,7 @@ impl HatInterestTrait for Hat {
                         ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                        body: DeclareBody::DeclareToken(DeclareToken {
-                            id: token_id,
-                            wire_expr,
-                        }),
+                        body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
                     },
                     token.expr().to_string(),
                 ),
@@ -392,21 +378,13 @@ impl HatInterestTrait for Hat {
 
         debug_assert!(dst.region.bound().is_south());
 
-        // TODO(regions*): apply this everywhere else
-        if self.face_hat(&dst).local_tokens.contains_key(&res) {
-            return;
-        }
-
-        // TODO(regions*): apply this everywhere else (?)
         let id = if interest.mode.is_future() {
-            let id = self
-                .face_hat(ctx.src_face)
-                .next_id
-                .fetch_add(1, Ordering::SeqCst);
-            self.face_hat_mut(&mut dst)
+            let face_hat = self.face_hat_mut(&mut dst);
+
+            *face_hat
                 .local_tokens
-                .insert(res.clone(), id);
-            id
+                .entry(res.clone())
+                .or_insert_with(|| face_hat.next_id.fetch_add(1, Ordering::SeqCst))
         } else {
             TokenId::default()
         };

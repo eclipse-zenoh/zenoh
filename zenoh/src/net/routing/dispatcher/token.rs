@@ -27,7 +27,7 @@ use zenoh_protocol::{
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
     dispatcher::face::Face,
-    hat::{DispatcherContext, SendDeclare},
+    hat::{DispatcherContext, RouteCurrentEntityResult, SendDeclare},
     router::{node_id_as_source, Resource},
 };
 
@@ -64,14 +64,6 @@ impl Face {
             .cloned()
         {
             Some(mut prefix) => {
-                let _span = tracing::debug_span!(
-                    "declare_token",
-                    id,
-                    interest_id,
-                    expr = [prefix.expr(), expr.suffix.as_ref()].concat()
-                )
-                .entered();
-
                 let res = Resource::get_resource(&prefix, &expr.suffix);
                 let (res, mut wtables) = if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                     drop(rtables);
@@ -105,30 +97,28 @@ impl Face {
                     send_declare,
                 };
 
-                if let Some(interest_id) = interest_id {
-                    if let Some(pending_interest) =
-                        hats[region].route_current_token(ctx.reborrow(), interest_id, res.clone())
-                    {
-                        if pending_interest.mode.is_future() {
+                match interest_id
+                    .map(|id| hats[region].route_current_token(ctx.reborrow(), id, res.clone()))
+                {
+                    Some(RouteCurrentEntityResult::Noop) => {} // ¯\_(ツ)_/¯
+                    Some(RouteCurrentEntityResult::Breadcrumb { interest }) => {
+                        if interest.mode.is_future() {
                             hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
                         }
 
-                        hats[pending_interest.src_region].propagate_current_token(
-                            ctx,
-                            res,
-                            pending_interest,
-                        );
+                        hats[interest.src_region].propagate_current_token(ctx, res, interest);
                     }
-                } else {
-                    hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
+                    Some(RouteCurrentEntityResult::ShouldPropagate) | None => {
+                        hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
 
-                    for region in hats.regions().copied().collect_vec() {
-                        let other_tokens = hats
-                            .values()
-                            .filter(|hat| hat.region() != region)
-                            .any(|hat| hat.remote_tokens_of(&res));
+                        for region in hats.regions().copied().collect_vec() {
+                            let other_tokens = hats
+                                .values()
+                                .filter(|hat| hat.region() != region)
+                                .any(|hat| hat.remote_tokens_of(&res));
 
-                        hats[region].propagate_token(ctx.reborrow(), res.clone(), other_tokens);
+                            hats[region].propagate_token(ctx.reborrow(), res.clone(), other_tokens);
+                        }
                     }
                 }
             }
