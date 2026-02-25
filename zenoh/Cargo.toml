@@ -81,6 +81,7 @@ unstable = [
   "zenoh-protocol/unstable",
   "zenoh-transport/unstable",
 ]
+uring = ["zenoh-transport/uring"]
 
 [dependencies]
 ahash = { workspace = true, default-features = true }

@@ -140,6 +140,9 @@ jobs:
       - name: Clippy zenoh shared-memory
         run: cargo +stable clippy -p zenoh --all-targets --features unstable,shared-memory -- --deny warnings
 
+      - name: Clippy zenoh uring
+        run: cargo +stable clippy -p zenoh --all-targets --features uring -- --deny warnings
+
       - name: Clippy workspace
         run: cargo +stable clippy --all-targets --features test -- --deny warnings
 
@@ -215,6 +218,10 @@ jobs:
       - name: Run tests stable
         if: ${{ matrix.os != 'macos-latest' }}
         run: cargo nextest run -p zenoh
+
+      - name: Run tests stable (uring)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -p zenoh -F "uring"
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}

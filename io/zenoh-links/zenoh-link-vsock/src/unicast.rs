@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "uring")]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{cell::UnsafeCell, collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -193,6 +195,14 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Vsock
+    }
+
+    #[cfg(feature = "uring")]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
     }
 }
 
