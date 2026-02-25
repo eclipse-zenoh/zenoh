@@ -6163,23 +6163,14 @@ name = "zenoh-link-quic"
 version = "1.7.2"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
  "quinn",
- "rustls",
- "rustls-pemfile",
  "rustls-webpki",
- "secrecy",
  "time 0.3.47",
- "tokio",
- "tokio-util",
  "tracing",
- "webpki-roots",
- "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
@@ -6188,17 +6179,14 @@ version = "1.7.2"
 dependencies = [
  "async-trait",
  "quinn",
- "rustls",
  "rustls-webpki",
  "time 0.3.47",
- "tokio",
  "tokio-util",
  "tracing",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
@@ -6561,7 +6549,6 @@ dependencies = [
  "crossbeam-utils",
  "flume",
  "futures",
- "futures-util",
  "lazy_static",
  "lz4_flex",
  "rand 0.8.5",
