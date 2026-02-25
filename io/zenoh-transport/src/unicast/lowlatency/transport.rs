@@ -38,7 +38,7 @@ use crate::{
     unicast::{
         authentication::TransportAuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
-        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
+        transport_unicast_inner::{AddLinkResult, TransportStatus, TransportUnicastTrait},
         TransportConfigUnicast,
     },
     TransportManager, TransportPeerEventHandler,
@@ -58,7 +58,7 @@ pub(crate) struct TransportUnicastLowlatency {
     // The callback
     pub(super) callback: Arc<SyncRwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
-    alive: Arc<AsyncMutex<bool>>,
+    status: Arc<AsyncMutex<TransportStatus>>,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: zenoh_stats::TransportStats,
@@ -85,7 +85,7 @@ impl TransportUnicastLowlatency {
             config,
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(SyncRwLock::new(None)),
-            alive: Arc::new(AsyncMutex::new(false)),
+            status: Arc::new(AsyncMutex::new(TransportStatus::Uninitialized)),
             #[cfg(feature = "stats")]
             stats,
             #[cfg(feature = "stats")]
@@ -128,10 +128,8 @@ impl TransportUnicastLowlatency {
         );
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
-        *a_guard = false;
-        let callback = zwrite!(self.callback).take();
-
+        let mut status_guard = self.get_status().await;
+        *status_guard = TransportStatus::Closed;
         // Delete the transport on the manager
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
@@ -139,33 +137,41 @@ impl TransportUnicastLowlatency {
         self.token.cancel();
         self.tracker.close();
         self.tracker.wait().await;
-        // self.stop_keepalive().await;
-        // self.stop_rx().await;
 
         if let Some(val) = zasyncwrite!(self.link).as_ref() {
             let _ = val.close(Some(close::reason::GENERIC)).await;
         }
-
+        let callback = zwrite!(self.callback).take();
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {
             cb.closed();
         }
-
+        // Delete the transport on the manager - this should be the last step to ensure that no new transport to the same peer can be added while we are closing this transport.
+        // We also drop the status_guard, to avoid deadlock due to different lock acquisition order in init_existing_transport unicast.
+        // The lock is no longer needed at this point, as we have already marked the transport as not alive and taken the callback to notify it of the closure.
+        drop(status_guard);
+        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
         Ok(())
     }
 
-    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()> {
+    async fn sync(
+        &self,
+        _initial_sn_rx: TransportSn,
+    ) -> ZResult<AsyncMutexGuard<'_, TransportStatus>> {
         // Mark the transport as alive
-        let mut a_guard = zasynclock!(self.alive);
-        if *a_guard {
-            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            tracing::trace!("{}", e);
-            return Err(e.into());
+        let mut status_guard = zasynclock!(self.status);
+        match *status_guard {
+            TransportStatus::Uninitialized => {
+                *status_guard = TransportStatus::Alive;
+                Ok(status_guard)
+            }
+            TransportStatus::Alive => Ok(status_guard),
+            TransportStatus::Closed => {
+                let e = zerror!("Transport with peer {} is closed", self.config.zid);
+                tracing::trace!("{}", e);
+                Err(e.into())
+            }
         }
-
-        *a_guard = true;
-
-        Ok(())
     }
 }
 
@@ -178,8 +184,8 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         *zwrite!(self.callback) = Some(callback);
     }
 
-    async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
-        zasynclock!(self.alive)
+    async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
+        zasynclock!(self.status)
     }
 
     fn get_links(&self) -> Vec<Link> {
@@ -253,7 +259,17 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     ) -> AddLinkResult {
         tracing::trace!("Adding link: {}", link);
 
-        let _ = self.sync(other_initial_sn).await;
+        let status_guard = match self.sync(other_initial_sn).await {
+            Ok(status_guard) => status_guard,
+            Err(e) => {
+                tracing::error!(
+                    "Error syncing transport with peer {}: {}",
+                    self.config.zid,
+                    e
+                );
+                return Err((e, link.fail(), close::reason::GENERIC));
+            }
+        };
 
         let mut guard = zasyncwrite!(self.link);
         if guard.is_some() {
@@ -287,7 +303,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             self.internal_start_rx(other_lease);
         });
 
-        Ok((start_tx, start_rx, ack, None))
+        Ok((start_tx, start_rx, ack, status_guard))
     }
 
     /*************************************/
