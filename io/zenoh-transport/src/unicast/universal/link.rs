@@ -13,7 +13,6 @@
 //
 use std::time::Duration;
 
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
@@ -23,6 +22,7 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+use zenoh_task::TaskController;
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -44,8 +44,7 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The transmission pipeline
     pub(super) pipeline: TransmissionPipelineProducer,
     // The task handling substruct
-    tracker: TaskTracker,
-    token: CancellationToken,
+    task_controller: TaskController,
     #[cfg(feature = "unstable")]
     // Notifier for a BlockFirst message to be ready to be sent
     // (after the previous one has been sent)
@@ -105,8 +104,7 @@ impl TransportLinkUnicastUniversal {
         let result = Self {
             link,
             pipeline: producer,
-            tracker: TaskTracker::new(),
-            token: CancellationToken::new(),
+            task_controller: TaskController::default(),
             #[cfg(feature = "unstable")]
             block_first_notifiers: block_first_notifiers.try_into().ok().unwrap(),
             #[cfg(feature = "unstable")]
@@ -126,15 +124,15 @@ impl TransportLinkUnicastUniversal {
     ) {
         // Spawn the TX task
         let mut tx = self.link.tx();
-        let token = self.token.clone();
         #[cfg(feature = "stats")]
         let stats = self.stats.clone();
+        let tc = self.task_controller.clone();
         let task = async move {
             let res = tx_task(
                 consumer,
                 &mut tx,
                 keep_alive,
-                token,
+                tc,
                 #[cfg(feature = "stats")]
                 stats,
             )
@@ -150,14 +148,14 @@ impl TransportLinkUnicastUniversal {
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
         };
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::TX, task);
     }
 
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
         let priorities = self.link.config.priorities.clone();
         let reliability = self.link.config.reliability;
         let mut rx = self.link.rx();
-        let token = self.token.clone();
         #[cfg(feature = "stats")]
         let stats = self.stats.clone();
         let task = async move {
@@ -167,7 +165,6 @@ impl TransportLinkUnicastUniversal {
                 transport.clone(),
                 lease,
                 transport.manager.config.link_rx_buffer_size,
-                token,
                 #[cfg(feature = "stats")]
                 stats,
             )
@@ -196,16 +193,14 @@ impl TransportLinkUnicastUniversal {
             }
         };
         // WARN: If this is on ZRuntime::TX, a deadlock would occur.
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::RX);
+        self.task_controller
+            .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::RX, task);
     }
 
     pub(super) async fn close(self) -> ZResult<()> {
         tracing::trace!("{}: closing", self.link);
-
-        self.tracker.close();
-        self.token.cancel();
+        self.task_controller.terminate_all_async().await;
         self.pipeline.disable();
-        self.tracker.wait().await;
 
         self.link.close(None).await
     }
@@ -218,48 +213,49 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
-    token: CancellationToken,
+    task_controller: TaskController,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
-    loop {
-        tokio::select! {
-            res = tokio::time::timeout(keep_alive, pipeline.pull()) => {
-                match res {
-                    Ok(Some((mut batch, priority))) => {
-                        link.send_batch(&mut batch).await?;
+    let task = async {
+        loop {
+            let res = tokio::time::timeout(keep_alive, pipeline.pull()).await;
+            match res {
+                Ok(Some((mut batch, priority))) => {
+                    link.send_batch(&mut batch).await?;
 
-                        #[cfg(feature = "stats")]
-                        {
-                            stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
-                            stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
-                        }
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
+                        stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
+                    }
 
-                        // Reinsert the batch into the queue
-                        pipeline.refill(batch, priority);
-                    },
-                    Ok(None) => {
-                        // The queue has been disabled: break the tx loop, drain the queue, and exit
-                        break;
-                    },
-                    Err(_) => {
-                        // A timeout occurred, no control/data messages have been sent during
-                        // the keep_alive period, we need to send a KeepAlive message
-                        let message: TransportMessage = KeepAlive.into();
+                    // Reinsert the batch into the queue
+                    pipeline.refill(batch, priority);
+                }
+                Ok(None) => {
+                    // The queue has been disabled: break the tx loop, drain the queue, and exit
+                    break;
+                }
+                Err(_) => {
+                    // A timeout occurred, no control/data messages have been sent during
+                    // the keep_alive period, we need to send a KeepAlive message
+                    let message: TransportMessage = KeepAlive.into();
 
-                        #[allow(unused_variables)] // Used when stats feature is enabled
-                        let n = link.send(&message).await?;
+                    #[allow(unused_variables)] // Used when stats feature is enabled
+                    let n = link.send(&message).await?;
 
-                        #[cfg(feature = "stats")]
-                        {
-                            stats.inc_bytes(zenoh_stats::Tx, n as u64);
-                            stats.inc_transport_message(zenoh_stats::Tx, 1);
-                        }
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_bytes(zenoh_stats::Tx, n as u64);
+                        stats.inc_transport_message(zenoh_stats::Tx, 1);
                     }
                 }
-            },
-
-            _ = token.cancelled() => break
+            }
         }
+        ZResult::Ok(())
+    };
+    if let Ok(result) = task_controller.into_abortable(task).await {
+        result?;
     }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
@@ -284,7 +280,6 @@ async fn rx_task(
     transport: TransportUnicastUniversal,
     lease: Duration,
     rx_buffer_size: usize,
-    token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     async fn read<T, F>(
@@ -318,20 +313,19 @@ async fn rx_task(
     );
 
     loop {
-        tokio::select! {
-            batch = tokio::time::timeout(lease, read(link, &pool)) => {
-                let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
-                #[cfg(feature = "stats")]
-                {
-                    let header_bytes = if l.is_streamed { 2 } else { 0 };
-                    stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
-                }
-                transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
-            }
-
-            _ = token.cancelled() => break
+        let batch = tokio::time::timeout(lease, read(link, &pool)).await;
+        let batch = batch
+            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
+        #[cfg(feature = "stats")]
+        {
+            let header_bytes = if l.is_streamed { 2 } else { 0 };
+            stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
         }
+        transport.read_messages(
+            batch,
+            &l,
+            #[cfg(feature = "stats")]
+            &stats,
+        )?;
     }
-
-    Ok(())
 }
