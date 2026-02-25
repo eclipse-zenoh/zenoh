@@ -366,7 +366,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -377,7 +377,10 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn_abortable<F, T>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<T, zenoh_task::TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -706,7 +709,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -716,7 +719,10 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn_abortable<F, T>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<T, zenoh_task::TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -958,7 +964,8 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
-    async fn close_inner(&self) {
+    type CloseArgs = ();
+    async fn close_inner(&self, _: ()) {
         tracing::trace!("Runtime::close())");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn

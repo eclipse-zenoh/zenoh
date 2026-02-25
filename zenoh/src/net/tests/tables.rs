@@ -23,8 +23,13 @@ use zenoh_protocol::{
     core::{
         key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
     },
-    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
-    zenoh::Put,
+    network::{
+        declare::queryable::ext::QueryableInfoType,
+        ext::{self, NodeIdType},
+        request::ext::QueryTarget,
+        Declare, DeclareBody, DeclareKeyExpr, Mapping, Push, Request, Response, UndeclareKeyExpr,
+    },
+    zenoh::{PushBody, Put, RequestBody, ResponseBody},
 };
 
 use crate::{
@@ -609,13 +614,22 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push_consume(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+        _consume: bool,
+    ) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_request(&self, _msg: &mut zenoh_protocol::network::Request) {}
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned())
+    }
 
-    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned())
+    }
 
     fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
 
@@ -671,6 +685,168 @@ impl EPrimitives for ClientPrimitives {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+}
+
+#[test]
+fn test_response_wireexpr() {
+    let router = new_router();
+    let tables = router.tables.clone();
+    let primitives0 = Arc::new(ClientPrimitives::new());
+    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
+
+    let primitives1 = Arc::new(ClientPrimitives::new());
+    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()).state);
+
+    let qinfo = QueryableInfoType {
+        complete: true,
+        distance: 1,
+    };
+    register_expr(
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        11,
+        &"test/queryable/reply".into(),
+    );
+
+    Primitives::send_declare(
+        primitives0.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 11,
+                wire_expr: "test/queryable/reply".into(),
+            }),
+        },
+    );
+
+    register_expr(
+        &tables,
+        &mut face1.upgrade().unwrap(),
+        12,
+        &"test/queryable".into(),
+    );
+
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 12,
+                wire_expr: "test/queryable".into(),
+            }),
+        },
+    );
+
+    declare_queryable(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        0,
+        &WireExpr::from(11).with_suffix("/**"),
+        &qinfo,
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    route_query(
+        &tables,
+        &face1.upgrade().unwrap(),
+        &mut Request {
+            id: 1,
+            wire_expr: "test/queryable/reply/*".into(),
+            payload: RequestBody::Query(zenoh_protocol::zenoh::query::Query::default()),
+            ext_qos: zenoh_protocol::network::request::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            ext_target: QueryTarget::All,
+            ext_budget: None,
+            ext_timeout: None,
+        },
+    );
+
+    route_send_response(
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        &mut Response {
+            rid: 1,
+            wire_expr: WireExpr {
+                scope: 11,
+                suffix: "/1".into(),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh_protocol::zenoh::reply::Reply {
+                consolidation: zenoh_protocol::zenoh::ConsolidationMode::None,
+                ext_unknown: Vec::default(),
+                payload: PushBody::Put(zenoh_protocol::zenoh::put::Put::default()),
+            }),
+            ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_respid: None,
+        },
+    );
+    assert_eq!(
+        primitives1.get_last_name().unwrap(),
+        "test/queryable/reply/1"
+    );
+    let we = primitives1.get_last_key().unwrap();
+    // TODO: replace asserts with the ones commented below once optimization of reply wireexpr in route_send_response is enabled
+    assert_eq!(we.suffix, "test/queryable/reply/1");
+    assert_eq!(we.scope, 0);
+    /*assert_eq!(we.suffix, "/reply/1");
+    assert_eq!(we.scope, 12);
+    assert_eq!(we.mapping, Mapping::Receiver);*/
+
+    // unregister receiver mapping and validate that we is still correct
+    unregister_expr(&tables, &mut face1.upgrade().unwrap(), 12);
+
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: 12 }),
+        },
+    );
+
+    route_send_response(
+        &tables,
+        &mut face0.upgrade().unwrap(),
+        &mut Response {
+            rid: 1,
+            wire_expr: WireExpr {
+                scope: 11,
+                suffix: "/1".into(),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh_protocol::zenoh::reply::Reply {
+                consolidation: zenoh_protocol::zenoh::ConsolidationMode::None,
+                ext_unknown: Vec::default(),
+                payload: PushBody::Put(zenoh_protocol::zenoh::put::Put::default()),
+            }),
+            ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_respid: None,
+        },
+    );
+    assert_eq!(
+        primitives1.get_last_name().unwrap(),
+        "test/queryable/reply/1"
+    );
+    let we = primitives1.get_last_key().unwrap();
+    assert_eq!(we.suffix, "test/queryable/reply/1");
+    assert_eq!(we.scope, 0);
 }
 
 #[test]
@@ -839,6 +1015,7 @@ fn client_test() {
                 ..Put::default().into()
             },
             Reliability::Reliable,
+            true,
         );
     };
 

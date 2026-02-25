@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2024 ZettaScale Technology
+# Copyright (c) 2026 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -12,28 +12,20 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+authors = ["Olivier Hécart <olivier.hecart@zettascale.tech>"]
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
 edition = "2021"
 homepage = "http://zenoh.io"
 license = "EPL-2.0 OR Apache-2.0"
-name = "valgrind-check"
+name = "zenoh-1-75"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 version = "0.1.0"
 
-[dependencies]
-tokio = { version = "1.35.1", features = ["io-std", "rt-multi-thread", "time"] }
-zenoh = { path = "../../zenoh/" }
-zenoh-runtime = { path = "../../commons/zenoh-runtime/" }
-zenoh-util = { path = "../../commons/zenoh-util/", features = ["test"] }
-
-[[bin]]
-name = "pub_sub"
-path = "src/pub_sub/bin/z_pub_sub.rs"
-
-[[bin]]
-name = "queryable_get"
-path = "src/queryable_get/bin/z_queryable_get.rs"
-
 [package.metadata.cargo-machete]
-ignored = ["base64ct", "litemap", "zerofrom"]
+ignored = ["zenoh", "zenoh-ext", "zenoh-pinned-deps-1-75"]
+
+[dependencies]
+zenoh = { path = "../../zenoh/" }
+zenoh-ext = { path = "../../zenoh-ext/" }
+zenoh-pinned-deps-1-75 = { path = "../../commons/zenoh-pinned-deps-1-75/" }

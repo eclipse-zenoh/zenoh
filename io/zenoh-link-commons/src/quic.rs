@@ -539,10 +539,9 @@ pub fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
                 .subject
                 .iter_common_name()
                 .next()
-                .and_then(|cn| cn.as_str().ok())
-                .unwrap();
+                .and_then(|cn| cn.as_str().ok());
             auth_id = QuicAuthId {
-                auth_value: Some(subject_name.to_string()),
+                auth_value: subject_name.map(|cn| cn.to_string()),
             };
         }
     }

@@ -31,6 +31,10 @@ env:
   # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
   # version on crates.io. Thus this needs to be updated after every release.
   CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.7.2
+  # Nightly toolchain identifier used by cargo invocations
+  # Normally keep it "nightly" to always use the latest nightly, but in case of a regression in the Rust compiler, 
+  # it can be useful to fix it to a specific nightly version that is known to work.
+  NIGHTLY_TOOLCHAIN: "nightly-2026-02-21"
 
 jobs:
   determine-runner:
@@ -72,32 +76,13 @@ jobs:
           cache-bin: false
 
       - name: Check zenoh with rust 1.75.0
-        run: cargo +1.75.0 check --release --bins --lib
+        run: cargo +1.75.0 check --release --manifest-path ci/zenoh-1-75/Cargo.toml
 
-  # Test without Cargo.lock to ensure that all restrictions are correctly set in Cargo.toml for build with rust 1.75.0
-  check_rust_without_cargo_lock:
-    needs: determine-runner
-    name: Check zenoh build without Cargo.lock on Rust 1.75
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-
-    steps:
-      - name: Clone this repository
-        uses: actions/checkout@v4
-
-      - name: Update Rust 1.75.0 toolchain
-        run: rustup update 1.75.0
-
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-bin: false
-
-      - name: Check zenoh without Cargo.lock
+      - name: Check clippy on stable rust without Cargo.lock to ensure compatibility with latest dependencies
         run: |
-          rm Cargo.lock || true
-          cargo +1.75.0 check --bins --lib
+          rm Cargo.lock
+          cargo +stable clippy --release --manifest-path ci/zenoh-1-75/Cargo.toml -- -D warnings
+          git restore Cargo.lock
 
   check:
     needs: determine-runner
@@ -118,7 +103,7 @@ jobs:
       - name: Make sure necessary tools are installed
         run: |
           rustup component add clippy --toolchain stable
-          rustup component add rustfmt --toolchain nightly
+          rustup component add rustfmt --toolchain ${{ env.NIGHTLY_TOOLCHAIN }}
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
@@ -138,7 +123,7 @@ jobs:
         uses: taiki-e/install-action@taplo
   
       - name: Code format check
-        run: rustfmt +nightly --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
+        run: rustfmt +${{ env.NIGHTLY_TOOLCHAIN }} --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
       - name: Clippy zenoh no-default-features
         run: cargo +stable clippy -p zenoh --all-targets --no-default-features -- --deny warnings
@@ -231,6 +216,46 @@ jobs:
         if: ${{ matrix.os != 'macos-latest' }}
         run: cargo nextest run -p zenoh
 
+      - name: Check for feature leaks
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -p zenohd --no-default-features
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  test_unstable:
+    needs: determine-runner
+    name: Unit tests on ${{ matrix.os }} (unstable)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
+        run: |
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Run tests with unstable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
@@ -243,13 +268,41 @@ jobs:
           cargo build -p zenoh-plugin-rest --lib
           cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
-      - name: Rename junit test report (sudo macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Rename junit test report
-        if: ${{ matrix.os != 'macos-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests.junit.xml
+  test_shm:
+    needs: determine-runner
+    name: Unit tests on ${{ matrix.os }} (shared memory)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.determine-runner.outputs.runner) }}
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Set rustflags
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
+        run: |
+            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Run tests with SHM (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -261,31 +314,11 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
-      - name: Rename junit test report (sudo macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
-
-      - name: Rename junit test report
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm.junit.xml
-
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo prlimit --memlock=unlimited --pid=$$
           cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
-
-      - name: Rename junit test report
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests-shm-unixpipe.junit.xml
-
-      - name: Check for feature leaks
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -p zenohd --no-default-features
-
-      - name: Rename junit test report
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: mv target/nextest/default/junit.xml target/nextest/default/tests-feature-leaks.junit.xml
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
@@ -341,17 +374,6 @@ jobs:
       - name: Clone this repository
         uses: actions/checkout@v4
 
-      #
-      # Temporary workaround to remmove transitive dependency
-      # of static-init 1.0.3 which fails with nigtly Rust.
-      # This allows Rust to automatically pick a compatible version 1.0.4
-      # where the issue is fixed.
-      #
-      - name: Remove zenoh-pinned-deps-1-75 dependency and Cargo.lock
-        run: |
-          sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
-          rm -f Cargo.lock
-
       # Use a similar command than docs.rs build: rustdoc with nightly toolchain
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
@@ -359,93 +381,84 @@ jobs:
       - name: Run rustdoc using Nightly Rust and Zenoh unstable
         # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
         run: |
-          cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
+          cargo +${{ env.NIGHTLY_TOOLCHAIN }} rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
             -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples \
             --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
 
   coverage:
-        name: Coverage
-        strategy:
-          fail-fast: false
-          matrix:
-            os: [ubuntu-latest]
-            rust: [nightly]
-        runs-on: ${{ matrix.os }}
-        steps:
-          - name: Free Disk Space (Ubuntu)
-            uses: jlumbroso/free-disk-space@main
-            with:
-              tool-cache: false
-              android: true
-              dotnet: true
-              haskell: true
-              large-packages: true
-              docker-images: true
-              swap-storage: true
+    name: Coverage
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        rust: [nightly]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
-          - name: Install build-essential (Ubuntu)
-            if: ${{ matrix.os == 'ubuntu-latest' }}
-            run: |
-              sudo apt-get update
-              sudo apt-get install -y build-essential clang libc6-dev
+      - name: Install build-essential (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang libc6-dev
 
-          - name: Checkout sources
-            uses: actions/checkout@v4
+      - name: Checkout sources
+        uses: actions/checkout@v4
 
-          #
-          # Temporary workaround to remmove transitive dependency
-          # of static-init 1.0.3 which fails with nigtly Rust.
-          # This allows Rust to automatically pick a compatible version 1.0.4
-          # where the issue is fixed.
-          #
-          - name: Remove zenoh-pinned-deps-1-75 dependency and Cargo.lock
-            run: | 
-              sed -i '/zenoh-pinned-deps-1-75/d' Cargo.toml
-              rm -f Cargo.lock
+      - name: Install Rust toolchain
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.rust == 'nightly' && env.NIGHTLY_TOOLCHAIN || matrix.rust }}
+        run: |
+          rustup update ${{ env.RUSTUP_TOOLCHAIN }}
+          rustup component add llvm-tools-preview
 
-          - name: Install ${{ matrix.rust }} Rust toolchain
-            run: |
-              rustup override set ${{ matrix.rust }}
-              rustup update ${{ matrix.rust }}
-              rustup component add llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
 
-          - uses: Swatinem/rust-cache@v2
-            with:
-              cache-bin: false
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
-          - name: Install cargo-llvm-cov
-            uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
+        env:
+          RUSTUP_TOOLCHAIN: ${{ matrix.rust == 'nightly' && env.NIGHTLY_TOOLCHAIN || matrix.rust }}
+          RUST_LOG: None
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo llvm-cov test --features unstable --features test --features shared-memory \
+          ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
+          --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
+          --skip test_default_features \
+          --skip router_linkstate \
+          --skip three_node_combination  \
+          --skip three_node_combination_multicast \
+          --skip two_node_combination \
+          --skip test_gossip \
+          --skip metadata_alloc_concurrent \
+          --skip metadata_link_concurrent \
+          --skip metadata_link_failure_concurrent
 
-          - name: Generate code coverage
-            run: |
-              sudo prlimit --memlock=unlimited --pid=$$
-              cargo +${{ matrix.rust }} llvm-cov test --features unstable --features test --features shared-memory  \
-              ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
-              --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
-              --skip test_default_features \
-              --skip router_linkstate \
-              --skip three_node_combination  \
-              --skip three_node_combination_multicast \
-              --skip two_node_combination \
-              --skip test_gossip \
-              --skip metadata_alloc_concurrent \
-              --skip metadata_link_concurrent \
-              --skip metadata_link_failure_concurrent
-            env:
-              RUST_LOG: None
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
 
-          - name: Upload coverage to Codecov
-            uses: codecov/codecov-action@v5
-            with:
-              token: ${{ secrets.CODECOV_TOKEN }}
-              files: lcov.info
-              fail_ci_if_error: true
-
-          # Cleanup profraw files to avoid failing during rust-cache
-          # post run cleanup. It requires enough space on disk left to save the cache
-          - name: Cleanup profraw files
-            run: |
-              find . -name "*.profraw" -type f -delete
+      # Cleanup profraw files to avoid failing during rust-cache
+      # post run cleanup. It requires enough space on disk left to save the cache
+      - name: Cleanup profraw files
+        run: |
+          find . -name "*.profraw" -type f -delete
 
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
@@ -455,7 +468,7 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check, test, valgrind, typos, markdown_lint, doc, coverage]
+    needs: [check_rust, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
     if: always()
     steps:
       - name: Check whether all jobs pass
