@@ -6164,6 +6164,7 @@ version = "1.7.2"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "futures",
  "quinn",
  "rustls",
  "rustls-pemfile",
@@ -6179,6 +6180,7 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-util",
 ]
 
@@ -6561,7 +6563,6 @@ dependencies = [
  "crossbeam-utils",
  "flume",
  "futures",
- "futures-util",
  "lazy_static",
  "lz4_flex",
  "rand 0.8.5",
