@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024 ZettaScale Technology
+// Copyright (c) 2025 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,32 +12,53 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    fmt::{self, Debug},
     fs::File,
-    io,
-    io::{BufReader, Cursor},
+    io::{self, BufReader, Cursor},
     net::SocketAddr,
     sync::Arc,
+    time::Duration,
 };
 
+use quinn::TransportConfig;
 use rustls::{
+    crypto::CryptoProvider,
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
     server::WebPkiClientVerifier,
     version::TLS13,
     ClientConfig, RootCertStore, ServerConfig,
 };
 use secrecy::ExposeSecret;
+use time::OffsetDateTime;
 use webpki::anchor_from_trusted_cert;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_config::Config as ZenohConfig;
-use zenoh_link_commons::{
-    tls::WebPkiVerifierAnyServerName, ConfigurationInspector, BIND_INTERFACE,
-};
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
     parameters,
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
-use crate::config::*;
+use crate::{
+    quic::{
+        plaintext::{SkipServerVerification, SELF_SIGNED_CERT},
+        unicast::MultiStreamConfig,
+    },
+    tls::{config::*, WebPkiVerifierAnyServerName},
+    ConfigurationInspector, LinkAuthId,
+};
+
+// ALPN protocols
+/// Protocol used by zenoh <= 1.6.2
+pub const PROTOCOL_LEGACY: &[u8] = b"hq-29";
+/// Zenoh single stream
+pub const PROTOCOL_SINGLE_STREAM: &[u8] = b"zenoh";
+/// Zenoh multi stream
+pub const PROTOCOL_MULTI_STREAM: &[u8] = b"zenoh-ms";
+
+// QUIC MTU config
+pub const QUIC_INITIAL_MTU: &str = "initial_mtu";
+pub const QUIC_MTU_DISCOVERY_INTERVAL: &str = "mtu_discovery_interval_secs";
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -153,25 +174,48 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
     }
 }
 
-pub(crate) struct TlsServerConfig<'a> {
-    pub(crate) server_config: ServerConfig,
-    pub(crate) tls_close_link_on_expiration: bool,
-    pub(crate) bind_iface: Option<&'a str>,
+pub struct TlsServerConfig {
+    pub server_config: ServerConfig,
+    pub tls_close_link_on_expiration: bool,
 }
 
-impl<'a> TlsServerConfig<'a> {
-    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
-        let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
-            Some(s) => s
-                .parse()
-                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
-            None => TLS_ENABLE_MTLS_DEFAULT,
-        };
+impl TlsServerConfig {
+    pub async fn new(config: &Config<'_>, secure: bool) -> ZResult<Self> {
         let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
             Some(s) => s
                 .parse()
                 .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
             None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
+        };
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
+
+        let sc = if secure {
+            Self::new_secure_tls(config).await?
+        } else {
+            Self::new_unsecure_tls()?
+        };
+
+        Ok(Self {
+            server_config: sc,
+            tls_close_link_on_expiration,
+        })
+    }
+
+    async fn new_secure_tls(config: &Config<'_>) -> ZResult<ServerConfig> {
+        let tls_server_client_auth: bool = match config.get(TLS_ENABLE_MTLS) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown enable mTLS argument: {}", s))?,
+            None => TLS_ENABLE_MTLS_DEFAULT,
         };
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
@@ -205,16 +249,6 @@ impl<'a> TlsServerConfig<'a> {
             bail!("No private key found for TLS server.");
         }
 
-        // Install ring based rustls CryptoProvider.
-        rustls::crypto::ring::default_provider()
-            // This can be called successfully at most once in any process execution.
-            // Call this early in your process to configure which provider is used for the provider.
-            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
-            .install_default()
-            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
-            // when there are multiple quic links, and all but the first execution will fail.
-            .ok();
-
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
                 || Err(zerror!("Missing root certificates while mTLS is enabled.")),
@@ -231,11 +265,26 @@ impl<'a> TlsServerConfig<'a> {
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         };
-        Ok(TlsServerConfig {
-            server_config: sc,
-            tls_close_link_on_expiration,
-            bind_iface: config.get(BIND_INTERFACE),
-        })
+        Ok(sc)
+    }
+
+    fn new_unsecure_tls() -> ZResult<ServerConfig> {
+        // Does not support client authentication, and uses self-signed certificate
+        let (key, certs) = {
+            let cert = (*SELF_SIGNED_CERT)
+                .as_ref()
+                .map_err(|e| zerror!("Failed to generate static self-signed certificate: {e}"))?;
+            (
+                Into::<rustls::pki_types::PrivateKeyDer>::into(
+                    rustls::pki_types::PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()),
+                ),
+                vec![CertificateDer::from(cert.cert.clone())],
+            )
+        };
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| zerror!(e).into())
     }
 
     async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
@@ -259,14 +308,43 @@ impl<'a> TlsServerConfig<'a> {
     }
 }
 
-pub(crate) struct TlsClientConfig<'a> {
-    pub(crate) client_config: ClientConfig,
-    pub(crate) tls_close_link_on_expiration: bool,
-    pub(crate) bind_iface: Option<&'a str>,
+pub struct TlsClientConfig {
+    pub client_config: ClientConfig,
+    pub tls_close_link_on_expiration: bool,
 }
 
-impl<'a> TlsClientConfig<'a> {
-    pub async fn new(config: &'a Config<'_>) -> ZResult<Self> {
+impl TlsClientConfig {
+    pub async fn new(config: &Config<'_>, secure: bool) -> ZResult<Self> {
+        let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
+            None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
+        };
+
+        // Install ring based rustls CryptoProvider.
+        rustls::crypto::ring::default_provider()
+            // This can be called successfully at most once in any process execution.
+            // Call this early in your process to configure which provider is used for the provider.
+            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
+            .install_default()
+            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
+            // when there are multiple quic links, and all but the first execution will fail.
+            .ok();
+
+        let cc = if secure {
+            Self::new_secure_tls(config).await?
+        } else {
+            Self::new_unsecure_tls()?
+        };
+
+        Ok(TlsClientConfig {
+            client_config: cc,
+            tls_close_link_on_expiration,
+        })
+    }
+
+    async fn new_secure_tls(config: &Config<'_>) -> ZResult<ClientConfig> {
         let tls_client_server_auth: bool = match config.get(TLS_ENABLE_MTLS) {
             Some(s) => s
                 .parse()
@@ -284,13 +362,6 @@ impl<'a> TlsClientConfig<'a> {
             tracing::warn!("Skipping name verification of QUIC server");
         }
 
-        let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
-            Some(s) => s
-                .parse()
-                .map_err(|_| zerror!("Unknown close on expiration argument: {}", s))?,
-            None => TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT,
-        };
-
         // Allows mixed user-generated CA and webPKI CA
         tracing::debug!("Loading default Web PKI certificates.");
         let mut root_cert_store = RootCertStore {
@@ -301,16 +372,6 @@ impl<'a> TlsClientConfig<'a> {
             tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
         }
-
-        // Install ring based rustls CryptoProvider.
-        rustls::crypto::ring::default_provider()
-            // This can be called successfully at most once in any process execution.
-            // Call this early in your process to configure which provider is used for the provider.
-            // The configuration should happen before any use of ClientConfig::builder() or ServerConfig::builder().
-            .install_default()
-            // Ignore the error here, because `rustls::crypto::ring::default_provider().install_default()` will inevitably be executed multiple times
-            // when there are multiple quic links, and all but the first execution will fail.
-            .ok();
 
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");
@@ -377,11 +438,17 @@ impl<'a> TlsClientConfig<'a> {
                     .with_no_client_auth()
             }
         };
-        Ok(TlsClientConfig {
-            client_config: cc,
-            tls_close_link_on_expiration,
-            bind_iface: config.get(BIND_INTERFACE),
-        })
+        Ok(cc)
+    }
+
+    fn new_unsecure_tls() -> ZResult<ClientConfig> {
+        let provider = CryptoProvider::get_default().expect("default cypto provider should be set");
+        // No server verification, trusts any certificate
+        Ok(ClientConfig::builder_with_provider(provider.clone())
+            .with_protocol_versions(&[&TLS13])?
+            .dangerous()
+            .with_custom_certificate_verifier(SkipServerVerification::new(provider.clone()))
+            .with_no_client_auth())
     }
 
     async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
@@ -506,7 +573,7 @@ pub async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
     }
 }
 
-pub fn get_quic_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
+pub fn get_quic_host<'a>(address: &Address<'a>) -> ZResult<&'a str> {
     Ok(address
         .as_str()
         .rsplit_once(':')
@@ -519,4 +586,137 @@ pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
     Ok(general_purpose::STANDARD
         .decode(data)
         .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)
+}
+
+pub fn get_cert_common_name(conn: &quinn::Connection) -> ZResult<QuicAuthId> {
+    let mut auth_id = QuicAuthId { auth_value: None };
+    if let Some(pi) = conn.peer_identity() {
+        let serv_certs = pi
+            .downcast::<Vec<rustls_pki_types::CertificateDer>>()
+            .unwrap();
+        if let Some(item) = serv_certs.iter().next() {
+            let (_, cert) = X509Certificate::from_der(item.as_ref()).unwrap();
+            let subject_name = cert
+                .subject
+                .iter_common_name()
+                .next()
+                .and_then(|cn| cn.as_str().ok());
+            auth_id = QuicAuthId {
+                auth_value: subject_name.map(|cn| cn.to_string()),
+            };
+        }
+    }
+    Ok(auth_id)
+}
+
+/// Returns the minimum value of the `not_after` field in the remote certificate chain.
+/// Returns `None` if the remote certificate chain is empty
+pub fn get_cert_chain_expiration(conn: &quinn::Connection) -> ZResult<Option<OffsetDateTime>> {
+    let mut link_expiration: Option<OffsetDateTime> = None;
+    if let Some(pi) = conn.peer_identity() {
+        if let Ok(remote_certs) = pi.downcast::<Vec<rustls_pki_types::CertificateDer>>() {
+            for cert in *remote_certs {
+                let (_, cert) = X509Certificate::from_der(cert.as_ref())?;
+                let cert_expiration = cert.validity().not_after.to_datetime();
+                link_expiration = link_expiration
+                    .map(|current_min| current_min.min(cert_expiration))
+                    .or(Some(cert_expiration));
+            }
+        }
+    }
+    Ok(link_expiration)
+}
+
+#[derive(Clone)]
+pub struct QuicAuthId {
+    auth_value: Option<String>,
+}
+
+impl Debug for QuicAuthId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Common Name: {}",
+            self.auth_value.as_deref().unwrap_or("None")
+        )
+    }
+}
+
+impl From<QuicAuthId> for LinkAuthId {
+    fn from(value: QuicAuthId) -> Self {
+        LinkAuthId::Quic(value.auth_value.clone())
+    }
+}
+
+pub(crate) struct QuicMtuConfig {
+    initial_mtu: Option<u16>,
+    mtu_discovery_interval_secs: Option<u64>,
+}
+
+impl QuicMtuConfig {
+    fn apply_to_transport(&self, quic_transport_conf: &mut TransportConfig) {
+        if let Some(initial_mtu) = self.initial_mtu {
+            quic_transport_conf.initial_mtu(initial_mtu);
+        }
+
+        if let Some(mtu_discovery_interval) =
+            self.mtu_discovery_interval_secs.map(Duration::from_secs)
+        {
+            let mut mtu_discovery_config = quinn::MtuDiscoveryConfig::default();
+            mtu_discovery_config.interval(mtu_discovery_interval);
+            quic_transport_conf.mtu_discovery_config(Some(mtu_discovery_config));
+        }
+    }
+}
+
+impl TryFrom<&Config<'_>> for QuicMtuConfig {
+    type Error = zenoh_result::Error;
+
+    fn try_from(config: &Config) -> ZResult<Self> {
+        let mut initial_mtu = None;
+        if let Some(v) = config.get(QUIC_INITIAL_MTU) {
+            initial_mtu = Some(v.parse::<u16>().map_err(|err| {
+                zerror!("could not parse QUIC endpoint's {QUIC_INITIAL_MTU} value `{v}`: {err}")
+            })?);
+        }
+
+        let mut mtu_discovery_interval_secs = None;
+        if let Some(interval_secs) = config.get(QUIC_MTU_DISCOVERY_INTERVAL) {
+            mtu_discovery_interval_secs = Some(interval_secs
+            .parse::<u64>()
+            .map_err(|err| {
+                zerror!(
+                    "could not parse QUIC endpoint's {QUIC_MTU_DISCOVERY_INTERVAL} value `{interval_secs}`: {err}"
+                )
+            })?);
+        }
+
+        Ok(Self {
+            initial_mtu,
+            mtu_discovery_interval_secs,
+        })
+    }
+}
+
+/// Helper wrapper for configuring QUIC transport
+pub(crate) struct QuicTransportConfigurator<'a>(pub(crate) &'a mut quinn::TransportConfig);
+
+impl QuicTransportConfigurator<'_> {
+    pub(crate) fn configure_max_concurrent_streams(
+        self,
+        multistream: Option<&MultiStreamConfig>,
+    ) -> Self {
+        if let Some(m) = multistream {
+            m.set_nb_concurrent_streams(self.0);
+        } else {
+            self.0.max_concurrent_bidi_streams(0u8.into());
+            self.0.max_concurrent_uni_streams(0u8.into());
+        }
+        self
+    }
+
+    pub(crate) fn configure_mtu(self, mtu_config: &QuicMtuConfig) -> Self {
+        mtu_config.apply_to_transport(self.0);
+        self
+    }
 }

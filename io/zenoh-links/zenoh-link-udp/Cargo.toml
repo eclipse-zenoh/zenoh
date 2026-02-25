@@ -26,13 +26,14 @@ version = { workspace = true }
 
 [dependencies]
 async-trait = { workspace = true }
+quinn = { workspace = true }
 socket2 = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "net", "rt", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-link-commons = { workspace = true }
+zenoh-link-commons = { workspace = true, features = ["unsecure_quic"] }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }

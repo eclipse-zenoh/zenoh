@@ -25,11 +25,11 @@ use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
     get_ip_interface_names, parse_dscp, set_dscp, ConstructibleLinkManagerUnicast, LinkAuthId,
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, LocatorInspector,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{Address, EndPoint, Locator},
+    core::{Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -39,7 +39,7 @@ use super::{
     get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
     UDP_MAX_MTU,
 };
-use crate::pktinfo;
+use crate::{pktinfo, reliability::LinkUnicastQuicUnsecure};
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);
@@ -122,9 +122,11 @@ impl LinkUnicastUdpUnconnected {
     }
 }
 
-enum LinkUnicastUdpVariant {
+#[allow(private_interfaces)]
+pub(crate) enum LinkUnicastUdpVariant {
     Connected(LinkUnicastUdpConnected),
     Unconnected(Arc<LinkUnicastUdpUnconnected>),
+    Reliable(Box<LinkUnicastQuicUnsecure>),
 }
 
 pub struct LinkUnicastUdp {
@@ -139,7 +141,7 @@ pub struct LinkUnicastUdp {
 }
 
 impl LinkUnicastUdp {
-    fn new(
+    pub(crate) fn new(
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         variant: LinkUnicastUdpVariant,
@@ -161,40 +163,56 @@ impl LinkUnicastTrait for LinkUnicastUdp {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.close().await,
             LinkUnicastUdpVariant::Unconnected(link) => {
-                link.close(self.src_addr, self.dst_addr).await
+                link.close(__self.src_addr, __self.dst_addr).await
+            }
+            LinkUnicastUdpVariant::Reliable(link) => {
+                link.close();
+                Ok(())
             }
         }
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize> {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.write(buffer).await,
             LinkUnicastUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
+            LinkUnicastUdpVariant::Reliable(link) => link.write(buffer, priority).await,
         }
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        let mut written: usize = 0;
-        while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()> {
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(link) => link.write_all(buffer, priority).await,
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => {
+                let mut written: usize = 0;
+                while written < buffer.len() {
+                    written += self.write(&buffer[written..], priority).await?;
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize> {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.read(buffer).await,
             LinkUnicastUdpVariant::Unconnected(link) => link.read(buffer).await,
+            LinkUnicastUdpVariant::Reliable(link) => link.read(buffer, priority).await,
         }
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let mut read: usize = 0;
-        while read < buffer.len() {
-            let n = self.read(&mut buffer[read..]).await?;
-            read += n;
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()> {
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(link) => link.read_exact(buffer, priority).await,
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => {
+                let mut read: usize = 0;
+                while read < buffer.len() {
+                    let n = self.read(&mut buffer[read..], priority).await?;
+                    read += n;
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     #[inline(always)]
@@ -209,7 +227,12 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        *UDP_DEFAULT_MTU
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(link) => link.get_mtu(),
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => {
+                *UDP_DEFAULT_MTU
+            }
+        }
     }
 
     #[inline(always)]
@@ -219,12 +242,28 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
-        super::IS_RELIABLE
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(_) => true,
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => {
+                super::IS_RELIABLE
+            }
+        }
     }
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        false
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(_) => true,
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => false,
+        }
+    }
+
+    #[inline(always)]
+    fn supports_priorities(&self) -> bool {
+        match &self.variant {
+            LinkUnicastUdpVariant::Reliable(link) => link.supports_priorities(),
+            LinkUnicastUdpVariant::Connected(_) | LinkUnicastUdpVariant::Unconnected(_) => false,
+        }
     }
 
     #[inline(always)]
@@ -250,8 +289,8 @@ impl fmt::Debug for LinkUnicastUdp {
 }
 
 pub struct LinkManagerUnicastUdp {
-    manager: NewLinkChannelSender,
-    listeners: ListenersUnicastIP,
+    pub(crate) manager: NewLinkChannelSender,
+    pub(crate) listeners: ListenersUnicastIP,
 }
 
 impl LinkManagerUnicastUdp {
@@ -369,11 +408,8 @@ impl LinkManagerUnicastUdp {
 
         Ok((socket, local_addr))
     }
-}
 
-#[async_trait]
-impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
-    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
+    async fn new_udp_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
@@ -423,7 +459,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         )
     }
 
-    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+    async fn new_udp_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_udp_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
@@ -474,6 +510,42 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             endpoint,
             errs
         )
+    }
+}
+
+#[async_trait]
+impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
+    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
+        let is_reliable = crate::UdpLocatorInspector
+            .is_reliable(&endpoint.to_locator())
+            .map_err(|e| {
+                zerror!("Failed to parse reliability config for UDP endpoint '{endpoint}': {e:?}")
+            })?;
+        if is_reliable {
+            let (quic_link, src_addr, dst_addr) =
+                LinkUnicastQuicUnsecure::connect(&endpoint).await?;
+            let link = LinkUnicastUdp::new(
+                src_addr,
+                dst_addr,
+                LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
+            );
+            Ok(LinkUnicast(Arc::new(link)))
+        } else {
+            self.new_udp_link(endpoint).await
+        }
+    }
+
+    async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+        let is_reliable = crate::UdpLocatorInspector
+            .is_reliable(&endpoint.to_locator())
+            .map_err(|e| {
+                zerror!("Failed to parse reliability config for UDP endpoint '{endpoint}': {e:?}")
+            })?;
+        if is_reliable {
+            LinkUnicastQuicUnsecure::listen(&endpoint, self).await
+        } else {
+            self.new_udp_listener(endpoint).await
+        }
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {

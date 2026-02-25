@@ -31,7 +31,7 @@ use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{endpoint::Address, EndPoint, Locator},
+    core::{endpoint::Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -123,7 +123,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -131,7 +131,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -139,7 +139,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -147,7 +147,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _ = self
             .get_mut_socket()
             .read_exact(buffer)
