@@ -140,14 +140,12 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
-    #[doc(hidden)]
-    #[deprecated = "congestion control cannot be set for reply"]
+    #[deprecated = "calling this function has no impact, replies will use the query congestion control"]
     fn congestion_control(self, _congestion_control: CongestionControl) -> Self {
         self
     }
 
-    #[doc(hidden)]
-    #[deprecated = "priority cannot be set for reply"]
+    #[deprecated = "calling this function has no impact, replies will use the query priority"]
     fn priority(self, _priority: Priority) -> Self {
         self
     }
