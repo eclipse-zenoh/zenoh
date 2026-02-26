@@ -183,11 +183,11 @@ async fn test_qos_overwrite_get_reply() {
     query.reply("a/test", "reply").express(false).await.unwrap();
     std::mem::drop(query);
     let reply = replies.recv_async().await.unwrap();
-    // Reply inherits the QoS of the query, which is overwritten
-    assert_eq!(reply.result().unwrap().priority(), Priority::RealTime);
+    // Reply inherits the QoS of the original query
+    assert_eq!(reply.result().unwrap().priority(), Priority::DataLow);
     assert_eq!(
         reply.result().unwrap().congestion_control(),
-        CongestionControl::Block
+        CongestionControl::Drop
     );
     assert!(!reply.result().unwrap().express());
 
@@ -211,7 +211,7 @@ async fn test_qos_overwrite_get_reply() {
     std::mem::drop(query);
 
     let reply = replies.recv_async().await.unwrap();
-    // Reply inherits the QoS of the query, which is not overwritten
+    // Reply inherits the QoS of the original query
     assert_eq!(reply.result().unwrap().priority(), Priority::DataLow);
     assert_eq!(
         reply.result().unwrap().congestion_control(),
