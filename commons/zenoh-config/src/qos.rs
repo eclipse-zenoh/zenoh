@@ -207,7 +207,6 @@ pub enum QosOverwriteMessage {
     Put,
     Delete,
     Query,
-    Reply,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]

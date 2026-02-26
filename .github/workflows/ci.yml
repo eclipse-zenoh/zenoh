@@ -27,10 +27,10 @@ env:
   # with plans for changes that REQUIRE a minor version bump as defined by the Cargo reference
   # (https://doc.rust-lang.org/cargo/reference/semver.html).
   # However, a minor release could be published without such changes, in which case this variable need not be changed.
-  CARGO_SEMVER_CHECKS_RELEASE_TYPE: patch
+  CARGO_SEMVER_CHECKS_RELEASE_TYPE: minor
   # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
   # version on crates.io. Thus this needs to be updated after every release.
-  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.3.0
+  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.7.2
   # Nightly toolchain identifier used by cargo invocations
   # Normally keep it "nightly" to always use the latest nightly, but in case of a regression in the Rust compiler, 
   # it can be useful to fix it to a specific nightly version that is known to work.

@@ -11,7 +11,10 @@ use zenoh_protocol::{
 };
 
 use crate::{
-    api::queryable::{Query, QueryInner, ReplyPrimitives},
+    api::{
+        queryable::{Query, QueryInner, ReplyPrimitives},
+        sample::QoS,
+    },
     net::primitives::Primitives,
 };
 
@@ -70,6 +73,7 @@ async fn test_reply_preserves_optimized_ke() {
         parameters: "".into(),
         qid: 1,
         zid: ZenohIdProto::default(),
+        qos: QoS::default(),
         #[cfg(feature = "unstable")]
         source_info: None,
         primitives: ReplyPrimitives::new_remote(Some(session.downgrade()), primitives.clone()),

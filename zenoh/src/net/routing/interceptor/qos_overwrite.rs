@@ -83,7 +83,6 @@ impl QosOverwriteFactory {
                 QosOverwriteMessage::Put => filter.put = true,
                 QosOverwriteMessage::Delete => filter.delete = true,
                 QosOverwriteMessage::Query => filter.query = true,
-                QosOverwriteMessage::Reply => filter.reply = true,
             }
         }
         filter.qos = conf.qos;
@@ -379,9 +378,6 @@ impl InterceptorTrait for QosInterceptor {
             NetworkBodyMut::Request(Request { ext_qos, .. }) => {
                 self.overwrite_qos(QosOverwriteMessage::Query, ext_qos);
             }
-            NetworkBodyMut::Response(Response { ext_qos, .. }) => {
-                self.overwrite_qos(QosOverwriteMessage::Reply, ext_qos);
-            }
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ext_qos,
@@ -397,6 +393,7 @@ impl InterceptorTrait for QosInterceptor {
                 self.overwrite_qos(QosOverwriteMessage::Delete, ext_qos);
             }
             // unaffected message types
+            NetworkBodyMut::Response(_) => {}
             NetworkBodyMut::ResponseFinal(_) => {}
             NetworkBodyMut::Declare(_) => {}
             NetworkBodyMut::Interest(_) => {}

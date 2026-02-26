@@ -47,9 +47,11 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
+    src_qos: response::ext::QoSType,
 }
 
 #[inline]
@@ -272,6 +274,7 @@ struct QueryCleanup {
     tables: Arc<TablesLock>,
     face: Weak<FaceState>,
     qid: RequestId,
+    qos: response::ext::QoSType,
     timeout: Duration,
 }
 
@@ -280,12 +283,14 @@ impl QueryCleanup {
         face: &Arc<FaceState>,
         tables_ref: &Arc<TablesLock>,
         qid: u32,
+        qos: response::ext::QoSType,
         timeout: Duration,
     ) {
         let mut cleanup = QueryCleanup {
             tables: tables_ref.clone(),
             face: Arc::downgrade(face),
             qid,
+            qos,
             timeout,
         };
         let queries_lock = zread!(tables_ref.queries_lock);
@@ -325,7 +330,7 @@ impl Timed for QueryCleanup {
                         ext_unknown: vec![],
                         payload: ZBuf::from("Timeout".as_bytes().to_vec()),
                     }),
-                    ext_qos: response::ext::QoSType::RESPONSE,
+                    ext_qos: self.qos,
                     ext_tstamp: None,
                     ext_respid,
                 },
@@ -423,6 +428,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 let query = Arc::new(Query {
                     src_face: face.clone(),
                     src_qid: msg.id,
+                    src_qos: msg.ext_qos,
                 });
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
@@ -450,13 +456,17 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                         .clone()
                         .send_response_final(&mut ResponseFinal {
                             rid: msg.id,
-                            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                            ext_qos: msg.ext_qos,
                             ext_tstamp: None,
                         });
                 } else {
                     for ((outface, key_expr, context), outqid) in route {
                         QueryCleanup::spawn_query_clean_up_task(
-                            &outface, tables_ref, outqid, timeout,
+                            &outface,
+                            tables_ref,
+                            outqid,
+                            msg.ext_qos,
+                            timeout,
                         );
 
                         tracing::trace!(
@@ -490,7 +500,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                     .clone()
                     .send_response_final(&mut ResponseFinal {
                         rid: msg.id,
-                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                        ext_qos: msg.ext_qos,
                         ext_tstamp: None,
                     });
             }
@@ -507,7 +517,7 @@ pub fn route_query(tables_ref: &Arc<TablesLock>, face: &Arc<FaceState>, msg: &mu
                 .clone()
                 .send_response_final(&mut ResponseFinal {
                     rid: msg.id,
-                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                    ext_qos: msg.ext_qos,
                     ext_tstamp: None,
                 });
         }
@@ -536,9 +546,9 @@ pub(crate) fn route_send_response(
             match face
                 .pending_queries
                 .get(&msg.rid)
-                .map(|(q, _)| (q.src_qid, q.src_face.clone()))
+                .map(|(q, _)| q.as_ref().clone())
             {
-                Some((src_rid, src_face)) => {
+                Some(query) => {
                     if let Some(expr) = expr {
                         // TODO: consider to optimize keyexpr for 2.0 ?
                         // Doing it now will break wire compatibility
@@ -558,17 +568,18 @@ pub(crate) fn route_send_response(
                         "{}:{} Route reply for query {}:{} ({})",
                         face,
                         msg.rid,
-                        src_face,
-                        src_rid,
+                        query.src_face,
+                        query.src_qid,
                         msg.wire_expr.suffix.as_ref()
                     );
                     drop(tables);
                     drop(queries_lock);
 
-                    msg.rid = src_rid;
-                    if src_face.primitives.send_response(msg) {
+                    msg.rid = query.src_qid;
+                    msg.ext_qos = query.src_qos;
+                    if query.src_face.primitives.send_response(msg) {
                         #[cfg(feature = "stats")]
-                        payload_observer.observe_payload(zenoh_stats::Tx, &src_face, msg);
+                        payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
                     }
                 }
                 None => tracing::warn!("{}:{} Route reply: Query not found!", face, msg.rid),
@@ -626,7 +637,7 @@ pub(crate) fn finalize_pending_query(query: (Arc<Query>, CancellationToken)) {
             .clone()
             .send_response_final(&mut ResponseFinal {
                 rid: query.src_qid,
-                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+                ext_qos: query.src_qos,
                 ext_tstamp: None,
             });
     }
