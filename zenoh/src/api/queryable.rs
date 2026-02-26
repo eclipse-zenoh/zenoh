@@ -472,6 +472,27 @@ impl Query {
             attachment: None,
         }
     }
+
+    /// Gets the Priority policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn priority(&self) -> crate::qos::Priority {
+        self.inner.qos.priority()
+    }
+
+    /// Gets the CongestionControl policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn congestion_control(&self) -> crate::qos::CongestionControl {
+        self.inner.qos.congestion_control()
+    }
+
+    /// Gets the Express policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn express(&self) -> bool {
+        self.inner.qos.express()
+    }
 }
 
 impl fmt::Debug for Query {

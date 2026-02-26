@@ -176,9 +176,9 @@ async fn test_qos_overwrite_get_reply() {
         .await
         .unwrap();
     let query = queryable.recv_async().await.unwrap();
-    //assert_eq!(query.priority(), Priority::RealTime);
-    //assert_eq!(query.congestion_control(), CongestionControl::Block);
-    //assert!(query.express());
+    assert_eq!(query.priority(), Priority::RealTime);
+    assert_eq!(query.congestion_control(), CongestionControl::Block);
+    assert!(query.express());
 
     query.reply("a/test", "reply").express(false).await.unwrap();
     std::mem::drop(query);
@@ -199,9 +199,9 @@ async fn test_qos_overwrite_get_reply() {
         .await
         .unwrap();
     let query = queryable.recv_async().await.unwrap();
-    //assert_eq!(query.priority(), Priority::RealTime);
-    //assert_eq!(query.congestion_control(), CongestionControl::Block);
-    //assert!(query.express());
+    assert_eq!(query.priority(), Priority::DataLow);
+    assert_eq!(query.congestion_control(), CongestionControl::Drop);
+    assert!(!query.express());
 
     query
         .reply("a/b/test", "reply")
