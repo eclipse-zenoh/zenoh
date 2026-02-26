@@ -28,7 +28,7 @@ publish = false
 
 [features]
 default = ["zenoh-ext/default", "zenoh/default"]
-shared-memory = ["zenoh/shared-memory"]
+shared-memory = ["talc", "zenoh-result", "zenoh-shm", "zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 
 [dependencies]
@@ -36,11 +36,14 @@ clap = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 prost = { workspace = true }
 serde_json = { workspace = true }
+talc = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["io-std", "rt-multi-thread", "time"] }
 zenoh = { workspace = true, default-features = false }
 zenoh-ext = { workspace = true, default-features = false, features = [
   "unstable",
 ] }
+zenoh-result = { workspace = true, optional = true }
+zenoh-shm = { workspace = true, optional = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -79,7 +82,7 @@ path = "examples/z_pub.rs"
 
 [[example]]
 name = "z_pub_shm"
-path = "examples/z_pub_shm.rs"
+path = "examples/shm/z_pub_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
@@ -88,7 +91,7 @@ path = "examples/z_sub.rs"
 
 [[example]]
 name = "z_sub_shm"
-path = "examples/z_sub_shm.rs"
+path = "examples/shm/z_sub_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
@@ -105,7 +108,7 @@ path = "examples/z_queryable.rs"
 
 [[example]]
 name = "z_queryable_shm"
-path = "examples/z_queryable_shm.rs"
+path = "examples/shm/z_queryable_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
@@ -118,7 +121,7 @@ path = "examples/z_get.rs"
 
 [[example]]
 name = "z_get_shm"
-path = "examples/z_get_shm.rs"
+path = "examples/shm/z_get_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
@@ -147,7 +150,7 @@ path = "examples/z_sub_thr.rs"
 
 [[example]]
 name = "z_pub_shm_thr"
-path = "examples/z_pub_shm_thr.rs"
+path = "examples/shm/z_pub_shm_thr.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
@@ -156,7 +159,7 @@ path = "examples/z_ping.rs"
 
 [[example]]
 name = "z_ping_shm"
-path = "examples/z_ping_shm.rs"
+path = "examples/shm/z_ping_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
@@ -165,15 +168,25 @@ path = "examples/z_pong.rs"
 
 [[example]]
 name = "z_alloc_shm"
-path = "examples/z_alloc_shm.rs"
+path = "examples/shm/z_alloc_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_bytes_shm"
-path = "examples/z_bytes_shm.rs"
+path = "examples/shm/z_bytes_shm.rs"
 required-features = ["shared-memory", "unstable"]
 
 [[example]]
 name = "z_posix_shm_provider"
-path = "examples/z_posix_shm_provider.rs"
+path = "examples/shm/z_posix_shm_provider.rs"
+required-features = ["shared-memory", "unstable"]
+
+[[example]]
+name = "z_custom_shm_provider"
+path = "examples/shm/z_custom_shm_provider.rs"
+required-features = ["shared-memory", "unstable"]
+
+[[example]]
+name = "z_shm_provider"
+path = "examples/shm/z_shm_provider.rs"
 required-features = ["shared-memory", "unstable"]
