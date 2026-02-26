@@ -27,17 +27,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
-use {
-    crate::api::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 #[cfg(feature = "unstable")]
 use crate::api::cancellation::SyncGroup;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
-#[zenoh_macros::unstable]
-use crate::api::selector::ZenohParameters;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
 use crate::{
@@ -47,8 +42,9 @@ use crate::{
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
+        query::ReplyKeyExpr,
         sample::{Locality, QoS, Sample, SampleKind},
-        selector::Selector,
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         session::{UndeclarableSealed, WeakSession},
         Id,
     },
@@ -441,7 +437,6 @@ impl Query {
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
     /// # }
-    #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
             if any {
@@ -451,9 +446,8 @@ impl Query {
             }
         })
     }
-    #[cfg(feature = "unstable")]
     fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().reply_key_expr_any())
+        Ok(self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM))
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.

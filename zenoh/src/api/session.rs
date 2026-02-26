@@ -81,7 +81,6 @@ use crate::{
     api::handlers::CallbackParameter,
     api::{
         cancellation::{CancellationToken, SyncGroup, SyncGroupNotifier},
-        query::ReplyKeyExpr,
         sample::SourceInfo,
         selector::ZenohParameters,
     },
@@ -111,7 +110,7 @@ use crate::{
         querier::QuerierState,
         query::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
-            Reply,
+            Reply, ReplyKeyExpr,
         },
         queryable::{Query, QueryInner, QueryableState, ReplyPrimitives},
         sample::{Locality, QoS, Sample, SampleKind},
@@ -1217,7 +1216,6 @@ impl Session {
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
             timeout: self.queries_default_timeout(),
-            #[cfg(feature = "unstable")]
             accept_replies: ReplyKeyExpr::default(),
         }
     }

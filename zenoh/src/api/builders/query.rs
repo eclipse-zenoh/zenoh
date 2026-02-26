@@ -23,9 +23,7 @@ use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::query::ReplyKeyExpr;
-#[cfg(feature = "unstable")]
-use crate::api::{sample::SourceInfo, selector::ZenohParameters};
+use crate::api::sample::SourceInfo;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
@@ -33,8 +31,9 @@ use crate::{
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         publisher::Priority,
+        query::ReplyKeyExpr,
         sample::{Locality, QoSBuilder},
-        selector::Selector,
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         session::Session,
     },
     bytes::OptionZBytes,
@@ -340,7 +339,6 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this get operation accepts such disjoint replies.
-    #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {
             if let Ok(Selector {
@@ -348,7 +346,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
                 mut parameters,
             }) = self.selector
             {
-                parameters.to_mut().set_reply_key_expr_any();
+                parameters.to_mut().insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
                 let selector = Ok(Selector {
                     key_expr,
                     parameters,
