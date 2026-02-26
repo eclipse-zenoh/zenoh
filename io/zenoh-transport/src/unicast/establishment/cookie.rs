@@ -45,6 +45,7 @@ pub(crate) struct Cookie {
     #[cfg(feature = "transport_compression")]
     pub(crate) ext_compression: ext::compression::StateAccept,
     pub(crate) ext_patch: ext::patch::StateAccept,
+    pub(crate) ext_region_name: ext::region_name::StateAccept,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -72,6 +73,7 @@ where
         #[cfg(feature = "transport_compression")]
         self.write(&mut *writer, &x.ext_compression)?;
         self.write(&mut *writer, &x.ext_patch)?;
+        self.write(&mut *writer, &x.ext_region_name)?;
 
         Ok(())
     }
@@ -81,7 +83,7 @@ impl<R> RCodec<Cookie, &mut R> for Zenoh080
 where
     R: Reader,
 {
-    type Error = DidntRead;
+    type Error = zenoh_result::Error;
 
     fn read(self, reader: &mut R) -> Result<Cookie, Self::Error> {
         let zid: ZenohIdProto = self.read(&mut *reader)?;
@@ -103,6 +105,7 @@ where
         #[cfg(feature = "transport_compression")]
         let ext_compression: ext::compression::StateAccept = self.read(&mut *reader)?;
         let ext_patch: ext::patch::StateAccept = self.read(&mut *reader)?;
+        let ext_region_name: ext::region_name::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             zid,
@@ -121,6 +124,7 @@ where
             #[cfg(feature = "transport_compression")]
             ext_compression,
             ext_patch,
+            ext_region_name,
         };
 
         Ok(cookie)
@@ -156,7 +160,7 @@ impl<R> RCodec<Cookie, &mut R> for &mut Zenoh080Cookie<'_>
 where
     R: Reader,
 {
-    type Error = DidntRead;
+    type Error = zenoh_result::Error;
 
     fn read(self, reader: &mut R) -> Result<Cookie, Self::Error> {
         let bytes: Vec<u8> = self.codec.read(&mut *reader)?;
@@ -193,6 +197,7 @@ impl Cookie {
             #[cfg(feature = "transport_compression")]
             ext_compression: ext::compression::StateAccept::rand(),
             ext_patch: ext::patch::StateAccept::rand(),
+            ext_region_name: ext::region_name::StateAccept::rand(),
         }
     }
 }

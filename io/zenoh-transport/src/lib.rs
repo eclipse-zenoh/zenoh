@@ -33,7 +33,7 @@ pub use manager::*;
 use serde::Serialize;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
@@ -112,6 +112,7 @@ pub struct TransportPeer {
     pub links: Vec<Link>,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
+    pub region_name: Option<RegionName>,
 }
 
 pub trait TransportPeerEventHandler: Send + Sync {

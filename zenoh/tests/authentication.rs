@@ -95,6 +95,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_link_protocols() {
+        zenoh_util::init_log_from_env_or("error");
         test_pub_sub_auth_link_protocol(1234).await
     }
 

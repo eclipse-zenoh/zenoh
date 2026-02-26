@@ -79,10 +79,10 @@ pub mod scouting {
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
-            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // "router"
-                &crate::WhatAmIMatcher::empty().router();
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
+            pub const client: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
             mode_accessor!(crate::WhatAmIMatcher);
         }
         pub mod autoconnect_strategy {
@@ -97,7 +97,7 @@ pub mod scouting {
         pub mod listen {
             pub const router: &bool = &true;
             pub const peer: &bool = &true;
-            pub const client: &bool = &false;
+            pub const client: &bool = &true;
             mode_accessor!(bool);
         }
     }
@@ -116,10 +116,10 @@ pub mod scouting {
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
                 &crate::WhatAmIMatcher::empty();
-            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher::empty().router().peer();
-            pub const client: &crate::WhatAmIMatcher = // ""
-                &crate::WhatAmIMatcher::empty();
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
+            pub const client: &crate::WhatAmIMatcher = // "router|peer|client"
+                &crate::WhatAmIMatcher::empty().router().peer().client();
             mode_accessor!(crate::WhatAmIMatcher);
         }
         pub mod autoconnect_strategy {
@@ -153,9 +153,6 @@ pub const queries_default_timeout: u64 = 10000;
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
 pub mod routing {
-    pub mod router {
-        pub const peers_failover_brokering: bool = true;
-    }
     pub mod peer {
         pub const mode: &str = "peer_to_peer";
     }

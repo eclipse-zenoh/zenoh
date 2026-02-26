@@ -94,18 +94,12 @@ pub struct OpenSyn {
     pub ext_mlink: Option<ext::MultiLinkSyn>,
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
+    pub ext_south: Option<ext::RemoteBound>,
 }
 
 // Extensions
 pub mod ext {
-    #[cfg(feature = "shared-memory")]
-    use crate::common::ZExtZ64;
-    #[cfg(feature = "shared-memory")]
-    use crate::zextz64;
-    use crate::{
-        common::{ZExtUnit, ZExtZBuf},
-        zextunit, zextzbuf,
-    };
+    use crate::{zextunit, zextz64, zextzbuf};
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
@@ -132,6 +126,10 @@ pub mod ext {
     /// # Compression extension
     /// Used to negotiate the use of compression on the link
     pub type Compression = zextunit!(0x6, false);
+
+    /// # RemoteBound extension
+    /// Used to indicate that the remote is on our south bound
+    pub type RemoteBound = zextz64!(0x7, false);
 }
 
 impl OpenSyn {
@@ -140,9 +138,7 @@ impl OpenSyn {
     pub fn rand() -> Self {
         use rand::Rng;
 
-        #[cfg(feature = "shared-memory")]
-        use crate::common::ZExtZ64;
-        use crate::common::{ZExtUnit, ZExtZBuf};
+        use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
         const MIN: usize = 32;
         const MAX: usize = 1_024;
@@ -164,6 +160,7 @@ impl OpenSyn {
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_south = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
 
         Self {
             lease,
@@ -176,6 +173,7 @@ impl OpenSyn {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         }
     }
 }
@@ -199,6 +197,7 @@ pub struct OpenAck {
     pub ext_mlink: Option<ext::MultiLinkAck>,
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
+    pub ext_south: Option<ext::RemoteBound>,
 }
 
 impl OpenAck {
@@ -207,9 +206,7 @@ impl OpenAck {
     pub fn rand() -> Self {
         use rand::Rng;
 
-        #[cfg(feature = "shared-memory")]
-        use crate::common::ZExtZ64;
-        use crate::common::{ZExtUnit, ZExtZBuf};
+        use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
         let mut rng = rand::thread_rng();
 
@@ -227,6 +224,7 @@ impl OpenAck {
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_south = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
 
         Self {
             lease,
@@ -238,6 +236,7 @@ impl OpenAck {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
+            ext_south,
         }
     }
 }

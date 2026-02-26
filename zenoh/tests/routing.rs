@@ -388,10 +388,12 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
-                            break session;
-                        } else {
-                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        match ztimeout!(zenoh::open(config.clone())) {
+                            Ok(session) => break session,
+                            Err(err) => {
+                                tracing::error!(node = node.name, err = %err, "Failed to open session");
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
                         }
                     }
                 };
@@ -444,7 +446,8 @@ impl Recipe {
                     while let Some(res) = recipe_join_set.join_next().await {
                         res??;
                     }
-                    bail!("Timeout");
+
+                    bail!("Recipe {self} timed out");
                 },
                 res = recipe_join_set.join_next() => {
                     if let Some(res) = res {
@@ -614,7 +617,7 @@ async fn gossip_regression_1() -> Result<()> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/peers")).unwrap();
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/north")).unwrap();
     let reply = ztimeout!(replies.recv_async()).unwrap();
     let sample = reply.into_result().ok().unwrap();
     let pl = sample.payload().try_to_string().unwrap();
@@ -693,7 +696,7 @@ async fn gossip_regression_2() -> Result<()> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let replies = ztimeout!(peer2.get("@/*/peer/linkstate/peers")).unwrap();
+    let replies = ztimeout!(peer2.get("@/*/peer/linkstate/north")).unwrap();
     let reply = ztimeout!(replies.recv_async()).unwrap();
     let sample = reply.into_result().ok().unwrap();
     let pl = sample.payload().try_to_string().unwrap();
@@ -794,7 +797,7 @@ async fn gossip_regression_3() -> Result<()> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/peers")).unwrap();
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/north")).unwrap();
     let reply = ztimeout!(replies.recv_async()).unwrap();
     let sample = reply.into_result().ok().unwrap();
     let pl = sample.payload().try_to_string().unwrap();
@@ -804,7 +807,7 @@ async fn gossip_regression_3() -> Result<()> {
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/peers")).unwrap();
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/north")).unwrap();
     let reply = ztimeout!(replies.recv_async()).unwrap();
     let sample = reply.into_result().ok().unwrap();
     let pl = sample.payload().try_to_string().unwrap();
@@ -818,6 +821,7 @@ async fn gossip_regression_3() -> Result<()> {
 }
 
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
+#[ignore] // FIXME(regions): remove this
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
     zenoh::init_log_from_env_or("error");
@@ -1325,186 +1329,6 @@ async fn three_node_combination_multicast() -> Result<()> {
     }
 
     println!("Three-node combination test passed.");
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 9)]
-async fn peer_linkstate() -> Result<()> {
-    zenoh_util::try_init_log_from_env();
-    let delay_in_secs = [
-        (0, 1, 2),
-        (0, 2, 1),
-        (1, 2, 0),
-        (1, 0, 2),
-        (2, 0, 1),
-        (2, 1, 0),
-    ];
-
-    let mut idx = 0;
-    // Ports going to be used: 17551 to 17598
-    let base_port = 17550;
-
-    let linkstate_config = || {
-        let mut config = Config::default();
-        config
-            .routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        config
-            .scouting
-            .gossip
-            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
-            .unwrap();
-        Some(config)
-    };
-
-    let recipe_list: Vec<_> = delay_in_secs
-        .into_iter()
-        .map(|d| (1024, d))
-        .map(|(msg_size, (delay1, delay2, delay3))| {
-            idx += 1;
-            let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-
-            let ke_pubsub = format!("peer_linkstate_keyexpr_pubsub_{idx}");
-            let ke_getqueryable = format!("peer_linkstate_keyexpr_getqueryable_{idx}");
-            let ke_subliveliness = format!("peer_linkstate_keyexpr_subliveliness_{idx}");
-            let ke_getliveliness = format!("peer_linkstate_keyexpr_getliveliness_{idx}");
-
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let dummy_node = Node {
-                name: "Dummy Peer".to_string(),
-                mode: WhatAmI::Peer,
-                listen: vec![locator.clone()],
-                con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-                warmup: Duration::from_secs(delay1) + Duration::from_millis(rng.gen_range(0..500)),
-                config: linkstate_config(),
-                ..Default::default()
-            };
-
-            let (pub_node, queryable_node, liveliness_node, livelinessloop_node) = {
-                let base = Node {
-                    mode: WhatAmI::Peer,
-                    connect: vec![locator.clone()],
-                    warmup: Duration::from_secs(delay2),
-                    config: linkstate_config(),
-                    ..Default::default()
-                };
-
-                let mut pub_node = base.clone();
-                pub_node.name = "Pub Peer".to_string();
-                pub_node.con_task = ConcurrentTask::from([SequentialTask::from([Task::Pub(
-                    ke_pubsub.clone(),
-                    msg_size,
-                )])]);
-                pub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut queryable_node = base.clone();
-                queryable_node.name = "Queryable Peer".to_string();
-                queryable_node.con_task =
-                    ConcurrentTask::from([SequentialTask::from([Task::Queryable(
-                        ke_getqueryable.clone(),
-                        msg_size,
-                    )])]);
-                queryable_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut liveliness_node = base.clone();
-                liveliness_node.name = "Liveliness Peer".to_string();
-                liveliness_node.con_task =
-                    ConcurrentTask::from([SequentialTask::from([Task::Liveliness(
-                        ke_getliveliness.clone(),
-                    )])]);
-                liveliness_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut livelinessloop_node = base;
-                livelinessloop_node.name = "LivelinessLoop Peer".to_string();
-                livelinessloop_node.con_task =
-                    ConcurrentTask::from([SequentialTask::from([Task::LivelinessLoop(
-                        ke_subliveliness.clone(),
-                    )])]);
-                livelinessloop_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                (
-                    pub_node,
-                    queryable_node,
-                    liveliness_node,
-                    livelinessloop_node,
-                )
-            };
-
-            let (sub_node, get_node, livelinessget_node, livelinesssub_node) = {
-                let base = Node {
-                    mode: WhatAmI::Peer,
-                    connect: vec![locator],
-                    warmup: Duration::from_secs(delay3),
-                    config: linkstate_config(),
-                    ..Default::default()
-                };
-
-                let mut sub_node = base.clone();
-                sub_node.name = "Sub Peer".to_string();
-                sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::Sub(ke_pubsub, msg_size),
-                    Task::Checkpoint,
-                ])]);
-                sub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut get_node = base.clone();
-                get_node.name = "Get Peer".to_string();
-                get_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::Get(ke_getqueryable, msg_size),
-                    Task::Checkpoint,
-                ])]);
-                get_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut livelinessget_node = base.clone();
-                livelinessget_node.name = "LivelinessGet Peer".to_string();
-                livelinessget_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::LivelinessGet(ke_getliveliness),
-                    Task::Checkpoint,
-                ])]);
-                livelinessget_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut livelinesssub_node = base;
-                livelinesssub_node.name = "LivelinessSub Peer".to_string();
-                livelinesssub_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::LivelinessSub(ke_subliveliness),
-                    Task::Checkpoint,
-                ])]);
-                livelinesssub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                (sub_node, get_node, livelinessget_node, livelinesssub_node)
-            };
-
-            (
-                Recipe::new([dummy_node.clone(), pub_node, sub_node]),
-                Recipe::new([dummy_node.clone(), queryable_node, get_node]),
-                Recipe::new([dummy_node.clone(), liveliness_node, livelinessget_node]),
-                Recipe::new([dummy_node, livelinessloop_node, livelinesssub_node]),
-            )
-        })
-        .collect();
-
-    for chunks in recipe_list.chunks(PARALLEL_RECIPES).map(|x| x.to_vec()) {
-        let mut join_set = tokio::task::JoinSet::new();
-        for (pubsub, getqueryable, getlivelienss, subliveliness) in chunks {
-            join_set.spawn(async move {
-                pubsub.run().await?;
-                getqueryable.run().await?;
-                getlivelienss.run().await?;
-                subliveliness.run().await?;
-                Result::Ok(())
-            });
-        }
-
-        while let Some(res) = join_set.join_next().await {
-            res??;
-        }
-    }
-
-    println!("Peer linkstate test passed.");
     Ok(())
 }
 

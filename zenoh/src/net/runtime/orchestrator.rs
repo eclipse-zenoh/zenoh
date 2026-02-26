@@ -100,7 +100,7 @@ impl StartConditions {
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.terminated = true;
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
@@ -115,7 +115,7 @@ impl StartConditions {
                 terminated: true,
             })
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
@@ -131,9 +131,15 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
-            let guard = &self.state.config.lock().0;
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
+            let guard = &self.state.config.lock();
             (
+                guard
+                    .listen()
+                    .endpoints()
+                    .client()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 guard
                     .connect()
                     .endpoints()
@@ -141,6 +147,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().listen().client()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
@@ -148,47 +155,55 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
-        match peers.len() {
-            0 => {
-                if scouting {
-                    tracing::info!("Scouting...");
-                    let ifaces = Runtime::get_interfaces(&ifaces);
-                    if ifaces.is_empty() {
-                        bail!("Unable to find multicast interface!")
+
+        self.bind_listeners(&listeners).await?;
+
+        if scouting {
+            if listen || peers.is_empty() {
+                let ifaces = Runtime::get_interfaces(&ifaces);
+                let mcast_socket = if listen {
+                    Some(Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?)
+                } else {
+                    None
+                };
+                if ifaces.is_empty() {
+                    bail!("Unable to find multicast interface!")
+                } else {
+                    let sockets: Vec<UdpSocket> = ifaces
+                        .into_iter()
+                        .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
+                        .collect();
+                    if sockets.is_empty() {
+                        bail!("Unable to bind UDP port to any multicast interface!")
                     } else {
-                        let sockets: Vec<UdpSocket> = ifaces
-                            .into_iter()
-                            .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                            .collect();
-                        if sockets.is_empty() {
-                            bail!("Unable to bind UDP port to any multicast interface!")
-                        } else {
+                        if peers.is_empty() {
                             self.connect_first(&sockets, autoconnect, &addr, timeout)
-                                .await
+                                .await?
+                        }
+                        if let Some(mcast_socket) = mcast_socket {
+                            let this = self.clone();
+                            self.spawn_abortable(async move {
+                                this.responder(&mcast_socket, &sockets).await;
+                            });
                         }
                     }
-                } else {
-                    bail!("No peer specified and multicast scouting deactivated!")
                 }
             }
-            _ => self.connect_peers(&peers, true).await,
+            if !peers.is_empty() {
+                self.connect_peers(&peers, true).await
+            } else {
+                Ok(())
+            }
+        } else if peers.is_empty() {
+            bail!("No peer specified and multicast scouting deactivated!")
+        } else {
+            self.connect_peers(&peers, true).await
         }
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (
-            listeners,
-            peers,
-            scouting,
-            wait_scouting,
-            listen,
-            autoconnect,
-            addr,
-            ifaces,
-            delay,
-            linkstate,
-        ) = {
-            let guard = &self.state.config.lock().0;
+        let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
+            let guard = &self.state.config.lock();
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
                 guard
@@ -204,7 +219,6 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
-                unwrap_or_default!(guard.routing().peer().mode()) == *"linkstate",
             )
         };
 
@@ -216,9 +230,7 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if linkstate {
-            tokio::time::sleep(delay).await;
-        } else if wait_scouting
+        if wait_scouting
             && (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
@@ -232,7 +244,7 @@ impl Runtime {
 
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = &self.state.config.lock().0;
+            let guard = &self.state.config.lock();
             (
                 guard
                     .listen()
@@ -276,7 +288,7 @@ impl Runtime {
     ) -> ZResult<()> {
         let multicast_ttl = {
             let config_guard = self.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
         let ifaces = Runtime::get_interfaces(&ifaces);
@@ -430,28 +442,28 @@ impl Runtime {
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), true)
     }
 
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_listener_timeout(guard)
     }
 
     fn get_global_connect_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_connect_timeout(guard)
     }
 
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
         if listeners.is_empty() {
-            tracing::warn!("Starting with no listener endpoints!");
+            tracing::debug!("Starting with no listener endpoints!");
             return Ok(());
         }
         let timeout = self.get_global_listener_timeout();
@@ -653,7 +665,7 @@ impl Runtime {
                 }
             }
         }
-        tracing::info!("zenohd listening scout messages on {}", sockaddr);
+        tracing::info!("Listening scout messages on {}", sockaddr);
 
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
@@ -714,7 +726,7 @@ impl Runtime {
             let this = self.clone();
             let idx = self.state.start_conditions.add_peer_connector().await;
             let config_guard = this.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
             let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
@@ -942,7 +954,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(self.whatami())
@@ -1081,7 +1092,7 @@ impl Runtime {
                         return Loop::Break;
                     }
                 } else {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -1110,7 +1121,7 @@ impl Runtime {
             addr,
             move |hello| async move {
                 if hello.locators.is_empty() {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
                     self.connect_peer(&hello.zid, &hello.locators).await;
                 }
@@ -1215,7 +1226,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
@@ -1251,7 +1261,6 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
@@ -1270,16 +1279,21 @@ impl Runtime {
     pub(crate) fn update_network(&self) -> ZResult<()> {
         let router = self.router();
         let _ctrl_lock = zlock!(router.tables.ctrl_lock);
-        let mut tables = zwrite!(router.tables.tables);
-        router
-            .tables
-            .hat_code
-            .update_from_config(&mut tables, &router.tables, self)
+        let mut wtables = zwrite!(router.tables.tables);
+        let tables = &mut *wtables;
+        for hat in tables.hats.values_mut() {
+            hat.update_from_config(&router.tables, self)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        router.tables.hat_code.links_info(&tables)
+        tables
+            .hats
+            .values()
+            .flat_map(|hat| hat.links_info().into_iter())
+            .collect()
     }
 }

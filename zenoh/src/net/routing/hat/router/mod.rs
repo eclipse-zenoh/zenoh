@@ -19,51 +19,51 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
     any::Any,
-    collections::{hash_map::DefaultHasher, HashMap, HashSet},
-    hash::Hasher,
-    mem,
-    sync::{atomic::AtomicU32, Arc},
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    iter, mem,
+    sync::Arc,
 };
 
-use token::{token_linkstate_change, token_remove_node, undeclare_simple_token};
+use itertools::Itertools;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::ZenohIdProto,
+    core::{Region, ZenohIdProto},
     network::{
-        declare::{queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-        interest::InterestId,
-        oam::id::OAM_LINKSTATE,
+        declare::queryable::ext::QueryableInfoType, interest::InterestId, oam::id::OAM_LINKSTATE,
         Oam,
     },
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
-use zenoh_task::TerminatableTask;
+use zenoh_task::{TaskController, TerminatableTask};
 use zenoh_transport::unicast::TransportUnicast;
 
-use self::{
-    pubsub::{pubsub_linkstate_change, pubsub_remove_node, undeclare_simple_subscription},
-    queries::{queries_linkstate_change, queries_remove_node, undeclare_simple_queryable},
-};
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
+        tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
     },
     HatBaseTrait, HatTrait, SendDeclare,
 };
 use crate::net::{
     codec::Zenoh080Routing,
     protocol::{
-        linkstate::{link_weights_from_config, LinkEdgeWeight, LinkStateList},
-        network::{shared_nodes, Network},
-        PEERS_NET_NAME, ROUTERS_NET_NAME,
+        linkstate::{link_weights_from_config, LinkStateList},
+        network::{LinkId, Network},
+        ROUTERS_NET_NAME,
     },
     routing::{
-        dispatcher::{face::Face, interests::RemoteInterest},
-        hat::TREES_COMPUTATION_DELAY_MS,
-        router::{LocalQueryables, LocalSubscribers},
+        dispatcher::{
+            self,
+            face::InterestState,
+            interests::{PendingCurrentInterest, RemoteInterest},
+            queries::merge_qabl_infos,
+            region::RegionMap,
+        },
+        hat::{DispatcherContext, Remote, TREES_COMPUTATION_DELAY_MS},
+        router::DEFAULT_NODE_ID,
     },
     runtime::Runtime,
 };
@@ -73,55 +73,6 @@ mod pubsub;
 mod queries;
 mod token;
 
-// Interest id used for Pushed declarations without declare final to other routers/linkstate peers
-const INITIAL_INTEREST_ID: u32 = 0;
-
-macro_rules! hat {
-    ($t:expr) => {
-        $t.hat.downcast_ref::<HatTables>().unwrap()
-    };
-}
-use hat;
-
-macro_rules! hat_mut {
-    ($t:expr) => {
-        $t.hat.downcast_mut::<HatTables>().unwrap()
-    };
-}
-use hat_mut;
-
-macro_rules! res_hat {
-    ($r:expr) => {
-        $r.context().hat.downcast_ref::<HatContext>().unwrap()
-    };
-}
-use res_hat;
-
-macro_rules! res_hat_mut {
-    ($r:expr) => {
-        get_mut_unchecked($r)
-            .context_mut()
-            .hat
-            .downcast_mut::<HatContext>()
-            .unwrap()
-    };
-}
-use res_hat_mut;
-
-macro_rules! face_hat {
-    ($f:expr) => {
-        $f.hat.downcast_ref::<HatFace>().unwrap()
-    };
-}
-use face_hat;
-
-macro_rules! face_hat_mut {
-    ($f:expr) => {
-        get_mut_unchecked($f).hat.downcast_mut::<HatFace>().unwrap()
-    };
-}
-use face_hat_mut;
-
 use crate::net::{common::AutoConnect, protocol::network::SuccessorEntry};
 
 struct TreesComputationWorker {
@@ -130,7 +81,7 @@ struct TreesComputationWorker {
 }
 
 impl TreesComputationWorker {
-    fn new(net_type: WhatAmI) -> Self {
+    fn new(region: Region) -> Self {
         let (tx, rx) = flume::bounded::<Arc<TablesLock>>(1);
         let task = TerminatableTask::spawn_abortable(zenoh_runtime::ZRuntime::Net, async move {
             loop {
@@ -139,28 +90,22 @@ impl TreesComputationWorker {
                 ))
                 .await;
                 if let Ok(tables_ref) = rx.recv_async().await {
-                    let mut tables = zwrite!(tables_ref.tables);
+                    let mut wtables = zwrite!(tables_ref.tables);
+                    let tables = &mut *wtables;
+                    let hat = tables.hats[region]
+                        .as_any_mut()
+                        .downcast_mut::<Hat>()
+                        .unwrap();
 
                     tracing::trace!("Compute trees");
-                    let new_children = match net_type {
-                        WhatAmI::Router => hat_mut!(tables)
-                            .routers_net
-                            .as_mut()
-                            .unwrap()
-                            .compute_trees(),
-                        _ => hat_mut!(tables)
-                            .linkstatepeers_net
-                            .as_mut()
-                            .unwrap()
-                            .compute_trees(),
-                    };
+                    let new_children = hat.net_mut().compute_trees();
 
                     tracing::trace!("Compute routes");
-                    pubsub::pubsub_tree_change(&mut tables, &new_children, net_type);
-                    queries::queries_tree_change(&mut tables, &new_children, net_type);
-                    token::token_tree_change(&mut tables, &new_children, net_type);
-                    tables.disable_all_routes();
-                    drop(tables);
+                    hat.pubsub_tree_change(&mut tables.data, &new_children);
+                    hat.queries_tree_change(&mut tables.data, &new_children);
+                    hat.token_tree_change(&mut tables.data, &new_children);
+                    tables.data.disable_all_routes();
+                    drop(wtables);
                 }
             }
         });
@@ -168,164 +113,212 @@ impl TreesComputationWorker {
     }
 }
 
-struct HatTables {
+pub(crate) struct Hat {
+    region: Region,
     router_subs: HashSet<Arc<Resource>>,
-    linkstatepeer_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
-    linkstatepeer_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
-    linkstatepeer_qabls: HashSet<Arc<Resource>>,
-    routers_net: Option<Network>,
-    linkstatepeers_net: Option<Network>,
-    shared_nodes: Vec<ZenohIdProto>,
+    #[allow(dead_code)] // FIXME(regions)
+    next_interest_id: InterestId,
+    #[allow(dead_code)] // FIXME(regions)
+    router_local_interests: HashMap<InterestId, InterestState>,
+    router_pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
+    /// Interests declared by nodes in this router's subregions.
+    ///
+    /// Interest mode can only be one of:
+    /// - [`zenoh_protocol::network::interest::InterestMode::Future`]
+    /// - [`zenoh_protocol::network::interest::InterestMode::CurrentFuture`]
+    #[allow(dead_code)] // FIXME(regions)
+    router_remote_interests: HashMap<(ZenohIdProto, InterestId), RemoteInterest>,
+    task_controller: TaskController,
+    routers_net: Option<Network>, // TODO(regions): remove Option?
     routers_trees_worker: TreesComputationWorker,
-    linkstatepeers_trees_worker: TreesComputationWorker,
-    router_peers_failover_brokering: bool,
 }
 
-impl HatTables {
-    fn new(router_peers_failover_brokering: bool) -> Self {
+impl Debug for Hat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.region)
+    }
+}
+
+impl Hat {
+    pub(crate) fn new(region: Region) -> Self {
+        // FIXME(regions): peer failover brokering is scrapped
         Self {
+            region,
             router_subs: HashSet::new(),
-            linkstatepeer_subs: HashSet::new(),
             router_qabls: HashSet::new(),
-            linkstatepeer_qabls: HashSet::new(),
             router_tokens: HashSet::new(),
-            linkstatepeer_tokens: HashSet::new(),
             routers_net: None,
-            linkstatepeers_net: None,
-            shared_nodes: vec![],
-            routers_trees_worker: TreesComputationWorker::new(WhatAmI::Router),
-            linkstatepeers_trees_worker: TreesComputationWorker::new(WhatAmI::Peer),
-            router_peers_failover_brokering,
+            routers_trees_worker: TreesComputationWorker::new(region),
+            router_local_interests: HashMap::new(),
+            router_pending_current_interests: HashMap::new(),
+            router_remote_interests: HashMap::new(),
+            next_interest_id: 1,
+            task_controller: TaskController::default(),
         }
     }
 
-    #[inline]
-    fn get_net(&self, net_type: WhatAmI) -> Option<&Network> {
-        match net_type {
-            WhatAmI::Router => self.routers_net.as_ref(),
-            WhatAmI::Peer => self.linkstatepeers_net.as_ref(),
-            _ => None,
+    pub(crate) fn net(&self) -> &Network {
+        self.routers_net.as_ref().unwrap()
+    }
+
+    pub(crate) fn net_mut(&mut self) -> &mut Network {
+        self.routers_net.as_mut().unwrap()
+    }
+
+    pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
+        res.context().hats[self.region].ctx.downcast_ref().unwrap()
+    }
+
+    pub(self) fn res_hat_mut<'r>(&self, res: &'r mut Arc<Resource>) -> &'r mut HatContext {
+        get_mut_unchecked(res).context_mut().hats[self.region]
+            .ctx
+            .downcast_mut()
+            .unwrap()
+    }
+
+    #[allow(dead_code)] // FIXME(regions)
+    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
+        remote.as_any().downcast_ref().unwrap()
+    }
+
+    pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
+        face_state.hats[self.region].downcast_ref().unwrap()
+    }
+
+    pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
+        get_mut_unchecked(face_state).hats[self.region]
+            .downcast_mut()
+            .unwrap()
+    }
+
+    pub(crate) fn face<'t>(
+        &self,
+        tables: &'t TablesData,
+        zid: &ZenohIdProto,
+    ) -> Option<&'t Arc<FaceState>> {
+        tables.faces.values().find(|face| face.zid == *zid)
+    }
+
+    #[allow(dead_code)] // FIXME(regions)
+    /// Identifies the gateway of this hat's region (if any).
+    pub(crate) fn region_gateway(&self) -> Option<NodeId> {
+        // TODO(regions2): elect the primary gateway
+        let net = self.net();
+        let mut gwys = net.graph.node_indices().filter(|idx| {
+            tracing::trace!(
+                zid = %net.graph[*idx].zid.short(),
+                is_gwy = net.graph[*idx].is_gateway,
+                "Gateway candidate node"
+            );
+            net.graph[*idx].is_gateway
+        });
+
+        let gwy = gwys.next()?;
+
+        if gwys.next().is_some() {
+            tracing::error!(
+                bound = ?self.region,
+                total = gwys.count() + 2,
+                selected = ?net.graph[gwy].zid,
+                "Multiple gateways found in router subregion. \
+                Only one gateway per subregion is supported. \
+                Selecting arbitrary gateway"
+            );
+        }
+
+        Some(gwy.index() as NodeId)
+    }
+
+    /// Find the next hop in the point-to-point route ending at `dst_nid`.
+    ///
+    /// This works by exploiting the following property of linkstate routing:
+    /// [`crate::net::protocol::network::Tree::directions`] contains routes
+    /// up the spanning tree root.
+    fn point_to_point_hop(&self, tables: &TablesData, dst_nid: NodeId) -> Option<Arc<FaceState>> {
+        let net = self.net();
+        let tree = net.trees.get(dst_nid as usize)?;
+        let next_hop_node_id = tree.directions.get(dst_nid as usize)?.as_ref()?;
+        let next_hop = net
+            .graph
+            .node_weight(*next_hop_node_id)
+            .map(|node| &node.zid)?;
+        self.face(tables, next_hop).cloned()
+    }
+
+    /// Sends a network message to the router identified by `dst_node_id`.
+    #[allow(dead_code)] // FIXME(regions)
+    pub(crate) fn send_point_to_point(
+        &self,
+        ctx: DispatcherContext,
+        dst_node_id: NodeId,
+        mut send_message: impl FnMut(&Arc<FaceState>),
+    ) {
+        let Some(next_hop) = self.point_to_point_hop(ctx.tables, dst_node_id) else {
+            tracing::error!("Unable to find next-hop face in point-to-point route");
+            return;
+        };
+        send_message(&next_hop);
+    }
+
+    /// Sends a declare message to the router identified by `dst_node_id`.
+    ///
+    /// See also: [`Self::point_to_point_hop`].
+    #[allow(dead_code)] // FIXME(regions)
+    pub(crate) fn send_declare_point_to_point(
+        &self,
+        ctx: DispatcherContext,
+        dst_node_id: NodeId,
+        mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
+    ) {
+        let Some(next_hop) = self.point_to_point_hop(ctx.tables, dst_node_id) else {
+            tracing::error!("Unable to find next-hop face in point-to-point route");
+            return;
+        };
+        send_message(ctx.send_declare, &next_hop)
+    }
+
+    fn schedule_compute_trees(&self, tables_ref: Arc<TablesLock>) {
+        tracing::trace!("Schedule trees computation");
+        if let Err(err) = self.routers_trees_worker.tx.try_send(tables_ref) {
+            tracing::trace!(%err, "Failed to schedule routing tree computation");
         }
     }
 
-    #[inline]
-    fn full_net(&self, net_type: WhatAmI) -> bool {
-        match net_type {
-            WhatAmI::Router => self
-                .routers_net
-                .as_ref()
-                .map(|net| net.full_linkstate)
-                .unwrap_or(false),
-            WhatAmI::Peer => self
-                .linkstatepeers_net
-                .as_ref()
-                .map(|net| net.full_linkstate)
-                .unwrap_or(false),
-            _ => false,
-        }
-    }
-
-    #[inline]
-    fn get_router_links(&self, peer: ZenohIdProto) -> impl Iterator<Item = &ZenohIdProto> + '_ {
-        self.linkstatepeers_net
+    fn get_router(&self, face: &FaceState, nodeid: NodeId) -> Option<ZenohIdProto> {
+        match self
+            .routers_net
             .as_ref()
             .unwrap()
-            .get_links(peer)
-            .map(|h| h.keys())
-            .into_iter()
-            .flatten()
-            .filter(move |nid| {
-                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
-                    node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
-                } else {
-                    false
+            .get_link(self.face_hat(face).link_id)
+        {
+            Some(link) => match link.get_zid(&(nodeid as u64)) {
+                Some(router) => Some(*router),
+                None => {
+                    tracing::error!(
+                        "Received router declaration with unknown routing context id {}",
+                        nodeid
+                    );
+                    None
                 }
-            })
-    }
-
-    #[inline]
-    fn elect_router<'a>(
-        &'a self,
-        self_zid: &'a ZenohIdProto,
-        key_expr: &str,
-        mut routers: impl Iterator<Item = &'a ZenohIdProto>,
-    ) -> &'a ZenohIdProto {
-        match routers.next() {
-            None => self_zid,
-            Some(router) => {
-                let hash = |r: &ZenohIdProto| {
-                    let mut hasher = DefaultHasher::new();
-                    for b in key_expr.as_bytes() {
-                        hasher.write_u8(*b);
-                    }
-                    for b in &r.to_le_bytes()[..r.size()] {
-                        hasher.write_u8(*b);
-                    }
-                    hasher.finish()
-                };
-                let mut res = router;
-                let mut h = None;
-                for router2 in routers {
-                    let h2 = hash(router2);
-                    if h2 > *h.get_or_insert_with(|| hash(res)) {
-                        res = router2;
-                        h = Some(h2);
-                    }
-                }
-                res
+            },
+            None => {
+                tracing::error!(
+                    "Could not find corresponding link in routers network for {}",
+                    face
+                );
+                None
             }
-        }
-    }
-
-    #[inline]
-    fn failover_brokering_to(
-        source_links: &HashMap<ZenohIdProto, LinkEdgeWeight>,
-        dest: &ZenohIdProto,
-    ) -> bool {
-        // if source_links is empty then gossip is probably disabled in source peer
-        !source_links.is_empty() && !source_links.contains_key(dest)
-    }
-
-    #[inline]
-    fn failover_brokering(&self, peer1: ZenohIdProto, peer2: ZenohIdProto) -> bool {
-        self.router_peers_failover_brokering
-            && self
-                .linkstatepeers_net
-                .as_ref()
-                .map(|net| {
-                    let res = match net.get_links(peer1) {
-                        Some(links) => HatTables::failover_brokering_to(links, &peer2),
-                        None => false,
-                    };
-                    tracing::trace!("failover_brokering {} {} : {}", peer1, peer2, res);
-                    res
-                })
-                .unwrap_or(false)
-    }
-
-    fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
-        tracing::trace!("Schedule trees computation");
-        match net_type {
-            WhatAmI::Router => {
-                let _ = self.routers_trees_worker.tx.try_send(tables_ref);
-            }
-            WhatAmI::Peer => {
-                let _ = self.linkstatepeers_trees_worker.tx.try_send(tables_ref);
-            }
-            _ => (),
         }
     }
 }
 
-pub(crate) struct HatCode {}
-
-impl HatBaseTrait for HatCode {
-    fn init(&self, tables: &mut Tables, runtime: Runtime) -> ZResult<()> {
+impl HatBaseTrait for Hat {
+    fn init(&mut self, tables: &mut TablesData, runtime: Runtime) -> ZResult<()> {
         let config_guard = runtime.config().lock();
-        let config = &config_guard.0;
-        let whatami = tables.whatami;
+        let config = &config_guard;
+        let whatami = config.mode();
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
         let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
@@ -338,64 +331,27 @@ impl HatBaseTrait for HatCode {
             AutoConnect::disabled()
         };
 
-        let router_full_linkstate = true;
-        let peer_full_linkstate =
-            unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
-        let router_peers_failover_brokering =
-            unwrap_or_default!(config.routing().router().peers_failover_brokering());
         let router_link_weights = config
             .routing()
             .router()
             .linkstate()
             .transport_weights()
             .clone();
-        let peer_link_weights = config
-            .routing()
-            .peer()
-            .linkstate()
-            .transport_weights()
-            .clone();
         drop(config_guard);
 
-        if router_full_linkstate | gossip {
-            hat_mut!(tables).routers_net = Some(Network::new(
-                ROUTERS_NET_NAME.to_string(),
-                tables.zid,
-                runtime.clone(),
-                router_full_linkstate,
-                router_peers_failover_brokering,
-                gossip,
-                gossip_multihop,
-                gossip_target,
-                autoconnect,
-                link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
-            ));
-        }
-        if peer_full_linkstate | gossip {
-            hat_mut!(tables).linkstatepeers_net = Some(Network::new(
-                PEERS_NET_NAME.to_string(),
-                tables.zid,
-                runtime,
-                peer_full_linkstate,
-                router_peers_failover_brokering,
-                gossip,
-                gossip_multihop,
-                gossip_target,
-                autoconnect,
-                link_weights_from_config(peer_link_weights, PEERS_NET_NAME)?,
-            ));
-        }
-        if router_full_linkstate && peer_full_linkstate {
-            hat_mut!(tables).shared_nodes = shared_nodes(
-                hat!(tables).routers_net.as_ref().unwrap(),
-                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
-            );
-        }
+        self.routers_net = Some(Network::new(
+            ROUTERS_NET_NAME.to_string(),
+            tables.zid,
+            runtime.clone(),
+            true,
+            gossip,
+            gossip_multihop,
+            gossip_target,
+            autoconnect,
+            link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
+            &self.region,
+        ));
         Ok(())
-    }
-
-    fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
-        Box::new(HatTables::new(router_peers_failover_brokering))
     }
 
     fn new_face(&self) -> Box<dyn Any + Send + Sync> {
@@ -406,344 +362,175 @@ impl HatBaseTrait for HatCode {
         Box::new(HatContext::new())
     }
 
+    fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote> {
+        self.get_router(face, nid).map(|zid| Remote(Box::new(zid)))
+    }
+
     fn new_local_face(
-        &self,
-        _tables: &mut Tables,
+        &mut self,
+        _ctx: DispatcherContext,
         _tables_ref: &Arc<TablesLock>,
-        _face: &mut Face,
-        _send_declare: &mut SendDeclare,
     ) -> ZResult<()> {
-        // Nothing to do
-        Ok(())
+        bail!("Local sessions should not be bound to router hats");
     }
 
+    #[tracing::instrument(level = "trace", skip_all, fields(src = %ctx.src_face, rgn = %self.region))]
     fn new_transport_unicast_face(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Face,
+        &mut self,
+        ctx: DispatcherContext,
         transport: &TransportUnicast,
-        _send_declare: &mut SendDeclare,
+        _other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()> {
-        let link_id = match face.state.whatami {
-            WhatAmI::Router => hat_mut!(tables)
-                .routers_net
-                .as_mut()
-                .unwrap()
-                .add_link(transport.clone()),
-            WhatAmI::Peer => {
-                if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
-                    net.add_link(transport.clone())
-                } else {
-                    0
-                }
-            }
-            _ => 0,
-        };
+        debug_assert!(self.owns(ctx.src_face));
 
-        if hat!(tables).full_net(WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
-            hat_mut!(tables).shared_nodes = shared_nodes(
-                hat!(tables).routers_net.as_ref().unwrap(),
-                hat!(tables).linkstatepeers_net.as_ref().unwrap(),
-            );
-        }
+        let link_id = self.net_mut().add_link(transport.clone());
 
-        face_hat_mut!(&mut face.state).link_id = link_id;
+        self.face_hat_mut(ctx.src_face).link_id = link_id;
+        self.schedule_compute_trees(ctx.tables_lock.clone());
 
-        match face.state.whatami {
-            WhatAmI::Router => {
-                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
-            }
-            WhatAmI::Peer => {
-                if hat_mut!(tables).full_net(WhatAmI::Peer) {
-                    hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
-                }
-            }
-            _ => (),
-        }
         Ok(())
     }
 
-    fn close_face(
-        &self,
-        tables: &TablesLock,
-        tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        send_declare: &mut SendDeclare,
-    ) {
-        let mut wtables = zwrite!(tables.tables);
-        let mut face_clone = face.clone();
-        let face = get_mut_unchecked(face);
-        let hat_face = match face.hat.downcast_mut::<HatFace>() {
-            Some(hate_face) => hate_face,
-            None => {
-                tracing::error!("Error downcasting face hat in close_face!");
-                return;
-            }
-        };
+    fn close_face(&mut self, ctx: DispatcherContext) {
+        debug_assert!(self.owns(ctx.src_face));
 
-        hat_face.remote_interests.clear();
-        hat_face.local_subs.clear();
-        hat_face.local_qabls.clear();
-        hat_face.local_tokens.clear();
-
-        for res in face.remote_mappings.values_mut() {
-            get_mut_unchecked(res).session_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.remote_mappings.clear();
-        for res in face.local_mappings.values_mut() {
-            get_mut_unchecked(res).session_ctxs.remove(&face.id);
-            Resource::clean(res);
-        }
-        face.local_mappings.clear();
-
-        let mut subs_matches = vec![];
-        for (_id, mut res) in hat_face.remote_subs.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
-
-            if res.context.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
-                            .disable_data_routes();
-                        subs_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_data_routes();
-                subs_matches.push(res);
-            }
-        }
-
-        let mut qabls_matches = vec![];
-        for (_, (mut res, _)) in hat_face.remote_qabls.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
-
-            if res.context.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !Arc::ptr_eq(&match_, &res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
-                            .disable_query_routes();
-                        qabls_matches.push(match_);
-                    }
-                }
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .disable_query_routes();
-                qabls_matches.push(res);
-            }
-        }
-
-        let mut tokens = vec![];
-        for (_id, mut res) in hat_face.remote_tokens.drain() {
-            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
-            tokens.push(res);
-        }
-
-        for mut res in subs_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_data_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in qabls_matches {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .disable_query_routes();
-            Resource::clean(&mut res);
-        }
-        for mut res in tokens {
-            Resource::clean(&mut res);
-        }
-        wtables.faces.remove(&face.id);
-
-        match face.whatami {
-            WhatAmI::Router => {
-                for (_, removed_node) in hat_mut!(wtables)
-                    .routers_net
-                    .as_mut()
-                    .unwrap()
-                    .remove_link(&face.zid)
-                {
-                    pubsub_remove_node(&mut wtables, &removed_node, WhatAmI::Router, send_declare);
-                    queries_remove_node(&mut wtables, &removed_node, WhatAmI::Router, send_declare);
-                    token_remove_node(&mut wtables, &removed_node, WhatAmI::Router, send_declare);
-                }
-
-                if hat!(wtables).full_net(WhatAmI::Peer) {
-                    hat_mut!(wtables).shared_nodes = shared_nodes(
-                        hat!(wtables).routers_net.as_ref().unwrap(),
-                        hat!(wtables).linkstatepeers_net.as_ref().unwrap(),
-                    );
-                }
-
-                hat_mut!(wtables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
-            }
-            WhatAmI::Peer => {
-                if hat!(wtables).full_net(WhatAmI::Peer) {
-                    for (_, removed_node) in hat_mut!(wtables)
-                        .linkstatepeers_net
-                        .as_mut()
-                        .unwrap()
-                        .remove_link(&face.zid)
-                    {
-                        pubsub_remove_node(
-                            &mut wtables,
-                            &removed_node,
-                            WhatAmI::Peer,
-                            send_declare,
-                        );
-                        queries_remove_node(
-                            &mut wtables,
-                            &removed_node,
-                            WhatAmI::Peer,
-                            send_declare,
-                        );
-                        token_remove_node(&mut wtables, &removed_node, WhatAmI::Peer, send_declare);
-                    }
-
-                    hat_mut!(wtables).shared_nodes = shared_nodes(
-                        hat!(wtables).routers_net.as_ref().unwrap(),
-                        hat!(wtables).linkstatepeers_net.as_ref().unwrap(),
-                    );
-
-                    hat_mut!(wtables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
-                } else if let Some(net) = hat_mut!(wtables).linkstatepeers_net.as_mut() {
-                    net.remove_link(&face.zid);
-                }
-            }
-            _ => (),
-        };
-        drop(wtables);
+        self.schedule_compute_trees(ctx.tables_lock.clone());
     }
 
+    #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
-        &self,
-        tables: &mut Tables,
-        tables_ref: &Arc<TablesLock>,
+        &mut self,
+        mut ctx: DispatcherContext,
         oam: &mut Oam,
-        transport: &TransportUnicast,
-        send_declare: &mut SendDeclare,
+        zid: &ZenohIdProto,
+        whatami: WhatAmI,
+        other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
+            debug_assert_implies!(
+                !ctx.src_face.whatami.is_router(),
+                ctx.src_face.remote_bound.is_south()
+            );
+
             if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
-                if let Ok(zid) = transport.get_zid() {
-                    use zenoh_buffers::reader::HasReader;
-                    use zenoh_codec::RCodec;
-                    let codec = Zenoh080Routing::new();
-                    let mut reader = buf.reader();
-                    let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
-                        bail!("failed to decode link state");
-                    };
+                use zenoh_buffers::reader::HasReader;
+                use zenoh_codec::RCodec;
+                let codec = Zenoh080Routing::new();
+                let mut reader = buf.reader();
+                let Ok(list): Result<LinkStateList, _> = codec.read(&mut reader) else {
+                    bail!("failed to decode link state");
+                };
 
-                    let whatami = transport.get_whatami()?;
-                    match whatami {
-                        WhatAmI::Router => {
-                            for (_, removed_node) in hat_mut!(tables)
-                                .routers_net
-                                .as_mut()
-                                .unwrap()
-                                .link_states(list.link_states, zid)
-                                .removed_nodes
-                            {
-                                pubsub_remove_node(
-                                    tables,
-                                    &removed_node,
-                                    WhatAmI::Router,
-                                    send_declare,
-                                );
-                                queries_remove_node(
-                                    tables,
-                                    &removed_node,
-                                    WhatAmI::Router,
-                                    send_declare,
-                                );
-                                token_remove_node(
-                                    tables,
-                                    &removed_node,
-                                    WhatAmI::Router,
-                                    send_declare,
-                                );
-                            }
+                tracing::trace!(
+                    id = %"OAM_LINKSTATE",
+                    wai = %whatami.short(),
+                    rgn = %self.region(),
+                    linkstate = ?list
+                );
 
-                            if hat!(tables).full_net(WhatAmI::Peer) {
-                                hat_mut!(tables).shared_nodes = shared_nodes(
-                                    hat!(tables).routers_net.as_ref().unwrap(),
-                                    hat!(tables).linkstatepeers_net.as_ref().unwrap(),
-                                );
-                            }
+                let removed_nodes = self
+                    .net_mut()
+                    .link_states(list.link_states, *zid)
+                    .removed_nodes;
 
-                            hat_mut!(tables)
-                                .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
+                let removed_subscribers = removed_nodes
+                    .iter()
+                    .flat_map(|(_, node)| self.unregister_node_subscribers(node))
+                    .collect::<HashSet<_>>();
+
+                let removed_queryables = removed_nodes
+                    .iter()
+                    .flat_map(|(_, node)| self.unregister_node_queryables(node))
+                    .collect::<HashSet<_>>();
+
+                let removed_tokens = removed_nodes
+                    .iter()
+                    .flat_map(|(_, node)| self.unregister_node_tokens(node))
+                    .collect::<HashSet<_>>();
+
+                // FIXME(regions): refactor?
+
+                let region = self.region();
+
+                let mut hats = other_hats
+                    .into_iter()
+                    .chain(iter::once((self.region, self as &mut dyn HatTrait)))
+                    .collect::<RegionMap<_>>();
+
+                for mut res in removed_subscribers {
+                    dispatcher::pubsub::disable_matches_data_routes(ctx.tables, &mut res);
+
+                    let mut remaining = hats
+                        .values_mut()
+                        .filter(|hat| hat.remote_subscribers_of(&res).is_some())
+                        .collect_vec();
+
+                    if remaining.is_empty() {
+                        for hat in hats.values_mut() {
+                            hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
                         }
-                        WhatAmI::Peer => {
-                            if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
-                                let changes = net.link_states(list.link_states, zid);
-                                if hat!(tables).full_net(WhatAmI::Peer) {
-                                    for (_, removed_node) in changes.removed_nodes {
-                                        pubsub_remove_node(
-                                            tables,
-                                            &removed_node,
-                                            WhatAmI::Peer,
-                                            send_declare,
-                                        );
-                                        queries_remove_node(
-                                            tables,
-                                            &removed_node,
-                                            WhatAmI::Peer,
-                                            send_declare,
-                                        );
-                                        token_remove_node(
-                                            tables,
-                                            &removed_node,
-                                            WhatAmI::Peer,
-                                            send_declare,
-                                        );
-                                    }
-
-                                    hat_mut!(tables).shared_nodes = shared_nodes(
-                                        hat!(tables).routers_net.as_ref().unwrap(),
-                                        hat!(tables).linkstatepeers_net.as_ref().unwrap(),
-                                    );
-
-                                    hat_mut!(tables)
-                                        .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
-                                } else {
-                                    for (_, updated_node) in changes.updated_nodes {
-                                        pubsub_linkstate_change(
-                                            tables,
-                                            &updated_node.zid,
-                                            &updated_node.links,
-                                            send_declare,
-                                        );
-                                        queries_linkstate_change(
-                                            tables,
-                                            &updated_node.zid,
-                                            &updated_node.links,
-                                            send_declare,
-                                        );
-                                        token_linkstate_change(
-                                            tables,
-                                            &updated_node.zid,
-                                            &updated_node.links,
-                                            send_declare,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        _ => (),
-                    };
+                        Resource::clean(&mut res);
+                    } else if let [last_owner] = &mut *remaining {
+                        last_owner
+                            .unpropagate_last_non_owned_subscriber(ctx.reborrow(), res.clone())
+                    }
                 }
+
+                for mut res in removed_queryables {
+                    dispatcher::queries::disable_matches_query_routes(ctx.tables, &mut res);
+
+                    let remaining = hats
+                        .iter()
+                        .filter_map(|(rgn, hat)| {
+                            hat.remote_queryables_of(&res).map(|info| (*rgn, info))
+                        })
+                        .collect_vec();
+
+                    match &*remaining {
+                        [] => {
+                            for hat in hats.values_mut() {
+                                hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                            }
+                            Resource::clean(&mut res);
+                        }
+                        [(last_owner, _)] => hats[last_owner]
+                            .unpropagate_last_non_owned_queryable(ctx.reborrow(), res.clone()),
+                        _ => {
+                            for hat in hats.values_mut() {
+                                let other_info = remaining
+                                    .iter()
+                                    .filter_map(|(region, info)| {
+                                        (region != &hat.region()).then_some(*info)
+                                    })
+                                    .reduce(merge_qabl_infos);
+
+                                hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                            }
+                        }
+                    }
+                }
+
+                for mut res in removed_tokens {
+                    let mut remaining = hats
+                        .values_mut()
+                        .filter(|hat| hat.remote_tokens_of(&res))
+                        .collect_vec();
+
+                    if remaining.is_empty() {
+                        for hat in hats.values_mut() {
+                            hat.unpropagate_token(ctx.reborrow(), res.clone());
+                        }
+                        Resource::clean(&mut res);
+                    } else if let [last_owner] = &mut *remaining {
+                        last_owner.unpropagate_last_non_owned_token(ctx.reborrow(), res.clone())
+                    }
+                }
+
+                hats[region]
+                    .as_any()
+                    .downcast_ref::<Self>()
+                    .unwrap()
+                    .schedule_compute_trees(ctx.tables_lock.clone());
             }
         }
 
@@ -751,83 +538,40 @@ impl HatBaseTrait for HatCode {
     }
 
     #[inline]
-    fn map_routing_context(
-        &self,
-        tables: &Tables,
-        face: &FaceState,
-        routing_context: NodeId,
-    ) -> NodeId {
-        match face.whatami {
-            WhatAmI::Router => hat!(tables)
-                .routers_net
-                .as_ref()
-                .unwrap()
-                .get_local_context(routing_context, face_hat!(face).link_id),
-            WhatAmI::Peer => {
-                if hat!(tables).full_net(WhatAmI::Peer) {
-                    hat!(tables)
-                        .linkstatepeers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_local_context(routing_context, face_hat!(face).link_id)
-                } else {
-                    0
-                }
-            }
-            _ => 0,
+    fn map_routing_context(&self, _tables: &TablesData, face: &FaceState, nid: NodeId) -> NodeId {
+        if self.owns(face) {
+            self.net()
+                .get_local_context(nid, self.face_hat(face).link_id)
+        } else {
+            DEFAULT_NODE_ID
         }
     }
 
     #[inline]
-    fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &RoutingExpr) -> bool {
-        face.whatami != WhatAmI::Peer
-            || hat!(tables).linkstatepeers_net.is_none()
-            || tables.zid
-                == *hat!(tables).elect_router(
-                    &tables.zid,
-                    expr.key_expr().map_or("", |ke| ke),
-                    hat!(tables).get_router_links(face.zid),
-                )
+    fn ingress_filter(&self, _tables: &TablesData, _face: &FaceState, _expr: &RoutingExpr) -> bool {
+        // FIXME(regions): ensure that there is a south-bound peer that can
+        // handle duplicated messages through gossip from peers with multiple
+        // connections to the same router gateway.
+        true
     }
 
     #[inline]
     fn egress_filter(
         &self,
-        tables: &Tables,
+        _tables: &TablesData,
         src_face: &FaceState,
         out_face: &Arc<FaceState>,
-        expr: &RoutingExpr,
+        _expr: &RoutingExpr,
     ) -> bool {
-        if src_face.id != out_face.id
-            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
-        {
-            let dst_master = out_face.whatami != WhatAmI::Peer
-                || hat!(tables).linkstatepeers_net.is_none()
-                || tables.zid
-                    == *hat!(tables).elect_router(
-                        &tables.zid,
-                        expr.key_expr().map_or("", |ke| ke),
-                        hat!(tables).get_router_links(out_face.zid),
-                    );
-
-            return dst_master
-                && (src_face.whatami != WhatAmI::Peer
-                    || out_face.whatami != WhatAmI::Peer
-                    || hat!(tables).full_net(WhatAmI::Peer)
-                    || hat!(tables).failover_brokering(src_face.zid, out_face.zid));
-        }
-        false
+        src_face.id != out_face.id
+            && out_face.mcast_group.is_none()
+            && src_face.mcast_group.is_none()
     }
 
-    fn info(&self, tables: &Tables, kind: WhatAmI) -> String {
+    fn info(&self, kind: WhatAmI) -> String {
         match kind {
-            WhatAmI::Router => hat!(tables)
+            WhatAmI::Router => self
                 .routers_net
-                .as_ref()
-                .map(|net| net.dot())
-                .unwrap_or_else(|| "graph {}".to_string()),
-            WhatAmI::Peer => hat!(tables)
-                .linkstatepeers_net
                 .as_ref()
                 .map(|net| net.dot())
                 .unwrap_or_else(|| "graph {}".to_string()),
@@ -836,15 +580,13 @@ impl HatBaseTrait for HatCode {
     }
 
     fn update_from_config(
-        &self,
-        tables: &mut Tables,
+        &mut self,
         tables_ref: &Arc<TablesLock>,
         runtime: &Runtime,
     ) -> ZResult<()> {
         let config = runtime.config().lock();
         let router_link_weights = link_weights_from_config(
             config
-                .0
                 .routing()
                 .router()
                 .linkstate()
@@ -852,170 +594,77 @@ impl HatBaseTrait for HatCode {
                 .clone(),
             ROUTERS_NET_NAME,
         )?;
-        let peer_link_weights = link_weights_from_config(
-            config
-                .0
-                .routing()
-                .peer()
-                .linkstate()
-                .transport_weights()
-                .clone(),
-            PEERS_NET_NAME,
-        )?;
         drop(config);
-        if let Some(net) = hat_mut!(tables).routers_net.as_mut() {
+        if let Some(net) = self.routers_net.as_mut() {
             if net.update_link_weights(router_link_weights) {
-                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
-            }
-        }
-        if let Some(net) = hat_mut!(tables).linkstatepeers_net.as_mut() {
-            if net.update_link_weights(peer_link_weights) {
-                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
+                self.schedule_compute_trees(tables_ref.clone());
             }
         }
         Ok(())
     }
 
-    fn links_info(
-        &self,
-        tables: &Tables,
-    ) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
-        let mut out = HashMap::new();
-        if let Some(net) = &hat!(tables).routers_net {
-            out.extend(net.links_info());
+    fn links_info(&self) -> HashMap<ZenohIdProto, crate::net::protocol::linkstate::LinkInfo> {
+        if let Some(net) = &self.routers_net {
+            net.links_info()
+        } else {
+            HashMap::new()
         }
-        if let Some(net) = &hat!(tables).linkstatepeers_net {
-            out.extend(net.links_info());
-        }
-        out
     }
 
-    fn route_successor(
-        &self,
-        tables: &Tables,
-        src: ZenohIdProto,
-        dst: ZenohIdProto,
-    ) -> Option<ZenohIdProto> {
-        hat!(tables).routers_net.as_ref()?.route_successor(src, dst)
+    fn route_successor(&self, src: ZenohIdProto, dst: ZenohIdProto) -> Option<ZenohIdProto> {
+        self.net().route_successor(src, dst)
     }
 
-    fn route_successors(&self, tables: &Tables) -> Vec<SuccessorEntry> {
-        hat!(tables)
-            .routers_net
-            .as_ref()
-            .map(|net| net.route_successors())
-            .unwrap_or_default()
+    fn route_successors(&self) -> Vec<SuccessorEntry> {
+        self.net().route_successors()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn whatami(&self) -> WhatAmI {
+        WhatAmI::Router
+    }
+
+    fn region(&self) -> Region {
+        self.region
     }
 }
 
 struct HatContext {
     router_subs: HashSet<ZenohIdProto>,
-    linkstatepeer_subs: HashSet<ZenohIdProto>,
     router_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
-    linkstatepeer_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
     router_tokens: HashSet<ZenohIdProto>,
-    linkstatepeer_tokens: HashSet<ZenohIdProto>,
 }
 
 impl HatContext {
     fn new() -> Self {
         Self {
             router_subs: HashSet::new(),
-            linkstatepeer_subs: HashSet::new(),
             router_qabls: HashMap::new(),
-            linkstatepeer_qabls: HashMap::new(),
             router_tokens: HashSet::new(),
-            linkstatepeer_tokens: HashSet::new(),
         }
     }
 }
 
 struct HatFace {
-    link_id: usize,
-    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
-    remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: LocalSubscribers,
-    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: LocalQueryables,
-    remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
-    local_tokens: HashMap<Arc<Resource>, TokenId>,
-    remote_tokens: HashMap<TokenId, Arc<Resource>>,
+    link_id: LinkId,
 }
 
 impl HatFace {
     fn new() -> Self {
         Self {
-            link_id: 0,
-            next_id: AtomicU32::new(0),
-            remote_interests: HashMap::new(),
-            local_subs: LocalSubscribers::new(),
-            remote_subs: HashMap::new(),
-            local_qabls: LocalQueryables::new(),
-            remote_qabls: HashMap::new(),
-            local_tokens: HashMap::new(),
-            remote_tokens: HashMap::new(),
+            link_id: LinkId::default(),
         }
     }
 }
 
-fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdProto> {
-    match hat!(tables)
-        .routers_net
-        .as_ref()
-        .unwrap()
-        .get_link(face_hat!(face).link_id)
-    {
-        Some(link) => match link.get_zid(&(nodeid as u64)) {
-            Some(router) => Some(*router),
-            None => {
-                tracing::error!(
-                    "Received router declaration with unknown routing context id {}",
-                    nodeid
-                );
-                None
-            }
-        },
-        None => {
-            tracing::error!(
-                "Could not find corresponding link in routers network for {}",
-                face
-            );
-            None
-        }
-    }
-}
+impl HatTrait for Hat {}
 
-fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohIdProto> {
-    match hat!(tables)
-        .linkstatepeers_net
-        .as_ref()
-        .unwrap()
-        .get_link(face_hat!(face).link_id)
-    {
-        Some(link) => match link.get_zid(&(nodeid as u64)) {
-            Some(router) => Some(*router),
-            None => {
-                tracing::error!(
-                    "Received peer declaration with unknown routing context id {}",
-                    nodeid
-                );
-                None
-            }
-        },
-        None => {
-            tracing::error!(
-                "Could not find corresponding link in peers network for {}",
-                face
-            );
-            None
-        }
-    }
-}
-
-impl HatTrait for HatCode {}
-
-#[inline]
-pub(super) fn push_declaration_profile(tables: &Tables, face: &FaceState) -> bool {
-    !(face.whatami == WhatAmI::Client
-        || (face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer)))
-}
+#[allow(dead_code)] // FIXME(regions)
+type HatRemote = ZenohIdProto;

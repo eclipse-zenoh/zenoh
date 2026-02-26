@@ -12,14 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    any::Any,
     env, fmt,
-    ops::Deref,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
 
 use serde::{Deserialize, Serialize};
+use zenoh_config::ExpandedConfig;
 use zenoh_result::{bail, ZResult};
 
 /// Zenoh configuration.
@@ -210,8 +209,8 @@ impl<T> Clone for Notifier<T> {
     }
 }
 
-impl Notifier<Config> {
-    pub fn new(inner: Config) -> Self {
+impl Notifier<ExpandedConfig> {
+    pub fn new(inner: ExpandedConfig) -> Self {
         Notifier {
             inner: Arc::new(NotifierInner {
                 inner: Mutex::new(inner),
@@ -244,7 +243,7 @@ impl Notifier<Config> {
         }
     }
 
-    pub fn lock(&self) -> MutexGuard<'_, Config> {
+    pub fn lock(&self) -> MutexGuard<'_, ExpandedConfig> {
         self.lock_config()
     }
 
@@ -255,7 +254,7 @@ impl Notifier<Config> {
             .expect("acquiring Notifier's subscribers Mutex should not fail")
     }
 
-    fn lock_config(&self) -> MutexGuard<'_, Config> {
+    fn lock_config(&self) -> MutexGuard<'_, ExpandedConfig> {
         self.inner
             .inner
             .lock()
@@ -279,36 +278,6 @@ impl Notifier<Config> {
         self.lock_config().insert_json5(key, value)?;
         self.notify(key);
         Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn get<'a>(&'a self, key: &str) -> ZResult<LookupGuard<'a, Config>> {
-        let config = self.lock_config();
-        let subref = config.0.get(key.as_ref()).map_err(|err| zerror!("{err}"))? as *const _;
-        Ok(LookupGuard {
-            _guard: config,
-            subref,
-        })
-    }
-}
-
-pub struct LookupGuard<'a, T> {
-    _guard: MutexGuard<'a, T>,
-    subref: *const dyn Any,
-}
-
-impl<T> Deref for LookupGuard<'_, T> {
-    type Target = dyn Any;
-
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: MutexGuard pins the mutex behind which the value is held.
-        unsafe { &*self.subref }
-    }
-}
-
-impl<T> AsRef<dyn Any> for LookupGuard<'_, T> {
-    fn as_ref(&self) -> &dyn Any {
-        self.deref()
     }
 }
 

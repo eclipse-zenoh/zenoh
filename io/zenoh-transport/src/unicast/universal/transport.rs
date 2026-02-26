@@ -22,7 +22,7 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Bound, Priority, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
@@ -186,7 +186,10 @@ impl TransportUnicastUniversal {
         // Notify the callback
         let cb = zread!(self.callback).clone();
         if let Some(callback) = cb {
-            callback.del_link(link);
+            tokio::task::spawn_blocking(move || {
+                callback.del_link(link);
+            })
+            .await?;
         }
         if is_last {
             let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
@@ -341,6 +344,14 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn is_qos(&self) -> bool {
         self.config.is_qos
+    }
+
+    fn region_name(&self) -> Option<RegionName> {
+        self.config.region_name.clone()
+    }
+
+    fn get_bound(&self) -> Option<Bound> {
+        self.config.bound
     }
 
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {

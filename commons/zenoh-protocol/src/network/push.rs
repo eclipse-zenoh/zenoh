@@ -52,10 +52,7 @@ pub struct Push {
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
@@ -65,6 +62,9 @@ pub mod ext {
 
     pub type NodeId = zextz64!(0x3, true);
     pub type NodeIdType = crate::network::ext::NodeIdType<{ NodeId::ID }>;
+
+    pub type DstNodeId = zextz64!(0x4, false);
+    pub type DstNodeIdType = crate::network::ext::NodeIdType<{ DstNodeId::ID }>;
 }
 
 impl Push {

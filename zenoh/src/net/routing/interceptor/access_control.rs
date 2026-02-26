@@ -114,28 +114,28 @@ impl EgressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.query),
                     AclMessage::Query,
                     "Query (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
                 }
             }
             NetworkBodyMut::Response(Response { .. }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.reply),
                     AclMessage::Reply,
                     "Reply (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -145,14 +145,14 @@ impl EgressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.put),
                     AclMessage::Put,
                     "Put (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -162,14 +162,14 @@ impl EgressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.delete),
                     AclMessage::Delete,
                     "Delete (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -179,14 +179,14 @@ impl EgressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Declare Subscriber (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -196,7 +196,7 @@ impl EgressAclEnforcer {
                 body: DeclareBody::UndeclareSubscriber(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
@@ -205,7 +205,7 @@ impl EgressAclEnforcer {
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Undeclare Subscriber (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -215,14 +215,14 @@ impl EgressAclEnforcer {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -232,7 +232,7 @@ impl EgressAclEnforcer {
                 body: DeclareBody::UndeclareQueryable(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
@@ -241,7 +241,7 @@ impl EgressAclEnforcer {
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Undeclare Queryable (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -251,14 +251,14 @@ impl EgressAclEnforcer {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Liveliness Token (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -268,7 +268,7 @@ impl EgressAclEnforcer {
                 body: DeclareBody::UndeclareToken(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Undeclaration filtering diverges between ingress and egress:
@@ -277,7 +277,7 @@ impl EgressAclEnforcer {
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Undeclare Liveliness Token (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -288,14 +288,14 @@ impl EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.query_token),
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -306,14 +306,14 @@ impl EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -324,7 +324,7 @@ impl EgressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 // Note: options are set for InterestMode::Final for internal use only by egress interceptors.
@@ -335,7 +335,7 @@ impl EgressAclEnforcer {
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Undeclare Liveliness Subscriber (egress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -434,7 +434,7 @@ impl IngressAclEnforcer {
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
                 match key_expr {
-                    Some(ke) => self.action(action, log_msg, &ke),
+                    Some(token) => self.action(action, log_msg, &token),
                     None => Permission::Allow,
                 }
             }
@@ -461,28 +461,28 @@ impl IngressAclEnforcer {
                 payload: RequestBody::Query(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.query),
                     AclMessage::Query,
                     "Query (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
                 }
             }
             NetworkBodyMut::Response(Response { .. }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.reply),
                     AclMessage::Reply,
                     "Reply (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -492,14 +492,14 @@ impl IngressAclEnforcer {
                 payload: PushBody::Put(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.put),
                     AclMessage::Put,
                     "Put (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -509,14 +509,14 @@ impl IngressAclEnforcer {
                 payload: PushBody::Del(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.delete),
                     AclMessage::Delete,
                     "Delete (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -526,14 +526,14 @@ impl IngressAclEnforcer {
                 body: DeclareBody::DeclareSubscriber(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_subscriber),
                     AclMessage::DeclareSubscriber,
                     "Declare Subscriber (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -561,14 +561,14 @@ impl IngressAclEnforcer {
                 body: DeclareBody::DeclareQueryable(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_queryable),
                     AclMessage::DeclareQueryable,
                     "Declare Queryable (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -596,14 +596,14 @@ impl IngressAclEnforcer {
                 body: DeclareBody::DeclareToken(_),
                 ..
             }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_token),
                     AclMessage::LivelinessToken,
                     "Liveliness Token (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -633,14 +633,14 @@ impl IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.query_token),
                     AclMessage::LivelinessQuery,
                     "Liveliness Query (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;
@@ -651,14 +651,14 @@ impl IngressAclEnforcer {
                 options,
                 ..
             }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
+                let Some(token) = ctx.full_keyexpr(msg) else {
                     return false;
                 };
                 if self.cached_result_or_action(
                     cache.map(|c| c.declare_liveliness_subscriber),
                     AclMessage::DeclareLivelinessSubscriber,
                     "Declare Liveliness Subscriber (ingress)",
-                    keyexpr,
+                    token,
                 ) == Permission::Deny
                 {
                     return false;

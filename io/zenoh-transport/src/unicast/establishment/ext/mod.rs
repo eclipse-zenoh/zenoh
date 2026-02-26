@@ -20,5 +20,6 @@ pub(crate) mod lowlatency;
 pub(crate) mod multilink;
 pub(crate) mod patch;
 pub(crate) mod qos;
+pub(crate) mod region_name;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;

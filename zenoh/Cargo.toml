@@ -92,6 +92,7 @@ flate2 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
+hashbrown = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
@@ -130,8 +131,13 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
+predicates = { workspace = true }
+regex = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
+tracing-capture = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-tunnel = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 
 [build-dependencies]

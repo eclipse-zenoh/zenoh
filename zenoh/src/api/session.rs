@@ -27,7 +27,7 @@ use std::{
 use async_trait::async_trait;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, span::EnteredSpan, trace, warn};
 use uhlc::Timestamp;
 #[cfg(feature = "internal")]
 use uhlc::HLC;
@@ -54,7 +54,7 @@ use zenoh_protocol::{
             SubscriberId, TokenId, UndeclareQueryable, UndeclareSubscriber, UndeclareToken,
         },
         ext,
-        interest::{InterestId, InterestMode, InterestOptions},
+        interest::{self, InterestId, InterestMode, InterestOptions},
         push, request, AtomicRequestId, DeclareFinal, Interest, Mapping, Push, Request, RequestId,
         Response, ResponseFinal, UndeclareKeyExpr,
     },
@@ -184,6 +184,7 @@ pub(crate) struct SessionState {
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
+    span: tracing::span::Span,
 }
 
 impl SessionState {
@@ -191,6 +192,7 @@ impl SessionState {
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
         publisher_qos_tree: KeBoxTree<PublisherQoSConfig>,
+        runtime: &GenericRuntime,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -215,17 +217,43 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
+            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()), // FIXME(regions): include the face id
         }
+    }
+}
+
+pub(crate) struct SpannedPrimitives {
+    inner: Arc<dyn Primitives>,
+    _span: EnteredSpan,
+}
+
+impl Deref for SpannedPrimitives {
+    type Target = Arc<dyn Primitives>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl SpannedPrimitives {
+    pub(crate) fn into_primitives(self) -> Arc<dyn Primitives> {
+        self.inner
     }
 }
 
 impl SessionState {
     #[inline]
-    pub(crate) fn primitives(&self) -> ZResult<Arc<dyn Primitives>> {
-        self.primitives
+    pub(crate) fn primitives(&self) -> ZResult<SpannedPrimitives> {
+        let primitives = self
+            .primitives
             .as_ref()
             .cloned()
-            .ok_or_else(|| SessionClosedError.into())
+            .ok_or(SessionClosedError)?;
+
+        Ok(SpannedPrimitives {
+            inner: primitives,
+            _span: self.span.clone().entered(),
+        })
     }
 
     #[inline]
@@ -835,6 +863,7 @@ impl Session {
                 aggregated_subscribers,
                 aggregated_publishers,
                 publisher_qos.into(),
+                &runtime,
             ));
             let session = Session(Arc::new(SessionInner {
                 strong_counter: AtomicUsize::new(1),
@@ -1591,7 +1620,7 @@ impl Session {
                 wire_expr: Some(res.to_wire(self).to_owned()),
                 ext_qos: network::ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
             });
         }
         Ok(id)
@@ -1618,9 +1647,9 @@ impl Session {
                         //       they are initialized here for internal use by local egress interceptors.
                         options: InterestOptions::SUBSCRIBERS,
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -1647,9 +1676,9 @@ impl Session {
                 mode: InterestMode::CurrentFuture,
                 options: InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
                 wire_expr: Some(res.to_wire(self).to_owned()),
-                ext_qos: network::ext::QoSType::DEFAULT,
+                ext_qos: interest::ext::QoSType::DEFAULT,
                 ext_tstamp: None,
-                ext_nodeid: network::ext::NodeIdType::DEFAULT,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
             });
         }
         Ok(id)
@@ -1679,9 +1708,9 @@ impl Session {
                         mode: InterestMode::Final,
                         options: InterestOptions::empty(),
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -1819,9 +1848,9 @@ impl Session {
                         //       they are initialized here for internal use by local egress interceptors.
                         options: InterestOptions::TOKENS,
                         wire_expr: None,
-                        ext_qos: declare::ext::QoSType::DEFAULT,
+                        ext_qos: interest::ext::QoSType::DEFAULT,
                         ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     });
                 }
             }
@@ -2047,9 +2076,9 @@ impl Session {
             },
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(key_expr.to_wire(self).to_owned()),
-            ext_qos: declare::ext::QoSType::DECLARE,
+            ext_qos: interest::ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
 
         Ok(sub_state)
@@ -2771,6 +2800,30 @@ impl Session {
                 }
             });
 
+        for ke in state
+            .remote_tokens
+            .values()
+            .filter(|ke| ke.intersects(key_expr))
+        {
+            callback.call(Reply {
+                result: Ok(Sample {
+                    key_expr: ke.to_owned(),
+                    payload: ZBytes::new(),
+                    kind: SampleKind::Put,
+                    encoding: Encoding::default(),
+                    timestamp: None,
+                    qos: QoS::default(),
+                    #[cfg(feature = "unstable")]
+                    reliability: Reliability::default(),
+                    #[cfg(feature = "unstable")]
+                    source_info: None,
+                    attachment: None,
+                }),
+                #[cfg(feature = "unstable")]
+                replier_id: None,
+            });
+        }
+
         let primitives = state.primitives()?;
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
@@ -2784,9 +2837,9 @@ impl Session {
             mode: InterestMode::Current,
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(wexpr.clone()),
-            ext_qos: request::ext::QoSType::DEFAULT,
+            ext_qos: interest::ext::QoSType::DEFAULT,
             ext_tstamp: None,
-            ext_nodeid: request::ext::NodeIdType::DEFAULT,
+            ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
 
         Ok(())
@@ -2845,7 +2898,7 @@ impl Session {
             primitives: if local {
                 ReplyPrimitives::new_local(self.downgrade())
             } else {
-                ReplyPrimitives::new_remote(Some(self.downgrade()), primitives)
+                ReplyPrimitives::new_remote(Some(self.downgrade()), primitives.into_primitives())
             },
         });
         if !queryables.is_empty() {

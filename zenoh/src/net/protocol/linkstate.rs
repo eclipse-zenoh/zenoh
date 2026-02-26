@@ -21,10 +21,11 @@ pub const PID: u64 = 1; // 0x01
 pub const WAI: u64 = 1 << 1; // 0x02
 pub const LOC: u64 = 1 << 2; // 0x04
 pub const WGT: u64 = 1 << 3; // 0x08
+pub const GWY: u64 = 1 << 4; // 0x16
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~X|X|X|X|H|L|W|P~
+// ~X|X|X|G|H|L|W|P~
 // +-+-+-+-+-+-+-+-+
 // ~     psid      ~
 // +---------------+
@@ -49,6 +50,7 @@ pub(crate) struct LinkState {
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) links: Vec<u64>,
     pub(crate) link_weights: Option<Vec<u16>>,
+    pub(crate) is_gateway: bool,
 }
 
 #[derive(Default, Copy, Clone, PartialEq, Eq)]
@@ -100,6 +102,7 @@ pub(crate) struct LocalLinkState {
     pub(crate) whatami: WhatAmI,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) links: HashMap<ZenohIdProto, LinkEdgeWeight>,
+    pub(crate) is_gateway: bool,
 }
 
 impl LinkState {
@@ -142,6 +145,7 @@ impl LinkState {
         } else {
             None
         };
+        let is_gateway = rng.gen_bool(0.5);
 
         Self {
             psid,
@@ -151,6 +155,7 @@ impl LinkState {
             locators,
             links,
             link_weights,
+            is_gateway,
         }
     }
 }

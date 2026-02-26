@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    any::Any,
     borrow::Cow,
     cell::OnceCell,
     collections::HashMap,
+    fmt::Debug,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
@@ -27,7 +27,7 @@ use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, WireExpr, ZenohIdProto},
+    core::{ExprId, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -36,7 +36,8 @@ use super::face::FaceState;
 pub use super::resource::*;
 use crate::net::{
     routing::{
-        hat::HatTrait,
+        dispatcher::{face::FaceId, region::RegionMap},
+        hat::{HatTrait, Sources},
         interceptor::{interceptor_factories, InterceptorFactory},
     },
     runtime::WeakRuntime,
@@ -47,6 +48,12 @@ pub(crate) struct RoutingExpr<'a> {
     suffix: &'a str,
     resource: OnceCell<Option<&'a Arc<Resource>>>,
     key_expr: OnceCell<Option<Cow<'a, keyexpr>>>,
+}
+
+impl Debug for RoutingExpr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}{}", self.prefix, self.suffix)
+    }
 }
 
 impl<'a> RoutingExpr<'a> {
@@ -112,43 +119,66 @@ impl<'a> RoutingExpr<'a> {
     }
 }
 
-pub struct Tables {
+pub(crate) struct TablesData {
     pub(crate) zid: ZenohIdProto,
-    pub(crate) whatami: WhatAmI,
     pub(crate) runtime: Option<WeakRuntime>,
-    pub(crate) face_counter: usize,
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
+
     pub(crate) drop_future_timestamp: bool,
     pub(crate) queries_default_timeout: Duration,
     pub(crate) interests_timeout: Duration,
+
     pub(crate) root_res: Arc<Resource>,
-    pub(crate) faces: HashMap<usize, Arc<FaceState>>,
-    pub(crate) mcast_groups: Vec<Arc<FaceState>>,
-    pub(crate) mcast_faces: Vec<Arc<FaceState>>,
-    pub(crate) interceptors: Vec<InterceptorFactory>,
-    pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) routes_version: RoutesVersion,
+
+    pub(crate) face_counter: FaceId,
+
     pub(crate) next_interceptor_version: AtomicUsize,
+    pub(crate) interceptors: Vec<InterceptorFactory>,
+
+    pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
+
     #[cfg(feature = "stats")]
     pub(crate) stats: zenoh_stats::StatsRegistry,
     #[cfg(feature = "stats")]
     pub(crate) stats_keys: zenoh_stats::StatsKeysTree,
+
+    pub(crate) hats: RegionMap<HatTablesData>,
 }
 
-impl Tables {
+impl Debug for TablesData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TablesData").finish()
+    }
+}
+
+pub(crate) struct HatTablesData {
+    pub(crate) mcast_groups: Vec<Arc<FaceState>>,
+    // FIXME(regions): this field is apparently of no use (╯°□°)╯︵ ┻━┻
+    pub(crate) mcast_faces: Vec<Arc<FaceState>>,
+    pub(crate) routes_version: RoutesVersion,
+}
+
+impl HatTablesData {
+    pub(crate) fn new() -> Self {
+        HatTablesData {
+            mcast_groups: vec![],
+            mcast_faces: vec![],
+            routes_version: 0,
+        }
+    }
+}
+
+impl TablesData {
     pub fn new(
         zid: ZenohIdProto,
-        whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         config: &Config,
-        hat_code: &(dyn HatTrait + Send + Sync),
+        hat: RegionMap<HatTablesData>,
         #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
-        let router_peers_failover_brokering =
-            unwrap_or_default!(config.routing().router().peers_failover_brokering());
         let queries_default_timeout =
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
@@ -160,23 +190,20 @@ impl Tables {
             &mut stats_keys,
             config.stats.filters().iter().map(|f| &*f.key),
         );
-        Ok(Tables {
+
+        Ok(TablesData {
             zid,
-            whatami,
             runtime: None,
-            face_counter: 0,
             hlc,
             drop_future_timestamp,
             queries_default_timeout,
             interests_timeout,
             root_res: Resource::root(),
-            faces: HashMap::new(),
-            mcast_groups: vec![],
-            mcast_faces: vec![],
             interceptors: interceptor_factories(config)?,
-            hat: hat_code.new_tables(router_peers_failover_brokering),
-            routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
+            hats: hat,
+            face_counter: 0,
+            faces: HashMap::default(),
             #[cfg(feature = "stats")]
             stats_keys,
             #[cfg(feature = "stats")]
@@ -220,21 +247,98 @@ impl Tables {
         }
     }
 
-    #[inline]
-    pub(crate) fn get_face(&self, zid: &ZenohIdProto) -> Option<&Arc<FaceState>> {
-        self.faces.values().find(|face| face.zid == *zid)
+    pub(crate) fn disable_all_routes(&mut self) {
+        // REVIEW(regions): should hats invalidate each other's routes?
+        for hat in self.hats.values_mut() {
+            hat.routes_version = hat.routes_version.saturating_add(1);
+        }
     }
 
-    pub(crate) fn disable_all_routes(&mut self) {
-        self.routes_version = self.routes_version.saturating_add(1);
+    pub(crate) fn new_face_id(&mut self) -> FaceId {
+        let face_id = self.face_counter;
+        self.face_counter += 1;
+        face_id
     }
 }
 
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub(crate) hat_code: Box<dyn HatTrait + Send + Sync>,
     pub(crate) ctrl_lock: Mutex<()>,
-    pub queries_lock: RwLock<()>,
+    pub(crate) queries_lock: RwLock<()>,
+    pub(crate) zid: ZenohIdProto, // FIXME(regions): refactor/remove
+}
+
+pub struct Tables {
+    pub data: TablesData,
+    pub hats: RegionMap<Box<dyn HatTrait + Send + Sync>>,
+}
+
+impl Tables {
+    pub(crate) fn sourced_publishers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_publishers(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_subscribers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_subscribers(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_queryables(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_queryables(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_queriers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_queriers(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_tokens(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| hat.sourced_tokens(&self.data))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+}
+
+impl Debug for Tables {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tables").finish()
+    }
 }
 
 impl TablesLock {
@@ -244,19 +348,20 @@ impl TablesLock {
         #[cfg(feature = "stats")]
         {
             let tables = &mut *tables;
-            tables.stats.update_keys(
-                &mut tables.stats_keys,
+            tables.data.stats.update_keys(
+                &mut tables.data.stats_keys,
                 config.stats.filters().iter().map(|k| &*k.key),
             );
         }
-        tables.interceptors = interceptor_factories(config)?;
+        tables.data.interceptors = interceptor_factories(config)?;
         drop(tables);
         let tables = zread!(self.tables);
         let version = tables
+            .data
             .next_interceptor_version
             .fetch_add(1, Ordering::SeqCst);
-        tables.faces.values().for_each(|face| {
-            face.set_interceptors_from_factories(&tables.interceptors, version + 1);
+        tables.data.faces.values().for_each(|face| {
+            face.set_interceptors_from_factories(&tables.data.interceptors, version + 1);
         });
         Ok(())
     }

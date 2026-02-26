@@ -270,6 +270,16 @@ impl TransportManager {
             .collect()
     }
 
+    pub fn get_transports_multicast_blocking(&self) -> Vec<TransportMulticast> {
+        self.state
+            .multicast
+            .transports
+            .blocking_lock()
+            .values()
+            .map(|t| t.into())
+            .collect()
+    }
+
     pub(super) async fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
         let mut guard = zasynclock!(self.state.multicast.transports);
         let res = guard.remove(locator);
