@@ -29,8 +29,8 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {
-    crate::api::cancellation::SyncGroup, crate::query::ReplyKeyExpr,
-    zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto,
+    crate::api::cancellation::SyncGroup, zenoh_config::wrappers::EntityGlobalId,
+    zenoh_protocol::core::EntityGlobalIdProto,
 };
 
 use super::{
@@ -46,6 +46,7 @@ use crate::{
         builders::matching_listener::MatchingListenerBuilder,
         handlers::DefaultHandler,
         matching::{MatchingStatus, MatchingStatusType},
+        query::ReplyKeyExpr,
     },
     qos::Priority,
 };
@@ -83,7 +84,6 @@ pub struct Querier<'a> {
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) timeout: Duration,
-    #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
     pub(crate) undeclare_on_drop: bool,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
@@ -147,7 +147,6 @@ impl<'a> Querier<'a> {
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether this querier accepts such disjoint replies.
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn accept_replies(&self) -> ReplyKeyExpr {
         self.accept_replies
     }
