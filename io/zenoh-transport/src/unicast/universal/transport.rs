@@ -186,7 +186,10 @@ impl TransportUnicastUniversal {
         // Notify the callback
         let cb = zread!(self.callback).clone();
         if let Some(callback) = cb {
-            callback.del_link(link);
+            tokio::task::spawn_blocking(move || {
+                callback.del_link(link);
+            })
+            .await?;
         }
         if is_last {
             let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
