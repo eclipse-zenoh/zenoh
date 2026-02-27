@@ -514,7 +514,7 @@ validated_struct::validator! {
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
-            timeout: Option<u64>,
+            timeout: Option<i64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
             /// The multicast scouting configuration.

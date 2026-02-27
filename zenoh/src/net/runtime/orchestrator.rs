@@ -151,7 +151,7 @@ impl Runtime {
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
-                std::time::Duration::from_millis(unwrap_or_default!(guard.scouting().timeout())),
+                zenoh_config::ms_to_duration(unwrap_or_default!(guard.scouting().timeout())),
                 unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
@@ -175,17 +175,38 @@ impl Runtime {
                         .collect();
                     if sockets.is_empty() {
                         bail!("Unable to bind UDP port to any multicast interface!")
-                    } else {
-                        if peers.is_empty() {
+                    } else if peers.is_empty() {
+                        if timeout == Duration::MAX {
+                            if let Some(mcast_socket) = mcast_socket {
+                                let this = self.clone();
+                                self.spawn_abortable(async move {
+                                    tokio::select! {
+                                        _ = this.responder(&mcast_socket, &sockets) => {},
+                                        _ = this.connect_first(&sockets, autoconnect, &addr, timeout) => {},
+                                    }
+                                });
+                            } else {
+                                let this = self.clone();
+                                self.spawn_abortable(async move {
+                                    this.connect_first(&sockets, autoconnect, &addr, timeout)
+                                        .await
+                                });
+                            }
+                        } else {
                             self.connect_first(&sockets, autoconnect, &addr, timeout)
-                                .await?
+                                .await?;
+                            if let Some(mcast_socket) = mcast_socket {
+                                let this = self.clone();
+                                self.spawn_abortable(async move {
+                                    this.responder(&mcast_socket, &sockets).await;
+                                });
+                            }
                         }
-                        if let Some(mcast_socket) = mcast_socket {
-                            let this = self.clone();
-                            self.spawn_abortable(async move {
-                                this.responder(&mcast_socket, &sockets).await;
-                            });
-                        }
+                    } else if let Some(mcast_socket) = mcast_socket {
+                        let this = self.clone();
+                        self.spawn_abortable(async move {
+                            this.responder(&mcast_socket, &sockets).await;
+                        });
                     }
                 }
             }

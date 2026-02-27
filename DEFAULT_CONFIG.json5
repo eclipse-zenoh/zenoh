@@ -131,6 +131,7 @@
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
+    /// Set a negative value to scout in background.
     timeout: 3000,
     /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
     delay: 500,
