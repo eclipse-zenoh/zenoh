@@ -378,15 +378,25 @@ impl Runtime {
                 peers_to_retry.push(endpoint);
             }
         }
-        // sequentially try to connect to one of the remaining peers
-        // respecting connection retry delays
-        match self.peers_connector_retry(peers_to_retry, true).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
-                tracing::warn!("{}", &e);
-                Err(e.into())
+
+        if self.get_global_connect_retry_config().exit_on_failure {
+            // sequentially try to connect to one of the remaining peers
+            // respecting connection retry delays
+            match self.peers_connector_retry(peers_to_retry, true).await {
+                Ok(_) => Ok(()),
+                Err(_) => {
+                    let e = zerror!("Unable to connect to any of {:?}! ", peers);
+                    tracing::warn!("{}", &e);
+                    Err(e.into())
+                }
             }
+        } else {
+            // try to connect in background
+            if let Err(e) = self.spawn_peers_connector(peers_to_retry).await {
+                tracing::warn!("Error running background peers connector : {}", e);
+                return Err(e);
+            }
+            Ok(())
         }
     }
 
@@ -413,7 +423,11 @@ impl Runtime {
             } else {
                 // try to connect in background
                 if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
-                    tracing::warn!("Error connecting to {}: {}", endpoint, e);
+                    tracing::warn!(
+                        "Error running background peer connector for {}: {}",
+                        endpoint,
+                        e
+                    );
                     return Err(e);
                 }
             }
@@ -449,6 +463,11 @@ impl Runtime {
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
         let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
+    }
+
+    fn get_global_connect_retry_config(&self) -> zenoh_config::ConnectionRetryConf {
+        let guard = &self.state.config.lock();
+        zenoh_config::get_retry_config(guard, None, false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
@@ -716,6 +735,20 @@ impl Runtime {
         let udp_socket = zenoh_runtime::ZRuntime::Net
             .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
         Ok(udp_socket)
+    }
+
+    async fn spawn_peers_connector(&self, peers: Vec<EndPoint>) -> ZResult<()> {
+        let this = self.clone();
+        self.spawn(async move {
+            if this
+                .peers_connector_retry(peers.clone(), true)
+                .await
+                .is_err()
+            {
+                tracing::warn!("Unable to connect to any of {:?}! ", peers);
+            }
+        });
+        Ok(())
     }
 
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
