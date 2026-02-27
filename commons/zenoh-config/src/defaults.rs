@@ -69,7 +69,7 @@ pub mod open {
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
 pub mod scouting {
-    pub const timeout: u64 = 3000;
+    pub const timeout: i64 = 3000;
     pub const delay: u64 = 500;
     pub mod multicast {
         pub const enabled: bool = true;

@@ -106,7 +106,7 @@ impl ConnectionRetryPeriod {
     }
 }
 
-fn ms_to_duration(ms: i64) -> std::time::Duration {
+pub fn ms_to_duration(ms: i64) -> std::time::Duration {
     if ms >= 0 {
         std::time::Duration::from_millis(ms as u64)
     } else {
