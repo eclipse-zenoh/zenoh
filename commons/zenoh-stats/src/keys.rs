@@ -56,6 +56,7 @@ impl StatsKeysTree {
             if cache.generation.load(Ordering::Acquire) != self.generation {
                 self.update_cache(cache, keyexpr);
             }
+            // SAFETY: Dereference the raw pointer.
             return unsafe { &*cache.keys.get() }.clone();
         }
         self.compute_keys(keyexpr)

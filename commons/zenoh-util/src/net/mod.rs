@@ -34,6 +34,9 @@ lazy_static! {
 }
 
 #[cfg(windows)]
+/// # Safety
+/// The caller must ensure the `af_spec`` is valid, which will be used by
+/// `winapi::um::iphlpapi::GetAdaptersAddresses`.
 unsafe fn get_adapters_addresses(af_spec: i32) -> ZResult<Vec<u8>> {
     use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
@@ -43,13 +46,16 @@ unsafe fn get_adapters_addresses(af_spec: i32) -> ZResult<Vec<u8>> {
     let mut buffer: Vec<u8>;
     loop {
         buffer = Vec::with_capacity(size as usize);
-        ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-            af_spec.try_into().unwrap(),
-            0,
-            std::ptr::null_mut(),
-            buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
-            &mut size,
-        );
+        // SAFETY: Call the unsafe function `GetAdaptersAddresses`.
+        ret = unsafe {
+            winapi::um::iphlpapi::GetAdaptersAddresses(
+                af_spec.try_into().unwrap(),
+                0,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+                &mut size,
+            )
+        };
         if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
             break;
         }
