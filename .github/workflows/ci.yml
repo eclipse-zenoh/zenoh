@@ -34,7 +34,7 @@ env:
   # Nightly toolchain identifier used by cargo invocations
   # Normally keep it "nightly" to always use the latest nightly, but in case of a regression in the Rust compiler, 
   # it can be useful to fix it to a specific nightly version that is known to work.
-  NIGHTLY_TOOLCHAIN: "nightly-2026-02-21"
+  NIGHTLY_TOOLCHAIN: "nightly"
 
 jobs:
   determine-runner:
