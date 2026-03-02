@@ -14,6 +14,7 @@
 
 use std::cmp::max;
 
+use zenoh_result::ZResult;
 use zenoh_uring::reader::Reader;
 
 #[derive(Clone)]
@@ -23,15 +24,15 @@ pub struct Uring {
 }
 
 impl Uring {
-    pub fn new(batch_size: usize, link_rx_buffer_size: usize) -> Self {
+    pub fn new(batch_size: usize, link_rx_buffer_size: usize) -> ZResult<Self> {
         // add 2 bytes for size header in case of streamed links
         let batch_size = batch_size + (u16::BITS / 8) as usize;
         let batch_count = max(link_rx_buffer_size / batch_size, 2);
 
         //let writer = Arc::new(Writer::new());
-        let reader = Reader::new(batch_size, batch_count);
-        Self {
+        let reader = Reader::new(batch_size, batch_count)?;
+        Ok(Self {
             /*writer,*/ reader,
-        }
+        })
     }
 }

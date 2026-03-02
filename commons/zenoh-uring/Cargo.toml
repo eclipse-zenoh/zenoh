@@ -31,6 +31,7 @@ atomic-queue = { workspace = true }
 io-uring = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-runtime = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["event"] }
 thread-priority = { workspace = true }

@@ -139,7 +139,7 @@ fn reader_main() {
     let (stream, _addr) = listener.accept().unwrap();
     stream.set_nodelay(true).unwrap();
 
-    let reader = Reader::new(BUF_SIZE, BUF_COUNT);
+    let reader = Reader::new(BUF_SIZE, BUF_COUNT).unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 

@@ -25,6 +25,7 @@ use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriorit
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 
 use crate::batch_arena::BatchArena;
 
@@ -144,20 +145,19 @@ impl SubmissionIface {
 
     fn submit(&self, entry: io_uring::squeue::Entry) -> ZResult<()> {
         self.submit_quiet(entry)?;
-        self.wake_reader_thread();
-        Ok(())
+        self.wake_reader_thread()
     }
 
     fn submit_quiet(&self, entry: io_uring::squeue::Entry) -> ZResult<()> {
         self.sender.send(entry).map_err(|e| e.to_string().into())
     }
 
-    fn wake_reader_thread(&self) {
+    fn wake_reader_thread(&self) -> ZResult<()> {
         // A write() to an eventfd can (rarely) block if the internal counter is near overflow.
         // With non-blocking mode (EfdFlags::EFD_NONBLOCK), you’ll get EAGAIN instead of risking
         // a hang during shutdown logic.
         // TODO: handle EAGAIN or switch to blocking mode
-        self.waker.write(1).unwrap();
+        self.waker.write(1).map(|_| ()).map_err(|e| e.into())
     }
 }
 
@@ -180,7 +180,7 @@ impl Drop for ReaderInner {
     fn drop(&mut self) {
         self.exit_flag
             .store(true, std::sync::atomic::Ordering::SeqCst);
-        self.submitter.wake_reader_thread();
+        let _ = self.submitter.wake_reader_thread();
     }
 }
 
@@ -585,6 +585,7 @@ impl ReservableArena {
 #[derive(Clone)]
 pub struct Reader {
     inner: Arc<ReaderInner>,
+    receiver: tokio::sync::watch::Receiver<String>,
 }
 
 impl Reader {
@@ -609,11 +610,12 @@ impl Reader {
         ReadTask::new(fd, callback, self.inner.clone())
     }
 
-    pub fn new(batch_size: usize, batch_count: usize) -> Self {
+    pub fn new(batch_size: usize, batch_count: usize) -> ZResult<Self> {
         // create eventfd to wake io_uring on demand by producing read events
-        let waker = Arc::new(
-            nix::sys::eventfd::EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap(),
-        );
+        let waker = Arc::new(nix::sys::eventfd::EventFd::from_value_and_flags(
+            0,
+            EfdFlags::EFD_CLOEXEC,
+        )?);
 
         let c_waker = waker.clone();
 
@@ -626,6 +628,132 @@ impl Reader {
 
         let c_exit_flag = exit_flag.clone();
 
+        let (join_sender, mut join_receiver) = tokio::sync::watch::channel("".into());
+        join_receiver.mark_unchanged();
+
+        let ring_worker = move || -> ZResult<()> {
+            // Create memory for waker's read events
+            let mut dummy_mem = {
+                let mem: [u8; 8] = [0; 8];
+                Box::new(mem)
+            };
+
+            // io_uring read
+            let ring = IoUring::builder()
+                .setup_submit_all()
+                //.setup_sqpoll(1)
+                //.setup_iopoll()
+                //.setup_sqpoll_cpu(0)
+                //.setup_coop_taskrun()
+                .setup_defer_taskrun()
+                .setup_single_issuer()
+                .build((4096 /*batch_count*2*/).try_into()?)?;
+            let arena = BatchArena::new(batch_size, batch_count, u16::MAX as usize)?;
+            {
+                let provide_buffers = arena.provide_root_buffers();
+                unsafe { ring.submission_shared().push(&provide_buffers)? };
+                ring.submit_and_wait(1)?;
+
+                let cq: io_uring::cqueue::Entry = unsafe {
+                    ring.completion_shared()
+                        .next()
+                        .expect("completion queue is empty")
+                };
+                assert!(cq.result() == 0);
+            }
+
+            let arena = ReservableArena::new(arena, c_submitter);
+
+            // read for waker
+            let waker_read =
+                opcode::Read::new(types::Fd(c_waker.as_raw_fd()), dummy_mem.as_mut_ptr(), 8)
+                    .build();
+
+            unsafe { ring.submission_shared().push(&waker_read)? };
+
+            fn roll_ring_batches(
+                arena: &ReservableArena,
+                ctr: &mut i32,
+                sq: &mut SubmissionQueue<'_>,
+            ) -> ZResult<()> {
+                while *ctr < 0 {
+                    match arena.inner.pop_recycled_batch() {
+                        Some((batch, count)) => {
+                            unsafe { sq.push(&batch)? }
+                            *ctr += count as i32;
+                        }
+                        None => break,
+                    }
+                }
+                Ok(())
+            }
+
+            let mut batch_ctr = (batch_count / 2) as i32;
+
+            loop {
+                while let Some(e) = unsafe { ring.completion_shared() }.next() {
+                    //log!("INFO", "e: {:?}", e);
+
+                    let mut sq = unsafe { ring.submission_shared() };
+
+                    // waker trigger check
+                    if e.user_data() == 0 {
+                        log!("INFO", "Zero-user-data entry: {:?}", e);
+                        unsafe { sq.push(&waker_read)? };
+                        continue;
+                    }
+
+                    let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
+
+                    let need_submit = Reader::read_multi(&e, rx, &arena, &mut sq, &mut batch_ctr);
+
+                    roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
+
+                    if need_submit {
+                        let len = sq.len() as u32;
+                        drop(sq);
+
+                        unsafe {
+                            ring.submitter().enter::<libc::sigset_t>(
+                                len,
+                                0,
+                                EnterFlags::GETEVENTS.bits(),
+                                None,
+                            )?;
+                        }
+                    } else {
+                        drop(sq);
+                    }
+                }
+
+                let mut sq = unsafe { ring.submission_shared() };
+
+                // reclaim batches
+                roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
+
+                // receive external submissions
+                while let Ok(val) = receiver.try_recv() {
+                    unsafe { sq.push(&val)? };
+                }
+                drop(sq);
+
+                if c_exit_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                    break;
+                }
+
+                // this wait can be interrupted by Self::wake_reader_thread
+                ring.submit_and_wait(1)?;
+            }
+            Ok(())
+        };
+
+        ZRuntime::Net.spawn_blocking(move || {
+            if let Err(e) = ring_worker() {
+                let _ = join_sender.send(e.to_string());
+            }
+        });
+
+        /*
         #[cfg(unix)]
         let builder = ThreadBuilder::default()
             .name("uring_task")
@@ -635,12 +763,6 @@ impl Reader {
             .priority(ThreadPriority::Min);
 
         let _ = builder.spawn(move |result| {
-            // Create memory for waker's read events
-            let mut dummy_mem = {
-                let mem: [u8; 8] = [0; 8];
-                Box::new(mem)
-            };
-
             if let Err(e) = result {
                 let mut err = format!(
                     "{:?}: error setting scheduling priority for thread: {:?}, will run with ",
@@ -672,110 +794,26 @@ impl Reader {
                 log!("INFO", "{}", err);
             }
 
-
-            // io_uring read
-            let ring = IoUring::builder()
-                .setup_submit_all()
-                //.setup_sqpoll(1)
-                //.setup_iopoll()
-                //.setup_sqpoll_cpu(0)
-                //.setup_coop_taskrun()
-                .setup_defer_taskrun()
-                .setup_single_issuer()
-                .build((batch_count*2).try_into().unwrap()).unwrap();
-            let arena = BatchArena::new(batch_size, batch_count, u16::MAX as usize).unwrap();
-            {
-                let provide_buffers = arena.provide_root_buffers();
-                unsafe { ring.submission_shared().push(&provide_buffers).unwrap() };
-                ring.submit_and_wait(1).unwrap();
-
-                let cq: io_uring::cqueue::Entry = unsafe {
-                    ring.completion_shared()
-                        .next()
-                        .expect("completion queue is empty")
-                };
-                assert!(cq.result() == 0);
-            }
-
-            let arena = ReservableArena::new(arena, c_submitter);
-
-            // read for waker
-            let waker_read =
-                opcode::Read::new(types::Fd(c_waker.as_raw_fd()), dummy_mem.as_mut_ptr(), 8)
-                    .build();
-
-            unsafe { ring.submission_shared().push(&waker_read).unwrap() };
-
-            fn roll_ring_batches(arena: &ReservableArena, ctr: &mut i32, sq: &mut SubmissionQueue<'_>) {
-                while *ctr < 0 {
-                    match arena.inner.pop_recycled_batch() {
-                        Some(( batch,count)) => {
-                            unsafe { sq.push(&batch).unwrap() }
-                            *ctr += count as i32;
-                        },
-                        None => break,
-                    }
-                }
-            }
-
-            let mut batch_ctr = (batch_count/2) as i32;
-
-            loop {
-                while let Some(e) = unsafe { ring.completion_shared() }.next() {
-                    //log!("INFO", "e: {:?}", e);
-
-                    let mut sq = unsafe { ring.submission_shared() };
-
-                    // waker trigger check
-                    if e.user_data() == 0 {
-                        log!("INFO", "Zero-user-data entry: {:?}", e);
-                        unsafe { sq.push(&waker_read).unwrap() };
-                        continue;
-                    }
-
-                    let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
-
-                    let need_submit = Reader::read_multi(&e, rx, &arena, &mut sq, &mut batch_ctr);
-
-                    roll_ring_batches(&arena, &mut batch_ctr, &mut sq);
-
-                    if need_submit {
-                        let len = sq.len() as u32;
-                        drop(sq);
-
-                        unsafe { ring.submitter().enter::<libc::sigset_t>(
-                            len,
-                             0,
-                              EnterFlags::GETEVENTS.bits(),
-                               None).unwrap(); }
-                    } else {
-                        drop(sq);
-                    }
-                }
-
-                let mut sq = unsafe { ring.submission_shared() };
-
-                // reclaim batches
-                roll_ring_batches(&arena, &mut batch_ctr, &mut sq);
-
-                // receive external submissions
-                while let Ok(val) = receiver.try_recv() {
-                    unsafe { sq.push(&val).unwrap() };
-                }
-                drop(sq);
-
-                if c_exit_flag.load(std::sync::atomic::Ordering::SeqCst) {
-                    break;
-                }
-
-                // this wait can be interrupted by Self::wake_reader_thread
-                ring.submit_and_wait(1).unwrap();
+            if let Err(e) = ring_worker() {
+                let _ = join_sender.send(e.to_string());
             }
         });
+        */
 
         let inner = Arc::new(ReaderInner::new(submitter, exit_flag));
 
-        Self { inner }
+        Ok(Self {
+            inner,
+            receiver: join_receiver,
+        })
+    }
+
+    pub async fn wait_finished(&self) -> ZResult<()> {
+        let mut r = self.receiver.clone();
+        match r.changed().await {
+            Ok(_) => Err((*r.borrow_and_update()).clone().into()),
+            Err(_) => Ok(()),
+        }
     }
 
     fn read_multi(
@@ -805,6 +843,9 @@ impl Reader {
 
                     unsafe { sq.push(&recv).unwrap() };
                     need_submit = true;
+                }
+                libc::ECANCELED => {
+                    log!("INFO", "Rx task cancelled: {:?}", rx);
                 }
                 _unexpected => {
                     log!("INFO", "Unexpected uring error: {}", _unexpected);

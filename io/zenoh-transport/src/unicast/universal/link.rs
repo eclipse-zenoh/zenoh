@@ -523,9 +523,18 @@ async fn rx_task_uring(
             tracing::debug!("Uring RX task stopped by uring error event");
             return Err(e);
         },
+        finished = transport
+                    .manager
+                    .state
+                    .uring
+                    .reader.wait_finished() => {
+                        tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
+                        finished?;
+                    }
         _ = token.cancelled() => {
             tracing::debug!("Uring RX task stopped by transport cancellation");
         },
+
     }
 
     Ok(())
