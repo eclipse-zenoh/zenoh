@@ -81,7 +81,6 @@ use crate::{
     api::handlers::CallbackParameter,
     api::{
         cancellation::{CancellationToken, SyncGroup, SyncGroupNotifier},
-        query::ReplyKeyExpr,
         sample::SourceInfo,
         selector::ZenohParameters,
     },
@@ -111,7 +110,7 @@ use crate::{
         querier::QuerierState,
         query::{
             ConsolidationMode, LivelinessQueryState, QueryConsolidation, QueryState, QueryTarget,
-            Reply,
+            Reply, ReplyKeyExpr,
         },
         queryable::{Query, QueryInner, QueryableState, ReplyPrimitives},
         sample::{Locality, QoS, Sample, SampleKind},
@@ -1246,7 +1245,6 @@ impl Session {
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
             timeout: self.queries_default_timeout(),
-            #[cfg(feature = "unstable")]
             accept_replies: ReplyKeyExpr::default(),
         }
     }
@@ -2728,6 +2726,7 @@ impl Session {
                 qid,
                 target,
                 consolidation,
+                qos,
                 #[cfg(feature = "unstable")]
                 source,
                 value.as_ref().map(|v| query::ext::QueryBodyType {
@@ -2867,6 +2866,7 @@ impl Session {
         qid: RequestId,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
+        qos: QoS,
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
@@ -2895,6 +2895,7 @@ impl Session {
             parameters: parameters.to_owned().into(),
             qid,
             zid: zid.into(),
+            qos,
             #[cfg(feature = "unstable")]
             source_info,
             primitives: if local {
@@ -3236,6 +3237,7 @@ impl Primitives for WeakSession {
                             msg.id,
                             msg.ext_target,
                             m.consolidation,
+                            msg.ext_qos.into(),
                             #[cfg(feature = "unstable")]
                             m.ext_sinfo.map(Into::into),
                             mem::take(&mut m.ext_body),
