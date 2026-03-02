@@ -20,8 +20,7 @@ use std::{
 
 use io_uring::{opcode, squeue::Flags, types, EnterFlags, IoUring, SubmissionQueue};
 use nix::sys::eventfd::{EfdFlags, EventFd};
-#[cfg(unix)]
-use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
+//use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;

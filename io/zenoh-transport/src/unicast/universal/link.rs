@@ -26,9 +26,9 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+use zenoh_task::TaskController;
 #[cfg(feature = "uring")]
 use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
-use zenoh_task::TaskController;
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
