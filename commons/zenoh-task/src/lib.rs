@@ -41,10 +41,39 @@ impl Default for TaskController {
     }
 }
 
+#[derive(Debug)]
+pub struct TaskCancelledError;
+impl std::fmt::Display for TaskCancelledError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "task was cancelled")
+    }
+}
+impl std::error::Error for TaskCancelledError {}
+
 impl TaskController {
+    /// Converts a task to abortable one, which can later be terminated by call to [`TaskController::terminate_all()`].
+    pub fn into_abortable<'a, F, T>(
+        &self,
+        future: F,
+    ) -> impl Future<Output = Result<T, TaskCancelledError>> + Send + 'a
+    where
+        F: Future<Output = T> + Send + 'a,
+        T: Send + 'static,
+    {
+        let token = self.token.child_token();
+        let task = async move {
+            tokio::select! {
+                _ = token.cancelled() => { Err(TaskCancelledError) },
+                res = future => { Ok(res) }
+            }
+        };
+
+        task
+    }
+
     /// Spawns a task that can be later terminated by call to [`TaskController::terminate_all()`].
     /// Task output is ignored.
-    pub fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Result<T, TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -52,20 +81,15 @@ impl TaskController {
         #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        let token = self.token.child_token();
-        let task = async move {
-            tokio::select! {
-                _ = token.cancelled() => {},
-                _ = future => {}
-            }
-        };
-
-        self.tracker.spawn(task)
+        self.tracker.spawn(self.into_abortable(future))
     }
 
     /// Spawns a task using a specified runtime that can be later terminated by call to [`TaskController::terminate_all()`].
-    /// Task output is ignored.
-    pub fn spawn_abortable_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<()>
+    pub fn spawn_abortable_with_rt<F, T>(
+        &self,
+        rt: ZRuntime,
+        future: F,
+    ) -> JoinHandle<Result<T, TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -73,24 +97,18 @@ impl TaskController {
         #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        let token = self.token.child_token();
-        let task = async move {
-            tokio::select! {
-                _ = token.cancelled() => {},
-                _ = future => {}
-            }
-        };
-        self.tracker.spawn_on(task, &rt)
+        self.tracker.spawn_on(self.into_abortable(future), &rt)
     }
 
     pub fn get_cancellation_token(&self) -> CancellationToken {
         self.token.child_token()
     }
 
-    /// Spawns a task that can be cancelled via cancellation of a token obtained by [`TaskController::get_cancellation_token()`],
-    /// or that can run to completion in finite amount of time.
+    /// Spawns a task that can be cancelled cancellation of a token obtained by [`TaskController::get_cancellation_token()`],
+    /// was created via [`TaskController::into_abortable()`],
+    /// or can run to completion in finite amount of time, using a specified runtime.
     /// It can be later terminated by call to [`TaskController::terminate_all()`].
-    pub fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -98,13 +116,14 @@ impl TaskController {
         #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        self.tracker.spawn(future.map(|_f| ()))
+        self.tracker.spawn(future)
     }
 
-    /// Spawns a task that can be cancelled via cancellation of a token obtained by [`TaskController::get_cancellation_token()`],
-    /// or that can run to completion in finite amount of time, using a specified runtime.
+    /// Spawns a task which can be cancelled via cancellation of a token obtained by [`TaskController::get_cancellation_token()`],
+    /// was created via [`TaskController::into_abortable()`],
+    /// or can run to completion in finite amount of time, using a specified runtime.
     /// It can be later aborted by call to [`TaskController::terminate_all()`].
-    pub fn spawn_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<()>
+    pub fn spawn_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -112,7 +131,7 @@ impl TaskController {
         #[cfg(feature = "tracing-instrument")]
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
-        self.tracker.spawn_on(future.map(|_f| ()), &rt)
+        self.tracker.spawn_on(future, &rt)
     }
 
     /// Attempts tp terminate all previously spawned tasks
