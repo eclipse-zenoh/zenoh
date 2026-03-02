@@ -15,7 +15,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio_util::sync::CancellationToken;
 #[cfg(feature = "uring")]
 use zenoh_buffers::ZSlice;
 use zenoh_buffers::ZSliceBuffer;
@@ -413,7 +412,6 @@ async fn rx_task_uring(
     // TODO: implement timeout
     _lease: Duration,
     rx_buffer_size: usize,
-    token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     // The pool of buffers
@@ -521,10 +519,6 @@ async fn rx_task_uring(
                         tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
                         finished?;
                     }
-        _ = token.cancelled() => {
-            tracing::debug!("Uring RX task stopped by transport cancellation");
-        },
-
     }
 
     Ok(())
