@@ -86,6 +86,10 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 pub enum ZSliceKind {
     Raw = 0,
     ShmPtr = 1,
+    /// CUDA IPC handle — as_slice() is valid only for pinned/unified memory.
+    /// Device-only memory has len=0 in the ZSlice; use downcast_ref::<CudaBufInner>().cuda_len().
+    #[cfg(feature = "cuda")]
+    CudaPtr = 2,
 }
 
 /// A cloneable wrapper to a contiguous slice of bytes.

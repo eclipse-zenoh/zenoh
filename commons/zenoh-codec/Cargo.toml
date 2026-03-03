@@ -30,6 +30,7 @@ version = { workspace = true }
 
 [features]
 default = ["std"]
+cuda = ["zenoh-buffers/cuda", "zenoh-cuda"]
 shared-memory = [
   "std",
   "zenoh-buffers/shared-memory",
@@ -42,6 +43,7 @@ std = ["tracing", "uhlc/std", "zenoh-buffers/std", "zenoh-protocol/std"]
 tracing = { workspace = true, optional = true }
 uhlc = { workspace = true }
 zenoh-buffers = { workspace = true, default-features = false }
+zenoh-cuda = { workspace = true, optional = true }
 zenoh-protocol = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 

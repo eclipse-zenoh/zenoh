@@ -109,13 +109,25 @@ mod shm {
 
     const RAW: u8 = 0;
     const SHM_PTR: u8 = 1;
+    #[cfg(feature = "cuda")]
+    const CUDA_PTR: u8 = 2;
+
+    // Wire size for a CUDA IPC entry: kind(1) + handle(64) + len as u64(8) + device_id as i32(4)
+    #[cfg(feature = "cuda")]
+    const CUDA_WIRE_SIZE: usize = 1 + 64 + 8 + 4;
 
     macro_rules! zbuf_sliced_impl {
         ($bound:ty) => {
             impl LCodec<&ZBuf> for Zenoh080Sliced<$bound> {
                 fn w_len(self, message: &ZBuf) -> usize {
                     if self.is_sliced {
-                        message.zslices().fold(0, |acc, x| acc + 1 + x.len())
+                        message.zslices().fold(0, |acc, x| {
+                            #[cfg(feature = "cuda")]
+                            if x.kind == ZSliceKind::CudaPtr {
+                                return acc + CUDA_WIRE_SIZE;
+                            }
+                            acc + 1 + x.len()
+                        })
                     } else {
                         self.codec.w_len(message)
                     }
@@ -149,6 +161,21 @@ mod shm {
                                     // valid until it is received.
                                     unsafe { shmb.inc_ref_count() };
                                 }
+                                #[cfg(feature = "cuda")]
+                                ZSliceKind::CudaPtr => {
+                                    use zenoh_cuda::CudaBufInner;
+                                    self.codec.write(&mut *writer, CUDA_PTR)?;
+                                    let cuda = zs
+                                        .downcast_ref::<CudaBufInner>()
+                                        .expect("CudaPtr ZSlice must contain CudaBufInner");
+                                    // Send IPC handle + length + device — no bulk data.
+                                    writer
+                                        .write_exact(&cuda.ipc_handle)
+                                        .map_err(|_| DidntWrite)?;
+                                    self.codec.write(&mut *writer, cuda.cuda_len as u64)?;
+                                    // device_id encoded as u32 (negative values not expected)
+                                    self.codec.write(&mut *writer, cuda.device_id as u32)?;
+                                }
                             }
                         }
                     } else {
@@ -180,6 +207,25 @@ mod shm {
                                 SHM_PTR => {
                                     let mut zslice: ZSlice = self.codec.read(&mut *reader)?;
                                     zslice.kind = ZSliceKind::ShmPtr;
+                                    zbuf.push_zslice(zslice);
+                                }
+                                #[cfg(feature = "cuda")]
+                                CUDA_PTR => {
+                                    use std::sync::Arc;
+                                    use zenoh_cuda::CudaBufInner;
+                                    let mut handle = [0u8; 64];
+                                    reader.read_exact(&mut handle).map_err(|_| DidntRead)?;
+                                    let len: u64 = self.codec.read(&mut *reader)?;
+                                    let device_id: u32 = self.codec.read(&mut *reader)?;
+                                    // Open IPC handle — maps the sender's device memory.
+                                    let cuda_buf = CudaBufInner::from_ipc(
+                                        handle,
+                                        len as usize,
+                                        device_id as i32,
+                                    )
+                                    .map_err(|_| DidntRead)?;
+                                    let mut zslice = ZSlice::from(Arc::new(cuda_buf));
+                                    zslice.kind = ZSliceKind::CudaPtr;
                                     zbuf.push_zslice(zslice);
                                 }
                                 _ => return Err(DidntRead),

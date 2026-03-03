@@ -27,6 +27,7 @@ version = { workspace = true }
 [features]
 auth_pubkey = ["rsa", "transport_auth"]
 auth_usrpwd = ["transport_auth"]
+cuda = ["zenoh-buffers/cuda", "zenoh-codec/cuda", "zenoh-cuda"]
 default = ["test", "transport_multilink"]
 shared-memory = [
   "zenoh-buffers/shared-memory",
@@ -84,6 +85,7 @@ zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-cuda = { workspace = true, optional = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-stats = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }

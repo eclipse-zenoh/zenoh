@@ -262,6 +262,14 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
     shm_provider: &Option<Arc<LazyShmProvider>>,
 ) {
     for zs in zbuf.zslices_mut() {
+        #[cfg(all(feature = "shared-memory", feature = "cuda"))]
+        if zs.kind == ZSliceKind::CudaPtr {
+            // CUDA IPC: ZSlice already carries a CudaBufInner with an IPC handle.
+            // Signal the sliced codec by setting ext_shm; the codec handles the rest.
+            *ext_shm = Some(ShmType::new());
+            continue;
+        }
+
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
                 if let Some(shm_provider) = shm_provider {
