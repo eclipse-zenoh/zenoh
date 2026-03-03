@@ -356,6 +356,95 @@ async fn test_regions_scenario4_order1_queque() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario4_order1_toksub() {
+    init_tracing_subscriber();
+
+    let z9100 = ztimeout!(Node::new(Router, "41ae9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .open());
+
+    let z9200 = ztimeout!(Node::new(Router, "41ae9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .open());
+
+    let z9300 = ztimeout!(Node::new(Router, "41ae9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .open());
+
+    let z9110 = ztimeout!(Node::new(Client, "41ae9110").connect(&[loc!(z9100)]).open());
+    let z9120 = ztimeout!(Node::new(Client, "41ae9120").connect(&[loc!(z9100)]).open());
+    let z9130 = ztimeout!(Node::new(Client, "41ae9130").connect(&[loc!(z9100)]).open());
+    let z9210 = ztimeout!(Node::new(Client, "41ae9210").connect(&[loc!(z9200)]).open());
+    let z9220 = ztimeout!(Node::new(Client, "41ae9220").connect(&[loc!(z9200)]).open());
+    let z9230 = ztimeout!(Node::new(Client, "41ae9230").connect(&[loc!(z9200)]).open());
+    let z9310 = ztimeout!(Node::new(Client, "41ae9310").connect(&[loc!(z9300)]).open());
+    let z9320 = ztimeout!(Node::new(Client, "41ae9320").connect(&[loc!(z9300)]).open());
+    let z9330 = ztimeout!(Node::new(Client, "41ae9330").connect(&[loc!(z9300)]).open());
+
+    skip_fmt! {
+        let s9110 = z9110.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9310 = z9310.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+    }
+
+    let t9110 = z9110.liveliness().declare_token("test/9110").await.unwrap();
+    let t9120 = z9120.liveliness().declare_token("test/9120").await.unwrap();
+    let t9130 = z9130.liveliness().declare_token("test/9130").await.unwrap();
+    let t9210 = z9210.liveliness().declare_token("test/9210").await.unwrap();
+    let t9220 = z9220.liveliness().declare_token("test/9220").await.unwrap();
+    let t9230 = z9230.liveliness().declare_token("test/9230").await.unwrap();
+    let t9310 = z9310.liveliness().declare_token("test/9310").await.unwrap();
+    let t9320 = z9320.liveliness().declare_token("test/9320").await.unwrap();
+    let t9330 = z9330.liveliness().declare_token("test/9330").await.unwrap();
+
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_put_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    t9110.undeclare().await.unwrap();
+    t9120.undeclare().await.unwrap();
+    t9130.undeclare().await.unwrap();
+    t9210.undeclare().await.unwrap();
+    t9220.undeclare().await.unwrap();
+    t9230.undeclare().await.unwrap();
+    t9310.undeclare().await.unwrap();
+    t9320.undeclare().await.unwrap();
+    t9330.undeclare().await.unwrap();
+
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_del_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_regions_scenario4_order2_putsub() {
     init_tracing_subscriber();
 
@@ -685,4 +774,97 @@ async fn test_regions_scenario4_order2_queque() {
             1
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_regions_scenario4_order2_toksub() {
+    init_tracing_subscriber();
+
+    let z9100 = ztimeout!(Node::new(Router, "42ae9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .open());
+
+    let z9200 = ztimeout!(Node::new(Router, "42ae9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .open());
+
+    let z9110 = ztimeout!(Node::new(Client, "42ae9110").connect(&[loc!(z9100)]).open());
+    let z9120 = ztimeout!(Node::new(Client, "42ae9120").connect(&[loc!(z9100)]).open());
+    let z9130 = ztimeout!(Node::new(Client, "42ae9130").connect(&[loc!(z9100)]).open());
+    let z9210 = ztimeout!(Node::new(Client, "42ae9210").connect(&[loc!(z9200)]).open());
+    let z9220 = ztimeout!(Node::new(Client, "42ae9220").connect(&[loc!(z9200)]).open());
+    let z9230 = ztimeout!(Node::new(Client, "42ae9230").connect(&[loc!(z9200)]).open());
+
+    skip_fmt! {
+        let s9110 = z9110.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9120 = z9120.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9130 = z9130.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9210 = z9210.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9220 = z9220.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9230 = z9230.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+    }
+
+    let z9300 = ztimeout!(Node::new(Router, "42ae9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Client, "42ae9310").connect(&[loc!(z9300)]).open());
+    let z9320 = ztimeout!(Node::new(Client, "42ae9320").connect(&[loc!(z9300)]).open());
+    let z9330 = ztimeout!(Node::new(Client, "42ae9330").connect(&[loc!(z9300)]).open());
+
+    skip_fmt! {
+        let s9310 = z9310.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9320 = z9320.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+    }
+
+    let t9110 = z9110.liveliness().declare_token("test/9110").await.unwrap();
+    let t9120 = z9120.liveliness().declare_token("test/9120").await.unwrap();
+    let t9130 = z9130.liveliness().declare_token("test/9130").await.unwrap();
+    let t9210 = z9210.liveliness().declare_token("test/9210").await.unwrap();
+    let t9220 = z9220.liveliness().declare_token("test/9220").await.unwrap();
+    let t9230 = z9230.liveliness().declare_token("test/9230").await.unwrap();
+    let t9310 = z9310.liveliness().declare_token("test/9310").await.unwrap();
+    let t9320 = z9320.liveliness().declare_token("test/9320").await.unwrap();
+    let t9330 = z9330.liveliness().declare_token("test/9330").await.unwrap();
+
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_put_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
+
+    t9110.undeclare().await.unwrap();
+    t9120.undeclare().await.unwrap();
+    t9130.undeclare().await.unwrap();
+    t9210.undeclare().await.unwrap();
+    t9220.undeclare().await.unwrap();
+    t9230.undeclare().await.unwrap();
+    t9310.undeclare().await.unwrap();
+    t9320.undeclare().await.unwrap();
+    t9330.undeclare().await.unwrap();
+
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if [
+                &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
+            ]
+            .iter()
+            .all(|sub| sub.count_del_keys() == 9)
+            {
+                break;
+            }
+        }
+    });
 }
