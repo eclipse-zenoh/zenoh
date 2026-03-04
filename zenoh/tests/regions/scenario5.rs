@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2026 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-// Scenario 2
-//   P      P      P
-// P P P  P P P  P P P
+// Scenario 5
+//   R      R      R
+// R R R  R R R  R R R
 
 use std::time::Duration;
 
@@ -23,7 +23,7 @@ use zenoh::{
     query::{ConsolidationMode, QueryTarget},
     Wait,
 };
-use zenoh_config::WhatAmI::Peer;
+use zenoh_config::WhatAmI::Router;
 use zenoh_core::{lazy_static, ztimeout};
 
 use crate::{loc, predicates_ext, skip_fmt, Node, SubUtils};
@@ -44,55 +44,53 @@ fn init_tracing_subscriber() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order1_putsub() {
+async fn test_regions_scenario5_order1_putsub() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "21aa9100")
-        .multicast("224.2.1.1:9100")
+    let z9100 = ztimeout!(Node::new(Router, "51aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "21aa9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.1.1:9200")
+    let z9200 = ztimeout!(Node::new(Router, "51aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "21aa9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.1.1:9300")
+    let z9300 = ztimeout!(Node::new(Router, "51aa9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "21aa9110")
-        .multicast("224.2.1.1:9100")
+    let z9110 = ztimeout!(Node::new(Router, "51aa9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "21aa9120")
-        .multicast("224.2.1.1:9100")
+    let z9120 = ztimeout!(Node::new(Router, "51aa9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "21aa9130")
-        .multicast("224.2.1.1:9100")
-        .open());
-
-    let z9210 = ztimeout!(Node::new(Peer, "21aa9210")
-        .multicast("224.2.1.1:9200")
-        .open());
-    let z9220 = ztimeout!(Node::new(Peer, "21aa9220")
-        .multicast("224.2.1.1:9200")
-        .open());
-    let z9230 = ztimeout!(Node::new(Peer, "21aa9230")
-        .multicast("224.2.1.1:9200")
+    let z9130 = ztimeout!(Node::new(Router, "51aa9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "21aa9310")
-        .multicast("224.2.1.1:9300")
+    let z9210 = ztimeout!(Node::new(Router, "51aa9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "21aa9320")
-        .multicast("224.2.1.1:9300")
+    let z9220 = ztimeout!(Node::new(Router, "51aa9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "21aa9330")
-        .multicast("224.2.1.1:9300")
+    let z9230 = ztimeout!(Node::new(Router, "51aa9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Router, "51aa9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .open());
+    let z9320 = ztimeout!(Node::new(Router, "51aa9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .open());
+    let z9330 = ztimeout!(Node::new(Router, "51aa9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -134,68 +132,66 @@ async fn test_regions_scenario2_order1_putsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "21aa9110", "21aa9120", "21aa9130", "21aa9210", "21aa9220", "21aa9230", "21aa9310",
-        "21aa9320", "21aa9330",
+        "51aa9110", "51aa9120", "51aa9130", "51aa9210", "51aa9220", "51aa9230", "51aa9310",
+        "51aa9320", "51aa9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            2
+            3, // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order1_pubsub() {
+async fn test_regions_scenario5_order1_pubsub() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "21ab9100")
-        .multicast("224.2.1.2:9100")
+    let z9100 = ztimeout!(Node::new(Router, "51ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "21ab9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.1.2:9200")
+    let z9200 = ztimeout!(Node::new(Router, "51ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "21ab9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.1.2:9300")
+    let z9300 = ztimeout!(Node::new(Router, "51ab9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "21ab9110")
-        .multicast("224.2.1.2:9100")
+    let z9110 = ztimeout!(Node::new(Router, "51ab9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "21ab9120")
-        .multicast("224.2.1.2:9100")
+    let z9120 = ztimeout!(Node::new(Router, "51ab9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "21ab9130")
-        .multicast("224.2.1.2:9100")
-        .open());
-
-    let z9210 = ztimeout!(Node::new(Peer, "21ab9210")
-        .multicast("224.2.1.2:9200")
-        .open());
-    let z9220 = ztimeout!(Node::new(Peer, "21ab9220")
-        .multicast("224.2.1.2:9200")
-        .open());
-    let z9230 = ztimeout!(Node::new(Peer, "21ab9230")
-        .multicast("224.2.1.2:9200")
+    let z9130 = ztimeout!(Node::new(Router, "51ab9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "21ab9310")
-        .multicast("224.2.1.2:9300")
+    let z9210 = ztimeout!(Node::new(Router, "51ab9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "21ab9320")
-        .multicast("224.2.1.2:9300")
+    let z9220 = ztimeout!(Node::new(Router, "51ab9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "21ab9330")
-        .multicast("224.2.1.2:9300")
+    let z9230 = ztimeout!(Node::new(Router, "51ab9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Router, "51ab9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .open());
+    let z9320 = ztimeout!(Node::new(Router, "51ab9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .open());
+    let z9330 = ztimeout!(Node::new(Router, "51ab9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -247,66 +243,66 @@ async fn test_regions_scenario2_order1_pubsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "21ab9110", "21ab9120", "21ab9130", "21ab9210", "21ab9220", "21ab9230", "21ab9310",
-        "21ab9320", "21ab9330",
+        "51ab9110", "51ab9120", "51ab9130", "51ab9210", "51ab9220", "51ab9230", "51ab9310",
+        "51ab9320", "51ab9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            3
+            3,
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order1_getque() {
+async fn test_regions_scenario5_order1_getque() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "21ac9100")
-        .multicast("224.2.1.3:9100")
+    let z9100 = ztimeout!(Node::new(Router, "51ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "21ac9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.1.3:9200")
+    let z9200 = ztimeout!(Node::new(Router, "51ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "21ac9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.1.3:9300")
+    let z9300 = ztimeout!(Node::new(Router, "51ac9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "21ac9110")
-        .multicast("224.2.1.3:9100")
+    let z9110 = ztimeout!(Node::new(Router, "51ac9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "21ac9120")
-        .multicast("224.2.1.3:9100")
+    let z9120 = ztimeout!(Node::new(Router, "51ac9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "21ac9130")
-        .multicast("224.2.1.3:9100")
+    let z9130 = ztimeout!(Node::new(Router, "51ac9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "21ac9210")
-        .multicast("224.2.1.3:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "51ac9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "21ac9220")
-        .multicast("224.2.1.3:9200")
+    let z9220 = ztimeout!(Node::new(Router, "51ac9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "21ac9230")
-        .multicast("224.2.1.3:9200")
+    let z9230 = ztimeout!(Node::new(Router, "51ac9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
-    let z9310 = ztimeout!(Node::new(Peer, "21ac9310")
-        .multicast("224.2.1.3:9300")
+
+    let z9310 = ztimeout!(Node::new(Router, "51ac9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "21ac9320")
-        .multicast("224.2.1.3:9300")
+    let z9320 = ztimeout!(Node::new(Router, "51ac9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "21ac9330")
-        .multicast("224.2.1.3:9300")
+    let z9330 = ztimeout!(Node::new(Router, "51ac9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -342,66 +338,66 @@ async fn test_regions_scenario2_order1_getque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "21ac9110", "21ac9120", "21ac9130", "21ac9210", "21ac9220", "21ac9230", "21ac9310",
-        "21ac9320", "21ac9330",
+        "51ac9110", "51ac9120", "51ac9130", "51ac9210", "51ac9220", "51ac9230", "51ac9310",
+        "51ac9320", "51ac9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            2
+            3, // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order1_queque() {
+async fn test_regions_scenario5_order1_queque() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "21ad9100")
-        .multicast("224.2.1.4:9100")
+    let z9100 = ztimeout!(Node::new(Router, "51ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "21ad9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.1.4:9200")
+    let z9200 = ztimeout!(Node::new(Router, "51ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "21ad9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.1.4:9300")
+    let z9300 = ztimeout!(Node::new(Router, "51ad9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "21ad9110")
-        .multicast("224.2.1.4:9100")
+    let z9110 = ztimeout!(Node::new(Router, "51ad9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "21ad9120")
-        .multicast("224.2.1.4:9100")
+    let z9120 = ztimeout!(Node::new(Router, "51ad9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "21ad9130")
-        .multicast("224.2.1.4:9100")
+    let z9130 = ztimeout!(Node::new(Router, "51ad9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "21ad9210")
-        .multicast("224.2.1.4:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "51ad9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "21ad9220")
-        .multicast("224.2.1.4:9200")
+    let z9220 = ztimeout!(Node::new(Router, "51ad9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "21ad9230")
-        .multicast("224.2.1.4:9200")
+    let z9230 = ztimeout!(Node::new(Router, "51ad9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
-    let z9310 = ztimeout!(Node::new(Peer, "21ad9310")
-        .multicast("224.2.1.4:9300")
+
+    let z9310 = ztimeout!(Node::new(Router, "51ad9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "21ad9320")
-        .multicast("224.2.1.4:9300")
+    let z9320 = ztimeout!(Node::new(Router, "51ad9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "21ad9330")
-        .multicast("224.2.1.4:9300")
+    let z9330 = ztimeout!(Node::new(Router, "51ad9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -447,8 +443,8 @@ async fn test_regions_scenario2_order1_queque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "21ad9110", "21ad9120", "21ad9130", "21ad9210", "21ad9220", "21ad9230", "21ad9310",
-        "21ad9320", "21ad9330",
+        "51ad9110", "51ad9120", "51ad9130", "51ad9210", "51ad9220", "51ad9230", "51ad9310",
+        "51ad9320", "51ad9330",
     ] {
         assert_eq!(
             s.all_events()
@@ -460,37 +456,37 @@ async fn test_regions_scenario2_order1_queque() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order2_putsub() {
+async fn test_regions_scenario5_order2_putsub() {
     init_tracing_subscriber();
 
-    let z9110 = ztimeout!(Node::new(Peer, "22aa9110")
-        .multicast("224.2.2.1:9100")
+    let z9110 = ztimeout!(Node::new(Router, "52aa9110")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "22aa9120")
-        .multicast("224.2.2.1:9100")
+    let z9120 = ztimeout!(Node::new(Router, "52aa9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "22aa9130")
-        .multicast("224.2.2.1:9100")
-        .open());
-
-    let z9210 = ztimeout!(Node::new(Peer, "22aa9210")
-        .multicast("224.2.2.1:9200")
-        .open());
-    let z9220 = ztimeout!(Node::new(Peer, "22aa9220")
-        .multicast("224.2.2.1:9200")
-        .open());
-    let z9230 = ztimeout!(Node::new(Peer, "22aa9230")
-        .multicast("224.2.2.1:9200")
+    let z9130 = ztimeout!(Node::new(Router, "52aa9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "22aa9310")
-        .multicast("224.2.2.1:9300")
+    let z9210 = ztimeout!(Node::new(Router, "52aa9210")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "22aa9320")
-        .multicast("224.2.2.1:9300")
+    let z9220 = ztimeout!(Node::new(Router, "52aa9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "22aa9330")
-        .multicast("224.2.2.1:9300")
+    let z9230 = ztimeout!(Node::new(Router, "52aa9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210), loc!(z9220)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Router, "52aa9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .open());
+    let z9320 = ztimeout!(Node::new(Router, "52aa9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
+        .open());
+    let z9330 = ztimeout!(Node::new(Router, "52aa9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -505,20 +501,30 @@ async fn test_regions_scenario2_order2_putsub() {
         let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let z9100 = ztimeout!(Node::new(Peer, "22aa9100")
-        .multicast("224.2.2.1:9100")
+    let z9100 = ztimeout!(Node::new(Router, "52aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "22aa9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.2.1:9200")
+    let z9200 = ztimeout!(Node::new(Router, "52aa9200")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "22aa9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.2.1:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "52aa9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -550,50 +556,50 @@ async fn test_regions_scenario2_order2_putsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "22aa9110", "22aa9120", "22aa9130", "22aa9210", "22aa9220", "22aa9230", "22aa9310",
-        "22aa9320", "22aa9330",
+        "52aa9110", "52aa9120", "52aa9130", "52aa9210", "52aa9220", "52aa9230", "52aa9310",
+        "52aa9320", "52aa9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            2
+            3 // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order2_pubsub() {
+async fn test_regions_scenario5_order2_pubsub() {
     init_tracing_subscriber();
 
-    let z9110 = ztimeout!(Node::new(Peer, "22ab9110")
-        .multicast("224.2.2.2:9100")
+    let z9110 = ztimeout!(Node::new(Router, "52ab9110")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "22ab9120")
-        .multicast("224.2.2.2:9100")
+    let z9120 = ztimeout!(Node::new(Router, "52ab9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "22ab9130")
-        .multicast("224.2.2.2:9100")
-        .open());
-
-    let z9210 = ztimeout!(Node::new(Peer, "22ab9210")
-        .multicast("224.2.2.2:9200")
-        .open());
-    let z9220 = ztimeout!(Node::new(Peer, "22ab9220")
-        .multicast("224.2.2.2:9200")
-        .open());
-    let z9230 = ztimeout!(Node::new(Peer, "22ab9230")
-        .multicast("224.2.2.2:9200")
+    let z9130 = ztimeout!(Node::new(Router, "52ab9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "22ab9310")
-        .multicast("224.2.2.2:9300")
+    let z9210 = ztimeout!(Node::new(Router, "52ab9210")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "22ab9320")
-        .multicast("224.2.2.2:9300")
+    let z9220 = ztimeout!(Node::new(Router, "52ab9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "22ab9330")
-        .multicast("224.2.2.2:9300")
+    let z9230 = ztimeout!(Node::new(Router, "52ab9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210), loc!(z9220)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Router, "52ab9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .open());
+    let z9320 = ztimeout!(Node::new(Router, "52ab9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
+        .open());
+    let z9330 = ztimeout!(Node::new(Router, "52ab9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -618,20 +624,30 @@ async fn test_regions_scenario2_order2_pubsub() {
     let p9320 = z9320.declare_publisher("test").await.unwrap();
     let p9330 = z9330.declare_publisher("test").await.unwrap();
 
-    let z9100 = ztimeout!(Node::new(Peer, "22ab9100")
-        .multicast("224.2.2.2:9100")
+    let z9100 = ztimeout!(Node::new(Router, "52ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "22ab9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.2.2:9200")
+    let z9200 = ztimeout!(Node::new(Router, "52ab9200")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "22ab9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.2.2:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "52ab9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -663,8 +679,8 @@ async fn test_regions_scenario2_order2_pubsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "22ab9110", "22ab9120", "22ab9130", "22ab9210", "22ab9220", "22ab9230", "22ab9310",
-        "22ab9320", "22ab9330",
+        "52ab9110", "52ab9120", "52ab9130", "52ab9210", "52ab9220", "52ab9230", "52ab9310",
+        "52ab9320", "52ab9330",
     ] {
         assert_eq!(
             s.all_events()
@@ -676,35 +692,37 @@ async fn test_regions_scenario2_order2_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order2_getque() {
+async fn test_regions_scenario5_order2_getque() {
     init_tracing_subscriber();
 
-    let z9110 = ztimeout!(Node::new(Peer, "22ac9110")
-        .multicast("224.2.2.3:9100")
+    let z9110 = ztimeout!(Node::new(Router, "52ac9110")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "22ac9120")
-        .multicast("224.2.2.3:9100")
+    let z9120 = ztimeout!(Node::new(Router, "52ac9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "22ac9130")
-        .multicast("224.2.2.3:9100")
+    let z9130 = ztimeout!(Node::new(Router, "52ac9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "22ac9210")
-        .multicast("224.2.2.3:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "52ac9210")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "22ac9220")
-        .multicast("224.2.2.3:9200")
+    let z9220 = ztimeout!(Node::new(Router, "52ac9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "22ac9230")
-        .multicast("224.2.2.3:9200")
+    let z9230 = ztimeout!(Node::new(Router, "52ac9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210), loc!(z9220)])
         .open());
-    let z9310 = ztimeout!(Node::new(Peer, "22ac9310")
-        .multicast("224.2.2.3:9300")
+
+    let z9310 = ztimeout!(Node::new(Router, "52ac9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "22ac9320")
-        .multicast("224.2.2.3:9300")
+    let z9320 = ztimeout!(Node::new(Router, "52ac9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "22ac9330")
-        .multicast("224.2.2.3:9300")
+    let z9330 = ztimeout!(Node::new(Router, "52ac9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -719,20 +737,30 @@ async fn test_regions_scenario2_order2_getque() {
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
-    let z9100 = ztimeout!(Node::new(Peer, "22ac9100")
-        .multicast("224.2.2.3:9100")
+    let z9100 = ztimeout!(Node::new(Router, "52ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "22ac9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.2.3:9200")
+    let z9200 = ztimeout!(Node::new(Router, "52ac9200")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "22ac9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.2.3:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "52ac9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -758,48 +786,50 @@ async fn test_regions_scenario2_order2_getque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "22ac9110", "22ac9120", "22ac9130", "22ac9210", "22ac9220", "22ac9230", "22ac9310",
-        "22ac9320", "22ac9330",
+        "52ac9110", "52ac9120", "52ac9130", "52ac9210", "52ac9220", "52ac9230", "52ac9310",
+        "52ac9320", "52ac9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            2
+            3 // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order2_queque() {
+async fn test_regions_scenario5_order2_queque() {
     init_tracing_subscriber();
 
-    let z9110 = ztimeout!(Node::new(Peer, "22ad9110")
-        .multicast("224.2.2.4:9100")
+    let z9110 = ztimeout!(Node::new(Router, "52ad9110")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "22ad9120")
-        .multicast("224.2.2.4:9100")
+    let z9120 = ztimeout!(Node::new(Router, "52ad9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "22ad9130")
-        .multicast("224.2.2.4:9100")
+    let z9130 = ztimeout!(Node::new(Router, "52ad9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "22ad9210")
-        .multicast("224.2.2.4:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "52ad9210")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "22ad9220")
-        .multicast("224.2.2.4:9200")
+    let z9220 = ztimeout!(Node::new(Router, "52ad9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "22ad9230")
-        .multicast("224.2.2.4:9200")
+    let z9230 = ztimeout!(Node::new(Router, "52ad9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210), loc!(z9220)])
         .open());
-    let z9310 = ztimeout!(Node::new(Peer, "22ad9310")
-        .multicast("224.2.2.4:9300")
+
+    let z9310 = ztimeout!(Node::new(Router, "52ad9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "22ad9320")
-        .multicast("224.2.2.4:9300")
+    let z9320 = ztimeout!(Node::new(Router, "52ad9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "22ad9330")
-        .multicast("224.2.2.4:9300")
+    let z9330 = ztimeout!(Node::new(Router, "52ad9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -824,20 +854,30 @@ async fn test_regions_scenario2_order2_queque() {
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
-    let z9100 = ztimeout!(Node::new(Peer, "22ad9100")
-        .multicast("224.2.2.4:9100")
+    let z9100 = ztimeout!(Node::new(Router, "52ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "22ad9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.2.4:9200")
+    let z9200 = ztimeout!(Node::new(Router, "52ad9200")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9300 = ztimeout!(Node::new(Peer, "22ad9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.2.4:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "52ad9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -863,8 +903,8 @@ async fn test_regions_scenario2_order2_queque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "22ad9110", "22ad9120", "22ad9130", "22ad9210", "22ad9220", "22ad9230", "22ad9310",
-        "22ad9320", "22ad9330",
+        "52ad9110", "52ad9120", "52ad9130", "52ad9210", "52ad9220", "52ad9230", "52ad9310",
+        "52ad9320", "52ad9330",
     ] {
         assert_eq!(
             s.all_events()
@@ -876,49 +916,48 @@ async fn test_regions_scenario2_order2_queque() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order3_putsub() {
+async fn test_regions_scenario5_order3_putsub() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "23aa9100")
-        .multicast("224.2.3.1:9100")
+    let z9100 = ztimeout!(Node::new(Router, "53aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "23aa9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.3.1:9200")
+    let z9200 = ztimeout!(Node::new(Router, "53aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "23aa9110")
-        .multicast("224.2.3.1:9100")
+    let z9110 = ztimeout!(Node::new(Router, "53aa9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "23aa9120")
-        .multicast("224.2.3.1:9100")
+    let z9120 = ztimeout!(Node::new(Router, "53aa9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "23aa9130")
-        .multicast("224.2.3.1:9100")
-        .open());
-
-    let z9210 = ztimeout!(Node::new(Peer, "23aa9210")
-        .multicast("224.2.3.1:9200")
-        .open());
-    let z9220 = ztimeout!(Node::new(Peer, "23aa9220")
-        .multicast("224.2.3.1:9200")
-        .open());
-    let z9230 = ztimeout!(Node::new(Peer, "23aa9230")
-        .multicast("224.2.3.1:9200")
+    let z9130 = ztimeout!(Node::new(Router, "53aa9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "23aa9310")
-        .multicast("224.2.3.1:9300")
+    let z9210 = ztimeout!(Node::new(Router, "53aa9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "23aa9320")
-        .multicast("224.2.3.1:9300")
+    let z9220 = ztimeout!(Node::new(Router, "53aa9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "23aa9330")
-        .multicast("224.2.3.1:9300")
+    let z9230 = ztimeout!(Node::new(Router, "53aa9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Router, "53aa9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .open());
+    let z9320 = ztimeout!(Node::new(Router, "53aa9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
+        .open());
+    let z9330 = ztimeout!(Node::new(Router, "53aa9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -933,9 +972,17 @@ async fn test_regions_scenario2_order3_putsub() {
         let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let _z9300 = ztimeout!(Node::new(Peer, "23aa9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.3.1:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "53aa9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -967,62 +1014,61 @@ async fn test_regions_scenario2_order3_putsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "23aa9110", "23aa9120", "23aa9130", "23aa9210", "23aa9220", "23aa9230", "23aa9310",
-        "23aa9320", "23aa9330",
+        "53aa9110", "53aa9120", "53aa9130", "53aa9210", "53aa9220", "53aa9230", "53aa9310",
+        "53aa9320", "53aa9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            2
+            3 // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order3_pubsub() {
+async fn test_regions_scenario5_order3_pubsub() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "23ab9100")
-        .multicast("224.2.3.2:9100")
+    let z9100 = ztimeout!(Node::new(Router, "53ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "23ab9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.3.2:9200")
+    let z9200 = ztimeout!(Node::new(Router, "53ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "23ab9110")
-        .multicast("224.2.3.2:9100")
+    let z9110 = ztimeout!(Node::new(Router, "53ab9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "23ab9120")
-        .multicast("224.2.3.2:9100")
+    let z9120 = ztimeout!(Node::new(Router, "53ab9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "23ab9130")
-        .multicast("224.2.3.2:9100")
-        .open());
-
-    let z9210 = ztimeout!(Node::new(Peer, "23ab9210")
-        .multicast("224.2.3.2:9200")
-        .open());
-    let z9220 = ztimeout!(Node::new(Peer, "23ab9220")
-        .multicast("224.2.3.2:9200")
-        .open());
-    let z9230 = ztimeout!(Node::new(Peer, "23ab9230")
-        .multicast("224.2.3.2:9200")
+    let z9130 = ztimeout!(Node::new(Router, "53ab9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "23ab9310")
-        .multicast("224.2.3.2:9300")
+    let z9210 = ztimeout!(Node::new(Router, "53ab9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "23ab9320")
-        .multicast("224.2.3.2:9300")
+    let z9220 = ztimeout!(Node::new(Router, "53ab9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "23ab9330")
-        .multicast("224.2.3.2:9300")
+    let z9230 = ztimeout!(Node::new(Router, "53ab9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .open());
+
+    let z9310 = ztimeout!(Node::new(Router, "53ab9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
+        .open());
+    let z9320 = ztimeout!(Node::new(Router, "53ab9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
+        .open());
+    let z9330 = ztimeout!(Node::new(Router, "53ab9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1047,9 +1093,17 @@ async fn test_regions_scenario2_order3_pubsub() {
     let p9320 = z9320.declare_publisher("test").await.unwrap();
     let p9330 = z9330.declare_publisher("test").await.unwrap();
 
-    let _z9300 = ztimeout!(Node::new(Peer, "23ab9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.3.2:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "53ab9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -1081,8 +1135,8 @@ async fn test_regions_scenario2_order3_pubsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "23ab9110", "23ab9120", "23ab9130", "23ab9210", "23ab9220", "23ab9230", "23ab9310",
-        "23ab9320", "23ab9330",
+        "53ab9110", "53ab9120", "53ab9130", "53ab9210", "53ab9220", "53ab9230", "53ab9310",
+        "53ab9320", "53ab9330",
     ] {
         assert_eq!(
             s.all_events()
@@ -1094,47 +1148,48 @@ async fn test_regions_scenario2_order3_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order3_getque() {
+async fn test_regions_scenario5_order3_getque() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "23ac9100")
-        .multicast("224.2.3.3:9100")
+    let z9100 = ztimeout!(Node::new(Router, "53ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "23ac9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.3.3:9200")
+    let z9200 = ztimeout!(Node::new(Router, "53ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "23ac9110")
-        .multicast("224.2.3.3:9100")
+    let z9110 = ztimeout!(Node::new(Router, "53ac9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "23ac9120")
-        .multicast("224.2.3.3:9100")
+    let z9120 = ztimeout!(Node::new(Router, "53ac9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "23ac9130")
-        .multicast("224.2.3.3:9100")
+    let z9130 = ztimeout!(Node::new(Router, "53ac9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "23ac9210")
-        .multicast("224.2.3.3:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "53ac9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "23ac9220")
-        .multicast("224.2.3.3:9200")
+    let z9220 = ztimeout!(Node::new(Router, "53ac9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "23ac9230")
-        .multicast("224.2.3.3:9200")
+    let z9230 = ztimeout!(Node::new(Router, "53ac9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
-    let z9310 = ztimeout!(Node::new(Peer, "23ac9310")
-        .multicast("224.2.3.3:9300")
+
+    let z9310 = ztimeout!(Node::new(Router, "53ac9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "23ac9320")
-        .multicast("224.2.3.3:9300")
+    let z9320 = ztimeout!(Node::new(Router, "53ac9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "23ac9330")
-        .multicast("224.2.3.3:9300")
+    let z9330 = ztimeout!(Node::new(Router, "53ac9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1149,9 +1204,17 @@ async fn test_regions_scenario2_order3_getque() {
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
-    let _z9300 = ztimeout!(Node::new(Peer, "23ac9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.3.3:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "53ac9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -1177,60 +1240,61 @@ async fn test_regions_scenario2_order3_getque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "23ac9110", "23ac9120", "23ac9130", "23ac9210", "23ac9220", "23ac9230", "23ac9310",
-        "23ac9320", "23ac9330",
+        "53ac9110", "53ac9120", "53ac9130", "53ac9210", "53ac9220", "53ac9230", "53ac9310",
+        "53ac9320", "53ac9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            2
+            3, // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order3_queque() {
+async fn test_regions_scenario5_order3_queque() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "23ad9100")
-        .multicast("224.2.3.4:9100")
+    let z9100 = ztimeout!(Node::new(Router, "53ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "23ad9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.3.4:9200")
+    let z9200 = ztimeout!(Node::new(Router, "53ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "23ad9110")
-        .multicast("224.2.3.4:9100")
+    let z9110 = ztimeout!(Node::new(Router, "53ad9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "23ad9120")
-        .multicast("224.2.3.4:9100")
+    let z9120 = ztimeout!(Node::new(Router, "53ad9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "23ad9130")
-        .multicast("224.2.3.4:9100")
+    let z9130 = ztimeout!(Node::new(Router, "53ad9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "23ad9210")
-        .multicast("224.2.3.4:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "53ad9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "23ad9220")
-        .multicast("224.2.3.4:9200")
+    let z9220 = ztimeout!(Node::new(Router, "53ad9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "23ad9230")
-        .multicast("224.2.3.4:9200")
+    let z9230 = ztimeout!(Node::new(Router, "53ad9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
-    let z9310 = ztimeout!(Node::new(Peer, "23ad9310")
-        .multicast("224.2.3.4:9300")
+
+    let z9310 = ztimeout!(Node::new(Router, "53ad9310")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "23ad9320")
-        .multicast("224.2.3.4:9300")
+    let z9320 = ztimeout!(Node::new(Router, "53ad9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "23ad9330")
-        .multicast("224.2.3.4:9300")
+    let z9330 = ztimeout!(Node::new(Router, "53ad9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1255,9 +1319,17 @@ async fn test_regions_scenario2_order3_queque() {
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
-    let _z9300 = ztimeout!(Node::new(Peer, "23ad9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.3.4:9300")
+    let _z9300 = ztimeout!(Node::new(Router, "53ad9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -1283,8 +1355,8 @@ async fn test_regions_scenario2_order3_queque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "23ad9110", "23ad9120", "23ad9130", "23ad9210", "23ad9220", "23ad9230", "23ad9310",
-        "23ad9320", "23ad9330",
+        "53ad9110", "53ad9120", "53ad9130", "53ad9210", "53ad9220", "53ad9230", "53ad9310",
+        "53ad9320", "53ad9330",
     ] {
         assert_eq!(
             s.all_events()
@@ -1296,39 +1368,38 @@ async fn test_regions_scenario2_order3_queque() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order4_putsub() {
+async fn test_regions_scenario5_order4_putsub() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "24aa9100")
-        .multicast("224.2.4.1:9100")
+    let z9100 = ztimeout!(Node::new(Router, "54aa9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "24aa9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.4.1:9200")
+    let z9200 = ztimeout!(Node::new(Router, "54aa9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "24aa9110")
-        .multicast("224.2.4.1:9100")
+    let z9110 = ztimeout!(Node::new(Router, "54aa9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "24aa9120")
-        .multicast("224.2.4.1:9100")
+    let z9120 = ztimeout!(Node::new(Router, "54aa9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "24aa9130")
-        .multicast("224.2.4.1:9100")
+    let z9130 = ztimeout!(Node::new(Router, "54aa9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9210 = ztimeout!(Node::new(Peer, "24aa9210")
-        .multicast("224.2.4.1:9200")
+    let z9210 = ztimeout!(Node::new(Router, "54aa9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "24aa9220")
-        .multicast("224.2.4.1:9200")
+    let z9220 = ztimeout!(Node::new(Router, "54aa9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "24aa9230")
-        .multicast("224.2.4.1:9200")
+    let z9230 = ztimeout!(Node::new(Router, "54aa9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
 
     skip_fmt! {
@@ -1340,21 +1411,20 @@ async fn test_regions_scenario2_order4_putsub() {
         let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
     }
 
-    let _z9300 = ztimeout!(Node::new(Peer, "24aa9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.4.1:9300")
+    let z9300 = ztimeout!(Node::new(Router, "54aa9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "24aa9310")
-        .multicast("224.2.4.1:9300")
+    let z9310 = ztimeout!(Node::new(Router, "54aa9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "24aa9320")
-        .multicast("224.2.4.1:9300")
+    let z9320 = ztimeout!(Node::new(Router, "54aa9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "24aa9330")
-        .multicast("224.2.4.1:9300")
+    let z9330 = ztimeout!(Node::new(Router, "54aa9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1390,52 +1460,51 @@ async fn test_regions_scenario2_order4_putsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "24aa9110", "24aa9120", "24aa9130", "24aa9210", "24aa9220", "24aa9230", "24aa9310",
-        "24aa9320", "24aa9330",
+        "54aa9110", "54aa9120", "54aa9130", "54aa9210", "54aa9220", "54aa9230", "54aa9310",
+        "54aa9320", "54aa9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            2
+            3, // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order4_pubsub() {
+async fn test_regions_scenario5_order4_pubsub() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "24ab9100")
-        .multicast("224.2.4.2:9100")
+    let z9100 = ztimeout!(Node::new(Router, "54ab9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "24ab9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.4.2:9200")
+    let z9200 = ztimeout!(Node::new(Router, "54ab9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "24ab9110")
-        .multicast("224.2.4.2:9100")
+    let z9110 = ztimeout!(Node::new(Router, "54ab9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "24ab9120")
-        .multicast("224.2.4.2:9100")
+    let z9120 = ztimeout!(Node::new(Router, "54ab9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "24ab9130")
-        .multicast("224.2.4.2:9100")
+    let z9130 = ztimeout!(Node::new(Router, "54ab9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
 
-    let z9210 = ztimeout!(Node::new(Peer, "24ab9210")
-        .multicast("224.2.4.2:9200")
+    let z9210 = ztimeout!(Node::new(Router, "54ab9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "24ab9220")
-        .multicast("224.2.4.2:9200")
+    let z9220 = ztimeout!(Node::new(Router, "54ab9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "24ab9230")
-        .multicast("224.2.4.2:9200")
+    let z9230 = ztimeout!(Node::new(Router, "54ab9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
 
     skip_fmt! {
@@ -1454,21 +1523,20 @@ async fn test_regions_scenario2_order4_pubsub() {
     let p9220 = z9220.declare_publisher("test").await.unwrap();
     let p9230 = z9230.declare_publisher("test").await.unwrap();
 
-    let _z9300 = ztimeout!(Node::new(Peer, "24ab9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.4.2:9300")
+    let z9300 = ztimeout!(Node::new(Router, "54ab9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "24ab9310")
-        .multicast("224.2.4.2:9300")
+    let z9310 = ztimeout!(Node::new(Router, "54ab9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "24ab9320")
-        .multicast("224.2.4.2:9300")
+    let z9320 = ztimeout!(Node::new(Router, "54ab9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "24ab9330")
-        .multicast("224.2.4.2:9300")
+    let z9330 = ztimeout!(Node::new(Router, "54ab9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1508,8 +1576,8 @@ async fn test_regions_scenario2_order4_pubsub() {
     let s = STORAGE.lock();
 
     for zid in [
-        "24ab9110", "24ab9120", "24ab9130", "24ab9210", "24ab9220", "24ab9230", "24ab9310",
-        "24ab9320", "24ab9330",
+        "54ab9110", "54ab9120", "54ab9130", "54ab9210", "54ab9220", "54ab9230", "54ab9310",
+        "54ab9320", "54ab9330",
     ] {
         assert_eq!(
             s.all_events()
@@ -1521,38 +1589,38 @@ async fn test_regions_scenario2_order4_pubsub() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order4_getque() {
+async fn test_regions_scenario5_order4_getque() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "24ac9100")
-        .multicast("224.2.4.3:9100")
+    let z9100 = ztimeout!(Node::new(Router, "54ac9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "24ac9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.4.3:9200")
+    let z9200 = ztimeout!(Node::new(Router, "54ac9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "24ac9110")
-        .multicast("224.2.4.3:9100")
+    let z9110 = ztimeout!(Node::new(Router, "54ac9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "24ac9120")
-        .multicast("224.2.4.3:9100")
+    let z9120 = ztimeout!(Node::new(Router, "54ac9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "24ac9130")
-        .multicast("224.2.4.3:9100")
+    let z9130 = ztimeout!(Node::new(Router, "54ac9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "24ac9210")
-        .multicast("224.2.4.3:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "54ac9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "24ac9220")
-        .multicast("224.2.4.3:9200")
+    let z9220 = ztimeout!(Node::new(Router, "54ac9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "24ac9230")
-        .multicast("224.2.4.3:9200")
+    let z9230 = ztimeout!(Node::new(Router, "54ac9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
 
     skip_fmt! {
@@ -1564,21 +1632,20 @@ async fn test_regions_scenario2_order4_getque() {
         let _q9230 = z9230.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9230")).unwrap()).await.unwrap();
     }
 
-    let _z9300 = ztimeout!(Node::new(Peer, "24ac9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.4.3:9300")
+    let z9300 = ztimeout!(Node::new(Router, "54ac9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "24ac9310")
-        .multicast("224.2.4.3:9300")
+    let z9310 = ztimeout!(Node::new(Router, "54ac9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "24ac9320")
-        .multicast("224.2.4.3:9300")
+    let z9320 = ztimeout!(Node::new(Router, "54ac9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "24ac9330")
-        .multicast("224.2.4.3:9300")
+    let z9330 = ztimeout!(Node::new(Router, "54ac9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1608,51 +1675,51 @@ async fn test_regions_scenario2_order4_getque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "24ac9110", "24ac9120", "24ac9130", "24ac9210", "24ac9220", "24ac9230", "24ac9310",
-        "24ac9320", "24ac9330",
+        "54ac9110", "54ac9120", "54ac9130", "54ac9210", "54ac9220", "54ac9230", "54ac9310",
+        "54ac9320", "54ac9330",
     ] {
         assert_eq!(
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            2
+            3, // we should receive 3 declarations (1 from each of 2 routers within the sub-region, and 1 from the main region)
         );
     }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_regions_scenario2_order4_queque() {
+async fn test_regions_scenario5_order4_queque() {
     init_tracing_subscriber();
 
-    let z9100 = ztimeout!(Node::new(Peer, "24ad9100")
-        .multicast("224.2.4.4:9100")
+    let z9100 = ztimeout!(Node::new(Router, "54ad9100")
+        .endpoints("tcp/0.0.0.0:0", &[])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let z9200 = ztimeout!(Node::new(Peer, "24ad9200")
-        .connect(&[loc!(z9100)])
-        .multicast("224.2.4.4:9200")
+    let z9200 = ztimeout!(Node::new(Router, "54ad9200")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9110 = ztimeout!(Node::new(Peer, "24ad9110")
-        .multicast("224.2.4.4:9100")
+    let z9110 = ztimeout!(Node::new(Router, "54ad9110")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .open());
-    let z9120 = ztimeout!(Node::new(Peer, "24ad9120")
-        .multicast("224.2.4.4:9100")
+    let z9120 = ztimeout!(Node::new(Router, "54ad9120")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
         .open());
-    let z9130 = ztimeout!(Node::new(Peer, "24ad9130")
-        .multicast("224.2.4.4:9100")
+    let z9130 = ztimeout!(Node::new(Router, "54ad9130")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
         .open());
-    let z9210 = ztimeout!(Node::new(Peer, "24ad9210")
-        .multicast("224.2.4.4:9200")
+
+    let z9210 = ztimeout!(Node::new(Router, "54ad9210")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
         .open());
-    let z9220 = ztimeout!(Node::new(Peer, "24ad9220")
-        .multicast("224.2.4.4:9200")
+    let z9220 = ztimeout!(Node::new(Router, "54ad9220")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
         .open());
-    let z9230 = ztimeout!(Node::new(Peer, "24ad9230")
-        .multicast("224.2.4.4:9200")
+    let z9230 = ztimeout!(Node::new(Router, "54ad9230")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
         .open());
 
     skip_fmt! {
@@ -1671,21 +1738,20 @@ async fn test_regions_scenario2_order4_queque() {
         let q9230 = z9230.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
-    let _z9300 = ztimeout!(Node::new(Peer, "24ad9300")
-        .connect(&[loc!(z9100), loc!(z9200)])
-        .multicast("224.2.4.4:9300")
+    let z9300 = ztimeout!(Node::new(Router, "54ad9300")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
-    let z9310 = ztimeout!(Node::new(Peer, "24ad9310")
-        .multicast("224.2.4.4:9300")
+    let z9310 = ztimeout!(Node::new(Router, "54ad9310")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
         .open());
-    let z9320 = ztimeout!(Node::new(Peer, "24ad9320")
-        .multicast("224.2.4.4:9300")
+    let z9320 = ztimeout!(Node::new(Router, "54ad9320")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
         .open());
-    let z9330 = ztimeout!(Node::new(Peer, "24ad9330")
-        .multicast("224.2.4.4:9300")
+    let z9330 = ztimeout!(Node::new(Router, "54ad9330")
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1719,8 +1785,8 @@ async fn test_regions_scenario2_order4_queque() {
     let s = STORAGE.lock();
 
     for zid in [
-        "24ad9110", "24ad9120", "24ad9130", "24ad9210", "24ad9220", "24ad9230", "24ad9310",
-        "24ad9320", "24ad9330",
+        "54ad9110", "54ad9120", "54ad9130", "54ad9210", "54ad9220", "54ad9230", "54ad9310",
+        "54ad9320", "54ad9330",
     ] {
         assert_eq!(
             s.all_events()

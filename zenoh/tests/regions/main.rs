@@ -20,6 +20,8 @@ mod scenario2;
 mod scenario3;
 #[cfg(feature = "unstable")]
 mod scenario4;
+#[cfg(feature = "unstable")]
+mod scenario5;
 
 use std::time::Duration;
 
