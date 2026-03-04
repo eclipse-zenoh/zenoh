@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg(feature = "internal")]
+
 #[cfg(feature = "unstable")]
 mod scenario1;
 #[cfg(feature = "unstable")]
@@ -23,9 +25,17 @@ mod scenario4;
 #[cfg(feature = "unstable")]
 mod scenario5;
 
-use std::time::Duration;
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
-use zenoh::{key_expr::KeyExpr, pubsub::Subscriber, sample::SampleKind, Session};
+use itertools::Itertools;
+use zenoh::{
+    handlers::{Callback, CallbackParameter, IntoHandler},
+    sample::{Sample, SampleKind},
+    Session,
+};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 
@@ -169,62 +179,61 @@ macro_rules! skip_fmt {
     }
 }
 
-pub trait SubUtils {
-    fn count_put_keys(&self) -> usize;
-    fn count_del_keys(&self) -> usize;
-    fn count_vals(&self) -> usize;
-    fn take_put_keys(&self) -> Vec<KeyExpr<'static>>;
-    fn take_del_keys(&self) -> Vec<KeyExpr<'static>>;
+pub fn unbounded_sink() -> UnboundedSinkHandler {
+    UnboundedSinkHandler
 }
 
-impl SubUtils for Subscriber<flume::Receiver<zenoh::sample::Sample>> {
-    fn count_put_keys(&self) -> usize {
-        use itertools::Itertools;
-        self.handler()
-            .try_iter()
-            .filter_map(|s| {
-                (s.kind() == SampleKind::Put).then_some(s.key_expr().clone().into_owned())
-            })
-            .unique()
+pub struct UnboundedSinkHandler;
+
+impl<T> IntoHandler<T> for UnboundedSinkHandler
+where
+    T: CallbackParameter + Send + Sync,
+{
+    type Handler = UnboundedSink<T>;
+
+    fn into_handler(self) -> (Callback<T>, Self::Handler) {
+        let buffer = Arc::new(RwLock::new(Vec::new()));
+        let callback = {
+            let buffer = buffer.clone();
+            Callback::new(Arc::new(move |value| {
+                let mut guard = buffer.write().unwrap();
+                guard.push(value);
+            }))
+        };
+        let handler = UnboundedSink(buffer);
+        (callback, handler)
+    }
+}
+
+pub struct UnboundedSink<T>(Arc<RwLock<Vec<T>>>);
+
+impl<T> UnboundedSink<T> {
+    pub fn count_by<F>(&self, pred: F) -> usize
+    where
+        F: Fn(&T) -> bool,
+    {
+        let guard = self.0.read().unwrap();
+        guard.iter().filter(|value| pred(value)).count()
+    }
+}
+
+impl UnboundedSink<Sample> {
+    pub fn count_unique_by_keyexpr(&self, kind: SampleKind) -> usize {
+        let guard = self.0.read().unwrap();
+        guard
+            .iter()
+            .filter(|s| s.kind() == kind)
+            .unique_by(|s| s.key_expr())
             .count()
     }
 
-    fn count_del_keys(&self) -> usize {
-        use itertools::Itertools;
-        self.handler()
-            .try_iter()
-            .filter_map(|s| {
-                (s.kind() == SampleKind::Delete).then_some(s.key_expr().clone().into_owned())
-            })
-            .unique()
+    pub fn count_unique_by_payload(&self, kind: SampleKind) -> usize {
+        let guard = self.0.read().unwrap();
+        guard
+            .iter()
+            .filter(|s| s.kind() == kind)
+            .unique_by(|s| s.payload().to_bytes())
             .count()
-    }
-
-    fn count_vals(&self) -> usize {
-        use itertools::Itertools;
-        self.handler()
-            .try_iter()
-            .map(|s| s.payload().try_to_string().unwrap().into_owned())
-            .unique()
-            .count()
-    }
-
-    fn take_put_keys(&self) -> Vec<KeyExpr<'static>> {
-        self.handler()
-            .try_iter()
-            .filter_map(|s| {
-                (s.kind() == SampleKind::Put).then_some(s.key_expr().clone().into_owned())
-            })
-            .collect()
-    }
-
-    fn take_del_keys(&self) -> Vec<KeyExpr<'static>> {
-        self.handler()
-            .try_iter()
-            .filter_map(|s| {
-                (s.kind() == SampleKind::Delete).then_some(s.key_expr().clone().into_owned())
-            })
-            .collect()
     }
 }
 

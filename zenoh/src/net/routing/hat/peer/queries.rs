@@ -69,7 +69,7 @@ impl Hat {
             });
 
         for (res, info) in qabls {
-            // FIXME(regions): We always propagate entities in this codepath; the method name is misleading
+            // NOTE(regions): we always propagate entities in this codepath; the method name is misleading
             self.maybe_propagate_queryable(&res, &info, ctx.src_face, ctx.send_declare);
         }
     }
@@ -81,7 +81,7 @@ impl Hat {
         dst_face: &mut Arc<FaceState>,
         send_declare: &mut SendDeclare,
     ) {
-        // FIXME(regions): it's not because of initial interest that we push subscribers to north-bound peers.
+        // NOTE(regions): it's not because of initial interest that we push subscribers to north-bound peers.
         // Initial interest only exists to track current declarations at startup. This code is misleading.
         // See 20a95fb.
         let initial_interest = dst_face

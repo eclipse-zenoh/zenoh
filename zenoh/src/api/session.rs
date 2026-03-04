@@ -217,7 +217,7 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
-            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()), // FIXME(regions): include the face id
+            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()), // TODO(regions): include the face id
         }
     }
 }
@@ -2076,7 +2076,7 @@ impl Session {
             },
             options: InterestOptions::KEYEXPRS + InterestOptions::TOKENS,
             wire_expr: Some(key_expr.to_wire(self).to_owned()),
-            ext_qos: interest::ext::QoSType::DECLARE,
+            ext_qos: interest::ext::QoSType::INTEREST,
             ext_tstamp: None,
             ext_nodeid: interest::ext::NodeIdType::DEFAULT,
         });
@@ -2801,29 +2801,10 @@ impl Session {
                 }
             });
 
-        for ke in state
-            .remote_tokens
-            .values()
-            .filter(|ke| ke.intersects(key_expr))
-        {
-            callback.call(Reply {
-                result: Ok(Sample {
-                    key_expr: ke.to_owned(),
-                    payload: ZBytes::new(),
-                    kind: SampleKind::Put,
-                    encoding: Encoding::default(),
-                    timestamp: None,
-                    qos: QoS::default(),
-                    #[cfg(feature = "unstable")]
-                    reliability: Reliability::default(),
-                    #[cfg(feature = "unstable")]
-                    source_info: None,
-                    attachment: None,
-                }),
-                #[cfg(feature = "unstable")]
-                replier_id: None,
-            });
-        }
+        // NOTE(regions): we don't exec the callback with known tokens in
+        // `SessionState::remote_tokens` because the gateway resends current tokens on every query.
+        // While this is not trictly necessary, it is precisely how the protocol works on the wire
+        // as of Zenoh 1.7.2.
 
         let primitives = state.primitives()?;
         tracing::trace!("Register liveliness query {}", id);
@@ -3086,6 +3067,8 @@ impl Primitives for WeakSession {
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
+                trace!("recv DeclareToken {:?}", m.id);
+
                 let mut state = zwrite!(self.0.state);
                 if state.primitives.is_none() {
                     return; // Session closing or closed

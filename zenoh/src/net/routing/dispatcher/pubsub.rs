@@ -34,8 +34,8 @@ use crate::net::routing::{
         local_resources::{LocalResourceInfoTrait, LocalResources},
         tables::TablesData,
     },
+    gateway::{get_or_set_route, node_id_as_source, Direction, RouteBuilder},
     hat::{DispatcherContext, SendDeclare},
-    router::{get_or_set_route, node_id_as_source, Direction, RouteBuilder},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

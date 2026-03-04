@@ -30,8 +30,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
+    gateway::{InterceptorCacheValueType, Resource},
     interceptor::{has_interceptor, InterceptorContext, InterceptorTrait, InterceptorsChain},
-    router::{InterceptorCacheValueType, Resource},
     RoutingContext,
 };
 

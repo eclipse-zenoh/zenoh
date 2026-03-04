@@ -37,8 +37,8 @@ use crate::net::{
             resource::{NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
+        gateway::{Direction, RouteBuilder},
         hat::{DispatcherContext, HatBaseTrait, HatPubSubTrait, Sources},
-        router::{Direction, RouteBuilder},
         RoutingContext,
     },
 };
@@ -68,7 +68,6 @@ impl Hat {
                                 let sub_info = SubscriberInfo;
                                 self.send_sourced_subscriber_to_net_children(
                                     tables,
-                                    net,
                                     tree_children,
                                     res,
                                     None,
@@ -83,17 +82,16 @@ impl Hat {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn send_sourced_subscriber_to_net_children(
         &self,
         tables: &TablesData,
-        net: &Network, // TODO(regions): remove this
         children: &[NodeIndex],
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         _sub_info: &SubscriberInfo,
-        routing_context: NodeId,
+        node_id: NodeId,
     ) {
+        let net = self.net();
         for child in children {
             if net.graph.contains_node(*child) {
                 match self.face(tables, &net.graph[*child].zid).cloned() {
@@ -109,9 +107,7 @@ impl Hat {
                                     interest_id: None,
                                     ext_qos: ext::QoSType::DECLARE,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType {
-                                        node_id: routing_context,
-                                    },
+                                    ext_nodeid: ext::NodeIdType { node_id },
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id: SubscriberId::default(), // Sourced subscribers do not use ids
                                         wire_expr: key_expr,
@@ -137,13 +133,12 @@ impl Hat {
         src_face: Option<&Arc<FaceState>>,
         source: &ZenohIdProto,
     ) {
-        let net = &self.routers_net.as_ref().unwrap();
+        let net = self.net();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
                     self.send_sourced_subscriber_to_net_children(
                         tables,
-                        net,
                         &net.trees[tree_sid.index()].children,
                         res,
                         src_face,
@@ -444,7 +439,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         self.unregister_node_subscribers(&ctx.src_face.zid)
     }
 

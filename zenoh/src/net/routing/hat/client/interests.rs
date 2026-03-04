@@ -34,11 +34,11 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
+    gateway::SubscriberInfo,
     hat::{
         DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
-        RouteCurrentEntityResult,
+        RouteCurrentDeclareResult,
     },
-    router::SubscriberInfo,
     RoutingContext,
 };
 impl Hat {
@@ -49,7 +49,6 @@ impl Hat {
     ) {
         for RemoteInterest { res, options, .. } in other_hats
             .values()
-            .filter(|hat| hat.region().bound().is_south()) // FIXME(regions): this filter should be redundant (?)
             .flat_map(|hat| hat.remote_interests(ctx.tables))
         {
             let id = self
@@ -71,7 +70,7 @@ impl Hat {
                         mode: InterestMode::CurrentFuture,
                         options,
                         wire_expr,
-                        ext_qos: interest::ext::QoSType::DECLARE,
+                        ext_qos: interest::ext::QoSType::INTEREST,
                         ext_tstamp: None,
                         ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                     },
@@ -84,7 +83,7 @@ impl Hat {
 }
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, msg), fields(%src), ret)]
     fn route_interest(
         &mut self,
         ctx: DispatcherContext,
@@ -104,23 +103,20 @@ impl HatInterestTrait for Hat {
 
         let interests_timeout = ctx.tables.interests_timeout;
 
-        tracing::trace!(owned_faces = ?self.owned_faces(ctx.tables).collect::<Vec<_>>());
-
         if let Some(mut dst_face) = self.owned_faces(ctx.tables).next().cloned() {
             let id = self
                 .face_hat(&dst_face)
                 .next_id
                 .fetch_add(1, Ordering::SeqCst);
-            let dst_face_id = dst_face.id;
-            get_mut_unchecked(&mut dst_face).local_interests.insert(
-                id,
-                InterestState::new(
-                    dst_face_id,
-                    msg.options,
-                    res.clone(),
-                    msg.mode == InterestMode::Future,
-                ),
-            );
+
+            if msg.mode.is_future() {
+                let dst_face_id = dst_face.id;
+                let is_finalized = msg.mode == InterestMode::Future;
+                get_mut_unchecked(&mut dst_face).local_interests.insert(
+                    id,
+                    InterestState::new(dst_face_id, msg.options, res.clone(), is_finalized),
+                );
+            }
 
             if msg.mode.is_current() {
                 let dst_face_mut = get_mut_unchecked(&mut dst_face);
@@ -160,11 +156,7 @@ impl HatInterestTrait for Hat {
                     .unwrap_or_default(),
             ));
         } else {
-            tracing::debug!(
-                id = msg.id,
-                src = %ctx.src_face,
-                "Client region is empty. Will not propagate interest north"
-            );
+            tracing::debug!("Client region is empty");
         }
 
         if msg.mode.is_current() {
@@ -186,6 +178,8 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
 
+        // NOTE(regions): clients have at most one north-bound remote, this invariant is enforced in
+        // the orchestrator.
         if let Some(dst_face) = self
             .owned_faces_mut(ctx.tables)
             .next()
@@ -201,7 +195,7 @@ impl HatInterestTrait for Hat {
                             // they are initialized here for internal use by local egress interceptors.
                             options: remote_interest.options,
                             wire_expr: None,
-                            ext_qos: interest::ext::QoSType::DECLARE,
+                            ext_qos: interest::ext::QoSType::INTEREST,
                             ext_tstamp: None,
                             ext_nodeid: interest::ext::NodeIdType::DEFAULT,
                         },
@@ -223,43 +217,38 @@ impl HatInterestTrait for Hat {
         &mut self,
         ctx: DispatcherContext,
         interest_id: InterestId,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteCurrentDeclareResult {
+        use RouteCurrentDeclareResult::*;
+
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        if let Some(interest) = get_mut_unchecked(ctx.src_face)
+        let has_local_interest = get_mut_unchecked(ctx.src_face)
             .local_interests
             .get_mut(&interest_id)
-        {
-            interest.set_finalized();
-            tracing::trace!(?interest, "Finalized interest");
-        } else {
-            tracing::error!(
-                id = interest_id,
-                src = %ctx.src_face,
-                "Unknown local interest"
-            );
-            return None;
-        };
+            .map(|i| i.set_finalized())
+            .is_some();
 
-        let Some(PendingCurrentInterest {
-            interest,
-            cancellation_token,
-            ..
-        }) = get_mut_unchecked(ctx.src_face)
+        let breadcrumb = get_mut_unchecked(ctx.src_face)
             .pending_current_interests
-            .remove(&interest_id)
-        else {
-            tracing::error!(
-                id = interest_id,
-                src = %ctx.src_face,
-                "Unknown current interest"
-            );
-            return None;
-        };
+            .remove(&interest_id);
 
-        cancellation_token.cancel();
-        Arc::into_inner(interest)
+        match (has_local_interest, breadcrumb) {
+            (false, None) => {
+                tracing::error!("Unknown interest");
+                Noop
+            }
+            (true, None) => NoBreadcrumb,
+            (_, Some(breadcrumb)) => {
+                let Some(interest) = Arc::into_inner(breadcrumb.interest) else {
+                    bug!("Pending current interest with strong count > 1");
+                    return Noop;
+                };
+
+                breadcrumb.cancellation_token.cancel();
+                Breadcrumb { interest }
+            }
+        }
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
@@ -268,25 +257,27 @@ impl HatInterestTrait for Hat {
         ctx: DispatcherContext,
         interest_id: InterestId,
         _res: Arc<Resource>,
-    ) -> RouteCurrentEntityResult {
-        use RouteCurrentEntityResult::*;
+    ) -> RouteCurrentDeclareResult {
+        use RouteCurrentDeclareResult::*;
 
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
 
-        if !ctx.src_face.local_interests.contains_key(&interest_id) {
-            tracing::error!("Unknown interest");
-            return Noop;
-        }
+        let has_local_interest = ctx.src_face.local_interests.contains_key(&interest_id);
 
-        match ctx
+        let breadcrumb = ctx
             .src_face
             .pending_current_interests
             .get(&interest_id)
-            .map(|i| i.interest.as_ref().clone())
-        {
-            Some(interest) => Breadcrumb { interest },
-            None => ShouldPropagate,
+            .map(|i| i.interest.as_ref().clone());
+
+        match (has_local_interest, breadcrumb) {
+            (false, None) => {
+                tracing::error!("Unknown interest");
+                Noop
+            }
+            (true, None) => NoBreadcrumb,
+            (_, Some(interest)) => Breadcrumb { interest },
         }
     }
 

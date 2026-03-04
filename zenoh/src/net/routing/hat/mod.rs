@@ -20,7 +20,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
-    fmt::Debug,
+    fmt::{Debug, Display},
     sync::Arc,
 };
 
@@ -122,6 +122,12 @@ impl DispatcherContext<'_> {
 #[derive(Debug)]
 pub(crate) struct Remote(Box<dyn RemoteTrait>);
 
+impl Display for Remote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 impl Remote {
     fn as_any(&self) -> &dyn Any {
         self.0.as_any()
@@ -133,14 +139,14 @@ impl Remote {
     }
 }
 
-pub(crate) trait RemoteTrait: Any + Send + Sync + Debug {
+pub(crate) trait RemoteTrait: Any + Send + Sync + Debug + Display {
     fn clone_box(&self) -> Box<dyn RemoteTrait>;
     fn as_any(&self) -> &dyn Any;
 }
 
 impl<T> RemoteTrait for T
 where
-    T: Any + Send + Sync + Debug + Clone + 'static,
+    T: Any + Send + Sync + Debug + Display + Clone + 'static,
 {
     fn clone_box(&self) -> Box<dyn RemoteTrait> {
         Box::new(self.clone())
@@ -233,19 +239,19 @@ pub(crate) trait HatBaseTrait: Any {
         Vec::new()
     }
 
-    #[allow(dead_code)] // FIXME(regions)
+    #[allow(dead_code)]
     fn as_any(&self) -> &dyn Any;
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn whatami(&self) -> WhatAmI;
+    fn mode(&self) -> WhatAmI;
 
     fn region(&self) -> Region;
 
     /// Returns `true` if `face` belongs to this [`Hat`].
     fn owns(&self, face: &FaceState) -> bool {
         if self.region() == face.region && face.remote_bound.is_north() {
-            debug_assert_eq!(self.whatami(), face.whatami);
+            debug_assert_eq!(self.mode(), face.whatami);
             debug_assert_eq!(face.is_local, self.region() == Region::Local);
             debug_assert_implies!(face.is_local, face.whatami.is_client());
         }
@@ -256,58 +262,50 @@ pub(crate) trait HatBaseTrait: Any {
 
 /// Return value of current entity routing methods.
 #[derive(Debug)]
-pub(crate) enum RouteCurrentEntityResult {
-    /// Indicates that the operation failed or had no effect (e.g. the interest id is unknown).
+pub(crate) enum RouteCurrentDeclareResult {
+    /// Indicates that the operation failed or has no effect on the dispatcher (e.g. the interest id is unknown).
     Noop,
     /// The breadcrumb corresponding to a pending current interest for this entity.
     Breadcrumb { interest: CurrentInterest },
     /// Indicates that the entity should be propagated to matching downstream interests—there is no breadcrumb.
-    ShouldPropagate,
+    NoBreadcrumb,
 }
 
 // REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
-// FIXME(regions): update comments below
 
 /// Hat interest protocol interface.
 ///
 /// Below is the typical code-path for each message type.
 ///
-/// # Interest (current and/or future)
+/// # Interest w/ `mode=Current` or `mode=CurrentFuture`
 ///   1. [`HatInterestTrait::route_interest`] on the north hat.
 ///   2. [`HatInterestTrait::register_interest`] on the owner south hat, iff it owns the src face.
-///   3. [`HatInterestTrait::propagate_current_subscriptions`] on the owner south hat, iff it owns the src face.
-///   4. [`HatInterestTrait::propagate_current_queryables`] on the owner south hat, iff it owns the src face.
-///   4. [`HatInterestTrait::propagate_current_tokens`] on the owner south hat, iff it owns the src face.
-///   5. [`HatInterestTrait::send_final_declaration`] on the owner south hat,
+///   3. [`HatInterestTrait::send_current_tokens`] on the owner south hat, iff it owns the src face.
+///   4. [`HatInterestTrait::send_current_queryables`] on the owner south hat, iff it owns the src face.
+///   4. [`HatInterestTrait::send_current_tokens`] on the owner south hat, iff it owns the src face.
+///   5. [`HatInterestTrait::send_declare_final`] on the owner south hat,
 ///      iff it owns the src face and there is no gateway in the north region.
 ///
-/// # Interest (final)
+/// # `Interest` w/ `mode=Final`
 ///   1. [`HatInterestTrait::route_interest_final`] on the north hat.
 ///   2. [`HatInterestTrait::unregister_interest`] on the owner south hat, iff it owns the src face.
 ///
-/// # Declare (final)
-///   1. [`HatInterestTrait::route_final_declaration`] on the north hat.
-///   2. [`HatInterestTrait::send_final_declaration`] on the owner south hat, iff the msg is intended for it.
+/// # `DeclareFinal` (final)
+///   1. [`HatInterestTrait::route_declare_final`] on the north hat.
+///   2. [`HatInterestTrait::send_declare_final`] on the owner south hat, iff the msg is intended for it.
+///
+/// # `DeclareToken` (w/ interest id)
+///   1. [`HatInterestTrait::route_current_token`] on the north hat.
+///   2. [`HatInterestTrait::propagate_current_token`] on the owner south hat, iff the msg is intended for it.
 pub(crate) trait HatInterestTrait {
-    /// Handles interest messages.
-    ///
-    /// This method is only called on the north-bound hat.
-    ///
-    /// Returns `Some` iff the pending current interest is resolved.
-    ///
-    /// Will use the dowstream hat reference to call
-    /// [`HatInterestTrait::propagate_declarations`].
     fn route_interest(
         &mut self,
         ctx: DispatcherContext,
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
-    ) -> Option<CurrentInterest>; // TODO(regions): it's odd that this needs to be `Some` for "resolved interest" (i.e. doing nothing).
+    ) -> Option<CurrentInterest>; // TODO(regions): it's odd that this needs to be `Some` for "resolved interest" (i.e. doing nothing for router hats).
 
-    /// Handles interest finalization messages.
-    ///
-    /// This method is only called on the north-bound hat.
     fn route_interest_final(
         &mut self,
         ctx: DispatcherContext,
@@ -315,31 +313,23 @@ pub(crate) trait HatInterestTrait {
         remote_interest: &RemoteInterest,
     );
 
-    /// Handles declaration finalization messages.
-    ///
-    /// Returns `Some` iff the pending current interest is resolved.
-    ///
-    /// This method is only called on the north hat.
     fn route_declare_final(
         &mut self,
         ctx: DispatcherContext,
         interest_id: InterestId,
-    ) -> Option<CurrentInterest>;
+    ) -> RouteCurrentDeclareResult;
 
     fn route_current_token(
         &mut self,
         ctx: DispatcherContext,
         interest_id: InterestId,
         res: Arc<Resource>,
-    ) -> RouteCurrentEntityResult;
+    ) -> RouteCurrentDeclareResult;
 
     // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
     // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
     // should be reworked.
 
-    /// Propagates current subscribers to the interested subregion.
-    ///
-    /// This method is only called on the owner south hat.
     fn send_current_subscribers(
         &self,
         ctx: DispatcherContext,
@@ -348,9 +338,6 @@ pub(crate) trait HatInterestTrait {
         other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
     );
 
-    /// Propagates current queryables to the interested subregion.
-    ///
-    /// This method is only called on the owner south hat.
     fn send_current_queryables(
         &self,
         ctx: DispatcherContext,
@@ -374,9 +361,6 @@ pub(crate) trait HatInterestTrait {
         interest: CurrentInterest,
     );
 
-    /// Informs the interest source that all declarations have been transmitted.
-    ///
-    /// This method is only called on south hats.
     fn send_declare_final(
         &mut self,
         ctx: DispatcherContext,
@@ -384,9 +368,6 @@ pub(crate) trait HatInterestTrait {
         dst: &Remote,
     );
 
-    /// Register remote interests.
-    ///
-    /// This method is only called on the owner south hat.
     fn register_interest(
         &mut self,
         ctx: DispatcherContext,
@@ -394,9 +375,6 @@ pub(crate) trait HatInterestTrait {
         res: Option<Arc<Resource>>,
     );
 
-    /// Unregister remote interests.
-    ///
-    /// This method is only called on the owner south hat.
     fn unregister_interest(
         &mut self,
         ctx: DispatcherContext,
@@ -419,6 +397,7 @@ pub(crate) enum UnregisterEntityResult {
     LastUnregistered { res: Arc<Resource> },
 }
 
+// TODO(regions): update comments
 pub(crate) trait HatPubSubTrait {
     /// Register a subscriber entity.
     ///
@@ -443,7 +422,7 @@ pub(crate) trait HatPubSubTrait {
         nid: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
+    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a subscriber entity.
     ///
@@ -497,6 +476,7 @@ pub(crate) trait HatPubSubTrait {
     ) -> Arc<Route>;
 }
 
+// TODO(regions): update comments
 pub(crate) trait HatQueriesTrait {
     /// Register a queryable entity.
     ///
@@ -568,6 +548,7 @@ pub(crate) trait HatQueriesTrait {
     ) -> Arc<QueryTargetQablSet>;
 }
 
+// TODO(regions): update comments
 pub(crate) trait HatTokenTrait {
     /// Register a token entity.
     ///

@@ -61,15 +61,6 @@ impl WhatAmI {
         }
     }
 
-    // FIXME(regions): delete this
-    pub const fn short(self) -> &'static str {
-        match self {
-            Self::Router => "R",
-            Self::Peer => "P",
-            Self::Client => "C",
-        }
-    }
-
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {

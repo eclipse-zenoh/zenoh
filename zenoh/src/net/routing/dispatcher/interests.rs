@@ -36,8 +36,8 @@ use zenoh_util::Timed;
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::Tables},
-    hat::{DispatcherContext, Remote, SendDeclare},
-    router::{register_expr_interest, unregister_expr_interest, NodeId, Resource},
+    gateway::{register_expr_interest, NodeId, Resource},
+    hat::{DispatcherContext, Remote, RouteCurrentDeclareResult, SendDeclare},
     RoutingContext,
 };
 
@@ -66,7 +66,8 @@ impl fmt::Debug for RemoteInterest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RemoteInterest")
             .field("res", &self.res.as_ref().map(|res| res.expr()))
-            .field("options", &self.options)
+            .field("opts", &self.options)
+            .field("mode", &self.mode)
             .finish()
     }
 }
@@ -190,28 +191,21 @@ impl Timed for CurrentInterestCleanup {
 impl Face {
     #[tracing::instrument(
         level = "debug", 
-        skip(tables_lock, send_declare),
+        skip(self, msg, send_declare),
         fields(
             id = msg.id,
             mode = ?msg.mode,
             opts = %msg.options,
-            expr = ?msg.wire_expr
+            expr = msg.wire_expr.as_ref().map(|we| we.to_string())
         ),
         ret
     )]
-    pub(crate) fn interest(
-        &self,
-        tables_lock: &Arc<TablesLock>,
-        msg: &mut Interest,
-        send_declare: &mut SendDeclare,
-    ) {
+    pub(crate) fn interest(&self, msg: &mut Interest, send_declare: &mut SendDeclare) {
         let region = self.state.region;
 
         if region.bound().is_north() && !self.state.whatami.is_peer() {
             tracing::error!(
                 src = %self.state,
-                src_whatami = ?self.state.whatami,
-                north_whatami = ?tables_lock.tables.read().unwrap().hats[Region::North].whatami(),
                 "Ignoring interest from non-peer north-bound face (illegal)"
             );
             return;
@@ -242,7 +236,7 @@ impl Face {
 
         if options.keyexprs() && mode != &InterestMode::Current {
             register_expr_interest(
-                tables_lock,
+                &self.tables,
                 &mut self.state.clone(),
                 *id,
                 wire_expr.as_ref(),
@@ -250,7 +244,7 @@ impl Face {
         }
 
         let (res, mut wtables) = if let Some(expr) = wire_expr {
-            let rtables = zread!(tables_lock.tables);
+            let rtables = zread!(&self.tables.tables);
             match rtables
                 .data
                 .get_mapping(&self.state, &expr.scope, expr.mapping)
@@ -260,7 +254,7 @@ impl Face {
                     let res = Resource::get_resource(&prefix, &expr.suffix);
                     if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
                         drop(rtables);
-                        let wtables = zwrite!(tables_lock.tables);
+                        let wtables = zwrite!(self.tables.tables);
                         (Some(res.unwrap()), wtables)
                     } else {
                         let mut fullexpr = prefix.expr().to_string();
@@ -269,7 +263,7 @@ impl Face {
                             .map(|ke| Resource::get_matches(&rtables.data, ke))
                             .unwrap_or_default();
                         drop(rtables);
-                        let mut wtables = zwrite!(tables_lock.tables);
+                        let mut wtables = zwrite!(self.tables.tables);
                         let tables = &mut *wtables;
                         let mut res =
                             Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
@@ -289,7 +283,7 @@ impl Face {
                 }
             }
         } else {
-            (None, zwrite!(tables_lock.tables))
+            (None, zwrite!(self.tables.tables))
         };
 
         let tables = &mut *wtables;
@@ -383,18 +377,16 @@ impl Face {
     #[tracing::instrument(
         level = "debug",
         name = "interest",
-        skip(tables_lock),
+        skip(self, msg),
         fields(
             id = msg.id,
             mode = ?InterestMode::Final,
             opts = %msg.options,
-            expr = ?msg.wire_expr
+            expr = msg.wire_expr.as_ref().map(|we| we.to_string())
         ),
         ret
     )]
-    pub(crate) fn interest_final(&self, tables_lock: &TablesLock, msg: &Interest) {
-        unregister_expr_interest(tables_lock, &mut self.state.clone(), msg.id);
-
+    pub(crate) fn interest_final(&self, msg: &Interest) {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
@@ -405,6 +397,11 @@ impl Face {
             send_declare: &mut |_, _| unreachable!(),
         };
 
+        // Unregister keyexpr interest
+        get_mut_unchecked(ctx.src_face)
+            .remote_key_interests
+            .remove(&msg.id);
+
         let hats = &mut tables.hats;
         let region = ctx.src_face.region;
 
@@ -412,11 +409,12 @@ impl Face {
             return;
         };
 
-        // FIXME(regions): check if any other subregion has the same remote interest before propagating interest final
+        // REVIEW(regions): do we need to check if any other subregion has the same remote interest
+        // before propagating interest final?
         hats[Region::North].route_interest_final(ctx, msg, &remote_interest);
     }
 
-    #[tracing::instrument(level = "debug", skip(wtables, _node_id, send_declare), ret)]
+    #[tracing::instrument(level = "debug", skip(self, wtables, _node_id, send_declare), ret)]
     pub(crate) fn declare_final(
         &self,
         wtables: &mut Tables,
@@ -440,27 +438,21 @@ impl Face {
 
         if region.bound().is_south() {
             tracing::error!(
-                interest_id,
                 "Received current interest finalization from south-bound face. \
                 This message should only flow downstream"
             );
             return;
         }
 
-        if let Some(resolved_interest) =
-            hats[Region::North].route_declare_final(ctx.reborrow(), interest_id)
-        {
-            tracing::trace!(
-                src_id = resolved_interest.src_interest_id,
-                %region,
-                "Resolving current interest"
-            );
+        match hats[region].route_declare_final(ctx.reborrow(), interest_id) {
+            RouteCurrentDeclareResult::Noop | RouteCurrentDeclareResult::NoBreadcrumb => {} // ¯\_(ツ)_/¯
+            RouteCurrentDeclareResult::Breadcrumb { interest } => {
+                debug_assert!(interest.mode.is_current());
 
-            if resolved_interest.mode.is_current() {
-                hats[resolved_interest.src_region].send_declare_final(
+                hats[interest.src_region].send_declare_final(
                     ctx,
-                    resolved_interest.src_interest_id,
-                    &resolved_interest.src,
+                    interest.src_interest_id,
+                    &interest.src,
                 );
             }
         }

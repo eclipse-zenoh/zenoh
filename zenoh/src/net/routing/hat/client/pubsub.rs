@@ -38,8 +38,8 @@ use crate::net::routing::{
         resource::{FaceContext, NodeId, Resource},
         tables::{Route, RoutingExpr, TablesData},
     },
+    gateway::{Direction, RouteBuilder, DEFAULT_NODE_ID},
     hat::{DispatcherContext, HatBaseTrait, HatPubSubTrait, HatTrait, Sources},
-    router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
     RoutingContext,
 };
 
@@ -149,10 +149,9 @@ impl HatPubSubTrait for Hat {
         }
 
         if src_face.region.bound().is_south() {
-            // REVIEW(regions): there should only be one such face?
-            for face in self
+            if let Some(face) = self
                 .owned_faces(tables)
-                .filter(|f| f.region.bound().is_north())
+                .find(|f| f.region.bound().is_north())
             {
                 route.try_insert(face.id, || {
                     let has_interest_finalized = expr
@@ -243,7 +242,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;

@@ -35,7 +35,9 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 
-use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
+use super::{
+    super::gateway::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock,
+};
 use crate::net::{
     primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
@@ -82,6 +84,7 @@ impl InterestState {
         interest
     }
 
+    #[tracing::instrument(level = "debug", ret)]
     pub(crate) fn set_finalized(&mut self) {
         self.finalized = true;
         if self.options.subscribers() || self.options.queryables() {
@@ -137,7 +140,7 @@ pub struct FaceState {
     pub(crate) stats: Option<zenoh_stats::TransportStats>,
 }
 
-// FIXME(regions): expose constructor fields as a struct
+// TODO(regions): expose constructor fields as a struct
 pub(crate) struct FaceStateBuilder(FaceState);
 
 impl FaceStateBuilder {
@@ -405,13 +408,13 @@ impl Primitives for Face {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
-            self.interest(&self.tables, msg, &mut |p, m| declares.push((p.clone(), m)));
+            self.interest(msg, &mut |p, m| declares.push((p.clone(), m)));
             drop(ctrl_lock);
             for (p, m) in declares {
                 m.with_mut(|m| p.send_declare(m));
             }
         } else {
-            self.interest_final(&self.tables, msg);
+            self.interest_final(msg);
         }
     }
 
@@ -554,7 +557,7 @@ impl Primitives for Face {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "debug", ret)]
+    #[tracing::instrument(level = "debug", skip(self), fields(src = %self) ret)]
     fn send_close(&self) {
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
@@ -578,7 +581,7 @@ impl Primitives for Face {
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
 
-        for mut res in hats[region].unregister_face_subscriber(ctx.reborrow()) {
+        for mut res in hats[region].unregister_face_subscribers(ctx.reborrow()) {
             disable_matches_data_routes(ctx.tables, &mut res);
 
             let mut remaining = hats

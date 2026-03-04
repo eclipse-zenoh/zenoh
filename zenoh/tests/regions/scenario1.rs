@@ -17,18 +17,18 @@
 //   C      C      C
 // P P P  P P P  P P P
 
-use std::{collections::HashSet, time::Duration};
+use std::time::Duration;
 
 use predicates::Predicate;
 use zenoh::{
-    key_expr::KeyExpr,
     query::{ConsolidationMode, QueryTarget},
+    sample::SampleKind,
     Wait,
 };
 use zenoh_config::WhatAmI::{Client, Peer, Router};
 use zenoh_core::{lazy_static, ztimeout};
 
-use crate::{json, loc, predicates_ext, skip_fmt, Node, SubUtils};
+use crate::{json, loc, predicates_ext, skip_fmt, unbounded_sink, Node};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -98,15 +98,15 @@ async fn test_regions_scenario1_order1_putsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
     }
 
     ztimeout!(async {
@@ -126,7 +126,7 @@ async fn test_regions_scenario1_order1_putsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_vals() == 9)
+            .all(|sub| sub.count_unique_by_payload(SampleKind::Put) == 9)
             {
                 break;
             }
@@ -201,15 +201,15 @@ async fn test_regions_scenario1_order1_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
     }
 
     let p9110 = z9110.declare_publisher("test").await.unwrap();
@@ -239,7 +239,7 @@ async fn test_regions_scenario1_order1_pubsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_vals() == 9)
+            .all(|sub| sub.count_unique_by_payload(SampleKind::Put) == 9)
             {
                 break;
             }
@@ -265,20 +265,20 @@ async fn test_regions_scenario1_order1_pubsub() {
 async fn test_regions_scenario1_order1_getque() {
     init_tracing_subscriber();
 
-    let z9000 = ztimeout!(Node::new(Router, "11ac9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "11ac9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "11ac9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.3:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "11ac9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.3:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "11ac9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.3:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -362,20 +362,20 @@ async fn test_regions_scenario1_order1_getque() {
 async fn test_regions_scenario1_order1_queque() {
     init_tracing_subscriber();
 
-    let z9000 = ztimeout!(Node::new(Router, "11ad9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "11ad9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "11ad9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.4:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "11ad9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.4:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "11ad9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.4:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -519,15 +519,15 @@ async fn test_regions_scenario1_order1_toksub() {
         .open());
 
     skip_fmt! {
-        let s9110 = z9110.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9120 = z9120.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9130 = z9130.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9210 = z9210.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9220 = z9220.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9230 = z9230.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9310 = z9310.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9320 = z9320.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9120 = z9120.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9130 = z9130.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9210 = z9210.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9220 = z9220.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9230 = z9230.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9310 = z9310.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9320 = z9320.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
     }
 
     let t9110 = z9110.liveliness().declare_token("test/9110").await.unwrap();
@@ -544,24 +544,18 @@ async fn test_regions_scenario1_order1_toksub() {
         &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
     ];
 
-    {
-        let mut seen_tokens: Vec<HashSet<KeyExpr<'static>>> = vec![HashSet::default(); subs.len()];
-        ztimeout!(async {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-                for (sub, seen) in subs.iter().zip(seen_tokens.iter_mut()) {
-                    seen.extend(sub.take_put_keys());
-                }
-
-                eprintln!("seen_tokens={seen_tokens:?}");
-
-                if seen_tokens.iter().all(|keys| keys.len() == 9) {
-                    break;
-                }
+            if subs
+                .iter()
+                .all(|sub| sub.count_unique_by_keyexpr(SampleKind::Put) == 9)
+            {
+                break;
             }
-        });
-    }
+        }
+    });
 
     t9110.undeclare().await.unwrap();
     t9120.undeclare().await.unwrap();
@@ -573,23 +567,18 @@ async fn test_regions_scenario1_order1_toksub() {
     t9320.undeclare().await.unwrap();
     t9330.undeclare().await.unwrap();
 
-    {
-        let mut unseen_tokens: Vec<HashSet<KeyExpr<'static>>> =
-            vec![Default::default(); subs.len()];
-        ztimeout!(async {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-                for (sub, unseen) in subs.iter().zip(unseen_tokens.iter_mut()) {
-                    unseen.extend(sub.take_del_keys());
-                }
-
-                if unseen_tokens.iter().all(|keys| keys.len() == 9) {
-                    break;
-                }
+            if subs
+                .iter()
+                .all(|sub| sub.count_unique_by_keyexpr(SampleKind::Delete) == 9)
+            {
+                break;
             }
-        });
-    }
+        }
+    });
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -627,15 +616,15 @@ async fn test_regions_scenario1_order2_putsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
     }
 
     let z9000 = ztimeout!(Node::new(Router, "12aa9000").listen("tcp/0.0.0.0:0").open());
@@ -673,7 +662,7 @@ async fn test_regions_scenario1_order2_putsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_vals() == 9)
+            .all(|sub| sub.count_unique_by_payload(SampleKind::Put) == 9)
             {
                 break;
             }
@@ -730,15 +719,15 @@ async fn test_regions_scenario1_order2_pubsub() {
         .open());
 
     skip_fmt! {
-        let s9110 = z9110.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9120 = z9120.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9130 = z9130.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9210 = z9210.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9220 = z9220.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9230 = z9230.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9310 = z9310.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9320 = z9320.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
-        let s9330 = z9330.declare_subscriber("test").with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9120 = z9120.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9130 = z9130.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9210 = z9210.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9220 = z9220.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9230 = z9230.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+        let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
     }
 
     let p9110 = z9110.declare_publisher("test").await.unwrap();
@@ -786,7 +775,7 @@ async fn test_regions_scenario1_order2_pubsub() {
                 &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
             ]
             .iter()
-            .all(|sub| sub.count_vals() == 9)
+            .all(|sub| sub.count_unique_by_payload(SampleKind::Put) == 9)
             {
                 break;
             }
@@ -854,20 +843,20 @@ async fn test_regions_scenario1_order2_getque() {
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
-    let z9000 = ztimeout!(Node::new(Router, "12ac9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "12ac9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "12ac9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.3:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "12ac9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.3:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "12ac9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.3:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -961,20 +950,20 @@ async fn test_regions_scenario1_order2_queque() {
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
-    let z9000 = ztimeout!(Node::new(Router, "12ad9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "12ad9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "12ad9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.4:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "12ad9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.4:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "12ad9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.4:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -1046,15 +1035,15 @@ async fn test_regions_scenario1_order2_toksub() {
         .open());
 
     skip_fmt! {
-        let s9110 = z9110.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9120 = z9120.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9130 = z9130.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9210 = z9210.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9220 = z9220.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9230 = z9230.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9310 = z9310.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9320 = z9320.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
-        let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(flume::unbounded()).await.unwrap();
+        let s9110 = z9110.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9120 = z9120.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9130 = z9130.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9210 = z9210.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9220 = z9220.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9230 = z9230.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9310 = z9310.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9320 = z9320.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
+        let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
     }
 
     let z9000 = ztimeout!(Node::new(Router, "12ae9000").listen("tcp/0.0.0.0:0").open());
@@ -1089,22 +1078,18 @@ async fn test_regions_scenario1_order2_toksub() {
         &s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330,
     ];
 
-    {
-        let mut seen_tokens: Vec<HashSet<KeyExpr<'static>>> = vec![HashSet::default(); subs.len()];
-        ztimeout!(async {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-                for (sub, seen) in subs.iter().zip(seen_tokens.iter_mut()) {
-                    seen.extend(sub.take_put_keys());
-                }
-
-                if seen_tokens.iter().all(|keys| keys.len() == 9) {
-                    break;
-                }
+            if subs
+                .iter()
+                .all(|sub| sub.count_unique_by_keyexpr(SampleKind::Put) == 9)
+            {
+                break;
             }
-        });
-    }
+        }
+    });
 
     t9110.undeclare().await.unwrap();
     t9120.undeclare().await.unwrap();
@@ -1116,21 +1101,16 @@ async fn test_regions_scenario1_order2_toksub() {
     t9320.undeclare().await.unwrap();
     t9330.undeclare().await.unwrap();
 
-    {
-        let mut unseen_tokens: Vec<HashSet<KeyExpr<'static>>> =
-            vec![Default::default(); subs.len()];
-        ztimeout!(async {
-            loop {
-                tokio::time::sleep(Duration::from_millis(100)).await;
+    ztimeout!(async {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
-                for (sub, unseen) in subs.iter().zip(unseen_tokens.iter_mut()) {
-                    unseen.extend(sub.take_del_keys());
-                }
-
-                if unseen_tokens.iter().all(|keys| keys.len() == 9) {
-                    break;
-                }
+            if subs
+                .iter()
+                .all(|sub| sub.count_unique_by_keyexpr(SampleKind::Delete) == 9)
+            {
+                break;
             }
-        });
-    }
+        }
+    });
 }

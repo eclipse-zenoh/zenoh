@@ -41,10 +41,10 @@ use crate::net::routing::{
         resource::{FaceContext, NodeId, Resource},
         tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
     },
+    gateway::{Direction, DEFAULT_NODE_ID},
     hat::{
         DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, Sources, UnregisterEntityResult,
     },
-    router::{Direction, DEFAULT_NODE_ID},
     RoutingContext,
 };
 
@@ -160,10 +160,9 @@ impl HatQueriesTrait for Hat {
         }
 
         if src_face.region.bound().is_south() {
-            // REVIEW(regions): there should only be one such face?
-            for face in self
+            if let Some(face) = self
                 .owned_faces(tables)
-                .filter(|f| f.region.bound().is_north())
+                .find(|f| f.region.bound().is_north())
             {
                 let has_interest_finalized = expr
                     .resource()

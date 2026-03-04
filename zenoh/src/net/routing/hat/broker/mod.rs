@@ -47,8 +47,8 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, queries::LocalQueryables, region::RegionMap},
+        gateway::{FaceContext, LocalSubscribers},
         hat::{DispatcherContext, Remote},
-        router::{FaceContext, LocalSubscribers},
     },
     runtime::Runtime,
 };
@@ -146,8 +146,8 @@ impl HatBaseTrait for Hat {
         debug_assert!(ctx.src_face.region.bound().is_south());
 
         // NOTE(regions):
-        // - The broker hat is never the north hat, thus there are no interests to re-propagate
-        // - The broker hat doesn't re-propagate entities to between clients
+        // 1. The broker hat is never the north hat, thus there are no interests to re-propagate
+        // 2. The broker hat doesn't re-propagate entities to between clients
 
         ctx.tables.disable_all_routes();
 
@@ -165,8 +165,8 @@ impl HatBaseTrait for Hat {
         debug_assert!(ctx.src_face.region.bound().is_south());
 
         // NOTE(regions):
-        // - The broker hat is never the north hat, thus there are no interests to re-propagate
-        // - The broker hat doesn't re-propagate entities between clients
+        // 1. The broker hat is never the north hat, thus there are no interests to re-propagate
+        // 2. The broker hat doesn't re-propagate entities between clients
 
         ctx.tables.disable_all_routes();
 
@@ -240,7 +240,7 @@ impl HatBaseTrait for Hat {
         self
     }
 
-    fn whatami(&self) -> WhatAmI {
+    fn mode(&self) -> WhatAmI {
         WhatAmI::Client
     }
 
@@ -271,7 +271,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing
+            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing as 0 is reserved for `INITIAL_INTEREST`
             remote_interests: HashMap::new(),
             local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),

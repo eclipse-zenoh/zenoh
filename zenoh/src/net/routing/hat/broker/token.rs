@@ -27,8 +27,8 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{face::FaceState, tables::TablesData},
+    gateway::{FaceContext, NodeId, Resource},
     hat::{DispatcherContext, HatBaseTrait, HatTokenTrait, SendDeclare, Sources},
-    router::{FaceContext, NodeId, Resource},
     RoutingContext,
 };
 #[allow(unused_imports)]

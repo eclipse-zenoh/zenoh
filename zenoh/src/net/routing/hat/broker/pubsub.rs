@@ -37,8 +37,8 @@ use crate::{
             resource::{FaceContext, NodeId, Resource},
             tables::{Route, RoutingExpr, TablesData},
         },
+        gateway::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         hat::{DispatcherContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources},
-        router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
         RoutingContext,
     },
     sample::Locality,
@@ -333,7 +333,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;

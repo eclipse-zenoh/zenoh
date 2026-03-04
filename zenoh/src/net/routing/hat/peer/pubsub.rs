@@ -34,11 +34,11 @@ use crate::net::routing::{
         resource::{FaceContext, NodeId, Resource},
         tables::{Route, RoutingExpr, TablesData},
     },
+    gateway::{Direction, RouteBuilder, DEFAULT_NODE_ID},
     hat::{
         peer::{initial_interest, Hat, INITIAL_INTEREST_ID},
         DispatcherContext, HatBaseTrait, HatPubSubTrait, HatTrait, SendDeclare, Sources,
     },
-    router::{Direction, RouteBuilder, DEFAULT_NODE_ID},
     RoutingContext,
 };
 
@@ -59,7 +59,7 @@ impl Hat {
             .values()
             .flat_map(|hat| hat.remote_subscribers(ctx.tables).into_keys())
         {
-            // FIXME(regions): We always propagate entities in this codepath; the method name is misleading
+            // NOTE(regions): we always propagate entities in this codepath; the method name is misleading
             self.maybe_propagate_subscriber(&res, &info, ctx.src_face, ctx.send_declare);
         }
     }
@@ -79,7 +79,7 @@ impl Hat {
             return;
         };
 
-        // FIXME(regions): it's not because of initial interest that we push subscribers to north-bound peers.
+        // NOTE(regions): it's not because of initial interest that we push subscribers to north-bound peers.
         // Initial interest only exists to track current declarations at startup. This code is misleading.
         // See 20a95fb.
         let initial_interest = dst_face
@@ -367,7 +367,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
+    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
         debug_assert!(self.owns(ctx.src_face));
 
         let fid = ctx.src_face.id;

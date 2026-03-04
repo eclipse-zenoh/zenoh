@@ -46,8 +46,8 @@ use crate::net::routing::{
         region::{BoundMap, RegionMap},
         tables::{RoutingExpr, Tables},
     },
+    gateway::disable_matches_data_routes,
     interceptor::{InterceptorTrait, InterceptorsChain},
-    router::disable_matches_data_routes,
     RoutingContext,
 };
 
@@ -309,8 +309,9 @@ pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    // REVIEW(regions): added because e.g. router/router bounds needs separate
-    // Routes (WhatAmI, NodeId -> Route) since each linkstate has a NodeId space
+    // REVIEW(regions): added because e.g. router/router bounds needs separate Routes (WhatAmI,
+    // NodeId -> Route) since each linkstate has a NodeId space, but this is no longer true. Is this
+    // still needed?
     pub(crate) hats: RegionMap<HatResourceContext>,
     #[cfg(feature = "stats")]
     pub(crate) stats_keys: zenoh_stats::StatsKeyCache,
@@ -359,7 +360,7 @@ pub struct Resource {
     pub(crate) nonwild_prefix: Option<Arc<Resource>>,
     pub(crate) children: SingleOrBoxHashSet<Child>,
     pub(crate) ctx: Option<Box<ResourceContext>>,
-    pub(crate) face_ctxs: IntHashMap<FaceId, Arc<FaceContext>>, // REVIEW(regions): should this be per-hat?
+    pub(crate) face_ctxs: IntHashMap<FaceId, Arc<FaceContext>>,
 }
 
 impl PartialEq for Resource {
@@ -457,10 +458,6 @@ impl Resource {
             // SAFETY: non-root resources are valid keyexprs
             unsafe { Some(keyexpr::from_str_unchecked(&self.expr)) }
         }
-    }
-
-    pub fn as_keyexpr(&self) -> &keyexpr {
-        self.keyexpr().unwrap()
     }
 
     pub fn suffix(&self) -> &str {
@@ -1072,14 +1069,4 @@ pub(crate) fn register_expr_interest(
             .insert(id, None);
         drop(wtables);
     }
-}
-
-pub(crate) fn unregister_expr_interest(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
-    let wtables = zwrite!(tables.tables);
-    get_mut_unchecked(face).remote_key_interests.remove(&id);
-    drop(wtables);
 }

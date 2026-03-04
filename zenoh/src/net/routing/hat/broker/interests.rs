@@ -21,7 +21,7 @@ use itertools::Itertools;
 use zenoh_core::polyfill::*;
 use zenoh_protocol::network::{
     declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-    interest::InterestId,
+    interest::{InterestId, InterestMode},
     Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
     Interest,
 };
@@ -35,8 +35,8 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
-    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentEntityResult},
-    router::SubscriberInfo,
+    gateway::SubscriberInfo,
+    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentDeclareResult},
     RoutingContext,
 };
 
@@ -65,9 +65,9 @@ impl HatInterestTrait for Hat {
         &mut self,
         _ctx: DispatcherContext,
         _interest_id: InterestId,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteCurrentDeclareResult {
         bug!("North-bound broker hat");
-        None
+        RouteCurrentDeclareResult::Noop
     }
 
     fn route_current_token(
@@ -75,9 +75,9 @@ impl HatInterestTrait for Hat {
         _ctx: DispatcherContext,
         _interest_id: InterestId,
         _res: Arc<Resource>,
-    ) -> RouteCurrentEntityResult {
+    ) -> RouteCurrentDeclareResult {
         bug!("North-bound broker hat");
-        RouteCurrentEntityResult::Noop
+        RouteCurrentDeclareResult::Noop
     }
 
     #[allow(clippy::incompatible_msrv)]
@@ -91,6 +91,7 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_ne!(msg.mode, InterestMode::Final);
 
         let src_fid = ctx.src_face.id;
 
@@ -108,7 +109,7 @@ impl HatInterestTrait for Hat {
         };
         let mut matches = matches.into_keys();
 
-        if msg.options.aggregate() && (msg.mode.is_current() || msg.mode.is_future()) {
+        if msg.options.aggregate() {
             if let Some(aggregated_res) = &res {
                 let (sub_id, sub_info) = if msg.mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(ctx.src_face);
@@ -203,6 +204,7 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_ne!(msg.mode, InterestMode::Final);
 
         let matches: HashMap<Arc<Resource>, QueryableInfoType> = other_matches
             .into_iter()
@@ -223,7 +225,7 @@ impl HatInterestTrait for Hat {
                 acc
             });
 
-        if msg.options.aggregate() && (msg.mode.is_current() || msg.mode.is_future()) {
+        if msg.options.aggregate() {
             if let Some(aggregated_res) = &res {
                 let (resource_id, qabl_info) = if msg.mode.is_future() {
                     for (qabl, qabl_info) in matches {
@@ -378,28 +380,32 @@ impl HatInterestTrait for Hat {
 
         debug_assert!(dst.region.bound().is_south());
 
-        let id = if interest.mode.is_future() {
-            let face_hat = self.face_hat_mut(&mut dst);
+        if self.face_hat(&dst).local_tokens.contains_key(&res) {
+            tracing::debug!("Already propagated");
+            return;
+        }
 
-            *face_hat
+        let id = if interest.mode.is_future() {
+            let id = self.face_hat(&dst).next_id.fetch_add(1, Ordering::SeqCst);
+            self.face_hat_mut(&mut dst)
                 .local_tokens
-                .entry(res.clone())
-                .or_insert_with(|| face_hat.next_id.fetch_add(1, Ordering::SeqCst))
+                .insert(res.clone(), id);
+            id
         } else {
             TokenId::default()
         };
 
         let wire_expr = Resource::decl_key(&res, &mut dst);
         (ctx.send_declare)(
-            &dst.primitives,
+            &dbg!(dst).primitives,
             RoutingContext::with_expr(
-                Declare {
+                dbg!(Declare {
                     interest_id: Some(interest.src_interest_id),
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                },
+                }),
                 res.expr().to_string(),
             ),
         );
@@ -447,7 +453,7 @@ impl HatInterestTrait for Hat {
         );
     }
 
-    #[tracing::instrument(level = "debug", skip(ctx, msg), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, msg), fields(id = msg.id), ret)]
     fn unregister_interest(
         &mut self,
         ctx: DispatcherContext,
@@ -461,7 +467,7 @@ impl HatInterestTrait for Hat {
             .remote_interests
             .remove(&msg.id)
         else {
-            tracing::error!(id = msg.id, "Unknown remote interest");
+            tracing::error!("Unknown interest");
             return None;
         };
 

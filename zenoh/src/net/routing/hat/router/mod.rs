@@ -30,14 +30,11 @@ use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
 use zenoh_protocol::{
     common::ZExtBody,
     core::{Region, ZenohIdProto},
-    network::{
-        declare::queryable::ext::QueryableInfoType, interest::InterestId, oam::id::OAM_LINKSTATE,
-        Oam,
-    },
+    network::{declare::queryable::ext::QueryableInfoType, oam::id::OAM_LINKSTATE, Oam},
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
-use zenoh_task::{TaskController, TerminatableTask};
+use zenoh_task::TerminatableTask;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{
@@ -45,7 +42,7 @@ use super::{
         face::FaceState,
         tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
     },
-    HatBaseTrait, HatTrait, SendDeclare,
+    HatBaseTrait, HatTrait,
 };
 use crate::net::{
     codec::Zenoh080Routing,
@@ -55,15 +52,9 @@ use crate::net::{
         ROUTERS_NET_NAME,
     },
     routing::{
-        dispatcher::{
-            self,
-            face::InterestState,
-            interests::{PendingCurrentInterest, RemoteInterest},
-            queries::merge_qabl_infos,
-            region::RegionMap,
-        },
+        dispatcher::{self, queries::merge_qabl_infos, region::RegionMap},
+        gateway::DEFAULT_NODE_ID,
         hat::{DispatcherContext, Remote, TREES_COMPUTATION_DELAY_MS},
-        router::DEFAULT_NODE_ID,
     },
     runtime::Runtime,
 };
@@ -118,19 +109,6 @@ pub(crate) struct Hat {
     router_subs: HashSet<Arc<Resource>>,
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
-    #[allow(dead_code)] // FIXME(regions)
-    next_interest_id: InterestId,
-    #[allow(dead_code)] // FIXME(regions)
-    router_local_interests: HashMap<InterestId, InterestState>,
-    router_pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
-    /// Interests declared by nodes in this router's subregions.
-    ///
-    /// Interest mode can only be one of:
-    /// - [`zenoh_protocol::network::interest::InterestMode::Future`]
-    /// - [`zenoh_protocol::network::interest::InterestMode::CurrentFuture`]
-    #[allow(dead_code)] // FIXME(regions)
-    router_remote_interests: HashMap<(ZenohIdProto, InterestId), RemoteInterest>,
-    task_controller: TaskController,
     routers_net: Option<Network>, // TODO(regions): remove Option?
     routers_trees_worker: TreesComputationWorker,
 }
@@ -143,7 +121,6 @@ impl Debug for Hat {
 
 impl Hat {
     pub(crate) fn new(region: Region) -> Self {
-        // FIXME(regions): peer failover brokering is scrapped
         Self {
             region,
             router_subs: HashSet::new(),
@@ -151,11 +128,6 @@ impl Hat {
             router_tokens: HashSet::new(),
             routers_net: None,
             routers_trees_worker: TreesComputationWorker::new(region),
-            router_local_interests: HashMap::new(),
-            router_pending_current_interests: HashMap::new(),
-            router_remote_interests: HashMap::new(),
-            next_interest_id: 1,
-            task_controller: TaskController::default(),
         }
     }
 
@@ -178,11 +150,6 @@ impl Hat {
             .unwrap()
     }
 
-    #[allow(dead_code)] // FIXME(regions)
-    pub(self) fn hat_remote<'r>(&self, remote: &'r Remote) -> &'r HatRemote {
-        remote.as_any().downcast_ref().unwrap()
-    }
-
     pub(self) fn face_hat<'f>(&self, face_state: &'f FaceState) -> &'f HatFace {
         face_state.hats[self.region].downcast_ref().unwrap()
     }
@@ -199,84 +166,6 @@ impl Hat {
         zid: &ZenohIdProto,
     ) -> Option<&'t Arc<FaceState>> {
         tables.faces.values().find(|face| face.zid == *zid)
-    }
-
-    #[allow(dead_code)] // FIXME(regions)
-    /// Identifies the gateway of this hat's region (if any).
-    pub(crate) fn region_gateway(&self) -> Option<NodeId> {
-        // TODO(regions2): elect the primary gateway
-        let net = self.net();
-        let mut gwys = net.graph.node_indices().filter(|idx| {
-            tracing::trace!(
-                zid = %net.graph[*idx].zid.short(),
-                is_gwy = net.graph[*idx].is_gateway,
-                "Gateway candidate node"
-            );
-            net.graph[*idx].is_gateway
-        });
-
-        let gwy = gwys.next()?;
-
-        if gwys.next().is_some() {
-            tracing::error!(
-                bound = ?self.region,
-                total = gwys.count() + 2,
-                selected = ?net.graph[gwy].zid,
-                "Multiple gateways found in router subregion. \
-                Only one gateway per subregion is supported. \
-                Selecting arbitrary gateway"
-            );
-        }
-
-        Some(gwy.index() as NodeId)
-    }
-
-    /// Find the next hop in the point-to-point route ending at `dst_nid`.
-    ///
-    /// This works by exploiting the following property of linkstate routing:
-    /// [`crate::net::protocol::network::Tree::directions`] contains routes
-    /// up the spanning tree root.
-    fn point_to_point_hop(&self, tables: &TablesData, dst_nid: NodeId) -> Option<Arc<FaceState>> {
-        let net = self.net();
-        let tree = net.trees.get(dst_nid as usize)?;
-        let next_hop_node_id = tree.directions.get(dst_nid as usize)?.as_ref()?;
-        let next_hop = net
-            .graph
-            .node_weight(*next_hop_node_id)
-            .map(|node| &node.zid)?;
-        self.face(tables, next_hop).cloned()
-    }
-
-    /// Sends a network message to the router identified by `dst_node_id`.
-    #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn send_point_to_point(
-        &self,
-        ctx: DispatcherContext,
-        dst_node_id: NodeId,
-        mut send_message: impl FnMut(&Arc<FaceState>),
-    ) {
-        let Some(next_hop) = self.point_to_point_hop(ctx.tables, dst_node_id) else {
-            tracing::error!("Unable to find next-hop face in point-to-point route");
-            return;
-        };
-        send_message(&next_hop);
-    }
-
-    /// Sends a declare message to the router identified by `dst_node_id`.
-    ///
-    /// See also: [`Self::point_to_point_hop`].
-    #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn send_declare_point_to_point(
-        &self,
-        ctx: DispatcherContext,
-        dst_node_id: NodeId,
-        mut send_message: impl FnMut(&mut SendDeclare, &Arc<FaceState>),
-    ) {
-        let Some(next_hop) = self.point_to_point_hop(ctx.tables, dst_node_id) else {
-            tracing::error!("Unable to find next-hop face in point-to-point route");
-            return;
-        };
-        send_message(ctx.send_declare, &next_hop)
     }
 
     fn schedule_compute_trees(&self, tables_ref: Arc<TablesLock>) {
@@ -397,7 +286,7 @@ impl HatBaseTrait for Hat {
         self.schedule_compute_trees(ctx.tables_lock.clone());
     }
 
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(level = "debug", skip(ctx, other_hats), ret)]
     fn handle_oam(
         &mut self,
         mut ctx: DispatcherContext,
@@ -421,12 +310,7 @@ impl HatBaseTrait for Hat {
                     bail!("failed to decode link state");
                 };
 
-                tracing::trace!(
-                    id = %"OAM_LINKSTATE",
-                    wai = %whatami.short(),
-                    rgn = %self.region(),
-                    linkstate = ?list
-                );
+                tracing::trace!(linkstate = ?list);
 
                 let removed_nodes = self
                     .net_mut()
@@ -448,7 +332,7 @@ impl HatBaseTrait for Hat {
                     .flat_map(|(_, node)| self.unregister_node_tokens(node))
                     .collect::<HashSet<_>>();
 
-                // FIXME(regions): refactor?
+                // TODO(regions): refactor?
 
                 let region = self.region();
 
@@ -627,7 +511,7 @@ impl HatBaseTrait for Hat {
         self
     }
 
-    fn whatami(&self) -> WhatAmI {
+    fn mode(&self) -> WhatAmI {
         WhatAmI::Router
     }
 
@@ -665,6 +549,3 @@ impl HatFace {
 }
 
 impl HatTrait for Hat {}
-
-#[allow(dead_code)] // FIXME(regions)
-type HatRemote = ZenohIdProto;

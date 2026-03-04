@@ -47,8 +47,8 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, region::RegionMap},
+        gateway::FaceContext,
         hat::{DispatcherContext, Remote},
-        router::FaceContext,
     },
     runtime::Runtime,
 };
@@ -233,7 +233,7 @@ impl HatBaseTrait for Hat {
         self
     }
 
-    fn whatami(&self) -> WhatAmI {
+    fn mode(&self) -> WhatAmI {
         WhatAmI::Client
     }
 
@@ -264,7 +264,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing
+            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing as 0 is reserved for `INITIAL_INTEREST`
             remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),
@@ -277,6 +277,3 @@ impl HatFace {
 }
 
 impl HatTrait for Hat {}
-
-#[allow(dead_code)] // FIXME(regions)
-type HatRemote = Arc<FaceState>;
