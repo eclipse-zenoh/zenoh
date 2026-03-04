@@ -27,8 +27,8 @@ use zenoh_protocol::{
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
     dispatcher::face::Face,
+    gateway::{node_id_as_source, Resource},
     hat::{DispatcherContext, RouteCurrentDeclareResult, SendDeclare},
-    router::{node_id_as_source, Resource},
 };
 
 impl Face {

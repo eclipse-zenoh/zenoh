@@ -3325,7 +3325,7 @@ async fn test_liveliness_subget_client_history_middle() {
 // SUBGET PEER
 // -------------------------------------------------------
 
-#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"] // TODO(regions): delete this
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subget_peer_before() {
     use std::time::Duration;
@@ -4198,7 +4198,7 @@ async fn test_liveliness_regression_1() {
     router.close().await.unwrap();
 }
 
-#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"] // TODO(regions): delete this
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_regression_2() {
     use std::time::Duration;
@@ -4497,7 +4497,7 @@ async fn test_liveliness_regression_3() {
     router.close().await.unwrap();
 }
 
-#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"] // TODO(regions): delete this
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_issue_1470() {
     // https://github.com/eclipse-zenoh/zenoh/issues/1470
@@ -4753,7 +4753,7 @@ async fn test_liveliness_double_undeclare_clique() {
     peer2.close().await.unwrap();
 }
 
-#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"] // TODO(regions): delete this
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/pull/2289"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_sub_history_conflict() {
     // https://github.com/eclipse-zenoh/zenoh/issues/2071

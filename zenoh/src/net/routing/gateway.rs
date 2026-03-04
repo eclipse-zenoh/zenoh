@@ -47,7 +47,7 @@ use crate::net::{
     },
 };
 
-pub struct RouterBuilder<'c> {
+pub struct GatewayBuilder<'c> {
     config: &'c ExpandedConfig,
     hlc: Option<Arc<HLC>>,
     hats: Vec<Region>,
@@ -55,8 +55,8 @@ pub struct RouterBuilder<'c> {
     stats: Option<zenoh_stats::StatsRegistry>,
 }
 
-impl<'conf> RouterBuilder<'conf> {
-    pub fn new(config: &'conf ExpandedConfig) -> RouterBuilder<'conf> {
+impl<'conf> GatewayBuilder<'conf> {
+    pub fn new(config: &'conf ExpandedConfig) -> GatewayBuilder<'conf> {
         Self {
             config,
             hlc: None,
@@ -71,7 +71,7 @@ impl<'conf> RouterBuilder<'conf> {
         self
     }
 
-    #[allow(dead_code)] // FIXME(regions)
+    #[cfg(test)]
     pub fn hat(mut self, region: Region) -> Self {
         self.hats.push(region);
         self
@@ -83,7 +83,7 @@ impl<'conf> RouterBuilder<'conf> {
         self
     }
 
-    pub fn build(mut self) -> ZResult<Router> {
+    pub fn build(mut self) -> ZResult<Gateway> {
         if self.hats.is_empty() {
             self.hats.extend([(Region::North), (Region::Local)]);
         }
@@ -126,9 +126,9 @@ impl<'conf> RouterBuilder<'conf> {
             .stats
             .unwrap_or_else(|| zenoh_stats::StatsRegistry::new(zid, mode, &*crate::LONG_VERSION));
 
-        tracing::trace!(hats = ?self.hats, "New router");
+        tracing::trace!(hats = ?self.hats, "New gateway");
 
-        Ok(Router {
+        Ok(Gateway {
             tables: Arc::new(TablesLock {
                 tables: RwLock::new(Tables {
                     data: TablesData::new(
@@ -172,12 +172,12 @@ impl<'conf> RouterBuilder<'conf> {
     }
 }
 
-pub struct Router {
+pub struct Gateway {
     // whatami: WhatAmI,
     pub tables: Arc<TablesLock>,
 }
 
-impl Router {
+impl Gateway {
     pub fn init_hats(&mut self, runtime: Runtime) -> ZResult<()> {
         let _ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
@@ -228,7 +228,7 @@ impl Router {
         Arc::new(face)
     }
 
-    // FIXME(regions): name
+    // TODO(regions): rename this
     pub(crate) fn new_primitives(
         &self,
         primitives: Arc<dyn EPrimitives + Send + Sync>,
@@ -285,22 +285,6 @@ impl Router {
                 Arc::new(builder.build())
             })
             .clone();
-
-        let gwy_count = tables
-            .data
-            .faces
-            .iter()
-            .filter(|(_, f)| f.remote_bound.is_south())
-            .count();
-
-        // FIXME(regions): this error message is bad!
-        if gwy_count > 1 {
-            tracing::error!(
-                total = gwy_count,
-                "Multiple gateways found in subregion. \
-                Only one gateway per subregion is supported."
-            );
-        }
 
         newface.set_interceptors_from_factories(
             &tables.data.interceptors,

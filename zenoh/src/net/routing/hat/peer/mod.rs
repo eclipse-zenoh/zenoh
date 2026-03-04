@@ -55,8 +55,8 @@ use crate::net::{
             face::InterestState, interests::RemoteInterest, queries::LocalQueryables,
             region::RegionMap,
         },
+        gateway::{FaceContext, LocalSubscribers},
         hat::{DispatcherContext, Remote},
-        router::{FaceContext, LocalSubscribers},
         RoutingContext,
     },
     runtime::Runtime,
@@ -347,7 +347,7 @@ impl HatBaseTrait for Hat {
         self
     }
 
-    fn whatami(&self) -> WhatAmI {
+    fn mode(&self) -> WhatAmI {
         WhatAmI::Peer
     }
 

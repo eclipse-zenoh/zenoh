@@ -45,8 +45,8 @@ use crate::net::routing::{
         local_resources::{LocalResourceInfoTrait, LocalResources},
         tables::{Tables, TablesData},
     },
+    gateway::{get_or_set_route, node_id_as_source, QueryDirection, RouteBuilder},
     hat::{DispatcherContext, SendDeclare, UnregisterEntityResult},
-    router::{get_or_set_route, node_id_as_source, QueryDirection, RouteBuilder},
 };
 
 #[derive(Clone)]

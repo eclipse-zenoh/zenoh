@@ -36,8 +36,8 @@ use zenoh_util::Timed;
 use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::Tables},
+    gateway::{register_expr_interest, NodeId, Resource},
     hat::{DispatcherContext, Remote, RouteCurrentDeclareResult, SendDeclare},
-    router::{register_expr_interest, NodeId, Resource},
     RoutingContext,
 };
 
@@ -410,7 +410,7 @@ impl Face {
         };
 
         // REVIEW(regions): do we need to check if any other subregion has the same remote interest
-        // before propagating interest final
+        // before propagating interest final?
         hats[Region::North].route_interest_final(ctx, msg, &remote_interest);
     }
 

@@ -58,7 +58,7 @@ use crate::{
     bytes::Encoding,
     net::{
         primitives::Primitives,
-        routing::{dispatcher::tables::Tables, hat::Sources, router::Resource},
+        routing::{dispatcher::tables::Tables, gateway::Resource, hat::Sources},
         runtime::region,
     },
     LONG_VERSION,
@@ -787,7 +787,7 @@ fn linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     for (region, hat) in rtables
         .hats
         .iter()
-        .filter(|(_, hat)| hat.whatami().is_peer() || hat.whatami().is_router())
+        .filter(|(_, hat)| hat.mode().is_peer() || hat.mode().is_router())
     {
         let reply_key = prefix / &KeyExpr::try_from(format!("{region}")).unwrap();
 
@@ -822,11 +822,7 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let suffix = query.key_expr().as_str().strip_prefix(prefix.as_str());
     if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
         if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
-            for hat in rtables
-                .hats
-                .values()
-                .filter(|hat| hat.whatami().is_router())
-            {
+            for hat in rtables.hats.values().filter(|hat| hat.mode().is_router()) {
                 if let Some(successor) = hat.route_successor(src_zid, dst_zid) {
                     reply(query.key_expr(), successor);
                 }
@@ -838,7 +834,7 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let successors = rtables
         .hats
         .values()
-        .filter(|hat| hat.whatami().is_router())
+        .filter(|hat| hat.mode().is_router())
         .flat_map(|hat| hat.route_successors())
         .collect_vec();
     drop(rtables);

@@ -821,7 +821,7 @@ async fn gossip_regression_3() -> Result<()> {
 }
 
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
-#[ignore] // FIXME(regions): remove this
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/issues/2224"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
     zenoh::init_log_from_env_or("error");

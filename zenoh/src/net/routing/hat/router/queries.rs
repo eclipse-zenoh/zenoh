@@ -42,8 +42,8 @@ use crate::net::{
             resource::{NodeId, Resource},
             tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr, TablesData},
         },
+        gateway::Direction,
         hat::{DispatcherContext, HatBaseTrait, HatQueriesTrait, Sources, UnregisterEntityResult},
-        router::Direction,
         RoutingContext,
     },
 };
@@ -70,7 +70,6 @@ impl Hat {
                         if let Some(qabl_info) = qabls.get(&tree_id) {
                             self.send_sourced_queryable_to_net_children(
                                 tables,
-                                net,
                                 tree_children,
                                 res,
                                 qabl_info,
@@ -84,17 +83,16 @@ impl Hat {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn send_sourced_queryable_to_net_children(
         &self,
         tables: &TablesData,
-        net: &Network,
         children: &[NodeIndex],
         res: &Arc<Resource>,
         qabl_info: &QueryableInfoType,
         src_face: Option<&mut Arc<FaceState>>,
         routing_context: NodeId,
     ) {
+        let net = self.net();
         for child in children {
             if net.graph.contains_node(*child) {
                 match self.face(tables, &net.graph[*child].zid).cloned() {
@@ -132,7 +130,6 @@ impl Hat {
         }
     }
 
-    // FIXME(regions): use a different word for "propagate"
     fn propagate_sourced_queryable(
         &self,
         tables: &TablesData,
@@ -141,13 +138,12 @@ impl Hat {
         src_face: Option<&mut Arc<FaceState>>,
         source: &ZenohIdProto,
     ) {
-        let net = self.routers_net.as_ref().unwrap();
+        let net = self.net();
         match net.get_idx(source) {
             Some(tree_sid) => {
                 if net.trees.len() > tree_sid.index() {
                     self.send_sourced_queryable_to_net_children(
                         tables,
-                        net,
                         &net.trees[tree_sid.index()].children,
                         res,
                         qabl_info,

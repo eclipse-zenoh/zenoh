@@ -217,7 +217,7 @@ impl SessionState {
             aggregated_subscribers,
             aggregated_publishers,
             publisher_qos_tree,
-            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()), // FIXME(regions): include the face id
+            span: tracing::debug_span!("sess", zid = %ZenohIdProto::from(runtime.zid()).short()), // TODO(regions): include the face id
         }
     }
 }

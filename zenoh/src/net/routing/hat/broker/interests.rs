@@ -21,7 +21,7 @@ use itertools::Itertools;
 use zenoh_core::polyfill::*;
 use zenoh_protocol::network::{
     declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
-    interest::InterestId,
+    interest::{InterestId, InterestMode},
     Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
     Interest,
 };
@@ -35,8 +35,8 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
+    gateway::SubscriberInfo,
     hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentDeclareResult},
-    router::SubscriberInfo,
     RoutingContext,
 };
 
@@ -91,6 +91,7 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_ne!(msg.mode, InterestMode::Final);
 
         let src_fid = ctx.src_face.id;
 
@@ -108,7 +109,7 @@ impl HatInterestTrait for Hat {
         };
         let mut matches = matches.into_keys();
 
-        if msg.options.aggregate() && (msg.mode.is_current() || msg.mode.is_future()) {
+        if msg.options.aggregate() {
             if let Some(aggregated_res) = &res {
                 let (sub_id, sub_info) = if msg.mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(ctx.src_face);
@@ -203,6 +204,7 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_ne!(msg.mode, InterestMode::Final);
 
         let matches: HashMap<Arc<Resource>, QueryableInfoType> = other_matches
             .into_iter()
@@ -223,7 +225,7 @@ impl HatInterestTrait for Hat {
                 acc
             });
 
-        if msg.options.aggregate() && (msg.mode.is_current() || msg.mode.is_future()) {
+        if msg.options.aggregate() {
             if let Some(aggregated_res) = &res {
                 let (resource_id, qabl_info) = if msg.mode.is_future() {
                     for (qabl, qabl_info) in matches {

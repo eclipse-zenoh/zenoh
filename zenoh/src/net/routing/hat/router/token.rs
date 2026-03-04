@@ -29,8 +29,8 @@ use crate::net::{
     protocol::network::Network,
     routing::{
         dispatcher::{face::FaceState, tables::TablesData},
+        gateway::{NodeId, Resource},
         hat::{DispatcherContext, HatBaseTrait, HatTokenTrait, Sources},
-        router::{NodeId, Resource},
         RoutingContext,
     },
 };
@@ -382,8 +382,8 @@ impl HatTokenTrait for Hat {
             return;
         }
 
-        // NOTE(regions): this doesn't hold in general for tokens as it does for subscribers/queryables.
-        // debug_assert!(was_propagated);
+        // NOTE(regions): it's not true in general that the token had to have been propagated as is
+        // the case for subscribers and queryables.
 
         self.res_hat_mut(&mut res)
             .router_tokens

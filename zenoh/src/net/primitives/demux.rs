@@ -25,9 +25,9 @@ use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
 use super::Primitives;
 use crate::net::routing::{
     dispatcher::face::Face,
+    gateway::{InterceptorCacheValueType, Resource},
     hat::{DispatcherContext, HatTrait},
     interceptor::{has_interceptor, InterceptorContext, InterceptorTrait, InterceptorsChain},
-    router::{InterceptorCacheValueType, Resource},
     RoutingContext,
 };
 
@@ -190,7 +190,7 @@ impl TransportPeerEventHandler for DeMux {
                     owner_hat.handle_oam(
                         ctx,
                         m,
-                        // TODO(regions): are these every different from the face's?
+                        // TODO(regions): are these ever different from the face's?
                         &transport.get_zid()?,
                         transport.get_whatami()?,
                         other_hats.map(|hat| &mut **hat as &mut dyn HatTrait), // FIXME(regions)

@@ -34,11 +34,11 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
+    gateway::SubscriberInfo,
     hat::{
         DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
         RouteCurrentDeclareResult,
     },
-    router::SubscriberInfo,
     RoutingContext,
 };
 impl Hat {
@@ -178,7 +178,8 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        // NOTE(regions): clients have at most one north-bound remote.
+        // NOTE(regions): clients have at most one north-bound remote, this invariant is enforced in
+        // the orchestrator.
         if let Some(dst_face) = self
             .owned_faces_mut(ctx.tables)
             .next()

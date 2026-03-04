@@ -21,7 +21,7 @@ use std::{
 
 use zenoh_protocol::network::interest::InterestId;
 
-use crate::net::routing::router::Resource;
+use crate::net::routing::gateway::Resource;
 
 pub(crate) trait LocalResourceTrait: Hash + Clone + Eq {
     fn matches(&self, other: &Self) -> bool;

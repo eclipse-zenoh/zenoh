@@ -40,11 +40,11 @@ use crate::{
             resource::{NodeId, Resource},
             tables::{QueryTargetQablSet, RoutingExpr, TablesData},
         },
+        gateway::{FaceContext, QueryTargetQabl},
         hat::{
             DispatcherContext, HatBaseTrait, HatQueriesTrait, HatTrait, SendDeclare, Sources,
             UnregisterEntityResult,
         },
-        router::{FaceContext, QueryTargetQabl},
         RoutingContext,
     },
     sample::Locality,
@@ -182,8 +182,14 @@ impl Hat {
             return false;
         };
 
-        // REVIEW(regions): queryable resource *should* be non-root (?)
-        let is_matching_res = |qabl: &Resource| qabl.as_keyexpr().includes(key_expr);
+        let is_matching_res = |qabl: &Resource| {
+            let Some(ke) = qabl.keyexpr() else {
+                bug!("Queryable resource should not be root");
+                return false;
+            };
+
+            ke.includes(key_expr)
+        };
         let is_matching_info = |info: &QueryableInfoType| !complete || info.complete;
 
         let is_matching = |qabl: &Resource, info: &QueryableInfoType| {
@@ -319,7 +325,7 @@ impl HatQueriesTrait for Hat {
             let res = get_mut_unchecked(&mut res);
             match res.face_ctxs.get_mut(&ctx.src_face.id) {
                 Some(ctx) => {
-                    // NOTE(regions): this is an update for all queryables on the resource (?)
+                    // TODO(regions): this is an update for all queryables on the resource (?)
                     get_mut_unchecked(ctx).qabl = Some(*info);
                 }
                 None => {
@@ -337,7 +343,6 @@ impl HatQueriesTrait for Hat {
             .insert(id, (res.clone(), *info));
     }
 
-    // FIXME(regions): replicate changes elsewhere
     #[tracing::instrument(level = "debug", skip(ctx, id, _res, _node_id), ret)]
     fn unregister_queryable(
         &mut self,

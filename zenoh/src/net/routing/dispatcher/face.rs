@@ -35,7 +35,9 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
 use zenoh_transport::multicast::TransportMulticast;
 
-use super::{super::router::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock};
+use super::{
+    super::gateway::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock,
+};
 use crate::net::{
     primitives::{EPrimitives, McastMux, Mux, Primitives},
     routing::{
@@ -138,7 +140,7 @@ pub struct FaceState {
     pub(crate) stats: Option<zenoh_stats::TransportStats>,
 }
 
-// FIXME(regions): expose constructor fields as a struct
+// TODO(regions): expose constructor fields as a struct
 pub(crate) struct FaceStateBuilder(FaceState);
 
 impl FaceStateBuilder {

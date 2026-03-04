@@ -37,16 +37,16 @@ use crate::{
                 queries::route_send_response,
                 tables::TablesData,
             },
-            router::*,
+            gateway::*,
             RoutingContext,
         },
     },
 };
 
-fn new_router() -> Router {
+fn new_router() -> Gateway {
     let mut config = Config::default().expanded();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    RouterBuilder::new(&config)
+    GatewayBuilder::new(&config)
         .hat(Region::Local)
         .build()
         .unwrap()

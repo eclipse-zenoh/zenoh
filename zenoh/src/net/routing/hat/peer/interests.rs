@@ -39,11 +39,11 @@ use crate::net::routing::{
         resource::Resource,
         tables::TablesData,
     },
+    gateway::SubscriberInfo,
     hat::{
         DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
         RouteCurrentDeclareResult,
     },
-    router::SubscriberInfo,
     RoutingContext,
 };
 
@@ -125,9 +125,9 @@ impl HatInterestTrait for Hat {
                 && !initial_interest(f).is_none_or(|i| i.finalized)
         });
 
-        // NOTE(regions): Current interests are stateless, i.e. gateways don't register
-        // inbound/outbound token propagation. For this reason, we pick at most one destination
-        // for Current interests; otherwise we would wind up with duplicate tokens.
+        // NOTE(regions): `Current` (and not `CurrentFuture`) interests are stateless, i.e. gateways
+        // don't register inbound/outbound token propagation. For this reason, we pick at most one
+        // destination for `Current` interests; otherwise we would wind up with duplicate tokens.
         let dsts = if msg.mode == InterestMode::Current {
             initial_interest_peers
                 .chain(
@@ -258,7 +258,7 @@ impl HatInterestTrait for Hat {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_north());
         // NOTE(regions): the reverse implication doesn't hold: peer regions may exchange interests
-        // during while there are still unfinalized initial interests.
+        // while initial interests are unfinalized.
         debug_assert_implies!(
             interest_id == INITIAL_INTEREST_ID,
             ctx.src_face.remote_bound.is_north()
@@ -356,10 +356,11 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_ne!(msg.mode, InterestMode::Final);
 
         let mut matches = other_matches.into_keys();
 
-        if msg.options.aggregate() && (msg.mode.is_current() || msg.mode.is_future()) {
+        if msg.options.aggregate() {
             if let Some(aggregated_res) = &res {
                 let (sub_id, sub_info) = if msg.mode.is_future() {
                     let face_hat_mut = self.face_hat_mut(ctx.src_face);
@@ -450,11 +451,12 @@ impl HatInterestTrait for Hat {
     ) {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
+        debug_assert_ne!(msg.mode, InterestMode::Final);
 
         // NOTE(regions): we don't propagate the regions's entities in peer-to-peer mode
         let matches = other_matches;
 
-        if msg.options.aggregate() && (msg.mode.is_current() || msg.mode.is_future()) {
+        if msg.options.aggregate() {
             if let Some(aggregated_res) = &res {
                 let (resource_id, qabl_info) = if msg.mode.is_future() {
                     for (qabl, qabl_info) in matches {

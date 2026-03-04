@@ -74,8 +74,8 @@ use super::{
     primitives::{DeMux, EPrimitives, Primitives},
     routing::{
         self,
+        gateway::Gateway,
         namespace::{ENamespace, Namespace},
-        router::Router,
     },
 };
 #[cfg(feature = "plugins")]
@@ -91,8 +91,8 @@ use crate::{
         info::{Link, Transport},
     },
     net::routing::{
+        gateway::GatewayBuilder,
         hat::{self, HatTrait},
-        router::RouterBuilder,
     },
     GIT_VERSION,
 };
@@ -122,7 +122,7 @@ pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
-    router: Arc<Router>,
+    router: Arc<Gateway>,
     config: Notifier<ExpandedConfig>,
     manager: TransportManager,
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
@@ -428,7 +428,7 @@ impl RuntimeState {
             .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
-    fn router(&self) -> Arc<Router> {
+    fn router(&self) -> Arc<Gateway> {
         self.router.clone()
     }
 
@@ -598,7 +598,7 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let mut router_builder = RouterBuilder::new(&config);
+        let mut router_builder = GatewayBuilder::new(&config);
         if let Some(hlc) = hlc.as_ref().cloned() {
             router_builder = router_builder.hlc(hlc.clone());
         }
@@ -774,7 +774,7 @@ impl Runtime {
         self.state.spawn_abortable(future)
     }
 
-    pub(crate) fn router(&self) -> Arc<Router> {
+    pub(crate) fn router(&self) -> Arc<Gateway> {
         self.state.router()
     }
 
@@ -858,7 +858,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         })
                         .collect();
 
-                let config = runtime.config().lock();
+                let config = runtime.config().lock().clone();
 
                 let (region, remote_bound) =
                     region::compute_region_of(&peer, &config, transport.get_bound()?.as_ref())?;
