@@ -3104,7 +3104,9 @@ async fn test_liveliness_subget_client_middle() {
     let sample = ztimeout!(get.recv_async()).unwrap().into_result().unwrap();
     assert!(sample.kind() == SampleKind::Put);
     assert!(sample.key_expr().as_str() == LIVELINESS_KEYEXPR);
-    assert!(get.try_recv().is_err());
+    let x = get.try_recv().is_err();
+    tracing::info!(x);
+    assert!(x);
 
     token.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;

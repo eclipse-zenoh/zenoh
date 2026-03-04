@@ -215,7 +215,7 @@ impl HatBaseTrait for Hat {
         let do_initial_interest =
             ctx.src_face.region.bound().is_north() && ctx.src_face.remote_bound.is_north();
 
-        tracing::trace!(do_initial_interest);
+        tracing::debug!(do_initial_interest);
 
         if do_initial_interest {
             let face_id = ctx.src_face.id;
@@ -392,12 +392,10 @@ impl HatFace {
 
 impl HatTrait for Hat {}
 
-// In p2p, at connection, while no interest is sent on the network,
-// peers act as if they received an interest CurrentFuture with id 0
-// and send back a DeclareFinal with interest_id 0.
-// This 'ghost' interest is registered locally to allow tracking if
-// the DeclareFinal has been received or not (finalized).
-
+/// In p2p, at connection, while no interest is sent on the network, peers act as if they received
+/// an interest `CurrentFuture` with id `0` and send back a `DeclareFinal` with interest id `0`.
+/// This 'ghost' interest is registered locally to allow tracking if the `DeclareFinal` has been
+/// received or not (finalized).
 pub(crate) const INITIAL_INTEREST_ID: u32 = 0;
 
 #[inline]

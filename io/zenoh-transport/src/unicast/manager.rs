@@ -305,7 +305,7 @@ impl TransportManager {
     }
 
     pub async fn close_unicast(&self) {
-        tracing::trace!("TransportManagerUnicast::clear())");
+        tracing::trace!("TransportManagerUnicast::clear()");
 
         let mut pl_guard = zasynclock!(self.state.unicast.link_managers)
             .drain()

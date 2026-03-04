@@ -27,7 +27,7 @@ use zenoh_protocol::{
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
     dispatcher::face::Face,
-    hat::{DispatcherContext, RouteCurrentEntityResult, SendDeclare},
+    hat::{DispatcherContext, RouteCurrentDeclareResult, SendDeclare},
     router::{node_id_as_source, Resource},
 };
 
@@ -100,15 +100,15 @@ impl Face {
                 match interest_id
                     .map(|id| hats[region].route_current_token(ctx.reborrow(), id, res.clone()))
                 {
-                    Some(RouteCurrentEntityResult::Noop) => {} // ¯\_(ツ)_/¯
-                    Some(RouteCurrentEntityResult::Breadcrumb { interest }) => {
+                    Some(RouteCurrentDeclareResult::Noop) => {} // ¯\_(ツ)_/¯
+                    Some(RouteCurrentDeclareResult::Breadcrumb { interest }) => {
                         if interest.mode.is_future() {
                             hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
                         }
 
                         hats[interest.src_region].propagate_current_token(ctx, res, interest);
                     }
-                    Some(RouteCurrentEntityResult::ShouldPropagate) | None => {
+                    Some(RouteCurrentDeclareResult::NoBreadcrumb) | None => {
                         hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
 
                         for region in hats.regions().copied().collect_vec() {

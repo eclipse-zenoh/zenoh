@@ -20,7 +20,7 @@
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
-    fmt::Debug,
+    fmt::{Debug, Display},
     sync::Arc,
 };
 
@@ -122,6 +122,12 @@ impl DispatcherContext<'_> {
 #[derive(Debug)]
 pub(crate) struct Remote(Box<dyn RemoteTrait>);
 
+impl Display for Remote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 impl Remote {
     fn as_any(&self) -> &dyn Any {
         self.0.as_any()
@@ -133,14 +139,14 @@ impl Remote {
     }
 }
 
-pub(crate) trait RemoteTrait: Any + Send + Sync + Debug {
+pub(crate) trait RemoteTrait: Any + Send + Sync + Debug + Display {
     fn clone_box(&self) -> Box<dyn RemoteTrait>;
     fn as_any(&self) -> &dyn Any;
 }
 
 impl<T> RemoteTrait for T
 where
-    T: Any + Send + Sync + Debug + Clone + 'static,
+    T: Any + Send + Sync + Debug + Display + Clone + 'static,
 {
     fn clone_box(&self) -> Box<dyn RemoteTrait> {
         Box::new(self.clone())
@@ -256,13 +262,13 @@ pub(crate) trait HatBaseTrait: Any {
 
 /// Return value of current entity routing methods.
 #[derive(Debug)]
-pub(crate) enum RouteCurrentEntityResult {
-    /// Indicates that the operation failed or had no effect (e.g. the interest id is unknown).
+pub(crate) enum RouteCurrentDeclareResult {
+    /// Indicates that the operation failed or has no effect on the dispatcher (e.g. the interest id is unknown).
     Noop,
     /// The breadcrumb corresponding to a pending current interest for this entity.
     Breadcrumb { interest: CurrentInterest },
     /// Indicates that the entity should be propagated to matching downstream interests—there is no breadcrumb.
-    ShouldPropagate,
+    NoBreadcrumb,
 }
 
 // REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
@@ -324,14 +330,14 @@ pub(crate) trait HatInterestTrait {
         &mut self,
         ctx: DispatcherContext,
         interest_id: InterestId,
-    ) -> Option<CurrentInterest>;
+    ) -> RouteCurrentDeclareResult;
 
     fn route_current_token(
         &mut self,
         ctx: DispatcherContext,
         interest_id: InterestId,
         res: Arc<Resource>,
-    ) -> RouteCurrentEntityResult;
+    ) -> RouteCurrentDeclareResult;
 
     // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
     // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
@@ -443,7 +449,7 @@ pub(crate) trait HatPubSubTrait {
         nid: NodeId,
     ) -> Option<Arc<Resource>>;
 
-    fn unregister_face_subscriber(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
+    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a subscriber entity.
     ///

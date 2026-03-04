@@ -1073,13 +1073,3 @@ pub(crate) fn register_expr_interest(
         drop(wtables);
     }
 }
-
-pub(crate) fn unregister_expr_interest(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    id: InterestId,
-) {
-    let wtables = zwrite!(tables.tables);
-    get_mut_unchecked(face).remote_key_interests.remove(&id);
-    drop(wtables);
-}
