@@ -265,20 +265,20 @@ async fn test_regions_scenario1_order1_pubsub() {
 async fn test_regions_scenario1_order1_getque() {
     init_tracing_subscriber();
 
-    let z9000 = ztimeout!(Node::new(Router, "11ac9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "11ac9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "11ac9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.3:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "11ac9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.3:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "11ac9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.3:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -362,20 +362,20 @@ async fn test_regions_scenario1_order1_getque() {
 async fn test_regions_scenario1_order1_queque() {
     init_tracing_subscriber();
 
-    let z9000 = ztimeout!(Node::new(Router, "11ad9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "11ad9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "11ad9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.4:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "11ad9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.4:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "11ad9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.1.4:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -843,20 +843,20 @@ async fn test_regions_scenario1_order2_getque() {
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
-    let z9000 = ztimeout!(Node::new(Router, "12ac9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "12ac9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "12ac9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.3:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "12ac9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.3:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "12ac9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.3:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
@@ -950,20 +950,20 @@ async fn test_regions_scenario1_order2_queque() {
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
-    let z9000 = ztimeout!(Node::new(Router, "12ad9000").listen("tcp/[::]:0").open());
+    let z9000 = ztimeout!(Node::new(Router, "12ad9000").listen("tcp/0.0.0.0:0").open());
 
     let _z9100 = ztimeout!(Node::new(Client, "12ad9100")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.4:9100")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9200 = ztimeout!(Node::new(Client, "12ad9200")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.4:9200")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
     let _z9300 = ztimeout!(Node::new(Client, "12ad9300")
-        .endpoints("tcp/[::]:0", &[loc!(z9000)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9000)])
         .multicast("224.1.2.4:9300")
         .gateway("{south:[{filters:[{modes:[\"client\", \"peer\"]}]}]}")
         .open());
