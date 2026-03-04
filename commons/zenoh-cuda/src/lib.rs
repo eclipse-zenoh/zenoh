@@ -51,6 +51,7 @@ extern "C" {
     fn cudaSetDevice(device: i32) -> i32;
     fn cudaMallocHost(ptr: *mut *mut u8, size: usize) -> i32;
     fn cudaFreeHost(ptr: *mut u8) -> i32;
+    fn cudaMalloc(ptr: *mut *mut u8, size: usize) -> i32;
     fn cudaMallocManaged(ptr: *mut *mut u8, size: usize, flags: u32) -> i32;
     fn cudaFree(ptr: *mut u8) -> i32;
     fn cudaIpcGetMemHandle(handle: *mut u8, dev_ptr: *mut u8) -> i32;
@@ -93,21 +94,20 @@ unsafe impl Send for CudaBufInner {}
 unsafe impl Sync for CudaBufInner {}
 
 impl CudaBufInner {
-    /// Allocate pinned host memory and register for CUDA IPC.
+    /// Allocate pinned host memory (CPU-writable, GPU DMA-accessible).
     ///
-    /// Pinned memory is CPU-writable and GPU DMA-accessible. Suitable for
-    /// tensors that need occasional CPU writes (e.g. pre-processing on host).
+    /// Pinned memory is accessible from both CPU and GPU. It is serialized as
+    /// raw bytes (not via IPC handle) since it has a valid CPU address.
     pub fn alloc_pinned(len: usize, device_id: i32) -> ZResult<Self> {
         let mut ptr: *mut u8 = std::ptr::null_mut();
         unsafe {
             check_cuda(cudaSetDevice(device_id), "cudaSetDevice")?;
             check_cuda(cudaMallocHost(&mut ptr, len), "cudaMallocHost")?;
         }
-        let ipc_handle = Self::get_ipc_handle(ptr, "alloc_pinned")?;
         Ok(Self {
             ptr,
             cuda_len: len,
-            ipc_handle,
+            ipc_handle: [0u8; 64], // not used — pinned memory has no IPC handle
             device_id,
             mem_kind: CudaMemKind::Pinned,
             is_ipc_mapping: false,
@@ -116,9 +116,8 @@ impl CudaBufInner {
 
     /// Allocate unified memory (`cudaMallocManaged`).
     ///
-    /// Unified memory is CPU- and GPU-accessible. Best for tensors that are
-    /// written on CPU and consumed on GPU (or vice versa), at the cost of
-    /// page-migration overhead on first access.
+    /// Unified memory is CPU- and GPU-accessible. Serialized as raw bytes
+    /// (not via IPC handle) since it has a valid CPU address.
     pub fn alloc_unified(len: usize, device_id: i32) -> ZResult<Self> {
         let mut ptr: *mut u8 = std::ptr::null_mut();
         unsafe {
@@ -128,21 +127,41 @@ impl CudaBufInner {
                 "cudaMallocManaged",
             )?;
         }
-        let ipc_handle = Self::get_ipc_handle(ptr, "alloc_unified")?;
         Ok(Self {
             ptr,
             cuda_len: len,
-            ipc_handle,
+            ipc_handle: [0u8; 64], // not used — unified memory has no IPC handle
             device_id,
             mem_kind: CudaMemKind::Unified,
             is_ipc_mapping: false,
         })
     }
 
-    /// Wrap an existing device-only allocation (`cudaMalloc`).
+    /// Allocate device-only memory (`cudaMalloc`) and capture its IPC handle.
     ///
-    /// `as_slice()` returns `&[]` for this kind — the buffer can only be
-    /// accessed by GPU kernels. The IPC handle encodes the allocation pointer.
+    /// `as_slice()` returns `&[]` — the buffer is GPU-only. The IPC handle is
+    /// sent over the wire so the subscriber can open the allocation directly.
+    pub fn alloc_device(len: usize, device_id: i32) -> ZResult<Self> {
+        let mut ptr: *mut u8 = std::ptr::null_mut();
+        unsafe {
+            check_cuda(cudaSetDevice(device_id), "cudaSetDevice")?;
+            check_cuda(cudaMalloc(&mut ptr, len), "cudaMalloc")?;
+        }
+        let ipc_handle = Self::get_ipc_handle(ptr, "alloc_device")?;
+        Ok(Self {
+            ptr,
+            cuda_len: len,
+            ipc_handle,
+            device_id,
+            mem_kind: CudaMemKind::Device,
+            is_ipc_mapping: false,
+        })
+    }
+
+    /// Wrap an existing device-only allocation (`cudaMalloc`) with its IPC handle.
+    ///
+    /// Use this when the caller already has a `cudaMalloc`'d pointer (e.g. from
+    /// a GPU kernel output) and wants to send it via Zenoh.
     pub fn from_device_ptr(ptr: *mut u8, len: usize, device_id: i32) -> ZResult<Self> {
         let ipc_handle = Self::get_ipc_handle(ptr, "from_device_ptr")?;
         Ok(Self {
@@ -275,18 +294,20 @@ mod tests {
     #[test]
     #[ignore = "requires CUDA device"]
     fn test_ipc_handle_serialize() {
-        let buf = CudaBufInner::alloc_pinned(512, 0).unwrap();
-        let handle = buf.ipc_handle;
-        let len = buf.cuda_len;
-        let device_id = buf.device_id;
+        // IPC handles are only valid for device memory (cudaMalloc), not pinned/unified.
+        let buf = CudaBufInner::alloc_device(512, 0).unwrap();
+        assert_eq!(buf.cuda_len, 512);
+        assert_eq!(buf.device_id, 0);
+        // IPC handle must be non-zero for real device memory.
+        assert_ne!(buf.ipc_handle, [0u8; 64], "IPC handle should be non-zero");
 
-        // Wrap in ZSlice
+        // Wrap in ZSlice and verify the kind can be set.
         let mut zslice = ZSlice::from(Arc::new(buf));
-        // Set kind to CudaPtr (normally done by publisher code)
         zslice.kind = ZSliceKind::CudaPtr;
+        assert!(zslice.kind == ZSliceKind::CudaPtr);
 
-        // Simulate codec round-trip: open IPC handle
-        let mapped = CudaBufInner::from_ipc(handle, len, device_id).unwrap();
-        assert_eq!(mapped.cuda_len, 512);
+        // Note: from_ipc is cross-process by design — opening in the same process
+        // will return cudaErrorInvalidResourceHandle (error 1). A full round-trip
+        // test requires two separate processes (see examples/cuda_pubsub.rs).
     }
 }
