@@ -16,6 +16,7 @@ use std::{
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
     sync::{atomic::AtomicBool, mpsc::Sender, Arc},
+    u64,
 };
 
 use io_uring::{opcode, squeue::Flags, types, EnterFlags, IoUring, SubmissionQueue};
@@ -94,7 +95,9 @@ impl Drop for ReadTask {
     fn drop(&mut self) {
         tracing::debug!("Stopping read task: {:?}", self);
 
-        let event = opcode::AsyncCancel::new(self.user_data).build();
+        let event = opcode::AsyncCancel::new(self.user_data)
+            .build()
+            .flags(io_uring::squeue::Flags::ASYNC);
         let _ = self.inner.submitter.submit(event);
     }
 }
@@ -110,7 +113,8 @@ impl ReadTask {
 
         let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
             .build()
-            .user_data(user_data);
+            .user_data(user_data)
+            .flags(io_uring::squeue::Flags::ASYNC);
 
         inner.submitter.submit(recv)?;
 
@@ -246,22 +250,22 @@ impl Default for RxWindow {
     }
 }
 
-macro_rules! log {
-    ($level:expr, $($arg:tt)*) => {
-        //eprintln!("[{}] {}:{} - {}",
-        //    $level,
-        //    file!(),
-        //    line!(),
-        //    format_args!($($arg)*));
-    };
-}
+//macro_rules! log {
+//    ($level:expr, $($arg:tt)*) => {
+//        eprintln!("[{}] {}:{} - {}",
+//            $level,
+//            file!(),
+//            line!(),
+//            format_args!($($arg)*));
+//    };
+//}
 
 impl RxWindow {
     fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: &mut F) -> ZResult<()>
     where
         F: FnMut(FragmentedBatch) -> ZResult<()>,
     {
-        log!("INFO", "Buffer len: {}", buffer.len());
+        tracing::trace!("Buffer len: {}", buffer.len());
 
         fn parse_size(bytes: [u8; 2]) -> ZResult<usize> {
             let size = u16::from_le_bytes(bytes) as usize;
@@ -269,7 +273,7 @@ impl RxWindow {
             if size == 0 {
                 bail!("Zero-sized buffer in stream!");
             }
-            log!("INFO", "parsed size: {}", size);
+            tracing::trace!("parsed size: {}", size);
             Ok(size as usize)
         }
 
@@ -321,7 +325,7 @@ impl RxWindow {
                         data_offset: pos,
                         buffers: vec![buffer.clone()],
                     };
-                    log!("INFO", "on_batch");
+                    tracing::trace!("on_batch");
                     on_batch(batch)?;
                     pos += size;
                     leftover -= size;
@@ -366,7 +370,7 @@ impl RxWindow {
                         data_offset: pos,
                         buffers: vec![buffer.clone()],
                     };
-                    log!("INFO", "on_batch");
+                    tracing::trace!("on_batch");
                     on_batch(batch)?;
                     pos += size;
                     leftover -= size;
@@ -405,7 +409,7 @@ impl RxWindow {
                             buffers: vec![], //  batch_accumulator.batch.buffers.clone(),
                         };
                         std::mem::swap(&mut batch.buffers, &mut batch_accumulator.batch.buffers);
-                        log!("INFO", "on_batch");
+                        tracing::trace!("on_batch");
                         on_batch(batch)?;
                     }
 
@@ -413,14 +417,14 @@ impl RxWindow {
                         // no more data
                         if leftover == 0 {
                             self.state = RxWindowState::Initial;
-                            log!("INFO", "Accumulating -> Initial");
+                            tracing::trace!("Accumulating -> Initial");
                             break;
                         }
 
                         // buffer contains size fragment
                         if leftover == 1 {
                             self.state = RxWindowState::SizeFragmented(buffer[pos]);
-                            log!("INFO", "Accumulating -> SizeFragmented");
+                            tracing::trace!("Accumulating -> SizeFragmented");
                             break;
                         }
 
@@ -438,7 +442,7 @@ impl RxWindow {
                             let accumulator = BatchAccumulator::new(leftover, fragment);
                             self.state = RxWindowState::Accumulating(accumulator);
                             assert!(size != 0);
-                            log!("INFO", "Accumulating -> Accumulating (only size)");
+                            tracing::trace!("Accumulating -> Accumulating (only size)");
                             break;
                         }
 
@@ -452,7 +456,7 @@ impl RxWindow {
                             let accumulator = BatchAccumulator::new(leftover, fragment);
                             self.state = RxWindowState::Accumulating(accumulator);
                             assert!(size != 0);
-                            log!("INFO", "Accumulating -> Accumulating (fragment)");
+                            tracing::trace!("Accumulating -> Accumulating (fragment)");
                             break;
                         }
 
@@ -462,7 +466,7 @@ impl RxWindow {
                             data_offset: pos,
                             buffers: vec![buffer.clone()],
                         };
-                        log!("INFO", "on_batch");
+                        tracing::trace!("on_batch");
                         on_batch(batch)?;
                         pos += size;
                         leftover -= size;
@@ -666,7 +670,9 @@ impl Reader {
             // read for waker
             let waker_read =
                 opcode::Read::new(types::Fd(c_waker.as_raw_fd()), dummy_mem.as_mut_ptr(), 8)
-                    .build();
+                    .build()
+                    .user_data(u64::MAX)
+                    .flags(io_uring::squeue::Flags::ASYNC);
 
             unsafe { ring.submission_shared().push(&waker_read)? };
 
@@ -691,37 +697,46 @@ impl Reader {
 
             loop {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
-                    //log!("INFO", "e: {:?}", e);
+                    //        tracing::debug!( "e: {:?}", e);
 
                     let mut sq = unsafe { ring.submission_shared() };
 
-                    // waker trigger check
-                    if e.user_data() == 0 {
-                        log!("INFO", "Zero-user-data entry: {:?}", e);
-                        unsafe { sq.push(&waker_read)? };
-                        continue;
-                    }
-
-                    let rx: &Arc<Rx> = unsafe { std::mem::transmute(&e.user_data()) };
-
-                    let need_submit = Reader::read_multi(&e, rx, &arena, &mut sq, &mut batch_ctr);
-
-                    roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
-
-                    if need_submit {
-                        let len = sq.len() as u32;
-                        drop(sq);
-
-                        unsafe {
-                            ring.submitter().enter::<libc::sigset_t>(
-                                len,
-                                0,
-                                EnterFlags::GETEVENTS.bits(),
-                                None,
-                            )?;
+                    match e.user_data() {
+                        0 => {
+                            tracing::debug!("Zero-user-data entry: {:?}", e);
                         }
-                    } else {
-                        drop(sq);
+                        u64::MAX => {
+                            tracing::debug!("Waker event: {:?}", e);
+                            unsafe { sq.push(&waker_read)? };
+
+                            // receive external submissions
+                            while let Ok(val) = receiver.try_recv() {
+                                tracing::debug!("Waker submission: {:?}", val);
+                                unsafe { sq.push(&val)? };
+                            }
+                        }
+                        val => {
+                            let rx: &Arc<Rx> = unsafe { std::mem::transmute(&val) };
+
+                            let need_submit =
+                                Reader::read_multi(&e, rx, &arena, &mut sq, &mut batch_ctr);
+
+                            roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
+
+                            if need_submit {
+                                let len = sq.len() as u32;
+                                drop(sq);
+
+                                unsafe {
+                                    ring.submitter().enter::<libc::sigset_t>(
+                                        len,
+                                        0,
+                                        EnterFlags::GETEVENTS.bits(),
+                                        None,
+                                    )?;
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -732,6 +747,7 @@ impl Reader {
 
                 // receive external submissions
                 while let Ok(val) = receiver.try_recv() {
+                    tracing::debug!("Waker submission (out): {:?}", val);
                     unsafe { sq.push(&val)? };
                 }
                 drop(sq);
@@ -790,7 +806,7 @@ impl Reader {
                 }
                 err.push_str("This is not an hard error and it can be safely ignored under normal operating conditions. \
                 Though the SHM subsystem may experience some timeouts in case of an heavy congested system where this watchdog thread may not be scheduled at the required frequency.");
-                log!("INFO", "{}", err);
+                        tracing::debug!( "{}", err);
             }
 
             if let Err(e) = ring_worker() {
@@ -827,7 +843,7 @@ impl Reader {
             match e.result().neg() {
                 libc::ENOBUFS => {
                     // We are out of buffers
-                    //log!("INFO", "ENOBUFS: Restart multishot receive!!!");
+                    //        tracing::debug!( "ENOBUFS: Restart multishot receive!!!");
 
                     //let provide_buffers = arena
                     //    .inner
@@ -838,27 +854,29 @@ impl Reader {
 
                     let recv = opcode::RecvMulti::new(types::Fd(rx.fd), 0)
                         .build()
+                        .flags(io_uring::squeue::Flags::ASYNC)
                         .user_data(e.user_data());
 
                     unsafe { sq.push(&recv).unwrap() };
                     need_submit = true;
                 }
                 libc::ECANCELED => {
-                    log!("INFO", "Rx task cancelled: {:?}", rx);
+                    tracing::debug!("Rx task cancelled: {:?}", rx);
                 }
                 _unexpected => {
-                    log!("INFO", "Unexpected uring error: {}", _unexpected);
+                    tracing::debug!("Unexpected uring error: {}", _unexpected);
                 }
             }
         } else {
             match io_uring::cqueue::buffer_select(e.flags()) {
                 Some(buf_id) => {
-                    //log!("INFO", "Read multishot entry: {:?}", e);
+                    //        tracing::debug!( "Read multishot entry: {:?}", e);
 
                     if !io_uring::cqueue::more(e.flags()) {
-                        log!("INFO", "IORING_CQE_F_BUFFER: Restart multishot receive!!!");
+                        tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
                         let recv = opcode::RecvMulti::new(types::Fd(rx.fd), 0)
                             .build()
+                            .flags(io_uring::squeue::Flags::ASYNC)
                             .user_data(e.user_data());
                         unsafe { sq.push(&recv).unwrap() };
                         need_submit = true;
@@ -866,20 +884,20 @@ impl Reader {
 
                     let buf_len = e.result() as usize;
 
-                    //log!("INFO", "buf_id: {buf_id}, buf_len: {buf_len}");
+                    //        tracing::debug!( "buf_id: {buf_id}, buf_len: {buf_len}");
 
                     if buf_len > 0 {
                         let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
                         *ctr -= 1;
                         rx.run_callback(rx_buffer);
                     } else {
-                        log!("INFO", "zero buf len");
+                        tracing::debug!("zero buf len");
                     }
                 }
                 None => {
-                    log!("INFO", "no IORING_CQE_F_BUFFER!");
+                    tracing::debug!("no IORING_CQE_F_BUFFER: {:?}", e);
 
-                    log!("INFO", "Stopping read task");
+                    tracing::debug!("Stopping read task");
                     assert!(e.user_data() != 0);
                     let rx: Arc<Rx> = unsafe { std::mem::transmute(e.user_data()) };
                     rx.post_error(zerror!("Read task interrupt").into());

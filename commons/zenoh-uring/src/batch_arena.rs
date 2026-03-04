@@ -56,7 +56,7 @@ impl BatchArena {
     }
 
     pub(crate) fn allocate_more_batches(&self) -> Option<(io_uring::squeue::Entry, usize)> {
-        println!("Add batches");
+        tracing::debug!("Add batches");
 
         let (addr, size) = self
             .arena

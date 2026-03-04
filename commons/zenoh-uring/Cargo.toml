@@ -40,3 +40,4 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }

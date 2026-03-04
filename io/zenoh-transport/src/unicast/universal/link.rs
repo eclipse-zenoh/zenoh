@@ -281,7 +281,6 @@ async fn tx_task(
     Ok(())
 }
 
-#[cfg(not(feature = "uring"))]
 async fn rx_task(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
@@ -289,25 +288,7 @@ async fn rx_task(
     rx_buffer_size: usize,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
-    rx_task_non_uring(
-        link,
-        transport.clone(),
-        lease,
-        rx_buffer_size,
-        #[cfg(feature = "stats")]
-        stats,
-    )
-    .await
-}
-
-#[cfg(feature = "uring")]
-async fn rx_task(
-    link: &mut TransportLinkUnicastRx,
-    transport: TransportUnicastUniversal,
-    lease: Duration,
-    rx_buffer_size: usize,
-    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
-) -> ZResult<()> {
+    #[cfg(feature = "uring")]
     if link.link.get_fd().is_ok() {
         return rx_task_uring(
             link,
@@ -433,6 +414,9 @@ async fn rx_task_uring(
     let batch_config = link.config.batch;
     let c_transport = transport.clone();
 
+    ///////
+    //let reader = zenoh_uring::reader::Reader::new(65537, 16)?;
+
     let mut uring_read_task = {
         match link.link.is_streamed() {
             true => {
@@ -458,7 +442,7 @@ async fn rx_task_uring(
 
                     #[cfg(feature = "stats")]
                     {
-                        let header_bytes = if l.is_streamed { 2 } else { 0 };
+                        let header_bytes = 2;
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
                     c_transport.read_messages(
@@ -485,7 +469,7 @@ async fn rx_task_uring(
 
                     #[cfg(feature = "stats")]
                     {
-                        let header_bytes = if l.is_streamed { 2 } else { 0 };
+                        let header_bytes = 0;
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
                     c_transport.read_messages(
