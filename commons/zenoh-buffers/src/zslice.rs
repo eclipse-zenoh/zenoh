@@ -15,8 +15,10 @@ use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,
     fmt, iter,
+    mem::ManuallyDrop,
     num::NonZeroUsize,
-    ops::{Bound, Deref, RangeBounds},
+    ops::{Bound, Deref, DerefMut, RangeBounds},
+    ptr::NonNull,
 };
 
 use crate::{
@@ -91,12 +93,15 @@ pub enum ZSliceKind {
 /// A cloneable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
+    ptr: *const u8,
+    len: usize,
     buf: Arc<dyn ZSliceBuffer>,
-    start: usize,
-    end: usize,
     #[cfg(feature = "shared-memory")]
     pub kind: ZSliceKind,
 }
+
+unsafe impl Send for ZSlice {}
+unsafe impl Sync for ZSlice {}
 
 impl ZSlice {
     #[inline]
@@ -105,11 +110,12 @@ impl ZSlice {
         start: usize,
         end: usize,
     ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
-        if start <= end && end <= buf.as_slice().len() {
+        let slice = buf.as_slice();
+        if start <= end && end <= slice.len() {
             Ok(Self {
+                ptr: unsafe { slice.as_ptr().add(start) },
+                len: end - start,
                 buf,
-                start,
-                end,
                 #[cfg(feature = "shared-memory")]
                 kind: ZSliceKind::Raw,
             })
@@ -131,11 +137,17 @@ impl ZSlice {
 
     /// # Safety
     ///
-    /// Buffer modification must not modify slice range.
+    /// [`BufferMutGuard`] destructor must be run.
     #[inline]
     #[must_use]
-    pub unsafe fn downcast_mut<T: Any>(&mut self) -> Option<&mut T> {
-        Arc::get_mut(&mut self.buf)?.as_any_mut().downcast_mut()
+    pub unsafe fn downcast_mut<T: Any + AsRef<[u8]>>(&mut self) -> Option<BufferMutGuard<'_, T>> {
+        let mut zslice = NonNull::from(self);
+        let buffer = ManuallyDrop::new(
+            Arc::get_mut(&mut unsafe { zslice.as_mut() }.buf)?
+                .as_any_mut()
+                .downcast_mut()?,
+        );
+        Some(BufferMutGuard { zslice, buffer })
     }
 
     // This method is internal and is only meant to be used in `ZBufWriter`.
@@ -147,10 +159,12 @@ impl ZSlice {
         let vec = Arc::get_mut(&mut self.buf)?
             .as_any_mut()
             .downcast_mut::<Vec<u8>>()?;
-        if self.end == vec.len() {
+        if self.len == vec.len() {
+            debug_assert_eq!(self.ptr, vec.as_ptr());
             Some(ZSliceWriter {
                 vec,
-                end: &mut self.end,
+                ptr: &mut self.ptr,
+                len: &mut self.len,
             })
         } else {
             None
@@ -160,7 +174,7 @@ impl ZSlice {
     #[inline]
     #[must_use]
     pub const fn len(&self) -> usize {
-        self.end - self.start
+        self.len
     }
 
     #[inline]
@@ -173,7 +187,7 @@ impl ZSlice {
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
-        unsafe { self.buf.as_slice().get_unchecked(self.start..self.end) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 
     pub fn subslice(&self, range: impl RangeBounds<usize>) -> Option<Self> {
@@ -189,15 +203,20 @@ impl ZSlice {
         };
         if start <= end && end <= self.len() {
             Some(ZSlice {
+                ptr: unsafe { self.ptr.add(start) },
+                len: end - start,
                 buf: self.buf.clone(),
-                start: self.start + start,
-                end: self.start + end,
                 #[cfg(feature = "shared-memory")]
                 kind: self.kind,
             })
         } else {
             None
         }
+    }
+
+    unsafe fn advance_by(&mut self, n: usize) {
+        self.ptr = unsafe { self.ptr.add(n) };
+        self.len -= n;
     }
 }
 
@@ -248,11 +267,11 @@ where
     T: ZSliceBuffer + 'static,
 {
     fn from(buf: Arc<T>) -> Self {
-        let end = buf.as_slice().len();
+        let slice = buf.as_slice();
         Self {
+            ptr: slice.as_ptr(),
+            len: slice.len(),
             buf,
-            start: 0,
-            end,
             #[cfg(feature = "shared-memory")]
             kind: ZSliceKind::Raw,
         }
@@ -296,16 +315,64 @@ impl SplitBuffer for ZSlice {
     }
 }
 
+pub struct BufferMutGuard<'a, B: AsRef<[u8]>> {
+    zslice: NonNull<ZSlice>,
+    buffer: ManuallyDrop<&'a mut B>,
+}
+
+impl<'a, B: AsRef<[u8]>> BufferMutGuard<'a, B> {
+    /// # Safety
+    ///
+    /// The returned buffer must still be the internal buffer of the zslice.
+    pub unsafe fn map<B2: AsRef<[u8]>>(
+        self,
+        f: impl FnOnce(&mut B) -> &mut B2,
+    ) -> BufferMutGuard<'a, B2> {
+        let mut this = ManuallyDrop::new(self);
+        BufferMutGuard {
+            zslice: this.zslice,
+            buffer: ManuallyDrop::new(f(unsafe { ManuallyDrop::take(&mut this.buffer) })),
+        }
+    }
+}
+
+impl<B: AsRef<[u8]>> Deref for BufferMutGuard<'_, B> {
+    type Target = B;
+    fn deref(&self) -> &Self::Target {
+        &self.buffer
+    }
+}
+
+impl<B: AsRef<[u8]>> DerefMut for BufferMutGuard<'_, B> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.buffer
+    }
+}
+
+impl<B: AsRef<[u8]>> Drop for BufferMutGuard<'_, B> {
+    fn drop(&mut self) {
+        let slice = self.buffer.as_ref();
+        let ptr = slice.as_ptr();
+        let len = slice.len();
+        unsafe {
+            self.zslice.as_mut().ptr = ptr;
+            self.zslice.as_mut().len = len;
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ZSliceWriter<'a> {
     vec: &'a mut Vec<u8>,
-    end: &'a mut usize,
+    ptr: &'a mut *const u8,
+    len: &'a mut usize,
 }
 
 impl Writer for ZSliceWriter<'_> {
     fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
         let len = self.vec.write(bytes)?;
-        *self.end += len.get();
+        *self.ptr = self.vec.as_ptr();
+        *self.len = self.vec.len();
         Ok(len)
     }
 
@@ -323,7 +390,8 @@ impl Writer for ZSliceWriter<'_> {
     {
         // SAFETY: same precondition as the enclosing function
         let len = unsafe { self.vec.with_slot(len, write) }?;
-        *self.end += len.get();
+        *self.ptr = self.vec.as_ptr();
+        *self.len = self.vec.len();
         Ok(len)
     }
 }
@@ -332,13 +400,13 @@ impl BacktrackableWriter for ZSliceWriter<'_> {
     type Mark = usize;
 
     fn mark(&mut self) -> Self::Mark {
-        *self.end
+        *self.len
     }
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         assert!(mark <= self.vec.len());
         self.vec.truncate(mark);
-        *self.end = mark;
+        *self.len = mark;
         true
     }
 }
@@ -358,7 +426,7 @@ impl Reader for ZSlice {
         let mut reader = self.as_slice().reader();
         let len = reader.read(into)?;
         // we trust `Reader` impl for `&[u8]` to not overflow the size of the slice
-        self.start += len.get();
+        unsafe { self.advance_by(len.get()) }
         Ok(len)
     }
 
@@ -367,7 +435,7 @@ impl Reader for ZSlice {
         let mut reader = self.as_slice().reader();
         reader.read_exact(into)?;
         // we trust `Reader` impl for `&[u8]` to not overflow the size of the slice
-        self.start += into.len();
+        unsafe { self.advance_by(into.len()) };
         Ok(())
     }
 
@@ -390,7 +458,7 @@ impl Reader for ZSlice {
     #[inline(always)]
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         let res = self.subslice(..len).ok_or(DidntRead)?;
-        self.start += len;
+        unsafe { self.advance_by(len) };
         Ok(res)
     }
 
@@ -399,7 +467,7 @@ impl Reader for ZSlice {
         let mut reader = self.as_slice().reader();
         let res = reader.read_u8()?;
         // we trust `Reader` impl for `&[u8]` to not overflow the size of the slice
-        self.start += 1;
+        unsafe { self.advance_by(1) };
         Ok(res)
     }
 
@@ -410,15 +478,14 @@ impl Reader for ZSlice {
 }
 
 impl BacktrackableReader for ZSlice {
-    type Mark = usize;
+    type Mark = (*const u8, usize);
 
     fn mark(&mut self) -> Self::Mark {
-        self.start
+        (self.ptr, self.len)
     }
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
-        assert!(mark <= self.end);
-        self.start = mark;
+        (self.ptr, self.len) = mark;
         true
     }
 }
@@ -458,9 +525,10 @@ mod tests {
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
         // SAFETY: buffer slize size is not modified
-        let mut_slice = unsafe { zslice.downcast_mut::<Vec<u8>>() }.unwrap();
+        let mut mut_slice = unsafe { zslice.downcast_mut::<Vec<u8>>() }.unwrap();
 
         mut_slice[..buf.len()].clone_from_slice(&buf[..]);
+        drop(mut_slice);
 
         assert_eq!(buf.as_slice(), zslice.as_slice());
     }
