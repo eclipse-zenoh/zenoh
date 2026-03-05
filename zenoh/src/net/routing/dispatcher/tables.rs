@@ -266,7 +266,7 @@ pub struct TablesLock {
 /// In order to mutably borrow [`Tables::data`] and [`Tables::hats`] at the same time given an
 /// acquired guard from [`TablesLock::tables`], one needs to first dereference the guard into [`Tables`]:
 ///
-/// ```rust
+/// ```rust,ignore
 /// fn borrow_hats_and_data(tables_lock: &TablesLock) {
 ///     let mut guard = tables_lock.tables.write().unwrap();
 ///

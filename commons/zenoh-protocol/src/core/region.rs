@@ -90,6 +90,10 @@ pub enum Region {
 }
 
 impl Region {
+    pub const fn default_south(mode: WhatAmI) -> Self {
+        Self::South { id: 0, mode }
+    }
+
     pub fn bound(&self) -> Bound {
         match self {
             Region::North => Bound::North,

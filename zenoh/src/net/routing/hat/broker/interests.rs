@@ -397,15 +397,15 @@ impl HatInterestTrait for Hat {
 
         let wire_expr = Resource::decl_key(&res, &mut dst);
         (ctx.send_declare)(
-            &dbg!(dst).primitives,
+            &dst.primitives,
             RoutingContext::with_expr(
-                dbg!(Declare {
+                Declare {
                     interest_id: Some(interest.src_interest_id),
                     ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareToken(DeclareToken { id, wire_expr }),
-                }),
+                },
                 res.expr().to_string(),
             ),
         );

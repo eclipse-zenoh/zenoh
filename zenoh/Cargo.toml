@@ -59,6 +59,7 @@ shared-memory = [
   "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-stats", "zenoh-transport/stats"]
+test = ["zenoh-transport/test"]
 tracing-instrument = [
   "zenoh-runtime/tracing-instrument",
   "zenoh-task/tracing-instrument",

@@ -94,10 +94,7 @@ const MULTICAST_LIMITATION_NOTICE: &str =
 pub(crate) fn compute_multicast_region(config: &ExpandedConfig) -> ZResult<Region> {
     match config.mode() {
         WhatAmI::Peer => Ok(Region::North),
-        WhatAmI::Router => Ok(Region::South {
-            id: Default::default(),
-            mode: WhatAmI::Peer,
-        }),
+        WhatAmI::Router => Ok(Region::default_south(WhatAmI::Peer)),
         WhatAmI::Client => bail!("{MULTICAST_LIMITATION_NOTICE}"),
     }
 }
@@ -110,13 +107,9 @@ pub(crate) fn compute_multicast_region_of(
 ) -> ZResult<(Region, Bound)> {
     match (config.mode(), peer.whatami) {
         (WhatAmI::Peer, WhatAmI::Peer) => Ok((Region::North, Bound::North)),
-        (WhatAmI::Router, WhatAmI::Peer) => Ok((
-            Region::South {
-                id: Default::default(),
-                mode: WhatAmI::Peer,
-            },
-            Bound::North,
-        )),
+        (WhatAmI::Router, WhatAmI::Peer) => {
+            Ok((Region::default_south(WhatAmI::Peer), Bound::North))
+        }
         (WhatAmI::Peer, WhatAmI::Router) => Ok((Region::North, Bound::South)),
         _ => bail!("{MULTICAST_LIMITATION_NOTICE}"),
     }
@@ -152,13 +145,7 @@ fn compute_transient_region_of(
 fn compute_auto_region(mode: WhatAmI, remote_mode: WhatAmI) -> ZResult<(Region, Bound)> {
     match (mode, remote_mode) {
         (WhatAmI::Router, WhatAmI::Peer | WhatAmI::Client) | (WhatAmI::Peer, WhatAmI::Client) => {
-            Ok((
-                Region::South {
-                    id: Default::default(),
-                    mode: remote_mode,
-                },
-                Bound::North,
-            ))
+            Ok((Region::default_south(remote_mode), Bound::North))
         }
         (WhatAmI::Router, WhatAmI::Router) | (WhatAmI::Peer, WhatAmI::Peer) => {
             Ok((Region::North, Bound::North))

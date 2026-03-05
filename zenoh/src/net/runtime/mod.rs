@@ -552,6 +552,8 @@ pub struct RuntimeBuilder {
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(test)]
+    subregions: Option<Vec<Region>>,
 }
 
 impl RuntimeBuilder {
@@ -562,6 +564,8 @@ impl RuntimeBuilder {
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(test)]
+            subregions: None,
         }
     }
 
@@ -577,6 +581,12 @@ impl RuntimeBuilder {
         self
     }
 
+    #[cfg(all(test, feature = "test"))]
+    pub fn subregions(mut self, subregions: Vec<Region>) -> Self {
+        self.subregions.replace(subregions);
+        self
+    }
+
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
             config,
@@ -584,6 +594,8 @@ impl RuntimeBuilder {
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
+            #[cfg(test)]
+            subregions,
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
@@ -598,15 +610,23 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let mut router_builder = GatewayBuilder::new(&config);
+        let mut gateway_builder = GatewayBuilder::new(&config);
+
         if let Some(hlc) = hlc.as_ref().cloned() {
-            router_builder = router_builder.hlc(hlc.clone());
+            gateway_builder = gateway_builder.hlc(hlc.clone());
         }
 
         #[cfg(feature = "stats")]
-        let router_builder = router_builder.stats(stats.clone());
+        let gateway_builder = gateway_builder.stats(stats.clone());
 
-        let router = Arc::new(router_builder.build()?);
+        #[cfg(test)]
+        let gateway_builder = if let Some(subregions) = subregions {
+            gateway_builder.subregions(subregions)
+        } else {
+            gateway_builder
+        };
+
+        let gateway = Arc::new(gateway_builder.build()?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -650,7 +670,7 @@ impl RuntimeBuilder {
                 zid: zid.into(),
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
-                router,
+                router: gateway,
                 config,
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),

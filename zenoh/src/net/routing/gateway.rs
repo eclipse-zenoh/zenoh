@@ -50,9 +50,10 @@ use crate::net::{
 pub struct GatewayBuilder<'c> {
     config: &'c ExpandedConfig,
     hlc: Option<Arc<HLC>>,
-    hats: Vec<Region>,
     #[cfg(feature = "stats")]
     stats: Option<zenoh_stats::StatsRegistry>,
+    #[cfg(test)]
+    subregions: Option<Vec<Region>>,
 }
 
 impl<'conf> GatewayBuilder<'conf> {
@@ -60,9 +61,10 @@ impl<'conf> GatewayBuilder<'conf> {
         Self {
             config,
             hlc: None,
-            hats: Vec::new(),
             #[cfg(feature = "stats")]
             stats: None,
+            #[cfg(test)]
+            subregions: None,
         }
     }
 
@@ -72,8 +74,8 @@ impl<'conf> GatewayBuilder<'conf> {
     }
 
     #[cfg(test)]
-    pub fn hat(mut self, region: Region) -> Self {
-        self.hats.push(region);
+    pub fn subregions(mut self, subregions: Vec<Region>) -> Self {
+        self.subregions.replace(subregions);
         self
     }
 
@@ -83,40 +85,46 @@ impl<'conf> GatewayBuilder<'conf> {
         self
     }
 
-    pub fn build(mut self) -> ZResult<Gateway> {
-        if self.hats.is_empty() {
-            self.hats.extend([(Region::North), (Region::Local)]);
-        }
-
+    pub fn build(self) -> ZResult<Gateway> {
         let mode = self.config.mode();
 
-        match self.config.gateway.south.clone().unwrap_or_default() {
-            GatewaySouthConf::Preset(GatewayPresetConf::Auto) => match mode {
-                WhatAmI::Router => {
-                    for mode in [WhatAmI::Client, WhatAmI::Peer] {
-                        self.hats.push(Region::South {
-                            id: usize::default(),
-                            mode,
-                        });
+        let mut regions = vec![Region::North];
+
+        let mut set_regions_with_config = || {
+            match self.config.gateway.south.clone().unwrap_or_default() {
+                GatewaySouthConf::Preset(GatewayPresetConf::Auto) => match mode {
+                    WhatAmI::Router => {
+                        for mode in [WhatAmI::Client, WhatAmI::Peer] {
+                            regions.push(Region::default_south(mode));
+                        }
                     }
-                }
-                WhatAmI::Peer => {
-                    self.hats.push(Region::South {
-                        id: usize::default(),
-                        mode: WhatAmI::Client,
-                    });
-                }
-                WhatAmI::Client => {}
-            },
-            GatewaySouthConf::Custom(subregions) => {
-                for (id, _) in subregions.iter().enumerate() {
-                    // NOTE(regions): we create three hats per subregion.
-                    // If memory usage is an issue, we should create then lazily.
-                    for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
-                        self.hats.push(Region::South { id, mode });
+                    WhatAmI::Peer => {
+                        regions.push(Region::default_south(WhatAmI::Client));
+                    }
+                    WhatAmI::Client => {}
+                },
+                GatewaySouthConf::Custom(subregions) => {
+                    for (id, _) in subregions.iter().enumerate() {
+                        // NOTE(regions): we create three hats per subregion.
+                        // If memory usage is an issue, we should create then lazily.
+                        for mode in [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router] {
+                            regions.push(Region::South { id, mode });
+                        }
                     }
                 }
             }
+
+            regions.push(Region::Local);
+        };
+
+        #[cfg(not(test))]
+        set_regions_with_config();
+
+        #[cfg(test)]
+        if let Some(subregions) = self.subregions {
+            regions.extend_from_slice(&subregions);
+        } else {
+            set_regions_with_config()
         }
 
         let zid = ZenohIdProto::from(self.config.id());
@@ -126,7 +134,7 @@ impl<'conf> GatewayBuilder<'conf> {
             .stats
             .unwrap_or_else(|| zenoh_stats::StatsRegistry::new(zid, mode, &*crate::LONG_VERSION));
 
-        tracing::trace!(hats = ?self.hats, "New gateway");
+        tracing::trace!(?regions, "New gateway");
 
         Ok(Gateway {
             tables: Arc::new(TablesLock {
@@ -135,7 +143,7 @@ impl<'conf> GatewayBuilder<'conf> {
                         zid,
                         self.hlc,
                         self.config,
-                        self.hats
+                        regions
                             .iter()
                             .copied()
                             .map(|b| (b, tables::HatTablesData::new()))
@@ -143,8 +151,7 @@ impl<'conf> GatewayBuilder<'conf> {
                         #[cfg(feature = "stats")]
                         stats,
                     )?,
-                    hats: self
-                        .hats
+                    hats: regions
                         .iter()
                         .copied()
                         .map(|region| -> (Region, Box<dyn HatTrait + Send + Sync>) {

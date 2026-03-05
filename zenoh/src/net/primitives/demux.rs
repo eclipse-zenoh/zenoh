@@ -32,7 +32,7 @@ use crate::net::routing::{
 };
 
 pub struct DeMux {
-    face: Face,
+    pub(crate) face: Face,
     pub(crate) transport: Option<TransportUnicast>,
     pub(crate) interceptor: Arc<ArcSwapOption<InterceptorsChain>>,
 }
