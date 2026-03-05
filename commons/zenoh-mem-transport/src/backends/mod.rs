@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,17 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "transport_auth")]
-pub mod auth;
-#[cfg(feature = "transport_compression")]
-pub(crate) mod compression;
-pub(crate) mod lowlatency;
-#[cfg(feature = "transport_multilink")]
-pub(crate) mod multilink;
-pub(crate) mod patch;
-pub(crate) mod qos;
+
 #[cfg(feature = "shared-memory")]
-pub(crate) mod shm;
+pub mod shm;
 
 #[cfg(feature = "cuda")]
-pub(crate) mod mem;
+pub mod cuda;

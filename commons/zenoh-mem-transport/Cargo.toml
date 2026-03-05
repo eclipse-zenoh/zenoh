@@ -14,43 +14,24 @@
 [package]
 authors = { workspace = true }
 categories = { workspace = true }
-description = "Internal crate for zenoh."
+description = "Pluggable zero-copy memory transport backends for zenoh (SHM, CUDA IPC, RDMA, …)."
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-name = "zenoh-protocol"
+name = "zenoh-mem-transport"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
 [features]
 default = ["std"]
-internal = []
-shared-memory = ["std", "zenoh-buffers/shared-memory"]
-std = [
-  "rand?/std",
-  "rand?/std_rng",
-  "serde/std",
-  "uhlc/std",
-  "zenoh-buffers/std",
-  "zenoh-keyexpr/std",
-  "zenoh-result/std",
-]
-test = ["rand", "zenoh-buffers/test"]
-unstable = []
-cuda = []
+std = []
+shared-memory = ["zenoh-buffers/shared-memory", "dep:zenoh-shm"]
+cuda = ["shared-memory", "zenoh-buffers/cuda", "dep:zenoh-cuda"]
 
 [dependencies]
-const_format = { workspace = true }
-rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
-serde = { workspace = true, features = ["alloc"] }
-uhlc = { workspace = true, default-features = false }
 zenoh-buffers = { workspace = true, default-features = false }
-zenoh-keyexpr = { workspace = true }
-zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
-
-# NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
-[dev-dependencies]
-lazy_static = { workspace = true }
-rand = { workspace = true, features = ["default"] }
+tracing = { workspace = true }
+zenoh-shm = { workspace = true, optional = true }
+zenoh-cuda = { workspace = true, optional = true }

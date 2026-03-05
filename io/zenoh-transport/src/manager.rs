@@ -129,6 +129,8 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
+    #[cfg(feature = "cuda")]
+    pub mem_registry: Option<std::sync::Arc<zenoh_mem_transport::MemRegistry>>,
 }
 
 pub struct TransportManagerParams {
@@ -379,6 +381,8 @@ impl TransportManagerBuilder {
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(feature = "cuda")]
+            mem_registry: None,
         };
 
         let params = TransportManagerParams { config, state };

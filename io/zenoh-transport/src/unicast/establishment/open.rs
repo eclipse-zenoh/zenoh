@@ -89,6 +89,8 @@ struct RecvInitAckOut {
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
+    #[cfg(feature = "cuda")]
+    negotiated_mem: Option<std::sync::Arc<zenoh_mem_transport::NegotiatedMemCaps>>,
 }
 
 // OpenSyn
@@ -126,6 +128,8 @@ struct OpenLink<'a> {
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
     ext_patch: ext::patch::PatchFsm<'a>,
+    #[cfg(feature = "cuda")]
+    ext_mem: Option<ext::mem::MemFsm>,
 }
 
 #[async_trait]
@@ -201,6 +205,10 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Mem — advertise local CUDA caps in the InitSyn
+        #[cfg(feature = "cuda")]
+        let ext_mem_syn = self.ext_mem.as_ref().and_then(|f| f.local_ext());
+
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
@@ -216,6 +224,8 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem: ext_mem_syn,
         }
         .into();
 
@@ -321,6 +331,11 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
+        // Note: capture peer_has_shm before ext_shm is consumed by recv_init_ack.
+        #[cfg(all(feature = "cuda", feature = "shared-memory"))]
+        let peer_has_shm = init_ack.ext_shm.is_some();
+        #[cfg(all(feature = "cuda", not(feature = "shared-memory")))]
+        let peer_has_shm = false;
         #[cfg(feature = "shared-memory")]
         let shm_segment = match self.ext_shm.as_ref() {
             Some(ext) => ext
@@ -363,12 +378,23 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Mem — negotiate CUDA caps from peer's InitAck
+        #[cfg(feature = "cuda")]
+        let negotiated_mem = if let Some(mem_fsm) = self.ext_mem.as_ref() {
+            let neg = mem_fsm.negotiate(init_ack.ext_mem, peer_has_shm);
+            Some(std::sync::Arc::new(neg))
+        } else {
+            None
+        };
+
         let output = RecvInitAckOut {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
             other_cookie: init_ack.cookie,
             #[cfg(feature = "shared-memory")]
             ext_shm: shm_segment,
+            #[cfg(feature = "cuda")]
+            negotiated_mem,
         };
         Ok(output)
     }
@@ -591,6 +617,12 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
         ext_patch: ext::patch::PatchFsm::new(),
+        #[cfg(feature = "cuda")]
+        ext_mem: manager
+            .state
+            .mem_registry
+            .as_ref()
+            .map(|r| ext::mem::MemFsm::new(r.clone())),
     };
 
     // Clippy raises a warning because `batch_size::UNICAST` is currently equal to `BatchSize::MAX`.
@@ -689,6 +721,8 @@ pub(crate) async fn open_link(
         #[cfg(feature = "auth_usrpwd")]
         auth_id: UsrPwdId(None),
         patch: state.transport.ext_patch.get(),
+        #[cfg(feature = "cuda")]
+        negotiated_mem: iack_out.negotiated_mem,
     };
 
     let o_config = TransportLinkUnicastConfig {

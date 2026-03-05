@@ -64,6 +64,8 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "auth_usrpwd")]
     pub(crate) auth_id: UsrPwdId,
     pub(crate) patch: PatchType,
+    #[cfg(feature = "cuda")]
+    pub(crate) negotiated_mem: Option<std::sync::Arc<zenoh_mem_transport::NegotiatedMemCaps>>,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

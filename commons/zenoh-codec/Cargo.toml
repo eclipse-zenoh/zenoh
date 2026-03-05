@@ -30,7 +30,7 @@ version = { workspace = true }
 
 [features]
 default = ["std"]
-cuda = ["zenoh-buffers/cuda", "zenoh-cuda"]
+cuda = ["zenoh-buffers/cuda", "zenoh-cuda", "zenoh-protocol/cuda"]
 shared-memory = [
   "std",
   "zenoh-buffers/shared-memory",
