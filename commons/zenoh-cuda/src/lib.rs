@@ -86,6 +86,8 @@ pub struct CudaBufInner {
     /// True when this buffer was opened via `from_ipc` (subscriber side).
     /// Drop will call `cudaIpcCloseMemHandle` instead of `cudaFree`/`cudaFreeHost`.
     is_ipc_mapping: bool,
+    /// False for borrowed pointers (e.g. from torch allocator) — Drop skips cudaFree.
+    owns_allocation: bool,
 }
 
 // SAFETY: CUDA IPC memory is not aliased between threads when accessed via
@@ -111,6 +113,7 @@ impl CudaBufInner {
             device_id,
             mem_kind: CudaMemKind::Pinned,
             is_ipc_mapping: false,
+            owns_allocation: true,
         })
     }
 
@@ -134,6 +137,7 @@ impl CudaBufInner {
             device_id,
             mem_kind: CudaMemKind::Unified,
             is_ipc_mapping: false,
+            owns_allocation: true,
         })
     }
 
@@ -155,6 +159,7 @@ impl CudaBufInner {
             device_id,
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: false,
+            owns_allocation: true,
         })
     }
 
@@ -162,6 +167,7 @@ impl CudaBufInner {
     ///
     /// Use this when the caller already has a `cudaMalloc`'d pointer (e.g. from
     /// a GPU kernel output) and wants to send it via Zenoh.
+    /// The returned buffer **takes ownership** and will call `cudaFree` on drop.
     pub fn from_device_ptr(ptr: *mut u8, len: usize, device_id: i32) -> ZResult<Self> {
         let ipc_handle = Self::get_ipc_handle(ptr, "from_device_ptr")?;
         Ok(Self {
@@ -171,6 +177,32 @@ impl CudaBufInner {
             device_id,
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: false,
+            owns_allocation: true,
+        })
+    }
+
+    /// Wrap an externally-owned device pointer **without taking ownership**.
+    ///
+    /// Use this when the pointer is managed by an external allocator (e.g. the
+    /// PyTorch CUDA caching allocator) that must remain responsible for freeing
+    /// the memory. Drop will NOT call `cudaFree`.
+    ///
+    /// The caller must ensure the source allocation outlives this buffer and any
+    /// ZBuf/ZSlice referencing it (i.e. until after the publish call completes).
+    ///
+    /// # Safety
+    /// `ptr` must be a valid `cudaMalloc`'d device pointer for `len` bytes on
+    /// the given `device_id`. It must remain valid until this `CudaBufInner` drops.
+    pub fn from_device_ptr_borrowed(ptr: *mut u8, len: usize, device_id: i32) -> ZResult<Self> {
+        let ipc_handle = Self::get_ipc_handle(ptr, "from_device_ptr_borrowed")?;
+        Ok(Self {
+            ptr,
+            cuda_len: len,
+            ipc_handle,
+            device_id,
+            mem_kind: CudaMemKind::Device,
+            is_ipc_mapping: false,
+            owns_allocation: false,
         })
     }
 
@@ -198,6 +230,7 @@ impl CudaBufInner {
             device_id,
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: true,
+            owns_allocation: true,
         })
     }
 
@@ -245,7 +278,7 @@ impl ZSliceBuffer for CudaBufInner {
 
 impl Drop for CudaBufInner {
     fn drop(&mut self) {
-        if self.ptr.is_null() {
+        if self.ptr.is_null() || !self.owns_allocation {
             return;
         }
         let ret = unsafe {
@@ -265,8 +298,8 @@ impl fmt::Debug for CudaBufInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "CudaBufInner {{ cuda_len: {}, device_id: {}, mem_kind: {:?}, is_ipc: {} }}",
-            self.cuda_len, self.device_id, self.mem_kind, self.is_ipc_mapping
+            "CudaBufInner {{ cuda_len: {}, device_id: {}, mem_kind: {:?}, is_ipc: {}, owned: {} }}",
+            self.cuda_len, self.device_id, self.mem_kind, self.is_ipc_mapping, self.owns_allocation
         )
     }
 }
