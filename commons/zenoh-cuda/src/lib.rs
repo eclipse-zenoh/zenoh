@@ -28,6 +28,14 @@ use zenoh_result::{zerror, ZResult};
 /// CUDA IPC memory handle — 64 bytes matching `cudaIpcMemHandle_t`.
 pub type CudaIpcHandle = [u8; 64];
 
+/// FFI wrapper for `cudaIpcMemHandle_t` passed by value.
+///
+/// The CUDA Runtime API `cudaIpcOpenMemHandle` expects the handle as a
+/// by-value struct (64 bytes on the stack per the x86-64 SysV ABI), not
+/// as a pointer.  This `#[repr(C)]` newtype lets Rust pass it correctly.
+#[repr(C)]
+struct CudaIpcMemHandleFfi([u8; 64]);
+
 /// Discriminates how a [`CudaBufInner`] was allocated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CudaMemKind {
@@ -55,7 +63,10 @@ extern "C" {
     fn cudaMallocManaged(ptr: *mut *mut u8, size: usize, flags: u32) -> i32;
     fn cudaFree(ptr: *mut u8) -> i32;
     fn cudaIpcGetMemHandle(handle: *mut u8, dev_ptr: *mut u8) -> i32;
-    fn cudaIpcOpenMemHandle(dev_ptr: *mut *mut u8, handle: *const u8, flags: u32) -> i32;
+    // NOTE: cudaIpcMemHandle_t is a 64-byte struct passed BY VALUE in C.
+    // Using CudaIpcMemHandleFfi (#[repr(C)]) ensures Rust follows the x86-64
+    // SysV ABI (MEMORY class → 64 bytes on the stack), not pointer-passing.
+    fn cudaIpcOpenMemHandle(dev_ptr: *mut *mut u8, handle: CudaIpcMemHandleFfi, flags: u32) -> i32;
     fn cudaIpcCloseMemHandle(dev_ptr: *mut u8) -> i32;
 }
 
@@ -217,7 +228,7 @@ impl CudaBufInner {
             check_cuda(
                 cudaIpcOpenMemHandle(
                     &mut ptr,
-                    handle.as_ptr(),
+                    CudaIpcMemHandleFfi(handle),
                     CUDA_IPC_MEM_LAZY_ENABLE_PEER_ACCESS,
                 ),
                 "cudaIpcOpenMemHandle",

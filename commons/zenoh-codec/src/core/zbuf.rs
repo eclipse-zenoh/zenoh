@@ -223,7 +223,10 @@ mod shm {
                                         len as usize,
                                         device_id as i32,
                                     )
-                                    .map_err(|_| DidntRead)?;
+                                    .map_err(|e| {
+                                        tracing::error!("CUDA IPC open failed (len={len}, device_id={device_id}): {e}");
+                                        DidntRead
+                                    })?;
                                     let mut zslice = ZSlice::from(Arc::new(cuda_buf));
                                     zslice.kind = ZSliceKind::CudaPtr;
                                     zbuf.push_zslice(zslice);
