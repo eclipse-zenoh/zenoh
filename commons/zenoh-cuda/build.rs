@@ -11,6 +11,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 fn main() {
+    // Re-run if CUDA_PATH changes so the linker search path stays in sync.
+    println!("cargo:rerun-if-env-changed=CUDA_PATH");
+
     // Link against CUDA runtime library
     println!("cargo:rustc-link-lib=dylib=cudart");
 

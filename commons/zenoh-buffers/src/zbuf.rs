@@ -60,6 +60,13 @@ impl ZBuf {
 
     #[inline(always)]
     pub fn push_zslice(&mut self, zslice: ZSlice) {
+        // CudaPtr ZSlices have zero CPU-visible bytes (device memory) but must be
+        // stored so the transport codec can extract the IPC handle for wire encoding.
+        #[cfg(feature = "cuda")]
+        if zslice.kind == crate::ZSliceKind::CudaPtr {
+            self.slices.push(zslice);
+            return;
+        }
         if !zslice.is_empty() {
             self.slices.push(zslice);
         }
