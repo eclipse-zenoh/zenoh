@@ -47,7 +47,7 @@ fn new_router() -> Gateway {
     let mut config = Config::default().expanded();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     GatewayBuilder::new(&config)
-        .hat(Region::Local)
+        .subregions(vec![Region::Local])
         .build()
         .unwrap()
 }

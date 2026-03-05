@@ -1,0 +1,845 @@
+//
+// Copyright (c) 2026 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+#![allow(dead_code)]
+
+//! Routing unit-test scaffolding.
+//!
+//! Provides building blocks for writing routing integration tests that interact directly with a
+//! [`Gateway`] without the transport and orchestrator layers. Tests can configure one or more
+//! gateways, attach mock faces representing arbitrary remote nodes (clients, peers, routers),
+//! inject messages into those faces, and observe every message that the gateway routes to any other
+//! face.
+
+mod interest;
+mod routing;
+
+use std::{
+    any::Any,
+    sync::{Arc, Mutex},
+};
+
+use futures::executor::block_on;
+use zenoh_config::Config;
+use zenoh_keyexpr::keyexpr;
+use zenoh_protocol::{
+    core::{Bound, Region, Reliability, WhatAmI, ZenohIdProto},
+    network::{
+        declare::{
+            common::ext::WireExprType,
+            queryable::{QueryableId, UndeclareQueryable},
+            subscriber::{SubscriberId, UndeclareSubscriber},
+            token::{TokenId, UndeclareToken},
+            DeclareQueryable, DeclareSubscriber, DeclareToken,
+        },
+        ext::{self, NodeIdType},
+        interest::{InterestId, InterestMode, InterestOptions},
+        request::ext::QueryTarget,
+        Declare, DeclareBody, Interest, NetworkBody, Oam, Push, Request, RequestId, Response,
+        ResponseFinal,
+    },
+    zenoh::{PushBody, Put, Query, RequestBody},
+};
+use zenoh_transport::unicast::test_helpers::MockTransportUnicastInner;
+
+use crate::net::{
+    primitives::{DeMux, EPrimitives, Primitives},
+    routing::{
+        dispatcher::face::Face,
+        gateway::{Gateway, GatewayBuilder},
+        RoutingContext,
+    },
+    runtime::{Runtime, RuntimeBuilder},
+};
+
+/// Every message type that [`RecordingPrimitives`] can receive, stored verbatim.
+#[derive(Debug, Clone)]
+pub(crate) enum Message {
+    Push(Push),
+    Declare(Declare),
+    Request(Request),
+    Response(Response),
+    ResponseFinal(ResponseFinal),
+    Interest(Interest),
+    Oam(Oam),
+}
+
+/// An [`EPrimitives`] + [`Primitives`] implementation that records every message delivered to it.
+///
+/// All messages are stored as [`Message`] variants in arrival order.
+pub(crate) struct RecordingPrimitives {
+    messages: Mutex<Vec<Message>>,
+}
+
+impl RecordingPrimitives {
+    pub(crate) fn new() -> Self {
+        Self {
+            messages: Mutex::new(Vec::new()),
+        }
+    }
+
+    pub(crate) fn with_messages<F, T>(&self, f: F) -> T
+    where
+        F: FnOnce(&[Message]) -> T,
+    {
+        let msgs = self.messages.lock().unwrap();
+        f(&msgs)
+    }
+
+    pub(crate) fn pushes(&self) -> Vec<Push> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Push(p) = m {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn subscribers(&self) -> Vec<DeclareSubscriber> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::DeclareSubscriber(d),
+                    ..
+                }) = m
+                {
+                    Some(d.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn undeclared_subscribers(&self) -> Vec<UndeclareSubscriber> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::UndeclareSubscriber(u),
+                    ..
+                }) = m
+                {
+                    Some(u.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn queryables(&self) -> Vec<DeclareQueryable> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::DeclareQueryable(d),
+                    ..
+                }) = m
+                {
+                    Some(d.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn undeclared_queryables(&self) -> Vec<UndeclareQueryable> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::UndeclareQueryable(u),
+                    ..
+                }) = m
+                {
+                    Some(u.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn tokens(&self) -> Vec<DeclareToken> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::DeclareToken(d),
+                    ..
+                }) = m
+                {
+                    Some(d.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn undeclared_tokens(&self) -> Vec<UndeclareToken> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::UndeclareToken(u),
+                    ..
+                }) = m
+                {
+                    Some(u.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn requests(&self) -> Vec<Request> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Request(r) = m {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn responses(&self) -> Vec<Response> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Response(r) = m {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn response_finals(&self) -> Vec<ResponseFinal> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::ResponseFinal(r) = m {
+                    Some(r.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn interests(&self) -> Vec<Interest> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Interest(i) = m {
+                    Some(i.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn oams(&self) -> Vec<Oam> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Oam(o) = m {
+                    Some(o.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Discard all recorded messages.
+    pub(crate) fn clear(&self) {
+        self.messages.lock().unwrap().clear();
+    }
+}
+
+impl Primitives for RecordingPrimitives {
+    fn send_interest(&self, msg: &mut Interest) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push(Message::Interest(msg.clone()));
+    }
+
+    fn send_declare(&self, msg: &mut Declare) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push(Message::Declare(msg.clone()));
+    }
+
+    fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, _consume: bool) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push(Message::Push(msg.clone()));
+    }
+
+    fn send_request(&self, msg: &mut Request) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push(Message::Request(msg.clone()));
+    }
+
+    fn send_response(&self, msg: &mut Response) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push(Message::Response(msg.clone()));
+    }
+
+    fn send_response_final(&self, msg: &mut ResponseFinal) {
+        self.messages
+            .lock()
+            .unwrap()
+            .push(Message::ResponseFinal(msg.clone()));
+    }
+
+    fn send_close(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl EPrimitives for RecordingPrimitives {
+    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
+        Primitives::send_interest(self, ctx.msg);
+        false
+    }
+
+    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
+        Primitives::send_declare(self, ctx.msg);
+        false
+    }
+
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
+        self.send_push_consume(msg, reliability, true);
+        false
+    }
+
+    fn send_request(&self, msg: &mut Request) -> bool {
+        Primitives::send_request(self, msg);
+        false
+    }
+
+    fn send_response(&self, msg: &mut Response) -> bool {
+        Primitives::send_response(self, msg);
+        false
+    }
+
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+        Primitives::send_response_final(self, msg);
+        false
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// A mock face attached to a [`Harness`].
+///
+/// Messages injected via [`MockFace::put`] / [`MockFace::declare_subscriber`] etc. are
+/// processed by the gateway's routing tables just like messages from a real session.
+/// Messages that the gateway decides to route *to* this face are captured by the internal
+/// [`RecordingPrimitives`] and can be inspected with [`MockFace::recorder`].
+pub(crate) struct MockFace {
+    /// The gateway face handle; used as a `Primitives` source for message injection.
+    pub(crate) face: Arc<Face>,
+    /// Records every message the gateway routes to this face.
+    recorder: Arc<RecordingPrimitives>,
+    /// For remote faces: the `DeMux` wrapping this face, used to inject OAM messages via
+    /// the `TransportPeerEventHandler` path (OAM is not part of `Primitives`).
+    pub(crate) demux: Option<Arc<DeMux>>,
+    /// Maintains a strong count > 1 for the the mock transport inner for remote faces, which `Mux`
+    /// only holds via a `Weak` reference).
+    _data: Option<Arc<MockTransportUnicastInner>>,
+}
+
+impl MockFace {
+    /// Inject a `Put` with an explicit payload.
+    pub(crate) fn put(&self, key_expr: &keyexpr, payload: Vec<u8>) {
+        self.face.send_push(
+            &mut Push {
+                wire_expr: key_expr.as_str().to_string().into(),
+                ext_qos: ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::DEFAULT,
+                payload: PushBody::Put(Put {
+                    payload: payload.into(),
+                    ..Default::default()
+                }),
+            },
+            Reliability::BestEffort,
+        );
+    }
+
+    /// Inject a `Get` with an explicit payload.
+    pub(crate) fn query(&self, id: RequestId, key_expr: &keyexpr) {
+        self.face.send_request(&mut Request {
+            id,
+            wire_expr: key_expr.as_str().to_string().into(),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            ext_target: QueryTarget::DEFAULT,
+            ext_budget: None,
+            ext_timeout: None,
+            payload: RequestBody::Query(Query::default()),
+        });
+    }
+
+    /// Inject a `Delete` publication (tombstone) into the gateway.
+    pub(crate) fn delete(&self, key_expr: &keyexpr) {
+        use zenoh_protocol::zenoh::{Del, PushBody};
+        self.face.send_push(
+            &mut Push {
+                wire_expr: key_expr.as_str().to_string().into(),
+                ext_qos: ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::DEFAULT,
+                payload: PushBody::Del(Del::default()),
+            },
+            Reliability::BestEffort,
+        );
+    }
+
+    /// Declare a subscriber for `key_expr` from this face's perspective.
+    pub(crate) fn declare_subscriber(&self, id: SubscriberId, key_expr: &keyexpr) {
+        self.face.send_declare(&mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                id,
+                wire_expr: key_expr.as_str().to_string().into(),
+            }),
+        });
+    }
+
+    /// Remove a previously-declared subscriber.
+    pub(crate) fn undeclare_subscriber(&self, id: SubscriberId) {
+        self.face.send_declare(&mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                id,
+                ext_wire_expr: WireExprType::null(),
+            }),
+        });
+    }
+
+    /// Declare a queryable for `key_expr` from this face's perspective.
+    pub(crate) fn declare_queryable(&self, id: QueryableId, key_expr: &keyexpr) {
+        use zenoh_protocol::network::declare::queryable::ext::QueryableInfoType;
+        self.face.send_declare(&mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                id,
+                wire_expr: key_expr.as_str().to_string().into(),
+                ext_info: QueryableInfoType::DEFAULT,
+            }),
+        });
+    }
+
+    /// Remove a previously-declared queryable.
+    pub(crate) fn undeclare_queryable(&self, id: QueryableId) {
+        self.face.send_declare(&mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                id,
+                ext_wire_expr: WireExprType::null(),
+            }),
+        });
+    }
+
+    /// Declare a liveliness token for `key_expr` from this face's perspective.
+    pub(crate) fn declare_token(
+        &self,
+        id: TokenId,
+        key_expr: &keyexpr,
+        interest_id: Option<InterestId>,
+    ) {
+        self.face.send_declare(&mut Declare {
+            interest_id,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareToken(DeclareToken {
+                id,
+                wire_expr: key_expr.as_str().to_string().into(),
+            }),
+        });
+    }
+
+    /// Remove a previously-declared liveliness token.
+    pub(crate) fn undeclare_token(&self, id: TokenId) {
+        self.face.send_declare(&mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareToken(UndeclareToken {
+                id,
+                ext_wire_expr: WireExprType::null(),
+            }),
+        });
+    }
+
+    /// Declare an interest from this face's perspective.
+    pub(crate) fn interest(
+        &self,
+        id: InterestId,
+        mode: InterestMode,
+        options: InterestOptions,
+        key_expr: Option<&keyexpr>,
+    ) {
+        self.face.send_interest(&mut Interest {
+            id,
+            mode,
+            options,
+            wire_expr: key_expr.map(|ke| ke.as_str().to_string().into()),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+        });
+    }
+
+    /// Access the recorder to inspect what the gateway has delivered to this face.
+    pub(crate) fn recorder(&self) -> &RecordingPrimitives {
+        &self.recorder
+    }
+}
+
+/// Wraps a [`Gateway`] and provides ergonomic helpers for unit tests.
+pub(crate) struct Harness {
+    pub(crate) gateway: Gateway,
+    /// Kept alive so that the runtime's transport manager and background tasks outlive the harness.
+    /// `None` for client/peer harnesses that don't need a runtime.
+    _runtime: Option<Runtime>,
+}
+
+impl Harness {
+    const DEFAULT_SUBREGIONS: [Region; 4] = [
+        Region::Local,
+        Region::default_south(WhatAmI::Client),
+        Region::default_south(WhatAmI::Peer),
+        Region::default_south(WhatAmI::Router),
+    ];
+
+    pub(crate) fn new_client() -> Self {
+        Self::with_subregions(WhatAmI::Client, Self::DEFAULT_SUBREGIONS)
+    }
+
+    pub(crate) fn new_peer() -> Self {
+        Self::with_subregions(WhatAmI::Peer, Self::DEFAULT_SUBREGIONS)
+    }
+
+    /// Build a gateway in router mode.
+    ///
+    /// Uses a real [`Runtime`] so that [`Gateway::init_hats`] is called — required for the
+    /// router hat's topology tracking to function correctly.
+    pub(crate) fn new_router() -> Self {
+        Self::with_subregions(WhatAmI::Router, Self::DEFAULT_SUBREGIONS)
+    }
+
+    /// Build a gateway with a runtime (necessary for routers).
+    pub(crate) fn with_subregions<const N: usize>(mode: WhatAmI, subregions: [Region; N]) -> Self {
+        let mut config = Config::default();
+        config.set_mode(Some(mode)).unwrap();
+
+        // NOTE(regions): these lines attempt to remove all side-effects of creating a runtime.
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.connect.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.adminspace.set_enabled(false).unwrap();
+        config.plugins_loading.set_enabled(false).unwrap();
+
+        let runtime = block_on(
+            RuntimeBuilder::new(crate::api::config::Config(config))
+                .subregions(subregions.to_vec())
+                .build(),
+        )
+        .unwrap();
+        let gateway = Gateway {
+            tables: runtime.router().tables.clone(),
+        };
+        Self {
+            gateway,
+            _runtime: Some(runtime),
+        }
+    }
+
+    /// Build a gateway without a runtime.
+    pub(crate) fn with_subregions_noruntime<const N: usize>(
+        mode: WhatAmI,
+        subregions: [Region; N],
+    ) -> Self {
+        let mut config = Config::default().expanded();
+        config.set_mode(Some(mode)).unwrap();
+        let gateway = GatewayBuilder::new(&config)
+            .subregions(subregions.to_vec())
+            .build()
+            .unwrap();
+        Self {
+            gateway,
+            _runtime: None,
+        }
+    }
+
+    pub(crate) fn new_session(&self) -> MockFace {
+        self.new_face(FaceConfig::new_session())
+    }
+
+    /// Attach a mock face to the gateway and return its handle.
+    ///
+    /// For `Region::Local`, this calls [`Gateway::new_primitives`] directly.
+    /// For all other regions, a mock transport unicast is used.
+    pub(crate) fn new_face(&self, cfg: FaceConfig) -> MockFace {
+        let recorder = Arc::new(RecordingPrimitives::new());
+
+        if cfg.region == Region::Local {
+            let face = self.gateway.new_primitives(recorder.clone());
+            return MockFace {
+                face,
+                recorder,
+                demux: None,
+                _data: None,
+            };
+        }
+
+        use zenoh_transport::unicast::test_helpers::mock_transport_unicast;
+
+        let rec = recorder.clone();
+        let (mock_transport, mock_inner) = mock_transport_unicast(
+            ZenohIdProto::rand(),
+            cfg.mode,
+            Arc::new(move |msg| match msg.body {
+                NetworkBody::Push(mut p) => {
+                    Primitives::send_push_consume(&*rec, &mut p, msg.reliability, true)
+                }
+                NetworkBody::Declare(mut d) => Primitives::send_declare(&*rec, &mut d),
+                NetworkBody::Interest(mut i) => Primitives::send_interest(&*rec, &mut i),
+                NetworkBody::Request(mut r) => Primitives::send_request(&*rec, &mut r),
+                NetworkBody::Response(mut r) => Primitives::send_response(&*rec, &mut r),
+                NetworkBody::ResponseFinal(mut r) => Primitives::send_response_final(&*rec, &mut r),
+                NetworkBody::OAM(o) => rec.messages.lock().unwrap().push(Message::Oam(o)),
+            }),
+        );
+
+        let demux = self
+            .gateway
+            .new_transport_unicast(mock_transport, cfg.region, cfg.remote_bound)
+            .unwrap();
+
+        let face = Arc::new(demux.face.clone());
+        MockFace {
+            face,
+            recorder,
+            demux: Some(demux),
+            // Keep the mock transport inner alive: Mux (inside FaceState::primitives)
+            // only holds a Weak to the transport, so we must maintain a strong Arc here.
+            _data: Some(mock_inner),
+        }
+    }
+}
+
+/// Configures a face added to a [`Harness`] via [`Harness::new_face`].
+#[derive(Default, Clone, Copy)]
+pub(crate) struct FaceConfig {
+    pub(crate) region: Region,
+    pub(crate) mode: WhatAmI,
+    pub(crate) remote_bound: Bound,
+}
+
+impl FaceConfig {
+    pub(crate) fn region(mut self, region: Region) -> Self {
+        self.region = region;
+        self
+    }
+
+    pub(crate) fn mode(mut self, mode: WhatAmI) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    pub(crate) fn remote_bound(mut self, remote_bound: Bound) -> Self {
+        self.remote_bound = remote_bound;
+        self
+    }
+
+    pub(crate) fn new_session() -> Self {
+        Self::default().region(Region::Local).mode(WhatAmI::Client)
+    }
+}
+
+/// Connects two gateways together at the primitives level.
+pub(crate) struct EstablishedConnection {
+    /// A's face for B.
+    ab: MockFace,
+    /// B's face for A.
+    ba: MockFace,
+    nfwd: usize,
+    rev_nfwd: usize,
+}
+
+/// A mock of a network connection from [`Connection::a`] to [`Connection::b`].
+pub(crate) struct Connection<'a> {
+    /// Gateway A.
+    pub(crate) a: &'a Harness,
+    /// A's face for B.
+    pub(crate) ab: FaceConfig,
+    /// Gateway B.
+    pub(crate) b: &'a Harness,
+    /// B's face for A.
+    pub(crate) ba: FaceConfig,
+}
+
+impl Connection<'_> {
+    pub(crate) fn establish(self) -> EstablishedConnection {
+        EstablishedConnection {
+            ab: self.a.new_face(self.ab),
+            ba: self.b.new_face(self.ba),
+            nfwd: 0,
+            rev_nfwd: 0,
+        }
+    }
+}
+
+impl EstablishedConnection {
+    /// Forward one pending message **from A to B**.
+    pub(crate) fn fwd1(&mut self) -> Option<Message> {
+        let msg = self
+            .ab
+            .recorder
+            .with_messages(|msgs| msgs.get(self.nfwd).cloned())?;
+        Self::inject(&self.ba, &msg);
+        self.nfwd += 1;
+        Some(msg)
+    }
+
+    /// Forward one pending message in the reverse direction, i.e. **from B to A**.
+    pub(crate) fn rev_fwd1(&mut self) -> Option<Message> {
+        let msg = self
+            .ba
+            .recorder
+            .with_messages(|msgs| msgs.get(self.rev_nfwd).cloned())?;
+        Self::inject(&self.ab, &msg);
+        self.rev_nfwd += 1;
+        Some(msg)
+    }
+
+    /// Forward all pending messages **from A to B**.
+    pub(crate) fn fwd(&mut self) -> Vec<Message> {
+        // FIXME(regions): take the lock once
+        let mut msgs = Vec::new();
+        while let Some(msg) = self.fwd1() {
+            msgs.push(msg);
+        }
+        msgs
+    }
+
+    /// Forward one pending message in the reverse direction, i.e. **from B to A**.
+    pub(crate) fn rev_fwd(&mut self) -> Vec<Message> {
+        let mut msgs = Vec::new();
+        while let Some(msg) = self.rev_fwd1() {
+            msgs.push(msg);
+        }
+        msgs
+    }
+
+    /// Bi-directionally forward all pending messages, i.e. **from A and B _then_ from B to A**.
+    pub(crate) fn bi_fwd(&mut self) {
+        self.fwd();
+        self.rev_fwd();
+    }
+
+    fn inject(target: &MockFace, msg: &Message) {
+        use zenoh_protocol::network::{NetworkBodyMut, NetworkMessageMut};
+        use zenoh_transport::TransportPeerEventHandler as _;
+
+        match msg {
+            Message::Push(p) => target
+                .face
+                .send_push(&mut p.clone(), Reliability::default()),
+            Message::Declare(d) => target.face.send_declare(&mut d.clone()),
+            Message::Request(r) => target.face.send_request(&mut r.clone()),
+            Message::Response(r) => target.face.send_response(&mut r.clone()),
+            Message::ResponseFinal(r) => target.face.send_response_final(&mut r.clone()),
+            Message::Interest(i) => target.face.send_interest(&mut i.clone()),
+            Message::Oam(o) => {
+                if let Some(demux) = &target.demux {
+                    let _ = demux.handle_message(NetworkMessageMut {
+                        body: NetworkBodyMut::OAM(&mut o.clone()),
+                        reliability: Reliability::default(),
+                    });
+                }
+            }
+        }
+    }
+}
