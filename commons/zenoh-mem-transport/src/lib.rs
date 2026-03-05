@@ -30,18 +30,48 @@
 //!
 //! # Capability negotiation
 //!
-//! During the Zenoh handshake (`InitSyn`/`InitAck`/`OpenSyn`/`OpenAck`) each
-//! peer advertises a [`MemPeerCaps`] listing which backends it supports.  After
-//! the handshake the transport stores a [`NegotiatedMemCaps`] that records, for
-//! each [`ZSliceKind`], whether to use the backend natively or to fall back to
-//! a cheaper representation the peer can receive.
+//! During the Zenoh handshake (`InitSyn`/`InitAck`) each peer advertises which
+//! backends it supports via the `ext_mem` extension (extension ID `0x8`).
+//!
+//! - SHM capability is already conveyed by the existing `ext_shm` (ID `0x2`)
+//!   and its challenge-response mechanism; `ext_mem` carries additional backends
+//!   (CUDA IPC, RDMA, …).
+//! - After the handshake the transport calls [`MemRegistry::negotiate`] with the
+//!   peer's [`MemPeerCaps`] to produce a [`NegotiatedMemCaps`].
+//! - Every TX message consults `NegotiatedMemCaps` per [`ZSliceKind`] to decide
+//!   whether to send natively or downgrade (GPU→host staging copy, etc.).
+//!
+//! ## `ext_mem` wire format
+//!
+//! The `ext_mem` bytes (carried inside `ZExtZBuf(0x8)`) are:
+//!
+//! ```text
+//! version     : u8          — always 1
+//! n_backends  : u8
+//! for each backend:
+//!     id      : u8          — MemBackendId discriminant
+//!     len     : u16 (LE)    — byte length of the following caps
+//!     caps    : bytes[len]
+//!
+//! ShmCaps    = { segment_id : u64 (LE) }
+//! CudaIpcCaps = { n_devices : u8 ; device_ids : i32[n_devices] (LE) }
+//! ```
+//!
+//! Unknown `id` values are skipped (forward-compatible).  A length mismatch or
+//! version > 1 causes the entire extension to be ignored (no connection drop).
 //!
 //! # Adding a new backend
 //!
 //! 1. Implement [`ZeroMemTransport`] in a new crate (e.g. `zenoh-rdma`).
-//! 2. Add a `MemBackendId` variant (protocol version bump).
+//! 2. Add a [`MemBackendId`] variant (requires a protocol version bump).
 //! 3. Register with [`MemRegistry::register`] at session startup.
 //! 4. No changes to `map_to_partner`, codec dispatch, or the handshake FSM.
+//!
+//! # Examples
+//!
+//! See the `registry_negotiate` example in the `examples/` directory for a
+//! worked demonstration of registry setup, capability serialization, and
+//! negotiation outcome querying.
 
 pub mod backends;
 pub mod caps;

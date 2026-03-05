@@ -14,9 +14,25 @@
 
 //! FSM for the `ext_mem` handshake extension (CUDA IPC / zero-copy backends).
 //!
-//! Unlike SHM, the mem extension does NOT have a challenge-response phase.
-//! It is purely a capability advertisement: InitSyn carries local caps, InitAck
-//! carries remote caps, and after the handshake we compute [`NegotiatedMemCaps`].
+//! ## Design
+//!
+//! `ext_mem` (extension ID `0x8`) carries a serialised [`MemInitExt`] blob
+//! inside an `InitSyn` / `InitAck` message.  The blob lists the non-SHM
+//! backends (CUDA IPC, RDMA, …) supported by the local peer.
+//!
+//! SHM capability is conveyed separately by the existing `ext_shm` (ID `0x2`)
+//! challenge-response mechanism.  [`MemFsm::negotiate`] synthesises a unified
+//! [`NegotiatedMemCaps`] by combining both sources:
+//!
+//! | peer signal         | ShmPtr result           | CudaPtr result                   |
+//! |---------------------|-------------------------|----------------------------------|
+//! | `ext_shm` present   | `Native`                | —                                |
+//! | `ext_shm` absent    | `Fallback(ToRaw)`       | —                                |
+//! | `ext_mem` CudaIpc   | —                       | `Native` (same-host) or fallback |
+//! | `ext_mem` absent    | —                       | `Fallback(ToRaw)`                |
+//!
+//! Unlike `ext_shm`, there is **no Open-phase** for `ext_mem`.  The negotiation
+//! result is available immediately after `InitAck` is processed.
 
 use std::sync::Arc;
 

@@ -92,3 +92,66 @@ impl MemRegistry {
         self.all.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use zenoh_buffers::ZSliceKind;
+
+    use super::*;
+    use crate::{
+        backends::shm::ShmBackend,
+        caps::{MemBackendCaps, MemPeerCaps, ShmCaps},
+        DowngradePath, NegotiationResult,
+    };
+
+    fn make_shm_registry() -> MemRegistry {
+        let mut reg = MemRegistry::new();
+        reg.register(ShmBackend::new(42, vec![0]));
+        reg
+    }
+
+    #[test]
+    fn registry_shm_native_when_peer_has_shm() {
+        let reg = make_shm_registry();
+        let peer = MemPeerCaps::new(vec![MemBackendCaps::Shm(ShmCaps { segment_id: 99 })]);
+        let neg = reg.negotiate(&peer);
+        let entry = neg.get(ZSliceKind::ShmPtr).expect("ShmPtr should be negotiated");
+        assert!(matches!(entry.result, NegotiationResult::Native));
+    }
+
+    #[test]
+    fn registry_shm_fallback_to_raw_when_peer_has_no_shm() {
+        let reg = make_shm_registry();
+        let peer = MemPeerCaps::new(vec![]); // peer advertises nothing
+        let neg = reg.negotiate(&peer);
+        let entry = neg.get(ZSliceKind::ShmPtr).expect("ShmPtr should be negotiated");
+        assert!(matches!(
+            entry.result,
+            NegotiationResult::Fallback(DowngradePath::ToRaw)
+        ));
+    }
+
+    #[test]
+    fn registry_local_caps_includes_shm() {
+        let reg = make_shm_registry();
+        let caps = reg.local_caps();
+        assert!(caps.iter().any(|c| matches!(c, MemBackendCaps::Shm(_))));
+    }
+
+    #[test]
+    fn registry_backend_for_unknown_kind_returns_none() {
+        let reg = make_shm_registry();
+        // Raw has no registered backend
+        assert!(reg.backend_for(ZSliceKind::Raw).is_none());
+    }
+
+    #[test]
+    #[should_panic]
+    fn registry_panics_on_duplicate_kind() {
+        let mut reg = MemRegistry::new();
+        reg.register(ShmBackend::new(1, vec![0]));
+        reg.register(ShmBackend::new(2, vec![0])); // second registration of ShmPtr → panic
+    }
+}
