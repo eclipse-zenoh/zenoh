@@ -24,6 +24,8 @@ mod scenario3;
 mod scenario4;
 #[cfg(feature = "unstable")]
 mod scenario5;
+#[cfg(feature = "unstable")]
+mod scenario6;
 
 use std::{
     sync::{Arc, RwLock},
